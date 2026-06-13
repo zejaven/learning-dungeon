@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useStore } from './engine/store';
+import { LANGS, tl, ui, useLang } from './i18n';
 import { EditorPanel } from './shell/EditorPanel';
 import { VisualizationCanvas } from './shell/VisualizationCanvas';
 import { MissionPanel } from './shell/MissionPanel';
@@ -24,6 +25,9 @@ export function App() {
   const resetCode = useStore((s) => s.resetCode);
   const run = useStore((s) => s.run);
 
+  const lang = useLang((s) => s.lang);
+  const setLang = useLang((s) => s.setLang);
+
   const [showAssistant, setShowAssistant] = useState(false);
   const [showAddTopic, setShowAddTopic] = useState(false);
 
@@ -40,31 +44,42 @@ export function App() {
           onChange={(e) => selectTopic(e.target.value)}
           disabled={topics.length === 0}
         >
-          {topics.length === 0 && <option value="">No topics yet</option>}
+          {topics.length === 0 && <option value="">{ui('noTopics', lang)}</option>}
           {topics.map((t) => (
             <option key={t.id} value={t.id}>
-              {t.title}
+              {tl(t.title, lang)}
             </option>
           ))}
         </select>
         <div className="spacer" />
+        <select value={lang} onChange={(e) => setLang(e.target.value as (typeof LANGS)[number])}>
+          {LANGS.map((l) => (
+            <option key={l} value={l}>
+              {l.toUpperCase()}
+            </option>
+          ))}
+        </select>
         <button onClick={() => setShowAssistant(true)} disabled={!topic}>
-          💬 Ask AI
+          {ui('askAI', lang)}
         </button>
         <button className="accent" onClick={() => setShowAddTopic(true)}>
-          ＋ Add topic
+          {ui('addTopic', lang)}
         </button>
       </header>
 
       <div className="main">
         {/* Left: explanation */}
         <section className="panel">
-          <div className="panel-title">{topic ? topic.category : 'Explanation'}</div>
+          <div className="panel-title">
+            {topic ? tl(topic.category, lang) : ui('explanation', lang)}
+          </div>
           <div className="panel-body markdown">
             {topic ? (
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{topic.explanation}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {tl(topic.explanation, lang)}
+              </ReactMarkdown>
             ) : (
-              <p style={{ opacity: 0.6 }}>Loading…</p>
+              <p style={{ opacity: 0.6 }}>{ui('loading', lang)}</p>
             )}
           </div>
         </section>
@@ -73,15 +88,15 @@ export function App() {
         <section className="panel">
           <div className="toolbar">
             <button className="primary" onClick={run} disabled={running || !topic}>
-              {running ? 'running…' : '▶ Run'}
+              {running ? ui('running', lang) : ui('run', lang)}
             </button>
             <button onClick={resetCode} disabled={!topic}>
-              ↺ Reset
+              {ui('reset', lang)}
             </button>
             <span style={{ width: 8 }} />
             {topic?.examples.map((ex) => (
-              <button key={ex.id} onClick={() => loadExample(ex.id)} title={ex.explanation}>
-                {ex.title}
+              <button key={ex.id} onClick={() => loadExample(ex.id)} title={tl(ex.explanation, lang)}>
+                {tl(ex.title, lang)}
               </button>
             ))}
           </div>
@@ -96,13 +111,13 @@ export function App() {
 
         {/* Right: visualization + missions */}
         <section className="panel">
-          <div className="panel-title">Visualization</div>
+          <div className="panel-title">{ui('visualization', lang)}</div>
           <div className="panel-body">
             <VisualizationCanvas />
             {topic && topic.missions.length > 0 && (
               <>
                 <div className="panel-title" style={{ border: 'none', padding: '14px 0 4px' }}>
-                  Missions
+                  {ui('missions', lang)}
                 </div>
                 <MissionPanel missions={topic.missions} completed={completed} />
               </>

@@ -5,7 +5,8 @@ A topic is a folder `topics/<id>/` with this exact layout:
 ```
 topics/<id>/
   topic.yaml          metadata + examples list + primitives + defaultExample
-  explanation.md      prose: intuition, interview answer, traps
+  explanation.en.md   English prose: intuition, interview answer, traps
+  explanation.ru.md   Russian translation of the same explanation
   examples/
     01-*.java         full `public class Playground { public static void main ... }`
     02-*.java
@@ -14,23 +15,44 @@ topics/<id>/
   quiz.yaml           missions (event-checked) + bossFight questions
 ```
 
+## Bilingual rule
+
+Everything shown in the UI must exist in **both English and Russian**. Keep code,
+identifiers and technical terms (Java, HashMap, hashCode, resize, …) untranslated.
+Translatable YAML fields use a `{ en, ru }` map; explanation is two files.
+Java source code (including comments) stays in English — only the trace
+*descriptions* are bilingual.
+
 ## topic.yaml
 
 ```yaml
 id: <kebab-id>                  # must equal the folder name
-title: <Human Title>
-category: <e.g. Java Core / Collections>
+title:
+  en: <Human Title>
+  ru: <Заголовок>
+category:
+  en: <e.g. Java Core / Collections>
+  ru: <напр. Java Core / Коллекции>
 type: <DATA_STRUCTURE | CONCURRENCY | ...>
-summary: <one paragraph>
+summary:
+  en: <one paragraph>
+  ru: <один абзац>
 primitives: [ArrayGrid, LinkedNodes, EventLog]   # primitives the visualizer uses
 defaultExample: <example-id>    # which example loads by default
 examples:
   - id: <example-id>
-    title: <button label>
+    title:
+      en: <button label>
+      ru: <подпись кнопки>
     file: 01-basic.java         # relative to examples/
-    explanation: <what it shows>
+    explanation:
+      en: <what it shows>
+      ru: <что показывает>
 missionsFile: quiz.yaml
 ```
+
+(A plain scalar instead of an `{en, ru}` map is accepted and used for both
+languages, but new topics should provide both.)
 
 ## Trace events (the core contract)
 
@@ -39,47 +61,59 @@ User code drives an instrumented `visual.*` model. Each model call emits a line
 these from program output and returns them as `traceEvents`. The frontend replays
 them step by step, passing each event's `state` to `visualizer.tsx`.
 
+`visual.Trace.event(String event, String descEn, String descRu, List<String> highlight, Object state)`
+
 Event envelope (fixed):
 
 ```json
 {
   "step": 3,
   "event": "HASHMAP_PUT",
-  "description": "human-readable sentence shown in the EventLog",
+  "description": { "en": "shown in the EventLog", "ru": "показывается в журнале" },
   "highlight": ["bucket:0", "node:Aa"],
   "state": { "...": "topic-specific; must match trace-schema.json" }
 }
 ```
 
-`visual.Trace.event(String event, String description, List<String> highlight, Object state)`
-serializes `state` from Maps/Lists/String/Number/Boolean. Build `state` as a
-`LinkedHashMap` so key order is stable.
+`event` is a technical code and is NOT translated. `state` is serialized from
+Maps/Lists/String/Number/Boolean; build it as a `LinkedHashMap` for stable order.
 
 ## visualizer.tsx
 
 ```tsx
-import type { TraceEvent } from '../../frontend/src/engine/traceTypes';
-import { ArrayGrid } from '../../frontend/src/primitives/ArrayGrid';
-// ...compose primitives...
+import type { VisualizerProps } from '@app/engine/traceTypes';
+import { ArrayGrid } from '@app/primitives/ArrayGrid';
+import { tl, useLang } from '@app/i18n';
 
-export default function Visualizer({ event }: { event: TraceEvent | null }) {
+const LABELS = { capacity: { en: 'capacity', ru: 'ёмкость' } /* ... */ };
+
+export default function Visualizer({ event }: VisualizerProps) {
+  const lang = useLang((s) => s.lang);     // read the active language
   const state = event?.state as MyState | undefined;
-  // render `state` with primitives; use event.highlight to emphasize parts.
+  // render `state` with primitives; localize any labels via tl(LABELS.x, lang);
+  // use event.highlight to emphasize parts.
   return /* ... */;
 }
 ```
 
-The component is pure: given the current event, render the structure. It never
-calls the backend and never runs Java.
+The component is pure given the current event + language: it never calls the
+backend and never runs Java. Localize every visible label through `tl(..., lang)`.
 
 ## quiz.yaml
 
 ```yaml
 missions:
   - id: <id>
-    title: <short>
-    goal: <what the learner should make happen>
-    event: <TRACE_EVENT_TYPE that completes this mission>
+    title:
+      en: <short>
+      ru: <коротко>
+    goal:
+      en: <what the learner should make happen>
+      ru: <чего нужно добиться>
+    event: <TRACE_EVENT_TYPE that completes this mission>   # not translated
 bossFight:
-  - <interview question>
+  en:
+    - <interview question>
+  ru:
+    - <вопрос с собеседования>
 ```

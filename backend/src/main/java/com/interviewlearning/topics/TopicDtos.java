@@ -8,21 +8,28 @@ public final class TopicDtos {
     private TopicDtos() {
     }
 
+    /** A piece of text in both supported languages; the frontend picks one. */
+    public record Localized(String en, String ru) {
+        public static Localized of(String value) {
+            return new Localized(value, value);
+        }
+    }
+
     /** Lightweight entry for the topic switcher. */
     public record TopicSummary(
             String id,
-            String title,
-            String category,
+            Localized title,
+            Localized category,
             String type,
-            String summary
+            Localized summary
     ) {
     }
 
     public record Example(
             String id,
-            String title,
+            Localized title,
             String code,
-            String explanation
+            Localized explanation
     ) {
     }
 
@@ -32,8 +39,8 @@ public final class TopicDtos {
      */
     public record Mission(
             String id,
-            String title,
-            String goal,
+            Localized title,
+            Localized goal,
             String event
     ) {
     }
@@ -41,12 +48,12 @@ public final class TopicDtos {
     /** Full payload for a single topic. */
     public record TopicDetail(
             String id,
-            String title,
-            String category,
+            Localized title,
+            Localized category,
             String type,
-            String summary,
+            Localized summary,
             List<String> primitives,
-            String explanation,
+            Localized explanation,
             List<Example> examples,
             String defaultExampleId,
             List<Mission> missions

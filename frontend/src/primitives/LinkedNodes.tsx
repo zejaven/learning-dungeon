@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { ui, useLang } from '@app/i18n';
 
 export interface LinkedNode {
   id: string;
@@ -12,8 +13,9 @@ export interface LinkedNode {
  * collision chain, a linked list, etc.
  */
 export function LinkedNodes({ nodes }: { nodes: LinkedNode[] }) {
+  const lang = useLang((s) => s.lang);
   if (nodes.length === 0) {
-    return <span style={emptyStyle}>empty</span>;
+    return <span style={emptyStyle}>{ui('empty', lang)}</span>;
   }
   return (
     <div style={rowStyle}>

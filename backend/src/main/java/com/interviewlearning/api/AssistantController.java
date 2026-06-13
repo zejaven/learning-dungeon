@@ -29,7 +29,7 @@ public class AssistantController {
         this.topics = topics;
     }
 
-    public record AskRequest(String topicId, String question, String code) {
+    public record AskRequest(String topicId, String question, String code, String lang) {
     }
 
     @PostMapping(value = "/ask", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -41,19 +41,26 @@ public class AssistantController {
         Optional<TopicDetail> topic = request.topicId() == null
                 ? Optional.empty()
                 : topics.getTopic(request.topicId());
+        boolean ru = "ru".equalsIgnoreCase(request.lang());
 
         StringBuilder sb = new StringBuilder();
         sb.append("You are a concise, friendly Java interview mentor. ");
         sb.append("Answer the user's question directly and practically, with a short ")
                 .append("interview-ready explanation and a tiny example if helpful. ")
-                .append("Do not create or edit any files; just answer in text.\n\n");
+                .append("Do not create or edit any files; just answer in text. ");
+        sb.append(ru
+                ? "Reply in Russian, but keep code, identifiers and technical terms "
+                        + "like Java, HashMap, hashCode in their original form.\n\n"
+                : "Reply in English.\n\n");
 
         topic.ifPresent(t -> {
-            sb.append("Current topic: ").append(t.title())
-                    .append(" (").append(t.category()).append(").\n\n");
-            if (!t.explanation().isBlank()) {
-                sb.append("Topic reference material:\n")
-                        .append(t.explanation()).append("\n\n");
+            String title = ru ? t.title().ru() : t.title().en();
+            String category = ru ? t.category().ru() : t.category().en();
+            String explanation = ru ? t.explanation().ru() : t.explanation().en();
+            sb.append("Current topic: ").append(title)
+                    .append(" (").append(category).append(").\n\n");
+            if (!explanation.isBlank()) {
+                sb.append("Topic reference material:\n").append(explanation).append("\n\n");
             }
         });
 

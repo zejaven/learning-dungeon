@@ -1,8 +1,11 @@
+import type { Localized } from '../i18n';
+
 /** A single execution trace event emitted by an instrumented visual.* model. */
 export interface TraceEvent {
   step: number;
   event: string;
-  description: string;
+  /** Bilingual description shown in the event log. */
+  description: Localized;
   highlight: string[];
   /** Topic-specific snapshot; each visualizer narrows this to its own shape. */
   state: unknown;
@@ -17,35 +20,35 @@ export interface RunResult {
 
 export interface TopicSummary {
   id: string;
-  title: string;
-  category: string;
+  title: Localized;
+  category: Localized;
   type: string;
-  summary: string;
+  summary: Localized;
 }
 
 export interface Example {
   id: string;
-  title: string;
+  title: Localized;
   code: string;
-  explanation: string;
+  explanation: Localized;
 }
 
 export interface Mission {
   id: string;
-  title: string;
-  goal: string;
+  title: Localized;
+  goal: Localized;
   /** Trace event type whose presence completes this mission. */
   event: string;
 }
 
 export interface TopicDetail {
   id: string;
-  title: string;
-  category: string;
+  title: Localized;
+  category: Localized;
   type: string;
-  summary: string;
+  summary: Localized;
   primitives: string[];
-  explanation: string;
+  explanation: Localized;
   examples: Example[];
   defaultExampleId: string;
   missions: Mission[];

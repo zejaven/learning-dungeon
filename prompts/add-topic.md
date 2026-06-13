@@ -10,6 +10,15 @@ required (see below).
 Read `prompts/topic-contract.md` for the exact folder schema and the trace-event
 contract. Mirror the existing `topics/hashmap/` topic as your reference example.
 
+**The topic must be fully bilingual (English + Russian).** Every user-visible
+string exists in both languages: `title`, `category`, `summary`, each example's
+`title` and `explanation`, every mission `title`/`goal`, the `bossFight` lists,
+two explanation files (`explanation.en.md` + `explanation.ru.md`), and the trace
+event descriptions (`Trace.event(event, descEn, descRu, highlight, state)`). Keep
+code, identifiers and technical terms (Java, HashMap, hashCode, …) untranslated,
+and keep Java source/comments in English. Localize visualizer labels via
+`tl(..., lang)` with `useLang` from `@app/i18n`.
+
 ## Steps
 
 1. **Classify the topic.** Pick one type:
@@ -22,16 +31,17 @@ contract. Mirror the existing `topics/hashmap/` topic as your reference example.
 3. **Decide how the code produces trace events.** Prefer an existing instrumented
    model in `visual-runtime` (e.g. `visual.VisualHashMap`). If the topic needs a
    new model, add it under `visual-runtime/src/main/java/visual/` and have it call
-   `visual.Trace.event(type, description, highlight, state)`. Keep `visual-runtime`
-   dependency-free.
+   `visual.Trace.event(type, descEn, descRu, highlight, state)` with a bilingual
+   description. Keep `visual-runtime` dependency-free.
 4. **Create the topic folder** `topics/<id>/` with all required files (see schema).
 5. **Write 4–8 small examples**, each a full `public class Playground` with a
    `main`, each teaching exactly one idea, importing the `visual.*` model.
 6. **Write `visualizer.tsx`** — a default-exported React component rendering the
    event `state` using existing primitives. It must NOT know about Java execution;
    it only renders the `state` of the current step.
-7. **Write `explanation.md`**: intuitive explanation, a 60-second interview answer,
-   production relevance, and common misconceptions.
+7. **Write `explanation.en.md` and `explanation.ru.md`**: intuitive explanation, a
+   60-second interview answer, production relevance, and common misconceptions — the
+   Russian file is a faithful translation of the English one.
 8. **Write `quiz.yaml`** with missions whose `event` matches a trace event type the
    examples can produce, plus a `bossFight` question list.
 9. **Validate**: run `./gradlew :visual-runtime:test` if you added/changed a model,

@@ -145,6 +145,8 @@ public class JavaCodeRunner {
                 "-Xmx" + maxHeap,
                 "-XX:+UseSerialGC",
                 "-Dfile.encoding=UTF-8",
+                "-Dstdout.encoding=UTF-8",
+                "-Dstderr.encoding=UTF-8",
                 "-classpath", classpath,
                 className
         );

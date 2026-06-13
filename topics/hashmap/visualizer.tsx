@@ -2,6 +2,19 @@ import type { CSSProperties } from 'react';
 import type { VisualizerProps } from '@app/engine/traceTypes';
 import { ArrayGrid, type ArrayCell } from '@app/primitives/ArrayGrid';
 import { LinkedNodes, type LinkedNode } from '@app/primitives/LinkedNodes';
+import { tl, useLang } from '@app/i18n';
+
+const LABELS = {
+  capacity: { en: 'capacity', ru: 'ёмкость' },
+  loadFactor: { en: 'load factor', ru: 'коэф. загрузки' },
+  threshold: { en: 'threshold', ru: 'порог' },
+  size: { en: 'size', ru: 'размер' },
+  hash: { en: 'hash', ru: 'хэш' },
+  runHint: {
+    en: 'Run the code to visualize the map.',
+    ru: 'Запустите код, чтобы визуализировать мапу.',
+  },
+};
 
 interface BucketNode {
   key: string;
@@ -22,9 +35,10 @@ interface HashMapState {
 }
 
 export default function HashMapVisualizer({ event }: VisualizerProps) {
+  const lang = useLang((s) => s.lang);
   const state = event?.state as HashMapState | undefined;
   if (!state) {
-    return <div style={hintStyle}>Run the code to visualize the map.</div>;
+    return <div style={hintStyle}>{tl(LABELS.runHint, lang)}</div>;
   }
 
   const highlight = new Set(event?.highlight ?? []);
@@ -33,7 +47,7 @@ export default function HashMapVisualizer({ event }: VisualizerProps) {
     const nodes: LinkedNode[] = bucket.nodes.map((n) => ({
       id: `${bucket.index}-${n.key}`,
       title: `${n.key} → ${n.value}`,
-      subtitle: `hash ${n.hash}`,
+      subtitle: `${tl(LABELS.hash, lang)} ${n.hash}`,
       highlighted: highlight.has(`node:${n.key}`),
     }));
     return {
@@ -47,10 +61,14 @@ export default function HashMapVisualizer({ event }: VisualizerProps) {
   return (
     <div style={wrapStyle}>
       <div style={statsStyle}>
-        <Stat label="capacity" value={state.capacity} />
-        <Stat label="load factor" value={state.loadFactor} />
-        <Stat label="threshold" value={state.threshold} />
-        <Stat label="size" value={state.size} highlight={state.size > state.threshold} />
+        <Stat label={tl(LABELS.capacity, lang)} value={state.capacity} />
+        <Stat label={tl(LABELS.loadFactor, lang)} value={state.loadFactor} />
+        <Stat label={tl(LABELS.threshold, lang)} value={state.threshold} />
+        <Stat
+          label={tl(LABELS.size, lang)}
+          value={state.size}
+          highlight={state.size > state.threshold}
+        />
       </div>
       <ArrayGrid cells={cells} />
     </div>

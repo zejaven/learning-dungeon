@@ -42,6 +42,8 @@ public class VisualHashMap<K, V> {
         Trace.event("HASHMAP_CREATED",
                 "Created '" + name + "' with capacity " + capacity
                         + " (threshold " + threshold + ")",
+                "Создан '" + name + "' с ёмкостью " + capacity
+                        + " (порог " + threshold + ")",
                 List.of(), state());
     }
 
@@ -74,6 +76,8 @@ public class VisualHashMap<K, V> {
                 Trace.event("HASHMAP_PUT",
                         "Key " + show(key) + " already present in bucket " + index
                                 + " — value updated to " + show(value),
+                        "Ключ " + show(key) + " уже есть в бакете " + index
+                                + " — значение обновлено на " + show(value),
                         List.of("bucket:" + index, "node:" + show(key)),
                         state());
                 return old;
@@ -89,12 +93,17 @@ public class VisualHashMap<K, V> {
                     "Collision: key " + show(key) + " hashes to bucket " + index
                             + ", which already holds " + (bucket.size() - 1)
                             + " entry(ies). Appended to the chain.",
+                    "Коллизия: ключ " + show(key) + " попадает в бакет " + index
+                            + ", где уже " + (bucket.size() - 1)
+                            + " элемент(ов). Добавлен в цепочку.",
                     List.of("bucket:" + index, "node:" + show(key)),
                     state());
         } else {
             Trace.event("HASHMAP_PUT",
                     "Put " + show(key) + " into empty bucket " + index
                             + " (hash " + hash + " & " + (capacity - 1) + ")",
+                    "Положили " + show(key) + " в пустой бакет " + index
+                            + " (хэш " + hash + " & " + (capacity - 1) + ")",
                     List.of("bucket:" + index, "node:" + show(key)),
                     state());
         }
@@ -115,6 +124,8 @@ public class VisualHashMap<K, V> {
                     Trace.event("HASHMAP_GET",
                             "get(" + show(key) + ") looked in bucket " + index
                                     + " and found value " + show(node.value),
+                            "get(" + show(key) + ") заглянул в бакет " + index
+                                    + " и нашёл значение " + show(node.value),
                             List.of("bucket:" + index, "node:" + show(key)),
                             state());
                     return node.value;
@@ -124,6 +135,8 @@ public class VisualHashMap<K, V> {
         Trace.event("HASHMAP_GET",
                 "get(" + show(key) + ") looked in bucket " + index
                         + " and found nothing — returns null",
+                "get(" + show(key) + ") заглянул в бакет " + index
+                        + " и ничего не нашёл — вернёт null",
                 List.of("bucket:" + index),
                 state());
         return null;
@@ -158,6 +171,10 @@ public class VisualHashMap<K, V> {
                 "Size " + size + " exceeded threshold — resized from "
                         + oldCapacity + " to " + capacity
                         + " buckets and rehashed all entries (new threshold "
+                        + threshold + ")",
+                "Размер " + size + " превысил порог — расширение с "
+                        + oldCapacity + " до " + capacity
+                        + " бакетов и перехэширование всех элементов (новый порог "
                         + threshold + ")",
                 List.of(),
                 state());

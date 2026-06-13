@@ -1,6 +1,7 @@
 import { getVisualizer } from '@app/engine/topicRegistry';
 import { useStore } from '@app/engine/store';
 import { EventLog } from '@app/primitives/EventLog';
+import { stepLabel, ui, useLang } from '@app/i18n';
 
 export function VisualizationCanvas() {
   const topic = useStore((s) => s.topic);
@@ -9,6 +10,7 @@ export function VisualizationCanvas() {
   const setStep = useStore((s) => s.setStep);
   const stepNext = useStore((s) => s.stepNext);
   const stepPrev = useStore((s) => s.stepPrev);
+  const lang = useLang((s) => s.lang);
 
   if (!topic) return null;
 
@@ -21,30 +23,28 @@ export function VisualizationCanvas() {
         {Visualizer ? (
           <Visualizer event={currentEvent} />
         ) : (
-          <div style={{ opacity: 0.6, fontSize: 13 }}>
-            No visualizer found for <code>{topic.id}</code>. Showing the event log only.
-          </div>
+          <div style={{ opacity: 0.6, fontSize: 13 }}>{ui('noVisualizer', lang)}</div>
         )}
       </div>
 
       <div className="playback">
         <button onClick={stepPrev} disabled={events.length === 0 || stepIndex <= 0}>
-          ◀ Prev
+          {ui('prev', lang)}
         </button>
         <button
           onClick={stepNext}
           disabled={events.length === 0 || stepIndex >= events.length - 1}
         >
-          Next ▶
+          {ui('next', lang)}
         </button>
         <span>
-          {events.length > 0 ? `Step ${stepIndex + 1} / ${events.length}` : 'No steps yet'}
+          {events.length > 0 ? stepLabel(lang, stepIndex + 1, events.length) : ui('noSteps', lang)}
         </span>
       </div>
 
       <div>
         <div className="panel-title" style={{ border: 'none', padding: '4px 0' }}>
-          Event log — click a step
+          {ui('eventLogTitle', lang)}
         </div>
         <EventLog events={events} currentStep={stepIndex} onSelect={setStep} />
       </div>

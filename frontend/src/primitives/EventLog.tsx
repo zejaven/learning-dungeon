@@ -1,10 +1,11 @@
 import type { CSSProperties } from 'react';
 import type { TraceEvent } from '@app/engine/traceTypes';
+import { tl, ui, useLang } from '@app/i18n';
 
 /**
  * The step-by-step ledger of trace events. The current step is highlighted and
  * each row is clickable to scrub playback. The event's description is the
- * built-in "why did this happen?" explanation.
+ * built-in "why did this happen?" explanation, shown in the active language.
  */
 export function EventLog({
   events,
@@ -15,8 +16,9 @@ export function EventLog({
   currentStep: number;
   onSelect: (index: number) => void;
 }) {
+  const lang = useLang((s) => s.lang);
   if (events.length === 0) {
-    return <div style={emptyStyle}>Run the code to see what happens, step by step.</div>;
+    return <div style={emptyStyle}>{ui('eventLogEmpty', lang)}</div>;
   }
   return (
     <ol style={listStyle}>
@@ -27,7 +29,7 @@ export function EventLog({
           style={{ ...itemStyle, ...(i === currentStep ? activeStyle : {}) }}
         >
           <span style={badgeStyle}>{ev.event}</span>
-          <span>{ev.description}</span>
+          <span>{tl(ev.description, lang)}</span>
         </li>
       ))}
     </ol>

@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { streamSse } from '@app/engine/api';
 import { parseActivity } from '@app/engine/claudeStream';
 import { useStore } from '@app/engine/store';
+import { statusLabel, ui, useLang } from '@app/i18n';
 
 export function AddTopicDialog({ onClose }: { onClose: () => void }) {
   const loadTopics = useStore((s) => s.loadTopics);
+  const lang = useLang((s) => s.lang);
   const [question, setQuestion] = useState('');
   const [log, setLog] = useState<string[]>([]);
   const [status, setStatus] = useState<string>('');
@@ -24,7 +26,7 @@ export function AddTopicDialog({ onClose }: { onClose: () => void }) {
     if (!question.trim() || busy) return;
     setLog([]);
     setStatus('running');
-    setStatusMessage('Starting…');
+    setStatusMessage('…');
     setBusy(true);
     try {
       await streamSse(
@@ -39,7 +41,7 @@ export function AddTopicDialog({ onClose }: { onClose: () => void }) {
             setStatus(s);
             setStatusMessage(message);
             if (s === 'done') {
-              append('— topic generation finished —');
+              append(ui('genFinished', lang));
               loadTopics();
             } else if (s === 'error') {
               append(`[error] ${message}`);
@@ -61,10 +63,10 @@ export function AddTopicDialog({ onClose }: { onClose: () => void }) {
     <div className="dialog-backdrop" onClick={busy ? undefined : onClose}>
       <div className="dialog" onClick={(e) => e.stopPropagation()}>
         <div className="dialog-head">
-          <h2>Add a new topic</h2>
+          <h2>{ui('addTopicTitle', lang)}</h2>
           {status && (
             <span className={`status-pill ${status}`} title={statusMessage}>
-              {status}
+              {statusLabel(lang, status)}
             </span>
           )}
           <button onClick={onClose} disabled={busy}>
@@ -73,12 +75,11 @@ export function AddTopicDialog({ onClose }: { onClose: () => void }) {
         </div>
         <div className="dialog-body">
           <p style={{ marginTop: 0, color: 'var(--muted)', fontSize: 13 }}>
-            Paste an interview question. Claude Code will generate a full topic plugin
-            (explanation, examples, visualizer, missions) under <code>topics/</code>.
+            {ui('addTopicDesc', lang)}
           </p>
           <textarea
             rows={4}
-            placeholder="e.g. What is the difference between ArrayList and LinkedList?"
+            placeholder={ui('addTopicPlaceholder', lang)}
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             disabled={busy}
@@ -92,14 +93,14 @@ export function AddTopicDialog({ onClose }: { onClose: () => void }) {
         <div className="dialog-foot">
           {done && (
             <button className="accent" onClick={() => window.location.reload()}>
-              Reload to open new topic
+              {ui('reloadNew', lang)}
             </button>
           )}
           <button onClick={onClose} disabled={busy}>
-            Close
+            {ui('close', lang)}
           </button>
           <button className="primary" onClick={generate} disabled={busy || !question.trim()}>
-            {busy ? 'Generating…' : 'Generate topic'}
+            {busy ? ui('generating', lang) : ui('generate', lang)}
           </button>
         </div>
       </div>

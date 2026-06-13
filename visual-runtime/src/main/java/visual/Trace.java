@@ -14,9 +14,11 @@ import java.util.concurrent.atomic.AtomicInteger;
  * placing visual-runtime on the sandbox classpath never drags a third-party
  * library into user code.
  *
- * <p>Event envelope:
+ * <p>Descriptions are bilingual so the UI can show the active language without
+ * re-running the code. Event envelope:
  * <pre>
- * { "step": 1, "event": "HASHMAP_PUT", "description": "...",
+ * { "step": 1, "event": "HASHMAP_PUT",
+ *   "description": { "en": "...", "ru": "..." },
  *   "highlight": ["bucket:0"], "state": { ... topic specific ... } }
  * </pre>
  */
@@ -29,9 +31,18 @@ public final class Trace {
     private Trace() {
     }
 
-    /** Emits a single trace event. {@code state} is any JSON-serializable value. */
-    public static void event(String event, String description, List<String> highlight, Object state) {
-        StringBuilder sb = new StringBuilder(128);
+    /**
+     * Emits a single trace event with a bilingual description.
+     *
+     * @param event     event type code (not translated, e.g. HASHMAP_PUT)
+     * @param descEn    English description shown in the event log
+     * @param descRu    Russian description shown in the event log
+     * @param highlight highlight tokens (e.g. "bucket:0")
+     * @param state     any JSON-serializable snapshot
+     */
+    public static void event(String event, String descEn, String descRu,
+                             List<String> highlight, Object state) {
+        StringBuilder sb = new StringBuilder(160);
         sb.append('{');
         writeKey(sb, "step").append(STEP.incrementAndGet());
         sb.append(',');
@@ -39,7 +50,15 @@ public final class Trace {
         writeString(sb, event);
         sb.append(',');
         writeKey(sb, "description");
-        writeString(sb, description);
+        sb.append('{');
+        writeString(sb, "en");
+        sb.append(':');
+        writeString(sb, descEn);
+        sb.append(',');
+        writeString(sb, "ru");
+        sb.append(':');
+        writeString(sb, descRu);
+        sb.append('}');
         sb.append(',');
         writeKey(sb, "highlight");
         writeValue(sb, highlight == null ? List.of() : highlight);

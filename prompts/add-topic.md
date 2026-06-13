@@ -1,0 +1,48 @@
+# Add a new Java interview learning topic
+
+You are working **inside an existing interactive Java interview learning app**.
+The architecture is fixed. Your job is to add ONE new topic as a self-contained
+plugin folder under `topics/<id>/`, reusing the existing engine, runner and
+visual primitives. **Do not modify the shell, the engine, the runner, or the
+backend** unless a new visual primitive or instrumented model is genuinely
+required (see below).
+
+Read `prompts/topic-contract.md` for the exact folder schema and the trace-event
+contract. Mirror the existing `topics/hashmap/` topic as your reference example.
+
+## Steps
+
+1. **Classify the topic.** Pick one type:
+   `DATA_STRUCTURE | CONCURRENCY | JVM_MEMORY | SPRING | TRANSACTION | SQL |
+   HTTP | DESIGN_PATTERN | TESTING | OTHER`.
+2. **Identify the mental model to visualize.** The primitives that exist today are
+   `ArrayGrid`, `LinkedNodes` and `EventLog` (under `frontend/src/primitives/`).
+   If none fit your topic, add a new generic, data-driven primitive there following
+   the same style, and use it from your visualizer.
+3. **Decide how the code produces trace events.** Prefer an existing instrumented
+   model in `visual-runtime` (e.g. `visual.VisualHashMap`). If the topic needs a
+   new model, add it under `visual-runtime/src/main/java/visual/` and have it call
+   `visual.Trace.event(type, description, highlight, state)`. Keep `visual-runtime`
+   dependency-free.
+4. **Create the topic folder** `topics/<id>/` with all required files (see schema).
+5. **Write 4–8 small examples**, each a full `public class Playground` with a
+   `main`, each teaching exactly one idea, importing the `visual.*` model.
+6. **Write `visualizer.tsx`** — a default-exported React component rendering the
+   event `state` using existing primitives. It must NOT know about Java execution;
+   it only renders the `state` of the current step.
+7. **Write `explanation.md`**: intuitive explanation, a 60-second interview answer,
+   production relevance, and common misconceptions.
+8. **Write `quiz.yaml`** with missions whose `event` matches a trace event type the
+   examples can produce, plus a `bossFight` question list.
+9. **Validate**: run `./gradlew :visual-runtime:test` if you added/changed a model,
+   and make sure each example compiles. Confirm the topic folder matches the schema.
+
+## Hard constraints
+
+- Keep examples short and deterministic; one idea each.
+- Reuse primitives. Only add a new primitive under `frontend/src/primitives/` if
+  none fit, and keep it generic and data-driven.
+- Trace `state` must follow the topic's own `trace-schema.json`.
+- The topic must work fully offline (no external services).
+- Include the common interview traps and misconceptions for the topic.
+- Do not invent a new layout, editor, runner, or build system.

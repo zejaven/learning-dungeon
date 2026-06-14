@@ -1,4 +1,4 @@
-import type { RunResult, TopicDetail, TopicSummary } from './traceTypes';
+import type { RunResult, TopicDetail, TopicProgress, TopicSummary } from './traceTypes';
 
 export async function fetchTopics(): Promise<TopicSummary[]> {
   const res = await fetch('/api/topics');
@@ -19,6 +19,42 @@ export async function runCode(topicId: string, code: string): Promise<RunResult>
     body: JSON.stringify({ topicId, code }),
   });
   if (!res.ok) throw new Error(`Run failed (${res.status})`);
+  return res.json();
+}
+
+export async function fetchProgress(topicId: string): Promise<TopicProgress> {
+  const res = await fetch(`/api/progress/${encodeURIComponent(topicId)}`);
+  if (!res.ok) throw new Error(`Failed to load progress (${res.status})`);
+  return res.json();
+}
+
+export async function saveMissions(topicId: string, missionIds: string[]): Promise<void> {
+  await fetch(`/api/progress/${encodeURIComponent(topicId)}/missions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ missionIds }),
+  });
+}
+
+export interface SaveBossAnswerPayload {
+  questionIndex: number;
+  questionText: string;
+  answer: string;
+  verdict: string | null;
+  score: number | null;
+  passed: boolean;
+}
+
+export async function saveBossAnswer(
+  topicId: string,
+  payload: SaveBossAnswerPayload,
+): Promise<{ topicCompleted: boolean }> {
+  const res = await fetch(`/api/progress/${encodeURIComponent(topicId)}/boss-fight`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Failed to save answer (${res.status})`);
   return res.json();
 }
 

@@ -57,7 +57,8 @@ public class TopicRepository {
                                     loc(meta, "title", p.getFileName().toString()),
                                     loc(meta, "category", ""),
                                     str(meta, "type", "OTHER"),
-                                    loc(meta, "summary", "")
+                                    loc(meta, "summary", ""),
+                                    false
                             ))));
         } catch (IOException e) {
             log.warn("Failed to list topics: {}", e.getMessage());

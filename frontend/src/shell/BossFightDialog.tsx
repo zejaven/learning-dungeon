@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { streamSse } from '@app/engine/api';
+import { saveBossAnswer, streamSse } from '@app/engine/api';
 import { parseTextDelta } from '@app/engine/claudeStream';
 import { useStore } from '@app/engine/store';
 import { questionLabel, statusLabel, tl, ui, useLang } from '@app/i18n';
@@ -24,6 +24,8 @@ export function BossFightDialog({ onClose }: { onClose: () => void }) {
   const topic = useStore((s) => s.topic);
   const results = useStore((s) => s.bossFightResults);
   const setResult = useStore((s) => s.setBossFightResult);
+  const markTopicCompleted = useStore((s) => s.markTopicCompleted);
+  const alreadyCompleted = useStore((s) => s.topicCompleted);
   const lang = useLang((s) => s.lang);
 
   const questions = topic?.bossFight ?? [];
@@ -82,13 +84,26 @@ export function BossFightDialog({ onClose }: { onClose: () => void }) {
           onStatus: (s) => setStatus(s),
           onDone: () => {
             const score = parseScore(acc);
-            setResult(index, {
-              answer,
-              evaluation: stripScoreLine(acc),
-              score,
-              passed: score != null && score >= PASS_SCORE,
-            });
+            const verdict = stripScoreLine(acc);
+            const passed = score != null && score >= PASS_SCORE;
+            setResult(index, { answer, evaluation: verdict, score, passed });
             setBusy(false);
+            // Persist the answer (with full history) and pick up topic completion.
+            const wasCompleted = alreadyCompleted;
+            saveBossAnswer(topicId, {
+              questionIndex: index,
+              questionText: question,
+              answer,
+              verdict,
+              score,
+              passed,
+            })
+              .then((res) => {
+                if (res.topicCompleted && !wasCompleted) markTopicCompleted();
+              })
+              .catch(() => {
+                /* persistence is best-effort */
+              });
           },
         },
       );

@@ -21,7 +21,8 @@ public final class TopicDtos {
             Localized title,
             Localized category,
             String type,
-            Localized summary
+            Localized summary,
+            boolean completed
     ) {
     }
 

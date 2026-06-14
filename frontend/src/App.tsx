@@ -9,6 +9,7 @@ import { MissionPanel } from './shell/MissionPanel';
 import { AssistantDialog } from './shell/AssistantDialog';
 import { AddTopicDialog } from './shell/AddTopicDialog';
 import { BossFightDialog } from './shell/BossFightDialog';
+import { Fireworks } from './shell/Fireworks';
 
 export function App() {
   const topics = useStore((s) => s.topics);
@@ -18,6 +19,9 @@ export function App() {
   const output = useStore((s) => s.output);
   const runError = useStore((s) => s.runError);
   const completed = useStore((s) => s.completedMissions);
+  const topicCompleted = useStore((s) => s.topicCompleted);
+  const celebrating = useStore((s) => s.celebrating);
+  const setCelebrating = useStore((s) => s.setCelebrating);
 
   const loadTopics = useStore((s) => s.loadTopics);
   const selectTopic = useStore((s) => s.selectTopic);
@@ -49,10 +53,12 @@ export function App() {
           {topics.length === 0 && <option value="">{ui('noTopics', lang)}</option>}
           {topics.map((t) => (
             <option key={t.id} value={t.id}>
+              {t.completed ? '✅ ' : ''}
               {tl(t.title, lang)}
             </option>
           ))}
         </select>
+        {topicCompleted && <span className="completed-badge">{ui('topicCompleted', lang)}</span>}
         <div className="spacer" />
         <select value={lang} onChange={(e) => setLang(e.target.value as (typeof LANGS)[number])}>
           {LANGS.map((l) => (
@@ -139,6 +145,20 @@ export function App() {
       {showAssistant && <AssistantDialog onClose={() => setShowAssistant(false)} />}
       {showAddTopic && <AddTopicDialog onClose={() => setShowAddTopic(false)} />}
       {showBossFight && <BossFightDialog onClose={() => setShowBossFight(false)} />}
+
+      {celebrating && (
+        <>
+          <Fireworks />
+          <div className="celebrate-card">
+            <div className="celebrate-emoji">🏆</div>
+            <h2>{ui('congratsTitle', lang)}</h2>
+            <p>{ui('congratsBody', lang)}</p>
+            <button className="primary" onClick={() => setCelebrating(false)}>
+              {ui('celebrateClose', lang)}
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

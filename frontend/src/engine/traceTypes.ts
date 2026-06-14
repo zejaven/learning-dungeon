@@ -24,6 +24,23 @@ export interface TopicSummary {
   category: Localized;
   type: string;
   summary: Localized;
+  /** True once every boss-fight question has been passed. */
+  completed: boolean;
+}
+
+/** Persisted progress for a topic, restored on load. */
+export interface TopicProgress {
+  missions: Record<string, boolean>;
+  bossFight: Record<string, BossAnswer>;
+  completed: boolean;
+}
+
+export interface BossAnswer {
+  questionIndex: number;
+  answer: string;
+  verdict: string | null;
+  score: number | null;
+  passed: boolean;
 }
 
 export interface Example {

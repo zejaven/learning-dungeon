@@ -99,6 +99,13 @@ const UI: Record<string, Localized> = {
   },
   passed: { en: 'Passed', ru: 'Зачтено' },
   needMore: { en: 'Needs work — think again', ru: 'Недостаточно — подумайте ещё' },
+  topicCompleted: { en: '✅ Completed', ru: '✅ Пройдено' },
+  congratsTitle: { en: '🎉 Topic completed!', ru: '🎉 Тема пройдена!' },
+  congratsBody: {
+    en: 'You passed every boss-fight question for this topic. Well done!',
+    ru: 'Вы зачли все вопросы Битвы с боссом по этой теме. Отличная работа!',
+  },
+  celebrateClose: { en: 'Nice!', ru: 'Класс!' },
 };
 
 export function ui(key: keyof typeof UI | string, lang: Lang): string {

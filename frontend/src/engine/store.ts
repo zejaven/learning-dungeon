@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { fetchTopic, fetchTopics, runCode } from './api';
+import { fetchProgress, fetchTopic, fetchTopics, runCode, saveMissions } from './api';
 import type { TopicDetail, TopicSummary, TraceEvent } from './traceTypes';
 
 interface AppState {
@@ -19,6 +19,10 @@ interface AppState {
   completedMissions: Record<string, boolean>;
   /** Boss-fight evaluation results, keyed by question index. */
   bossFightResults: Record<number, BossFightResult>;
+  /** Whether the current topic is fully completed (all questions passed). */
+  topicCompleted: boolean;
+  /** Drives the celebration overlay when a topic is finished. */
+  celebrating: boolean;
 
   loadTopics: () => Promise<void>;
   selectTopic: (id: string) => Promise<void>;
@@ -30,6 +34,8 @@ interface AppState {
   stepNext: () => void;
   stepPrev: () => void;
   setBossFightResult: (index: number, result: BossFightResult) => void;
+  markTopicCompleted: () => void;
+  setCelebrating: (value: boolean) => void;
 }
 
 /** One graded boss-fight answer; `passed` is score >= 6. */
@@ -58,6 +64,8 @@ export const useStore = create<AppState>((set, get) => ({
   stepIndex: -1,
   completedMissions: {},
   bossFightResults: {},
+  topicCompleted: false,
+  celebrating: false,
 
   async loadTopics() {
     try {
@@ -86,7 +94,30 @@ export const useStore = create<AppState>((set, get) => ({
         stepIndex: -1,
         completedMissions: {},
         bossFightResults: {},
+        topicCompleted: false,
+        celebrating: false,
       });
+      // Restore saved progress (best-effort; never blocks opening the topic).
+      try {
+        const progress = await fetchProgress(id);
+        if (get().topic?.id !== id) return; // a newer topic was selected meanwhile
+        const bossFightResults: Record<number, BossFightResult> = {};
+        for (const [key, a] of Object.entries(progress.bossFight)) {
+          bossFightResults[Number(key)] = {
+            answer: a.answer,
+            evaluation: a.verdict ?? '',
+            score: a.score,
+            passed: a.passed,
+          };
+        }
+        set({
+          completedMissions: { ...progress.missions },
+          bossFightResults,
+          topicCompleted: progress.completed,
+        });
+      } catch {
+        /* progress is optional; ignore if the DB is unavailable */
+      }
     } catch (e) {
       set({ loadingTopic: false, runError: (e as Error).message });
     }
@@ -115,9 +146,11 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       const result = await runCode(topic.id, code);
       const completed = { ...get().completedMissions };
+      const newlyCompleted: string[] = [];
       for (const mission of topic.missions) {
-        if (result.traceEvents.some((ev) => ev.event === mission.event)) {
+        if (result.traceEvents.some((ev) => ev.event === mission.event) && !completed[mission.id]) {
           completed[mission.id] = true;
+          newlyCompleted.push(mission.id);
         }
       }
       set({
@@ -128,6 +161,11 @@ export const useStore = create<AppState>((set, get) => ({
         stepIndex: result.traceEvents.length - 1,
         completedMissions: completed,
       });
+      if (newlyCompleted.length > 0) {
+        saveMissions(topic.id, newlyCompleted).catch(() => {
+          /* persistence is best-effort */
+        });
+      }
     } catch (e) {
       set({ running: false, runError: (e as Error).message });
     }
@@ -150,5 +188,20 @@ export const useStore = create<AppState>((set, get) => ({
 
   setBossFightResult(index, result) {
     set({ bossFightResults: { ...get().bossFightResults, [index]: result } });
+  },
+
+  markTopicCompleted() {
+    const id = get().topic?.id;
+    set({
+      topicCompleted: true,
+      celebrating: true,
+      topics: id
+        ? get().topics.map((t) => (t.id === id ? { ...t, completed: true } : t))
+        : get().topics,
+    });
+  },
+
+  setCelebrating(value) {
+    set({ celebrating: value });
   },
 }));

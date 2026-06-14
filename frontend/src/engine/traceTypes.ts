@@ -54,6 +54,8 @@ export interface TopicDetail {
   missions: Mission[];
   /** Example question pre-filled as the Ask AI placeholder; may be empty. */
   assistantExample: Localized;
+  /** Interview questions for the Boss Fight practice mode. */
+  bossFight: Localized[];
 }
 
 /** Props every topic visualizer receives. */

@@ -39,10 +39,26 @@ public class AssistantController {
 
     @PostMapping(value = "/ask", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter ask(@RequestBody AskRequest request) {
-        List<String> args = model == null || model.isBlank()
+        return claude.stream(buildPrompt(request), modelArgs());
+    }
+
+    public record EvaluateRequest(String topicId, String question, String answer, String lang) {
+    }
+
+    /**
+     * Grades the user's spoken answer to one boss-fight interview question, using
+     * the topic theory as ground truth. The reply starts with a machine-readable
+     * {@code SCORE: <n>/10} line the frontend parses into a badge.
+     */
+    @PostMapping(value = "/evaluate", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter evaluate(@RequestBody EvaluateRequest request) {
+        return claude.stream(buildEvaluationPrompt(request), modelArgs());
+    }
+
+    private List<String> modelArgs() {
+        return model == null || model.isBlank()
                 ? List.of()
                 : List.of("--model", model);
-        return claude.stream(buildPrompt(request), args);
     }
 
     private String buildPrompt(AskRequest request) {
@@ -78,6 +94,48 @@ public class AssistantController {
         }
 
         sb.append("Question: ").append(request.question() == null ? "" : request.question());
+        return sb.toString();
+    }
+
+    private String buildEvaluationPrompt(EvaluateRequest request) {
+        Optional<TopicDetail> topic = request.topicId() == null
+                ? Optional.empty()
+                : topics.getTopic(request.topicId());
+        boolean ru = "ru".equalsIgnoreCase(request.lang());
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("You are a strict but fair Java technical interviewer grading a ")
+                .append("candidate's answer to ONE interview question. Use the topic ")
+                .append("reference material below as the ground truth.\n\n");
+        sb.append("Grade the answer from 0 to 10, where 0 = empty or wrong, ")
+                .append("6 = acceptable pass, 10 = excellent, complete and precise.\n");
+        sb.append("Your VERY FIRST line must be exactly `SCORE: <n>/10` where <n> is a ")
+                .append("single integer from 0 to 10. Then a blank line, then a short, ")
+                .append("specific explanation: what was correct, what was missing or wrong, ")
+                .append("and the key point a strong answer needs. Do not create or edit files.\n");
+        sb.append(ru
+                ? "Write the explanation in Russian, but keep code, identifiers and "
+                        + "technical terms like Java, HashMap, hashCode in their original form. "
+                        + "The SCORE line stays in English exactly as specified.\n\n"
+                : "Write the explanation in English.\n\n");
+
+        topic.ifPresent(t -> {
+            String title = ru ? t.title().ru() : t.title().en();
+            String category = ru ? t.category().ru() : t.category().en();
+            String explanation = ru ? t.explanation().ru() : t.explanation().en();
+            sb.append("Topic: ").append(title).append(" (").append(category).append(").\n\n");
+            if (!explanation.isBlank()) {
+                sb.append("Topic reference material (ground truth):\n")
+                        .append(explanation).append("\n\n");
+            }
+        });
+
+        sb.append("Interview question:\n")
+                .append(request.question() == null ? "" : request.question().trim())
+                .append("\n\n");
+        sb.append("Candidate's answer:\n")
+                .append(request.answer() == null ? "" : request.answer().trim())
+                .append("\n");
         return sb.toString();
     }
 }

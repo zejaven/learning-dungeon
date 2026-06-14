@@ -17,6 +17,8 @@ interface AppState {
   events: TraceEvent[];
   stepIndex: number; // index into events; -1 when there are none
   completedMissions: Record<string, boolean>;
+  /** Boss-fight evaluation results, keyed by question index. */
+  bossFightResults: Record<number, BossFightResult>;
 
   loadTopics: () => Promise<void>;
   selectTopic: (id: string) => Promise<void>;
@@ -27,6 +29,15 @@ interface AppState {
   setStep: (index: number) => void;
   stepNext: () => void;
   stepPrev: () => void;
+  setBossFightResult: (index: number, result: BossFightResult) => void;
+}
+
+/** One graded boss-fight answer; `passed` is score >= 6. */
+export interface BossFightResult {
+  answer: string;
+  evaluation: string;
+  score: number | null;
+  passed: boolean;
 }
 
 function defaultCodeFor(topic: TopicDetail): string {
@@ -46,6 +57,7 @@ export const useStore = create<AppState>((set, get) => ({
   events: [],
   stepIndex: -1,
   completedMissions: {},
+  bossFightResults: {},
 
   async loadTopics() {
     try {
@@ -73,6 +85,7 @@ export const useStore = create<AppState>((set, get) => ({
         events: [],
         stepIndex: -1,
         completedMissions: {},
+        bossFightResults: {},
       });
     } catch (e) {
       set({ loadingTopic: false, runError: (e as Error).message });
@@ -133,5 +146,9 @@ export const useStore = create<AppState>((set, get) => ({
 
   stepPrev() {
     get().setStep(get().stepIndex - 1);
+  },
+
+  setBossFightResult(index, result) {
+    set({ bossFightResults: { ...get().bossFightResults, [index]: result } });
   },
 }));

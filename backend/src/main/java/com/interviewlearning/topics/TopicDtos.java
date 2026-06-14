@@ -57,7 +57,8 @@ public final class TopicDtos {
             List<Example> examples,
             String defaultExampleId,
             List<Mission> missions,
-            Localized assistantExample
+            Localized assistantExample,
+            List<Localized> bossFight
     ) {
     }
 }

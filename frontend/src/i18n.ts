@@ -81,6 +81,24 @@ const UI: Record<string, Localized> = {
   generating: { en: 'Generating…', ru: 'Генерация…' },
   reloadNew: { en: 'Reload to open new topic', ru: 'Перезагрузить, чтобы открыть тему' },
   genFinished: { en: '— topic generation finished —', ru: '— генерация темы завершена —' },
+  bossFight: { en: '⚔️ Boss Fight', ru: '⚔️ Битва с боссом' },
+  bossFightTitle: { en: 'Boss Fight — ', ru: 'Битва с боссом — ' },
+  bossFightAnswerPlaceholder: {
+    en: 'Type your answer as if you were in the interview…',
+    ru: 'Напишите ответ так, будто вы на собеседовании…',
+  },
+  submitAnswer: { en: 'Submit answer (Ctrl+Enter)', ru: 'Отправить ответ (Ctrl+Enter)' },
+  evaluating: { en: 'Evaluating…', ru: 'Оцениваю…' },
+  reEvaluate: { en: 'Try again', ru: 'Ответить заново' },
+  examinerVerdict: { en: 'Examiner verdict', ru: 'Вердикт экзаменатора' },
+  score: { en: 'Score', ru: 'Оценка' },
+  notScored: { en: 'not answered yet', ru: 'ещё нет ответа' },
+  passHint: {
+    en: 'Score 6 or higher to unlock the next question.',
+    ru: 'Наберите 6 или выше, чтобы открыть следующий вопрос.',
+  },
+  passed: { en: 'Passed', ru: 'Зачтено' },
+  needMore: { en: 'Needs work — think again', ru: 'Недостаточно — подумайте ещё' },
 };
 
 export function ui(key: keyof typeof UI | string, lang: Lang): string {
@@ -90,6 +108,10 @@ export function ui(key: keyof typeof UI | string, lang: Lang): string {
 
 export function stepLabel(lang: Lang, current: number, total: number): string {
   return lang === 'ru' ? `Шаг ${current} / ${total}` : `Step ${current} / ${total}`;
+}
+
+export function questionLabel(lang: Lang, current: number, total: number): string {
+  return lang === 'ru' ? `Вопрос ${current} / ${total}` : `Question ${current} / ${total}`;
 }
 
 export function statusLabel(lang: Lang, status: string): string {

@@ -8,6 +8,7 @@ import { VisualizationCanvas } from './shell/VisualizationCanvas';
 import { MissionPanel } from './shell/MissionPanel';
 import { AssistantDialog } from './shell/AssistantDialog';
 import { AddTopicDialog } from './shell/AddTopicDialog';
+import { BossFightDialog } from './shell/BossFightDialog';
 
 export function App() {
   const topics = useStore((s) => s.topics);
@@ -30,6 +31,7 @@ export function App() {
 
   const [showAssistant, setShowAssistant] = useState(false);
   const [showAddTopic, setShowAddTopic] = useState(false);
+  const [showBossFight, setShowBossFight] = useState(false);
 
   useEffect(() => {
     loadTopics();
@@ -122,12 +124,21 @@ export function App() {
                 <MissionPanel missions={topic.missions} completed={completed} />
               </>
             )}
+            {topic && topic.bossFight.length > 0 && (
+              <button
+                className="accent boss-fight-btn"
+                onClick={() => setShowBossFight(true)}
+              >
+                {ui('bossFight', lang)}
+              </button>
+            )}
           </div>
         </section>
       </div>
 
       {showAssistant && <AssistantDialog onClose={() => setShowAssistant(false)} />}
       {showAddTopic && <AddTopicDialog onClose={() => setShowAddTopic(false)} />}
+      {showBossFight && <BossFightDialog onClose={() => setShowBossFight(false)} />}
     </div>
   );
 }

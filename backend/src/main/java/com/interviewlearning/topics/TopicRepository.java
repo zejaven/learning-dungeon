@@ -80,6 +80,7 @@ public class TopicRepository {
         Localized explanation = readExplanation(topicDir);
         List<Example> examples = loadExamples(topicDir, meta);
         List<Mission> missions = loadMissions(topicDir, meta);
+        List<Localized> bossFight = loadBossFight(topicDir, meta);
         List<String> primitives = stringList(meta.get("primitives"));
 
         return Optional.of(new TopicDetail(
@@ -93,7 +94,8 @@ public class TopicRepository {
                 examples,
                 str(meta, "defaultExample", examples.isEmpty() ? "" : examples.get(0).id()),
                 missions,
-                loc(meta, "assistantExample", "")
+                loc(meta, "assistantExample", ""),
+                bossFight
         ));
     }
 
@@ -157,6 +159,40 @@ public class TopicRepository {
                 }
             }
             return missions;
+        }).orElse(List.of());
+    }
+
+    /**
+     * Reads the {@code bossFight} interview questions from quiz.yaml. Accepts a
+     * {@code { en: [...], ru: [...] }} map (zipped index by index) or a plain list
+     * (used for both languages).
+     */
+    private List<Localized> loadBossFight(Path topicDir, Map<String, Object> meta) {
+        Path quiz = topicDir.resolve(str(meta, "missionsFile", "quiz.yaml"));
+        if (!Files.exists(quiz)) {
+            return List.of();
+        }
+        return loadYaml(quiz).map(q -> {
+            Object raw = q.get("bossFight");
+            List<Localized> result = new ArrayList<>();
+            if (raw instanceof Map<?, ?> m) {
+                List<String> en = stringList(m.get("en"));
+                List<String> ru = stringList(m.get("ru"));
+                int n = Math.max(en.size(), ru.size());
+                for (int i = 0; i < n; i++) {
+                    String e = i < en.size() ? en.get(i) : "";
+                    String r = i < ru.size() ? ru.get(i) : "";
+                    if (e.isEmpty()) e = r;
+                    if (r.isEmpty()) r = e;
+                    result.add(new Localized(e, r));
+                }
+            } else if (raw instanceof List<?> list) {
+                for (Object o : list) {
+                    String s = String.valueOf(o);
+                    result.add(new Localized(s, s));
+                }
+            }
+            return result;
         }).orElse(List.of());
     }
 

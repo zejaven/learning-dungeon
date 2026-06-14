@@ -1,0 +1,136 @@
+id: outbox-pattern
+title:
+  en: Outbox Pattern
+  ru: Паттерн Outbox
+category:
+  en: Distributed Systems / Messaging
+  ru: Распределённые системы / Обмен сообщениями
+type: TRANSACTION
+summary:
+  en: >
+    The Outbox pattern (transactional outbox) makes publishing an event reliable
+    when a service must both change its database and notify a message broker —
+    two different systems that cannot share a transaction. Instead of writing the
+    business change and publishing as two separate steps (the dual-write problem,
+    where a crash in between loses or duplicates the event), the service writes
+    the business change AND inserts an event row into an outbox table in the same
+    local database transaction. A separate relay later reads unpublished rows and
+    publishes them to the broker. Because the two writes commit together,
+    "publish exactly when the database commits" becomes guaranteed.
+  ru: >
+    Паттерн Outbox (транзакционный outbox) делает публикацию события надёжной,
+    когда сервис должен и изменить свою базу данных, и уведомить брокер сообщений
+    — две разные системы, которые не могут разделить одну транзакцию. Вместо того
+    чтобы выполнять бизнес-изменение и публикацию двумя отдельными шагами
+    (проблема двойной записи, когда сбой между ними теряет или дублирует
+    событие), сервис записывает бизнес-изменение И вставляет строку события в
+    таблицу outbox в одной локальной транзакции базы данных. Отдельный релей
+    позже читает неопубликованные строки и публикует их в брокер. Поскольку обе
+    записи фиксируются вместе, «публиковать ровно тогда, когда фиксируется база»
+    становится гарантией.
+
+# Visual primitives this topic's visualizer composes (frontend).
+primitives:
+  - BoxGroup
+  - EventLog
+
+defaultExample: relay-publish
+
+# Examples shown as buttons. `file` is relative to examples/.
+examples:
+  - id: basic
+    title:
+      en: Stage an event in one transaction
+      ru: Записать событие в одной транзакции
+    file: 01-basic.java
+    explanation:
+      en: >
+        One local transaction writes the order to the business table AND stages
+        an event row in the outbox table. Both commit together, so an event can
+        never be staged for an order that was not saved. The outbox row starts
+        PENDING — the transaction never touches the broker.
+      ru: >
+        Одна локальная транзакция записывает заказ в таблицу бизнес-данных И
+        кладёт строку события в таблицу outbox. Обе фиксируются вместе, поэтому
+        событие никогда не появится для заказа, который не был сохранён. Строка в
+        outbox начинается со статуса PENDING — транзакция не обращается к брокеру.
+  - id: relay-publish
+    title:
+      en: Relay publishes the event
+      ru: Релей публикует событие
+    file: 02-relay-publish.java
+    explanation:
+      en: >
+        After the transaction commits, a separate relay (a poller, or
+        change-data-capture) reads PENDING outbox rows, publishes them to the
+        broker, and marks them PUBLISHED. This decouples the commit from the
+        broker, which may be slow or temporarily down.
+      ru: >
+        После фиксации транзакции отдельный релей (поллер или change-data-capture)
+        читает PENDING-строки outbox, публикует их в брокер и помечает PUBLISHED.
+        Это отвязывает фиксацию от брокера, который может быть медленным или
+        временно недоступным.
+  - id: dual-write-trap
+    title:
+      en: Dual write loses the event (trap)
+      ru: Двойная запись теряет событие (ловушка)
+    file: 03-dual-write-trap.java
+    explanation:
+      en: >
+        The problem the outbox exists to prevent. The service commits the order,
+        then as a SEPARATE step tries to publish to the broker. The publish
+        crashes — the order is saved but the event is gone, and with no outbox
+        there is nothing to retry. Database and broker are now inconsistent.
+      ru: >
+        Проблема, ради которой и нужен outbox. Сервис фиксирует заказ, затем
+        ОТДЕЛЬНЫМ шагом пытается опубликовать в брокер. Публикация падает — заказ
+        сохранён, а событие потеряно, и без outbox нечего повторять. База и брокер
+        теперь рассогласованы.
+  - id: atomic-rollback
+    title:
+      en: Rollback stages nothing (trap)
+      ru: Откат не оставляет события (ловушка)
+    file: 04-atomic-rollback.java
+    explanation:
+      en: >
+        Because the business write and the outbox insert share one transaction,
+        a failed transaction rolls back BOTH: no order is saved and no event is
+        staged. You never publish an event for a change that did not actually
+        happen — the other half of atomicity.
+      ru: >
+        Поскольку бизнес-запись и вставка в outbox делят одну транзакцию,
+        неудачная транзакция откатывает ОБЕ: ни заказ не сохраняется, ни событие
+        не записывается. Вы никогда не публикуете событие для изменения, которого
+        на самом деле не было — вторая сторона атомарности.
+  - id: relay-redelivery-trap
+    title:
+      en: Relay redelivers a duplicate (trap)
+      ru: Релей доставляет дубликат (ловушка)
+    file: 05-relay-redelivery-trap.java
+    explanation:
+      en: >
+        The relay sends the event to the broker but crashes before marking the
+        row PUBLISHED, so the next poll sends it again — the broker receives a
+        duplicate. The relay is at-least-once, so consumers must dedup. This is
+        exactly the job of the Inbox pattern.
+      ru: >
+        Релей отправляет событие в брокер, но падает до того, как пометит строку
+        PUBLISHED, поэтому следующий опрос отправляет его снова — брокер получает
+        дубликат. Релей работает по принципу at-least-once, поэтому потребители
+        должны дедуплицировать. Это ровно задача паттерна Inbox.
+  - id: multiple-events
+    title:
+      en: Drain many events in order
+      ru: Публикация многих событий по порядку
+    file: 06-multiple-events.java
+    explanation:
+      en: >
+        Several business transactions each stage their own event. The outbox
+        preserves insertion order, so one relay run drains all PENDING rows to
+        the broker in the same order the changes were committed.
+      ru: >
+        Несколько бизнес-транзакций записывают каждая своё событие. Outbox
+        сохраняет порядок вставки, поэтому один запуск релея публикует все
+        PENDING-строки в брокер в том же порядке, в каком фиксировались изменения.
+
+missionsFile: quiz.yaml

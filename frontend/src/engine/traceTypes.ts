@@ -52,6 +52,8 @@ export interface TopicDetail {
   examples: Example[];
   defaultExampleId: string;
   missions: Mission[];
+  /** Example question pre-filled as the Ask AI placeholder; may be empty. */
+  assistantExample: Localized;
 }
 
 /** Props every topic visualizer receives. */

@@ -52,7 +52,9 @@ export function AssistantDialog({ onClose }: { onClose: () => void }) {
         <div className="dialog-body">
           <textarea
             rows={3}
-            placeholder={ui('assistantPlaceholder', lang)}
+            placeholder={
+              tl(topic?.assistantExample, lang) || ui('assistantPlaceholder', lang)
+            }
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={(e) => {

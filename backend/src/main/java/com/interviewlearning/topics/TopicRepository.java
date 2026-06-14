@@ -92,7 +92,8 @@ public class TopicRepository {
                 explanation,
                 examples,
                 str(meta, "defaultExample", examples.isEmpty() ? "" : examples.get(0).id()),
-                missions
+                missions,
+                loc(meta, "assistantExample", "")
         ));
     }
 

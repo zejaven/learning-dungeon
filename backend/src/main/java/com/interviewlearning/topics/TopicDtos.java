@@ -56,7 +56,8 @@ public final class TopicDtos {
             Localized explanation,
             List<Example> examples,
             String defaultExampleId,
-            List<Mission> missions
+            List<Mission> missions,
+            Localized assistantExample
     ) {
     }
 }

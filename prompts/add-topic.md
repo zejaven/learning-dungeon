@@ -13,8 +13,9 @@ contract. Mirror the existing `topics/hashmap/` topic as your reference example.
 **The topic must be fully bilingual (English + Russian).** Every user-visible
 string exists in both languages: `title`, `category`, `summary`, each example's
 `title` and `explanation`, every mission `title`/`goal`, the `bossFight` lists,
-two explanation files (`explanation.en.md` + `explanation.ru.md`), and the trace
-event descriptions (`Trace.event(event, descEn, descRu, highlight, state)`). Keep
+the `assistantExample` (the Ask AI placeholder question), two explanation files
+(`explanation.en.md` + `explanation.ru.md`), and the trace event descriptions
+(`Trace.event(event, descEn, descRu, highlight, state)`). Keep
 code, identifiers and technical terms (Java, HashMap, hashCode, …) untranslated,
 and keep Java source/comments in English. Localize visualizer labels via
 `tl(..., lang)` with `useLang` from `@app/i18n`.

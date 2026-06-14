@@ -48,6 +48,9 @@ examples:
     explanation:
       en: <what it shows>
       ru: <что показывает>
+assistantExample:                # one example question, shown as the Ask AI placeholder
+  en: "e.g. <a natural interview question about this topic>"
+  ru: "например: <тот же вопрос по-русски>"
 missionsFile: quiz.yaml
 ```
 

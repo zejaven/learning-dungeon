@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -33,13 +34,16 @@ public class TopicGenController {
     private final ClaudeCodeService claude;
     private final RepoPaths repoPaths;
     private final String permissionMode;
+    private final String model;
 
     public TopicGenController(ClaudeCodeService claude,
                               RepoPaths repoPaths,
-                              @Value("${app.claude.generate-permission-mode:bypassPermissions}") String permissionMode) {
+                              @Value("${app.claude.generate-permission-mode:bypassPermissions}") String permissionMode,
+                              @Value("${app.claude.generate-model:}") String model) {
         this.claude = claude;
         this.repoPaths = repoPaths;
         this.permissionMode = permissionMode;
+        this.model = model;
     }
 
     public record GenerateRequest(String question) {
@@ -48,7 +52,12 @@ public class TopicGenController {
     @PostMapping(value = "/generate", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter generate(@RequestBody GenerateRequest request) {
         String prompt = buildPrompt(request.question());
-        return claude.stream(prompt, List.of("--permission-mode", permissionMode));
+        List<String> args = new ArrayList<>(List.of("--permission-mode", permissionMode));
+        if (model != null && !model.isBlank()) {
+            args.add("--model");
+            args.add(model);
+        }
+        return claude.stream(prompt, args);
     }
 
     private String buildPrompt(String question) {

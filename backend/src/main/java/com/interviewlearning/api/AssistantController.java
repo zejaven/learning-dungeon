@@ -3,6 +3,7 @@ package com.interviewlearning.api;
 import com.interviewlearning.claude.ClaudeCodeService;
 import com.interviewlearning.topics.TopicDtos.TopicDetail;
 import com.interviewlearning.topics.TopicRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -23,10 +24,14 @@ public class AssistantController {
 
     private final ClaudeCodeService claude;
     private final TopicRepository topics;
+    private final String model;
 
-    public AssistantController(ClaudeCodeService claude, TopicRepository topics) {
+    public AssistantController(ClaudeCodeService claude,
+                              TopicRepository topics,
+                              @Value("${app.claude.assistant-model:}") String model) {
         this.claude = claude;
         this.topics = topics;
+        this.model = model;
     }
 
     public record AskRequest(String topicId, String question, String code, String lang) {
@@ -34,7 +39,10 @@ public class AssistantController {
 
     @PostMapping(value = "/ask", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter ask(@RequestBody AskRequest request) {
-        return claude.stream(buildPrompt(request), List.of());
+        List<String> args = model == null || model.isBlank()
+                ? List.of()
+                : List.of("--model", model);
+        return claude.stream(buildPrompt(request), args);
     }
 
     private String buildPrompt(AskRequest request) {

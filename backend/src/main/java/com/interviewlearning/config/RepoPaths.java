@@ -25,10 +25,29 @@ public class RepoPaths {
     private final Path repoRoot;
 
     public RepoPaths(@Value("${app.repo-root:}") String configuredRoot) {
-        Path root = (configuredRoot == null || configuredRoot.isBlank())
-                ? Path.of(System.getProperty("user.dir"))
-                : Path.of(configuredRoot);
+        Path root;
+        if (configuredRoot != null && !configuredRoot.isBlank()) {
+            root = Path.of(configuredRoot);
+        } else {
+            root = findRepoRoot(Path.of(System.getProperty("user.dir")));
+        }
         this.repoRoot = root.toAbsolutePath().normalize();
+    }
+
+    /**
+     * Walks up from {@code start} until it finds a directory containing {@code .git}
+     * or {@code topics/}, which identifies the repository root regardless of which
+     * subdirectory the JVM was launched from (e.g. {@code backend/} vs repo root).
+     */
+    private static Path findRepoRoot(Path start) {
+        Path p = start.toAbsolutePath();
+        while (p != null) {
+            if (Files.isDirectory(p.resolve(".git")) || Files.isDirectory(p.resolve("topics"))) {
+                return p;
+            }
+            p = p.getParent();
+        }
+        return start;
     }
 
     @PostConstruct

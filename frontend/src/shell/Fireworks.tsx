@@ -23,8 +23,10 @@ export function Fireworks() {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    const maybeCtx = canvas.getContext('2d');
+    if (!maybeCtx) return;
+    // Non-null binding so the nested animation closures keep the narrowed type.
+    const ctx: CanvasRenderingContext2D = maybeCtx;
 
     let width = (canvas.width = window.innerWidth);
     let height = (canvas.height = window.innerHeight);

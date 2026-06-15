@@ -2,7 +2,12 @@ import { create } from 'zustand';
 import { fetchProgress, fetchTopic, fetchTopics, runCode, saveMissions } from './api';
 import type { TopicDetail, TopicSummary, TraceEvent } from './traceTypes';
 
+export type View = 'home' | 'workspace';
+
 interface AppState {
+  /** Which screen is shown: the catalog home or the code workspace. */
+  view: View;
+
   topics: TopicSummary[];
   topicsError: string | null;
 
@@ -24,6 +29,7 @@ interface AppState {
   /** Drives the celebration overlay when a topic is finished. */
   celebrating: boolean;
 
+  setView: (view: View) => void;
   loadTopics: () => Promise<void>;
   selectTopic: (id: string) => Promise<void>;
   setCode: (code: string) => void;
@@ -52,6 +58,7 @@ function defaultCodeFor(topic: TopicDetail): string {
 }
 
 export const useStore = create<AppState>((set, get) => ({
+  view: 'home',
   topics: [],
   topicsError: null,
   topic: null,
@@ -67,14 +74,17 @@ export const useStore = create<AppState>((set, get) => ({
   topicCompleted: false,
   celebrating: false,
 
+  setView(view) {
+    set({ view });
+  },
+
   async loadTopics() {
+    // Loads the list of generated topics (used for completion flags and to know
+    // which catalog entries already have theory). The app opens on the home
+    // screen, so no topic is auto-selected.
     try {
       const topics = await fetchTopics();
       set({ topics, topicsError: null });
-      const current = get().topic;
-      if (!current && topics.length > 0) {
-        await get().selectTopic(topics[0].id);
-      }
     } catch (e) {
       set({ topicsError: (e as Error).message });
     }

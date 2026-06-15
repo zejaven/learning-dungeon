@@ -37,6 +37,10 @@ type: <DATA_STRUCTURE | CONCURRENCY | ...>
 summary:
   en: <one paragraph>
   ru: <один абзац>
+categoryId: <catalog category id>   # which home-tree category this topic belongs to
+categoryName: <Human Category Name> # ONLY when categoryId is a brand-new category
+difficulty: <1 | 2 | 3>             # 1 = Junior, 2 = Middle, 3 = Senior
+catalogId: <catalog question id>    # OPTIONAL: only when generated from a tree question
 primitives: [ArrayGrid, LinkedNodes, EventLog]   # primitives the visualizer uses
 defaultExample: <example-id>    # which example loads by default
 examples:
@@ -56,6 +60,30 @@ missionsFile: quiz.yaml
 
 (A plain scalar instead of an `{en, ru}` map is accepted and used for both
 languages, but new topics should provide both.)
+
+## Catalog placement (categoryId, difficulty, catalogId)
+
+`categoryId` places the topic in the home-screen question tree, and `difficulty`
+(1 = Junior, 2 = Middle, 3 = Senior) sets its star rating. `categoryId` MUST be
+one of these exact ids:
+
+```
+java-core, java-collections, concurrency, memory-gc, oop-design, exceptions,
+streams, algorithms, databases, spring, hibernate, design-patterns,
+microservices, rest, security, devops, performance, kotlin, messaging, other
+```
+
+Pick the single best fit from that list. If **none** of them genuinely fits the
+topic, do not force it into `other` — instead invent a **new category**: set
+`categoryId` to a new kebab-case id (not already in the list) and add a
+human-readable `categoryName` (an English label, in the same style as the
+existing category names). `categoryName` is required only for such a new category;
+omit it when `categoryId` is one of the known ids.
+
+`catalogId` is set only when a topic is generated from an existing tree question
+(it links the topic back to that question) — omit it otherwise. The generation
+request supplies the exact values to use for any of these it has already decided;
+otherwise choose them yourself.
 
 ## Trace events (the core contract)
 

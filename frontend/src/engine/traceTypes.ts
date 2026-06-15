@@ -26,6 +26,14 @@ export interface TopicSummary {
   summary: Localized;
   /** True once every boss-fight question has been passed. */
   completed: boolean;
+  /** Catalog category id this topic belongs to (for the home tree). */
+  categoryId: string;
+  /** Display name for a newly-invented category; '' for known categories. */
+  categoryName: string;
+  /** Difficulty 1-3 (Junior/Middle/Senior); 0 if unset. */
+  difficulty: number;
+  /** Originating catalog question id, if generated from one; '' otherwise. */
+  catalogId: string;
 }
 
 /** Persisted progress for a topic, restored on load. */

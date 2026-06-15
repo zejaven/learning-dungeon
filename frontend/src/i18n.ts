@@ -100,6 +100,21 @@ const UI: Record<string, Localized> = {
   passed: { en: 'Passed', ru: 'Зачтено' },
   needMore: { en: 'Needs work — think again', ru: 'Недостаточно — подумайте ещё' },
   topicCompleted: { en: '✅ Completed', ru: '✅ Пройдено' },
+  catalogTitle: { en: 'Questions', ru: 'Вопросы' },
+  theory: { en: 'Theory', ru: 'Теория' },
+  files: { en: 'Files', ru: 'Файлы' },
+  selectQuestion: {
+    en: 'Pick a question from the tree on the left.',
+    ru: 'Выберите вопрос в дереве слева.',
+  },
+  noTheoryYet: {
+    en: 'No theory for this question yet.',
+    ru: 'Для этого вопроса пока нет теории.',
+  },
+  generateTheory: { en: '✨ Generate theory', ru: '✨ Сгенерировать теорию' },
+  goToPractice: { en: 'Go to practice →', ru: 'Перейти к практике →' },
+  backToCatalog: { en: '← Catalog', ru: '← Каталог' },
+  openingTheory: { en: 'Opening…', ru: 'Открываю…' },
   congratsTitle: { en: '🎉 Topic completed!', ru: '🎉 Тема пройдена!' },
   congratsBody: {
     en: 'You passed every boss-fight question for this topic. Well done!',

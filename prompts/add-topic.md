@@ -23,9 +23,16 @@ and keep Java source/comments in English. Localize visualizer labels via
 
 ## Steps
 
-1. **Classify the topic.** Pick one type:
+1. **Classify the topic.** Pick one `type`:
    `DATA_STRUCTURE | CONCURRENCY | JVM_MEMORY | SPRING | TRANSACTION | SQL |
-   HTTP | DESIGN_PATTERN | TESTING | OTHER`.
+   HTTP | DESIGN_PATTERN | TESTING | OTHER`. Also set the topic's catalog
+   placement in `topic.yaml`: `categoryId` (one of the allowed ids in
+   topic-contract.md) and `difficulty` (1 = Junior, 2 = Middle, 3 = Senior). If
+   no existing category fits, create a NEW one: a new kebab-case `categoryId`
+   plus a human-readable `categoryName` (do not dump it into `other`).
+   The generation request may already specify `categoryId`, `difficulty` and a
+   `catalogId` — if so, use those exact values; otherwise determine `categoryId`
+   and `difficulty` yourself (and omit `catalogId`).
 2. **Identify the mental model to visualize.** The primitives that exist today are
    `ArrayGrid`, `LinkedNodes` and `EventLog` (under `frontend/src/primitives/`).
    If none fit your topic, add a new generic, data-driven primitive there following

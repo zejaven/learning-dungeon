@@ -59,7 +59,11 @@ public class TopicRepository {
                                     loc(meta, "category", ""),
                                     str(meta, "type", "OTHER"),
                                     loc(meta, "summary", ""),
-                                    false
+                                    false,
+                                    str(meta, "categoryId", ""),
+                                    str(meta, "categoryName", ""),
+                                    intVal(meta, "difficulty", 0),
+                                    str(meta, "catalogId", "")
                             ))));
         } catch (IOException e) {
             log.warn("Failed to list topics: {}", e.getMessage());
@@ -245,6 +249,21 @@ public class TopicRepository {
     private static String str(Map<String, Object> map, String key, String fallback) {
         Object v = map.get(key);
         return v == null ? fallback : String.valueOf(v).trim();
+    }
+
+    private static int intVal(Map<String, Object> map, String key, int fallback) {
+        Object v = map.get(key);
+        if (v instanceof Number n) {
+            return n.intValue();
+        }
+        if (v != null) {
+            try {
+                return Integer.parseInt(String.valueOf(v).trim());
+            } catch (NumberFormatException ignored) {
+                return fallback;
+            }
+        }
+        return fallback;
     }
 
     /**

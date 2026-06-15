@@ -22,7 +22,11 @@ public final class TopicDtos {
             Localized category,
             String type,
             Localized summary,
-            boolean completed
+            boolean completed,
+            String categoryId,
+            String categoryName,
+            int difficulty,
+            String catalogId
     ) {
     }
 

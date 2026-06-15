@@ -34,7 +34,8 @@ public class TopicController {
         Set<String> done = completedIds();
         return repository.listTopics().stream()
                 .map(s -> done.contains(s.id())
-                        ? new TopicSummary(s.id(), s.title(), s.category(), s.type(), s.summary(), true)
+                        ? new TopicSummary(s.id(), s.title(), s.category(), s.type(), s.summary(),
+                                true, s.categoryId(), s.categoryName(), s.difficulty(), s.catalogId())
                         : s)
                 .toList();
     }

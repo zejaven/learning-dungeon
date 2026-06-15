@@ -4,10 +4,25 @@ import { parseActivity } from '@app/engine/claudeStream';
 import { useStore } from '@app/engine/store';
 import { statusLabel, ui, useLang } from '@app/i18n';
 
-export function AddTopicDialog({ onClose }: { onClose: () => void }) {
+/** Catalog placement passed to generation when starting from a tree question. */
+export interface GenerateContext {
+  catalogId: string;
+  categoryId: string;
+  difficulty: number;
+}
+
+export function AddTopicDialog({
+  onClose,
+  initialQuestion = '',
+  context,
+}: {
+  onClose: () => void;
+  initialQuestion?: string;
+  context?: GenerateContext;
+}) {
   const loadTopics = useStore((s) => s.loadTopics);
   const lang = useLang((s) => s.lang);
-  const [question, setQuestion] = useState('');
+  const [question, setQuestion] = useState(initialQuestion);
   const [log, setLog] = useState<string[]>([]);
   const [status, setStatus] = useState<string>('');
   const [statusMessage, setStatusMessage] = useState<string>('');
@@ -31,7 +46,12 @@ export function AddTopicDialog({ onClose }: { onClose: () => void }) {
     try {
       await streamSse(
         '/api/topics/generate',
-        { question },
+        {
+          question,
+          catalogId: context?.catalogId,
+          categoryId: context?.categoryId,
+          difficulty: context?.difficulty,
+        },
         {
           onClaude: (line) => {
             const activity = parseActivity(line);

@@ -9,6 +9,7 @@ import { AddTopicDialog } from '@app/shell/AddTopicDialog';
 import { CategoryTree } from '@app/shell/CategoryTree';
 import { GenerationView } from '@app/shell/GenerationView';
 import { LangSwitcher } from '@app/shell/LangSwitcher';
+import { UsageBar } from '@app/shell/UsageBar';
 
 interface Selection {
   entry: CatalogEntry;
@@ -59,6 +60,7 @@ export function HomeScreen() {
       <header className="header">
         <h1>🗡️ Java Interview Dungeon</h1>
         <div className="spacer" />
+        <UsageBar />
         <LangSwitcher />
         <button className="accent" onClick={() => setShowAdd(true)}>
           {addTask?.status === 'running' ? ui('generating', lang) : ui('addTopic', lang)}

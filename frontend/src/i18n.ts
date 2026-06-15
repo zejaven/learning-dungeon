@@ -121,6 +121,9 @@ const UI: Record<string, Localized> = {
     ru: 'Вы зачли все вопросы Битвы с боссом по этой теме. Отличная работа!',
   },
   celebrateClose: { en: 'Nice!', ru: 'Класс!' },
+  usageSession: { en: 'Session', ru: 'Сессия' },
+  usageWeekly: { en: 'Week', ru: 'Неделя' },
+  usageResets: { en: 'resets in', ru: 'сброс через' },
 };
 
 export function ui(key: keyof typeof UI | string, lang: Lang): string {

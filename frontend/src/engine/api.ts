@@ -22,6 +22,25 @@ export async function runCode(topicId: string, code: string): Promise<RunResult>
   return res.json();
 }
 
+export interface UsageWindow {
+  utilization: number;
+  resetsAt: string | null;
+}
+
+export interface UsageSnapshot {
+  available: boolean;
+  session: UsageWindow | null;
+  weekly: UsageWindow | null;
+  error: string | null;
+}
+
+/** Current Claude session/weekly usage for the header meter. */
+export async function fetchUsage(): Promise<UsageSnapshot> {
+  const res = await fetch('/api/usage');
+  if (!res.ok) throw new Error(`Failed to load usage (${res.status})`);
+  return res.json();
+}
+
 export async function fetchProgress(topicId: string): Promise<TopicProgress> {
   const res = await fetch(`/api/progress/${encodeURIComponent(topicId)}`);
   if (!res.ok) throw new Error(`Failed to load progress (${res.status})`);

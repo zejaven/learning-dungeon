@@ -8,6 +8,7 @@ import { AssistantDialog } from '@app/shell/AssistantDialog';
 import { BossFightDialog } from '@app/shell/BossFightDialog';
 import { FileTree } from '@app/shell/FileTree';
 import { LangSwitcher } from '@app/shell/LangSwitcher';
+import { UsageBar } from '@app/shell/UsageBar';
 import { Fireworks } from '@app/shell/Fireworks';
 
 /**
@@ -44,6 +45,7 @@ export function WorkspaceScreen() {
         <h1 className="workspace-title">{topic ? tl(topic.title, lang) : 'Java Interview Dungeon'}</h1>
         {topicCompleted && <span className="completed-badge">{ui('topicCompleted', lang)}</span>}
         <div className="spacer" />
+        <UsageBar />
         <LangSwitcher />
         <button onClick={() => setShowAssistant(true)} disabled={!topic}>
           {ui('askAI', lang)}

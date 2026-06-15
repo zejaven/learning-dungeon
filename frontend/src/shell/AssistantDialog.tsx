@@ -3,6 +3,7 @@ import { streamSse } from '@app/engine/api';
 import { parseTextDelta } from '@app/engine/claudeStream';
 import { useStore } from '@app/engine/store';
 import { statusLabel, tl, ui, useLang } from '@app/i18n';
+import { Markdown } from './Markdown';
 
 export function AssistantDialog({ onClose }: { onClose: () => void }) {
   const topic = useStore((s) => s.topic);
@@ -61,7 +62,7 @@ export function AssistantDialog({ onClose }: { onClose: () => void }) {
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) ask();
             }}
           />
-          {answer && <div className="stream">{answer}</div>}
+          {answer && <Markdown>{answer}</Markdown>}
         </div>
         <div className="dialog-foot">
           <button onClick={onClose}>{ui('close', lang)}</button>

@@ -3,6 +3,7 @@ import { saveBossAnswer, streamSse } from '@app/engine/api';
 import { parseTextDelta } from '@app/engine/claudeStream';
 import { useStore } from '@app/engine/store';
 import { questionLabel, statusLabel, tl, ui, useLang } from '@app/i18n';
+import { Markdown } from './Markdown';
 
 const PASS_SCORE = 6;
 
@@ -157,7 +158,7 @@ export function BossFightDialog({ onClose }: { onClose: () => void }) {
           {stream && (
             <>
               <div className="boss-verdict-title">{ui('examinerVerdict', lang)}</div>
-              <div className="stream">{stream}</div>
+              <Markdown>{stream}</Markdown>
             </>
           )}
         </div>

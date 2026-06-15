@@ -85,6 +85,44 @@ omit it when `categoryId` is one of the known ids.
 request supplies the exact values to use for any of these it has already decided;
 otherwise choose them yourself.
 
+## Explanation files (explanation.en.md / explanation.ru.md)
+
+Prose teaching the concept: intuition, a 60-second interview answer, production
+relevance, and the common traps. The Russian file is a faithful translation of
+the English one.
+
+**Include 1–3 Mermaid diagrams** where a picture genuinely helps understanding —
+structure, interaction, lifecycle or relationships are far clearer drawn than
+described. Do not add diagrams just to have them. Embed each as a fenced block:
+
+````
+```mermaid
+flowchart LR
+  A[hash(key)] --> B["index = hash & (n-1)"] --> C[(bucket)]
+```
+````
+
+Pick the diagram type that fits the idea (see `prompts/mermaid-guide.md` for
+ready-to-copy examples per topic type):
+
+- `flowchart` / `graph` — algorithms, decision flow, memory layout, data structures
+- `sequenceDiagram` — interactions over time (threads, request flow, transactions)
+- `stateDiagram-v2` — lifecycles and state machines (Thread states, bean lifecycle)
+- `classDiagram` — type relationships, inheritance, design patterns
+- `erDiagram` — table/entity relationships (SQL, persistence)
+
+Diagram rules:
+
+- Use **valid** Mermaid 11 syntax; keep each diagram focused (roughly ≤ 12 nodes).
+- **Node/edge labels are technical terms in English** (same bilingual rule as code:
+  `HashMap`, `resize`, `RUNNABLE` stay untranslated). Only the prose around the
+  diagram is translated — so the **same diagram block is identical** in both
+  `explanation.en.md` and `explanation.ru.md`.
+- Wrap any label containing spaces or punctuation in quotes: `B["index = hash & (n-1)"]`.
+- Stay within the common node/edge syntax of the chosen diagram type; avoid exotic
+  features (themes, `click`, raw HTML, `%%{init}%%` blocks) — the app themes and
+  sanitizes diagrams itself.
+
 ## Trace events (the core contract)
 
 User code drives an instrumented `visual.*` model. Each model call emits a line

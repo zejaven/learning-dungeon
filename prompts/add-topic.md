@@ -50,7 +50,11 @@ and keep Java source/comments in English. Localize visualizer labels via
    it only renders the `state` of the current step.
 7. **Write `explanation.en.md` and `explanation.ru.md`**: intuitive explanation, a
    60-second interview answer, production relevance, and common misconceptions — the
-   Russian file is a faithful translation of the English one.
+   Russian file is a faithful translation of the English one. **Include 1–3 Mermaid
+   diagrams** where they aid understanding (structure / interaction / lifecycle /
+   relationships): pick the diagram type that fits the concept, keep labels as
+   English technical terms so the same diagram block is identical in both files. See
+   the explanation-files section of `topic-contract.md` and `prompts/mermaid-guide.md`.
 8. **Write `quiz.yaml`** with missions whose `event` matches a trace event type the
    examples can produce, plus a `bossFight` question list (each with a stable `id`).
 9. **Validate**: run `./gradlew :visual-runtime:test` if you added/changed a model,

@@ -1,6 +1,4 @@
 import { useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import type { CatalogEntry } from '@app/catalog';
 import { useGeneration } from '@app/engine/generationStore';
 import { useStore } from '@app/engine/store';
@@ -9,6 +7,7 @@ import { AddTopicDialog } from '@app/shell/AddTopicDialog';
 import { CategoryTree } from '@app/shell/CategoryTree';
 import { GenerationView } from '@app/shell/GenerationView';
 import { LangSwitcher } from '@app/shell/LangSwitcher';
+import { Markdown } from '@app/shell/Markdown';
 import { UsageBar } from '@app/shell/UsageBar';
 
 interface Selection {
@@ -109,11 +108,7 @@ export function HomeScreen() {
                     {ui('goToPractice', lang)}
                   </button>
                 </div>
-                <div className="markdown">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {tl(topic!.explanation, lang)}
-                  </ReactMarkdown>
-                </div>
+                <Markdown>{tl(topic!.explanation, lang)}</Markdown>
               </div>
             )}
           </div>

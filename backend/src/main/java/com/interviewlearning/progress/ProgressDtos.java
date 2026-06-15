@@ -11,7 +11,7 @@ public final class ProgressDtos {
 
     /** The current (non-deleted) boss-fight answer for one question. */
     public record BossAnswer(
-            int questionIndex,
+            String questionId,
             String answer,
             String verdict,
             Integer score,
@@ -22,7 +22,7 @@ public final class ProgressDtos {
     /** Everything the frontend needs to restore a topic's progress on load. */
     public record TopicProgress(
             Map<String, Boolean> missions,
-            Map<Integer, BossAnswer> bossFight,
+            Map<String, BossAnswer> bossFight,
             boolean completed
     ) {
     }
@@ -31,7 +31,7 @@ public final class ProgressDtos {
     }
 
     public record BossAnswerRequest(
-            int questionIndex,
+            String questionId,
             String questionText,
             String answer,
             String verdict,

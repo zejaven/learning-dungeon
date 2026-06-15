@@ -36,11 +36,17 @@ export interface TopicProgress {
 }
 
 export interface BossAnswer {
-  questionIndex: number;
+  questionId: string;
   answer: string;
   verdict: string | null;
   score: number | null;
   passed: boolean;
+}
+
+/** One boss-fight question with a stable id (answers are keyed by it). */
+export interface BossQuestion {
+  id: string;
+  text: Localized;
 }
 
 export interface Example {
@@ -72,7 +78,7 @@ export interface TopicDetail {
   /** Example question pre-filled as the Ask AI placeholder; may be empty. */
   assistantExample: Localized;
   /** Interview questions for the Boss Fight practice mode. */
-  bossFight: Localized[];
+  bossFight: BossQuestion[];
 }
 
 /** Props every topic visualizer receives. */

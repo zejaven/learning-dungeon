@@ -1,6 +1,7 @@
 package com.interviewlearning.topics;
 
 import com.interviewlearning.config.RepoPaths;
+import com.interviewlearning.topics.TopicDtos.BossQuestion;
 import com.interviewlearning.topics.TopicDtos.Example;
 import com.interviewlearning.topics.TopicDtos.Localized;
 import com.interviewlearning.topics.TopicDtos.Mission;
@@ -81,7 +82,7 @@ public class TopicRepository {
         Localized explanation = readExplanation(topicDir);
         List<Example> examples = loadExamples(topicDir, meta);
         List<Mission> missions = loadMissions(topicDir, meta);
-        List<Localized> bossFight = loadBossFight(topicDir, meta);
+        List<BossQuestion> bossFight = loadBossFight(topicDir, meta);
         List<String> primitives = stringList(meta.get("primitives"));
 
         return Optional.of(new TopicDetail(
@@ -164,19 +165,33 @@ public class TopicRepository {
     }
 
     /**
-     * Reads the {@code bossFight} interview questions from quiz.yaml. Accepts a
-     * {@code { en: [...], ru: [...] }} map (zipped index by index) or a plain list
-     * (used for both languages).
+     * Reads the {@code bossFight} interview questions from quiz.yaml. The canonical
+     * format is a list of {@code { id, en, ru }} objects. For backward
+     * compatibility a legacy {@code { en: [...], ru: [...] }} map (or a plain list)
+     * is also accepted; synthetic ids {@code q1, q2, ...} are assigned then.
      */
-    private List<Localized> loadBossFight(Path topicDir, Map<String, Object> meta) {
+    @SuppressWarnings("unchecked")
+    private List<BossQuestion> loadBossFight(Path topicDir, Map<String, Object> meta) {
         Path quiz = topicDir.resolve(str(meta, "missionsFile", "quiz.yaml"));
         if (!Files.exists(quiz)) {
             return List.of();
         }
         return loadYaml(quiz).map(q -> {
             Object raw = q.get("bossFight");
-            List<Localized> result = new ArrayList<>();
-            if (raw instanceof Map<?, ?> m) {
+            List<BossQuestion> result = new ArrayList<>();
+            if (raw instanceof List<?> list && !list.isEmpty() && list.get(0) instanceof Map<?, ?>) {
+                int i = 0;
+                for (Object item : list) {
+                    i++;
+                    if (item instanceof Map<?, ?> m) {
+                        Map<String, Object> qm = (Map<String, Object>) m;
+                        String id = str(qm, "id", "q" + i);
+                        String en = str(qm, "en", "");
+                        String ru = str(qm, "ru", en);
+                        result.add(new BossQuestion(id, new Localized(en, ru)));
+                    }
+                }
+            } else if (raw instanceof Map<?, ?> m) {
                 List<String> en = stringList(m.get("en"));
                 List<String> ru = stringList(m.get("ru"));
                 int n = Math.max(en.size(), ru.size());
@@ -185,12 +200,14 @@ public class TopicRepository {
                     String r = i < ru.size() ? ru.get(i) : "";
                     if (e.isEmpty()) e = r;
                     if (r.isEmpty()) r = e;
-                    result.add(new Localized(e, r));
+                    result.add(new BossQuestion("q" + (i + 1), new Localized(e, r)));
                 }
             } else if (raw instanceof List<?> list) {
+                int i = 0;
                 for (Object o : list) {
+                    i++;
                     String s = String.valueOf(o);
-                    result.add(new Localized(s, s));
+                    result.add(new BossQuestion("q" + i, new Localized(s, s)));
                 }
             }
             return result;

@@ -37,7 +37,7 @@ export async function saveMissions(topicId: string, missionIds: string[]): Promi
 }
 
 export interface SaveBossAnswerPayload {
-  questionIndex: number;
+  questionId: string;
   questionText: string;
   answer: string;
   verdict: string | null;

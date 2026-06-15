@@ -46,6 +46,17 @@ public final class TopicDtos {
     ) {
     }
 
+    /**
+     * One boss-fight interview question. {@code id} is stable across edits so a
+     * saved answer stays attached to the right question even if questions are
+     * reordered or inserted.
+     */
+    public record BossQuestion(
+            String id,
+            Localized text
+    ) {
+    }
+
     /** Full payload for a single topic. */
     public record TopicDetail(
             String id,
@@ -59,7 +70,7 @@ public final class TopicDtos {
             String defaultExampleId,
             List<Mission> missions,
             Localized assistantExample,
-            List<Localized> bossFight
+            List<BossQuestion> bossFight
     ) {
     }
 }

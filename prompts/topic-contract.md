@@ -115,8 +115,11 @@ missions:
       ru: <чего нужно добиться>
     event: <TRACE_EVENT_TYPE that completes this mission>   # not translated
 bossFight:
-  en:
-    - <interview question>
-  ru:
-    - <вопрос с собеседования>
+  - id: <stable-kebab-id>          # stable across edits; saved answers key off it
+    en: <interview question>
+    ru: <вопрос с собеседования>
 ```
+
+Each `bossFight` question needs a stable `id` (a short kebab slug, unique within
+the topic). Learner answers are stored against this id, so never reuse or
+repurpose an id for a different question — add a new one instead.

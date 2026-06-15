@@ -12,7 +12,8 @@ contract. Mirror the existing `topics/hashmap/` topic as your reference example.
 
 **The topic must be fully bilingual (English + Russian).** Every user-visible
 string exists in both languages: `title`, `category`, `summary`, each example's
-`title` and `explanation`, every mission `title`/`goal`, the `bossFight` lists,
+`title` and `explanation`, every mission `title`/`goal`, each `bossFight`
+question's `en`/`ru` (each with a stable `id`),
 the `assistantExample` (the Ask AI placeholder question), two explanation files
 (`explanation.en.md` + `explanation.ru.md`), and the trace event descriptions
 (`Trace.event(event, descEn, descRu, highlight, state)`). Keep
@@ -44,7 +45,7 @@ and keep Java source/comments in English. Localize visualizer labels via
    60-second interview answer, production relevance, and common misconceptions — the
    Russian file is a faithful translation of the English one.
 8. **Write `quiz.yaml`** with missions whose `event` matches a trace event type the
-   examples can produce, plus a `bossFight` question list.
+   examples can produce, plus a `bossFight` question list (each with a stable `id`).
 9. **Validate**: run `./gradlew :visual-runtime:test` if you added/changed a model,
    and make sure each example compiles. Confirm the topic folder matches the schema.
 

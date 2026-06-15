@@ -53,17 +53,17 @@ public class ProgressRepository {
 
     // --- Boss fight -------------------------------------------------------
 
-    public Map<Integer, BossAnswer> currentBossAnswers(String topicId) {
-        Map<Integer, BossAnswer> result = new LinkedHashMap<>();
+    public Map<String, BossAnswer> currentBossAnswers(String topicId) {
+        Map<String, BossAnswer> result = new LinkedHashMap<>();
         jdbc.query("""
-                SELECT question_index, answer, verdict, score, passed
+                SELECT question_id, answer, verdict, score, passed
                 FROM boss_fight_answer
                 WHERE topic_id = ? AND deleted_at IS NULL
-                ORDER BY question_index
+                ORDER BY question_id
                 """, rs -> {
-            int qi = rs.getInt("question_index");
+            String qid = rs.getString("question_id");
             Integer score = rs.getObject("score") == null ? null : rs.getInt("score");
-            result.put(qi, new BossAnswer(qi, rs.getString("answer"),
+            result.put(qid, new BossAnswer(qid, rs.getString("answer"),
                     rs.getString("verdict"), score, rs.getBoolean("passed")));
         }, topicId);
         return result;
@@ -74,13 +74,13 @@ public class ProgressRepository {
     public void saveBossAnswer(String topicId, BossAnswerRequest req) {
         jdbc.update("""
                 UPDATE boss_fight_answer SET deleted_at = now()
-                WHERE topic_id = ? AND question_index = ? AND deleted_at IS NULL
-                """, topicId, req.questionIndex());
+                WHERE topic_id = ? AND question_id = ? AND deleted_at IS NULL
+                """, topicId, req.questionId());
         jdbc.update("""
                 INSERT INTO boss_fight_answer
-                    (topic_id, question_index, question_text, answer, verdict, score, passed)
+                    (topic_id, question_id, question_text, answer, verdict, score, passed)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, topicId, req.questionIndex(), req.questionText(), req.answer(),
+                """, topicId, req.questionId(), req.questionText(), req.answer(),
                 req.verdict(), req.score(), req.passed());
     }
 

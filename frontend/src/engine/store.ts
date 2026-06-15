@@ -17,8 +17,8 @@ interface AppState {
   events: TraceEvent[];
   stepIndex: number; // index into events; -1 when there are none
   completedMissions: Record<string, boolean>;
-  /** Boss-fight evaluation results, keyed by question index. */
-  bossFightResults: Record<number, BossFightResult>;
+  /** Boss-fight evaluation results, keyed by stable question id. */
+  bossFightResults: Record<string, BossFightResult>;
   /** Whether the current topic is fully completed (all questions passed). */
   topicCompleted: boolean;
   /** Drives the celebration overlay when a topic is finished. */
@@ -33,7 +33,7 @@ interface AppState {
   setStep: (index: number) => void;
   stepNext: () => void;
   stepPrev: () => void;
-  setBossFightResult: (index: number, result: BossFightResult) => void;
+  setBossFightResult: (questionId: string, result: BossFightResult) => void;
   markTopicCompleted: () => void;
   setCelebrating: (value: boolean) => void;
 }
@@ -101,9 +101,9 @@ export const useStore = create<AppState>((set, get) => ({
       try {
         const progress = await fetchProgress(id);
         if (get().topic?.id !== id) return; // a newer topic was selected meanwhile
-        const bossFightResults: Record<number, BossFightResult> = {};
-        for (const [key, a] of Object.entries(progress.bossFight)) {
-          bossFightResults[Number(key)] = {
+        const bossFightResults: Record<string, BossFightResult> = {};
+        for (const [questionId, a] of Object.entries(progress.bossFight)) {
+          bossFightResults[questionId] = {
             answer: a.answer,
             evaluation: a.verdict ?? '',
             score: a.score,
@@ -186,8 +186,8 @@ export const useStore = create<AppState>((set, get) => ({
     get().setStep(get().stepIndex - 1);
   },
 
-  setBossFightResult(index, result) {
-    set({ bossFightResults: { ...get().bossFightResults, [index]: result } });
+  setBossFightResult(questionId, result) {
+    set({ bossFightResults: { ...get().bossFightResults, [questionId]: result } });
   },
 
   markTopicCompleted() {

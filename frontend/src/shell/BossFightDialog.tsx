@@ -39,9 +39,12 @@ export function BossFightDialog({ onClose }: { onClose: () => void }) {
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const stored = results[index];
+  const currentQuestion = questions[index];
+  const qid = currentQuestion?.id ?? '';
+  const stored = qid ? results[qid] : undefined;
 
   // When the question changes, show that question's saved answer + verdict.
+  // Questions are stable per topic, so an index change implies a qid change.
   useEffect(() => {
     setDraft(stored?.answer ?? '');
     setStream(stored?.evaluation ?? '');
@@ -54,7 +57,7 @@ export function BossFightDialog({ onClose }: { onClose: () => void }) {
   if (!topic || total === 0) return null;
 
   const topicId = topic.id;
-  const question = tl(questions[index], lang);
+  const questionText = tl(currentQuestion.text, lang);
   const displayedScore = busy ? liveScore : stored?.score ?? null;
   const passed = !busy && !!stored?.passed;
   const failed = !busy && stored != null && !stored.passed;
@@ -72,7 +75,7 @@ export function BossFightDialog({ onClose }: { onClose: () => void }) {
     try {
       await streamSse(
         '/api/assistant/evaluate',
-        { topicId, question, answer, lang },
+        { topicId, question: questionText, answer, lang },
         {
           onClaude: (line) => {
             const delta = parseTextDelta(line);
@@ -87,13 +90,13 @@ export function BossFightDialog({ onClose }: { onClose: () => void }) {
             const score = parseScore(acc);
             const verdict = stripScoreLine(acc);
             const passed = score != null && score >= PASS_SCORE;
-            setResult(index, { answer, evaluation: verdict, score, passed });
+            setResult(qid, { answer, evaluation: verdict, score, passed });
             setBusy(false);
             // Persist the answer (with full history) and pick up topic completion.
             const wasCompleted = alreadyCompleted;
             saveBossAnswer(topicId, {
-              questionIndex: index,
-              questionText: question,
+              questionId: qid,
+              questionText,
               answer,
               verdict,
               score,
@@ -135,7 +138,7 @@ export function BossFightDialog({ onClose }: { onClose: () => void }) {
             <ScoreBadge score={displayedScore} lang={lang} />
           </div>
 
-          <div className="boss-question">{question}</div>
+          <div className="boss-question">{questionText}</div>
 
           <textarea
             rows={4}

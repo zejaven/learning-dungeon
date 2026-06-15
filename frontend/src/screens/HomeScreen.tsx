@@ -108,7 +108,7 @@ export function HomeScreen() {
                     {ui('goToPractice', lang)}
                   </button>
                 </div>
-                <Markdown>{tl(topic!.explanation, lang)}</Markdown>
+                <Markdown className="markdown">{tl(topic!.explanation, lang)}</Markdown>
               </div>
             )}
           </div>

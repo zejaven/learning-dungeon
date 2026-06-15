@@ -11,10 +11,19 @@ import { MermaidBlock } from './MermaidBlock';
  * Fenced ```mermaid``` blocks render as diagrams (see {@link MermaidBlock}); all
  * other code blocks stay as plain code. We intercept at the `pre` level so the
  * diagram isn't left nested inside a <pre>.
+ *
+ * `className` defaults to the boxed, height-capped streaming look used in dialogs.
+ * Pass `"markdown"` for full-width, full-height prose (e.g. the theory panel).
  */
-export function Markdown({ children }: { children: string }) {
+export function Markdown({
+  children,
+  className = 'md-stream markdown',
+}: {
+  children: string;
+  className?: string;
+}) {
   return (
-    <div className="md-stream markdown">
+    <div className={className}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{

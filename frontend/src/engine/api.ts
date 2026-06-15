@@ -58,38 +58,25 @@ export async function saveBossAnswer(
   return res.json();
 }
 
-/**
- * Opens a POST request that streams Server-Sent Events. The browser EventSource
- * API is GET-only, so we read the stream manually and dispatch named events.
- */
-export async function streamSse(
-  url: string,
-  body: unknown,
-  handlers: {
-    onClaude?: (raw: string) => void;
-    onStatus?: (status: string, message: string) => void;
-    onError?: (message: string) => void;
-    onDone?: () => void;
-    signal?: AbortSignal;
-  },
-): Promise<void> {
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-    body: JSON.stringify(body),
-    signal: handlers.signal,
-  });
+export interface SseHandlers {
+  onClaude?: (raw: string) => void;
+  onStatus?: (status: string, message: string) => void;
+  onError?: (message: string) => void;
+  onDone?: () => void;
+  signal?: AbortSignal;
+}
+
+/** Reads a fetch Response as an SSE stream, dispatching named events. */
+async function consumeSse(res: Response, handlers: SseHandlers): Promise<void> {
   if (!res.ok || !res.body) {
     handlers.onError?.(`Stream request failed (${res.status})`);
     return;
   }
-
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
 
   const dispatch = (rawEvent: string) => {
-    // Parse one SSE block: lines of `event:` and `data:`.
     let name = 'message';
     const dataLines: string[] = [];
     for (const line of rawEvent.split('\n')) {
@@ -122,4 +109,64 @@ export async function streamSse(
     }
   }
   handlers.onDone?.();
+}
+
+/**
+ * Opens a POST request that streams Server-Sent Events. The browser EventSource
+ * API is GET-only, so we read the stream manually and dispatch named events.
+ */
+export async function streamSse(url: string, body: unknown, handlers: SseHandlers): Promise<void> {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+    body: JSON.stringify(body),
+    signal: handlers.signal,
+  });
+  await consumeSse(res, handlers);
+}
+
+// --- Topic generation tasks (server-tracked, reconnectable) ---------------
+
+export interface GenerateBody {
+  question: string;
+  catalogId?: string;
+  categoryId?: string;
+  difficulty?: number;
+}
+
+export interface GenTaskRef {
+  taskId: string;
+  key: string;
+  status: string;
+}
+
+/** Starts (or reuses) a generation task; returns its id + key. */
+export async function startGeneration(body: GenerateBody): Promise<GenTaskRef> {
+  const res = await fetch('/api/topics/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`Failed to start generation (${res.status})`);
+  return res.json();
+}
+
+/** Lists generation tasks still running, so the UI can reattach after a reload. */
+export async function fetchActiveGenerations(): Promise<GenTaskRef[]> {
+  const res = await fetch('/api/topics/generate/active');
+  if (!res.ok) return [];
+  return res.json();
+}
+
+/** Attaches to a task's event stream (replays its history, then live events). */
+export async function streamGenerationEvents(
+  taskId: string,
+  handlers: SseHandlers,
+): Promise<void> {
+  const res = await fetch(`/api/topics/generate/${encodeURIComponent(taskId)}/events`, {
+    method: 'GET',
+    headers: { Accept: 'text/event-stream' },
+    signal: handlers.signal,
+  });
+  await consumeSse(res, handlers);
 }

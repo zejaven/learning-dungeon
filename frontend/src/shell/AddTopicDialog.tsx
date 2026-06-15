@@ -1,127 +1,60 @@
-import { useEffect, useRef, useState } from 'react';
-import { streamSse } from '@app/engine/api';
-import { parseActivity } from '@app/engine/claudeStream';
-import { useStore } from '@app/engine/store';
-import { statusLabel, ui, useLang } from '@app/i18n';
+import { useState } from 'react';
+import { useGeneration } from '@app/engine/generationStore';
+import { ui, useLang } from '@app/i18n';
+import { GenerationView } from './GenerationView';
 
-/** Catalog placement passed to generation when starting from a tree question. */
-export interface GenerateContext {
-  catalogId: string;
-  categoryId: string;
-  difficulty: number;
-}
+const ADD_TOPIC_KEY = 'add-topic';
 
-export function AddTopicDialog({
-  onClose,
-  initialQuestion = '',
-  context,
-}: {
-  onClose: () => void;
-  initialQuestion?: string;
-  context?: GenerateContext;
-}) {
-  const loadTopics = useStore((s) => s.loadTopics);
+/**
+ * Free-form "Add topic" generation. The run is tracked server-side, so the dialog
+ * can be closed and reopened mid-generation and will show the same continuing
+ * stream (the Add-topic button reflects the running state).
+ */
+export function AddTopicDialog({ onClose }: { onClose: () => void }) {
   const lang = useLang((s) => s.lang);
-  const [question, setQuestion] = useState(initialQuestion);
-  const [log, setLog] = useState<string[]>([]);
-  const [status, setStatus] = useState<string>('');
-  const [statusMessage, setStatusMessage] = useState<string>('');
-  const [busy, setBusy] = useState(false);
-  const logRef = useRef<HTMLDivElement>(null);
+  const task = useGeneration((s) => s.tasks[ADD_TOPIC_KEY]);
+  const start = useGeneration((s) => s.start);
+  const [question, setQuestion] = useState('');
 
-  useEffect(() => {
-    logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
-  }, [log]);
+  const running = task?.status === 'running';
+  const showForm = !task; // once a task exists, show its stream instead of the form
 
-  function append(line: string) {
-    setLog((prev) => [...prev, line]);
+  function generate() {
+    if (!question.trim() || running) return;
+    start(ADD_TOPIC_KEY, { question });
   }
-
-  async function generate() {
-    if (!question.trim() || busy) return;
-    setLog([]);
-    setStatus('running');
-    setStatusMessage('…');
-    setBusy(true);
-    try {
-      await streamSse(
-        '/api/topics/generate',
-        {
-          question,
-          catalogId: context?.catalogId,
-          categoryId: context?.categoryId,
-          difficulty: context?.difficulty,
-        },
-        {
-          onClaude: (line) => {
-            const activity = parseActivity(line);
-            if (activity) append(activity);
-          },
-          onStatus: (s, message) => {
-            setStatus(s);
-            setStatusMessage(message);
-            if (s === 'done') {
-              append(ui('genFinished', lang));
-              loadTopics();
-            } else if (s === 'error') {
-              append(`[error] ${message}`);
-            }
-          },
-          onDone: () => setBusy(false),
-        },
-      );
-    } catch (e) {
-      setStatus('error');
-      append(`[error] ${(e as Error).message}`);
-      setBusy(false);
-    }
-  }
-
-  const done = status === 'done';
 
   return (
-    <div className="dialog-backdrop" onClick={busy ? undefined : onClose}>
+    <div className="dialog-backdrop" onClick={onClose}>
       <div className="dialog" onClick={(e) => e.stopPropagation()}>
         <div className="dialog-head">
           <h2>{ui('addTopicTitle', lang)}</h2>
-          {status && (
-            <span className={`status-pill ${status}`} title={statusMessage}>
-              {statusLabel(lang, status)}
-            </span>
-          )}
-          <button onClick={onClose} disabled={busy}>
-            ✕
-          </button>
+          <button onClick={onClose}>✕</button>
         </div>
         <div className="dialog-body">
-          <p style={{ marginTop: 0, color: 'var(--muted)', fontSize: 13 }}>
-            {ui('addTopicDesc', lang)}
-          </p>
-          <textarea
-            rows={4}
-            placeholder={ui('addTopicPlaceholder', lang)}
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            disabled={busy}
-          />
-          {log.length > 0 && (
-            <div className="stream" ref={logRef}>
-              {log.join('\n')}
-            </div>
+          {showForm ? (
+            <>
+              <p style={{ marginTop: 0, color: 'var(--muted)', fontSize: 13 }}>
+                {ui('addTopicDesc', lang)}
+              </p>
+              <textarea
+                rows={4}
+                placeholder={ui('addTopicPlaceholder', lang)}
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+              />
+            </>
+          ) : (
+            <GenerationView taskKey={ADD_TOPIC_KEY} />
           )}
         </div>
         <div className="dialog-foot">
-          {done && (
-            <button className="accent" onClick={() => window.location.reload()}>
-              {ui('reloadNew', lang)}
+          <button onClick={onClose}>{ui('close', lang)}</button>
+          {showForm && (
+            <button className="primary" onClick={generate} disabled={!question.trim()}>
+              {ui('generate', lang)}
             </button>
           )}
-          <button onClick={onClose} disabled={busy}>
-            {ui('close', lang)}
-          </button>
-          <button className="primary" onClick={generate} disabled={busy || !question.trim()}>
-            {busy ? ui('generating', lang) : ui('generate', lang)}
-          </button>
         </div>
       </div>
     </div>

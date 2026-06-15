@@ -1,11 +1,14 @@
 package com.interviewlearning.api;
 
-import com.interviewlearning.claude.ClaudeCodeService;
 import com.interviewlearning.config.RepoPaths;
+import com.interviewlearning.generation.GenerationService;
+import com.interviewlearning.generation.GenerationTask;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -18,6 +21,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Streams a Claude Code run that creates a new topic plugin from a pasted
@@ -31,16 +35,16 @@ public class TopicGenController {
 
     private static final Logger log = LoggerFactory.getLogger(TopicGenController.class);
 
-    private final ClaudeCodeService claude;
+    private final GenerationService generation;
     private final RepoPaths repoPaths;
     private final String permissionMode;
     private final String model;
 
-    public TopicGenController(ClaudeCodeService claude,
+    public TopicGenController(GenerationService generation,
                               RepoPaths repoPaths,
                               @Value("${app.claude.generate-permission-mode:bypassPermissions}") String permissionMode,
                               @Value("${app.claude.generate-model:}") String model) {
-        this.claude = claude;
+        this.generation = generation;
         this.repoPaths = repoPaths;
         this.permissionMode = permissionMode;
         this.model = model;
@@ -56,15 +60,48 @@ public class TopicGenController {
     public record GenerateRequest(String question, String catalogId, String categoryId, Integer difficulty) {
     }
 
-    @PostMapping(value = "/generate", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter generate(@RequestBody GenerateRequest request) {
-        String prompt = buildPrompt(request);
+    /**
+     * Starts a generation (or reuses the one already running for this key) and
+     * returns its task id. The client then attaches to {@code /generate/{id}/events}.
+     */
+    @PostMapping("/generate")
+    public Map<String, String> generate(@RequestBody GenerateRequest request) {
+        String key = (request.catalogId() != null && !request.catalogId().isBlank())
+                ? "catalog:" + request.catalogId().trim()
+                : "add-topic";
         List<String> args = new ArrayList<>(List.of("--permission-mode", permissionMode));
         if (model != null && !model.isBlank()) {
             args.add("--model");
             args.add(model);
         }
-        return claude.stream(prompt, args);
+        GenerationTask task = generation.startOrGet(key, buildPrompt(request), args);
+        return Map.of("taskId", task.id(), "key", task.key(), "status", task.status());
+    }
+
+    /** Attaches to a task's event stream, replaying its history first. */
+    @GetMapping(value = "/generate/{taskId}/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter events(@PathVariable String taskId) {
+        GenerationTask task = generation.byId(taskId);
+        if (task == null) {
+            // Unknown task (e.g. cleared by a backend restart): emit a clean error
+            // status and complete, rather than a 500.
+            SseEmitter emitter = new SseEmitter();
+            try {
+                emitter.send(SseEmitter.event().name("status")
+                        .data("{\"status\":\"error\",\"message\":\"No such generation task.\"}"));
+            } catch (IOException ignored) {
+                // client already gone
+            }
+            emitter.complete();
+            return emitter;
+        }
+        return task.attach(30 * 60 * 1000L);
+    }
+
+    /** Tasks still running, so the frontend can reattach after a reload. */
+    @GetMapping("/generate/active")
+    public List<Map<String, String>> active() {
+        return generation.running();
     }
 
     private String buildPrompt(GenerateRequest request) {

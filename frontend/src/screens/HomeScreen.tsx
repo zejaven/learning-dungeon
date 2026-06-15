@@ -2,10 +2,12 @@ import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { CatalogEntry } from '@app/catalog';
+import { useGeneration } from '@app/engine/generationStore';
 import { useStore } from '@app/engine/store';
 import { tl, ui, useLang } from '@app/i18n';
-import { AddTopicDialog, type GenerateContext } from '@app/shell/AddTopicDialog';
+import { AddTopicDialog } from '@app/shell/AddTopicDialog';
 import { CategoryTree } from '@app/shell/CategoryTree';
+import { GenerationView } from '@app/shell/GenerationView';
 import { LangSwitcher } from '@app/shell/LangSwitcher';
 
 interface Selection {
@@ -13,16 +15,11 @@ interface Selection {
   categoryId: string;
 }
 
-interface AddState {
-  question: string;
-  context?: GenerateContext;
-}
-
 /**
  * Home / catalog screen: a tree of interview questions on the left, theory (or a
- * "generate theory" action) on the right. Existing topics open into the code
- * workspace; questions without theory hand off to the generation flow, passing
- * the question's category id and difficulty so the new topic lands in place.
+ * "generate theory" action) on the right. Generation is server-tracked, so a run
+ * started here keeps going and is shown again the moment you return to the
+ * question (or reopen "Add topic").
  */
 export function HomeScreen() {
   const lang = useLang((s) => s.lang);
@@ -31,8 +28,11 @@ export function HomeScreen() {
   const selectTopic = useStore((s) => s.selectTopic);
   const setView = useStore((s) => s.setView);
 
+  const startGen = useGeneration((s) => s.start);
+  const addTask = useGeneration((s) => s.tasks['add-topic']);
+
   const [selected, setSelected] = useState<Selection | null>(null);
-  const [add, setAdd] = useState<AddState | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
 
   function handleSelect(entry: CatalogEntry, categoryId: string) {
     setSelected({ entry, categoryId });
@@ -41,16 +41,16 @@ export function HomeScreen() {
 
   const entry = selected?.entry ?? null;
   const theoryReady = entry?.topicId && topic?.id === entry.topicId && !loadingTopic;
+  const catalogKey = entry ? `catalog:${entry.id}` : '';
+  const genTask = useGeneration((s) => (catalogKey ? s.tasks[catalogKey] : undefined));
 
   function generateForSelected() {
     if (!selected) return;
-    setAdd({
+    startGen(`catalog:${selected.entry.id}`, {
       question: tl(selected.entry.question, lang),
-      context: {
-        catalogId: selected.entry.id,
-        categoryId: selected.categoryId,
-        difficulty: selected.entry.difficulty,
-      },
+      catalogId: selected.entry.id,
+      categoryId: selected.categoryId,
+      difficulty: selected.entry.difficulty,
     });
   }
 
@@ -60,8 +60,8 @@ export function HomeScreen() {
         <h1>🗡️ Java Interview Dungeon</h1>
         <div className="spacer" />
         <LangSwitcher />
-        <button className="accent" onClick={() => setAdd({ question: '' })}>
-          {ui('addTopic', lang)}
+        <button className="accent" onClick={() => setShowAdd(true)}>
+          {addTask?.status === 'running' ? ui('generating', lang) : ui('addTopic', lang)}
         </button>
       </header>
 
@@ -85,10 +85,16 @@ export function HomeScreen() {
             {entry && !entry.topicId && (
               <div className="home-generate">
                 <div className="home-question">{tl(entry.question, lang)}</div>
-                <p className="home-hint">{ui('noTheoryYet', lang)}</p>
-                <button className="primary" onClick={generateForSelected}>
-                  {ui('generateTheory', lang)}
-                </button>
+                {genTask ? (
+                  <GenerationView taskKey={catalogKey} />
+                ) : (
+                  <>
+                    <p className="home-hint">{ui('noTheoryYet', lang)}</p>
+                    <button className="primary" onClick={generateForSelected}>
+                      {ui('generateTheory', lang)}
+                    </button>
+                  </>
+                )}
               </div>
             )}
 
@@ -112,13 +118,7 @@ export function HomeScreen() {
         </section>
       </div>
 
-      {add !== null && (
-        <AddTopicDialog
-          initialQuestion={add.question}
-          context={add.context}
-          onClose={() => setAdd(null)}
-        />
-      )}
+      {showAdd && <AddTopicDialog onClose={() => setShowAdd(false)} />}
     </div>
   );
 }

@@ -54,7 +54,28 @@ public class ClaudeCodeService {
      */
     public SseEmitter stream(String prompt, List<String> extraArgs) {
         SseEmitter emitter = new SseEmitter(30 * 60 * 1000L); // 30 min
+        executor.submit(() -> runProcess(buildCommand(extraArgs), prompt, emitter));
+        return emitter;
+    }
 
+    /** Receives Claude output decoupled from any single client connection. */
+    public interface Sink {
+        void claude(String line);
+
+        void status(String status, String message);
+    }
+
+    /**
+     * Runs a Claude generation in the background, streaming output to {@code sink}.
+     * Unlike {@link #stream}, a disconnected client never aborts the process — the
+     * run completes on its own and the sink (a {@code GenerationTask}) buffers
+     * output for late or reconnecting subscribers.
+     */
+    public void runDetached(String prompt, List<String> extraArgs, Sink sink) {
+        executor.submit(() -> runProcessSink(buildCommand(extraArgs), prompt, sink));
+    }
+
+    private List<String> buildCommand(List<String> extraArgs) {
         List<String> command = new ArrayList<>();
         command.add(claudeCommand);
         command.add("-p");
@@ -63,9 +84,60 @@ public class ClaudeCodeService {
         command.add("--verbose");
         command.add("--include-partial-messages");
         command.addAll(extraArgs);
+        return command;
+    }
 
-        executor.submit(() -> runProcess(command, prompt, emitter));
-        return emitter;
+    private void runProcessSink(List<String> command, String prompt, Sink sink) {
+        ProcessBuilder pb = new ProcessBuilder(command)
+                .directory(repoPaths.repoRoot().toFile())
+                .redirectErrorStream(false);
+        Process process;
+        try {
+            sink.status("running", "Starting Claude Code…");
+            process = pb.start();
+        } catch (IOException e) {
+            log.error("Failed to start Claude CLI", e);
+            sink.status("error", "Could not start Claude CLI: " + e.getMessage()
+                    + " (is '" + claudeCommand + "' on PATH?)");
+            return;
+        }
+
+        try (OutputStream stdin = process.getOutputStream()) {
+            stdin.write(prompt.getBytes(StandardCharsets.UTF_8));
+            stdin.flush();
+        } catch (IOException e) {
+            log.warn("Failed writing prompt to Claude stdin: {}", e.getMessage());
+        }
+
+        Thread stderrDrain = new Thread(() -> {
+            try (BufferedReader br = new BufferedReader(
+                    new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = br.readLine()) != null) {
+                    log.debug("[claude stderr] {}", line);
+                }
+            } catch (IOException ignored) {
+            }
+        }, "claude-stderr");
+        stderrDrain.setDaemon(true);
+        stderrDrain.start();
+
+        try (BufferedReader br = new BufferedReader(
+                new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                if (!line.isBlank()) {
+                    sink.claude(line);
+                }
+            }
+            int exit = process.waitFor();
+            sink.status(exit == 0 ? "done" : "error",
+                    exit == 0 ? "Completed." : "Claude exited with code " + exit + ".");
+        } catch (IOException e) {
+            sink.status("error", "Stream error: " + e.getMessage());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private void runProcess(List<String> command, String prompt, SseEmitter emitter) {

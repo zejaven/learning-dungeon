@@ -19,6 +19,19 @@ is split into a **Young generation** and an **Old (Tenured) generation**:
   survived a collection wait and "age".
 - **Old generation** — where long-lived objects end up.
 
+```mermaid
+graph TD
+  subgraph Heap
+    subgraph Young["Young generation"]
+      Eden["Eden (new objects)"]
+      S0["Survivor S0"]
+      S1["Survivor S1"]
+    end
+    Old["Old / Tenured generation"]
+  end
+  Meta["Metaspace (class metadata, outside the heap)"]
+```
+
 A **minor GC** collects only the Young generation. Because almost everything in
 Eden is already dead, it has very little to copy and runs in milliseconds. The
 Old generation is collected only by a much rarer, more expensive **major (full)
@@ -40,6 +53,49 @@ garbage) be cheap.
    long-lived, so stop copying it around on every minor GC.
 5. **Major GC.** Eventually the Old generation fills and a major/full GC scans it.
    This is the expensive one you try to avoid.
+
+```mermaid
+flowchart LR
+  N["new object"] --> E["Eden"]
+  E -->|"Eden full: minor GC"| C{"still reachable?"}
+  C -->|no| Dead["reclaimed (free)"]
+  C -->|yes| Sv["copy to Survivor, age++"]
+  Sv -->|"age < threshold"| Sv
+  Sv -->|"age >= threshold"| Old["Old generation"]
+  Old -->|"Old full: major GC"| C2{"still reachable?"}
+  C2 -->|no| Dead2["reclaimed"]
+  C2 -->|yes| Old
+```
+
+## What triggers a GC (and what counts as garbage)
+
+GC is **not** on a timer — it is driven by **allocation and occupancy**, not by
+elapsed time. Two things must come together for memory to actually be reclaimed:
+
+1. **Objects must become unreachable.** The collector only reclaims objects that
+   can no longer be reached from a **GC root** (a local variable on a thread
+   stack, a `static` field, a JNI reference, …). The moment an object loses its
+   last incoming reference it becomes *eligible* for collection — but nothing is
+   freed yet, and you can't force *when* it happens.
+2. **A region must run out of room.** The collection itself is triggered by an
+   **allocation that can't be satisfied**:
+   - **Eden has no room** for a new object → a **minor GC** runs (collects Young).
+   - **Old can't fit a promotion** (or is full) → a **major / full GC** runs.
+   - An explicit **`System.gc()`** is only a *request* (the JVM may ignore it),
+     and Metaspace pressure can trigger a collection too.
+
+So "what must happen to memory for GC to start" is: objects stop being reachable,
+*and* a generation fills up enough to force a collection of that generation.
+
+```mermaid
+flowchart TD
+  A["allocation request"] --> Q{"room in Eden?"}
+  Q -->|yes| Fast["bump pointer, no GC"]
+  Q -->|no| Minor["minor GC: collect Young"]
+  Minor --> P{"promotion fits in Old?"}
+  P -->|yes| OK["continue allocating"]
+  P -->|no| Major["major / full GC: collect Old"]
+```
 
 ## Why two Survivor spaces (the key trick)
 

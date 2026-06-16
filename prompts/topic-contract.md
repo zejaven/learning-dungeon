@@ -114,11 +114,18 @@ ready-to-copy examples per topic type):
 Diagram rules:
 
 - Use **valid** Mermaid 11 syntax; keep each diagram focused (roughly ≤ 12 nodes).
-- **Node/edge labels are technical terms in English** (same bilingual rule as code:
-  `HashMap`, `resize`, `RUNNABLE` stay untranslated). Only the prose around the
-  diagram is translated — so the **same diagram block is identical** in both
-  `explanation.en.md` and `explanation.ru.md`.
+- **Translate diagram labels too** (same bilingual rule as the prose): the diagram
+  in `explanation.ru.md` has Russian labels, the one in `explanation.en.md` has
+  English labels. Keep **technical terms untranslated** exactly as in code —
+  type/identifier names, keywords and tokens like `HashMap`, `hashCode`, `resize`,
+  `capacity`, `threshold`, `RUNNABLE`, `Eden`, `Old`, `PENDING`, `O(n)`, code
+  expressions (`h ^ (h >>> 16)`) and SQL — but translate ordinary words
+  (`bucket empty?` → `бакет пуст?`, `store entry` → `сохранить запись`, edge labels
+  `yes`/`no` → `да`/`нет`). Node **ids** stay ASCII; only the label text and edge
+  labels are translated. So the two diagram blocks differ in their wording but share
+  the same structure and the same technical tokens.
 - Wrap any label containing spaces or punctuation in quotes: `B["index = hash & (n-1)"]`.
+  Cyrillic in labels and edge labels is fine (`-->|да|`, `{"бакет пуст?"}`).
 - Stay within the common node/edge syntax of the chosen diagram type; avoid exotic
   features (themes, `click`, raw HTML, `%%{init}%%` blocks) — the app themes and
   sanitizes diagrams itself.

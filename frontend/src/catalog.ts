@@ -221,7 +221,7 @@ export const CATALOG: CatalogCategory[] = [
     id: 'design-patterns',
     name: 'Design Patterns',
     entries: [
-      { id: 'design-patterns-1', difficulty: 2, topicId: 'chain-of-responsibility', question: { en: `What design patterns exist?`, ru: `Какие существуют шаблоны проектирования?` } },
+      { id: 'design-patterns-1', difficulty: 2, question: { en: `What design patterns exist?`, ru: `Какие существуют шаблоны проектирования?` } },
     ],
   },
   {
@@ -239,8 +239,8 @@ export const CATALOG: CatalogCategory[] = [
       { id: 'microservices-9', difficulty: 2, question: { en: `Why is an API Gateway needed?`, ru: `Зачем нужен API Gateway?` } },
       { id: 'microservices-10', difficulty: 3, question: { en: `What options for modular architecture exist? How is it best to organize modules?`, ru: `Какие есть варианты модульной архитектуры? Как лучше организовать модули?` } },
       { id: 'microservices-11', difficulty: 3, question: { en: `What microservice patterns exist?`, ru: `Какие существуют микросервисные паттерны?` } },
-      { id: 'microservices-12', difficulty: 3, topicId: 'outbox-pattern', question: { en: `How do you design an API for registering sales over an unreliable connection?`, ru: `Как проектировать API для регистрации продаж по неустойчивому соединению?` } },
-      { id: 'microservices-13', difficulty: 3, topicId: 'inbox-pattern', question: { en: `How do you avoid duplicates when registering sales?`, ru: `Как избежать дубликатов при регистрации продаж?` } },
+      { id: 'microservices-12', difficulty: 3, question: { en: `How do you design an API for registering sales over an unreliable connection?`, ru: `Как проектировать API для регистрации продаж по неустойчивому соединению?` } },
+      { id: 'microservices-13', difficulty: 3, question: { en: `How do you avoid duplicates when registering sales?`, ru: `Как избежать дубликатов при регистрации продаж?` } },
     ],
   },
   {

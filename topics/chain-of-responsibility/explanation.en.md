@@ -19,17 +19,46 @@ things:
    chain stops.
 2. **Pass it on** — it can't, so it forwards the request to the next handler.
 
+```mermaid
+flowchart TD
+  In["request arrives at handler"] --> Q{"within my limit?"}
+  Q -->|yes| H["handle it (approve) and stop"]
+  Q -->|no| P["pass to next handler"]
+  P --> N{"next handler exists?"}
+  N -->|yes| In2["next handler decides"]
+  N -->|no| U["unhandled"]
+```
+
 The key benefit is **decoupling**: the sender doesn't know — and doesn't care —
 which handler will end up doing the work, or even how many handlers there are.
 You can add, remove or reorder handlers without touching the sender.
 
-```
-request ──▶ [TeamLead ≤1k] ──▶ [Manager ≤10k] ──▶ [Director ≤100k]
+```mermaid
+flowchart LR
+  R["request"] --> TL["TeamLead (<= 1k)"]
+  TL -->|over limit| M["Manager (<= 10k)"]
+  M -->|over limit| D["Director (<= 100k)"]
+  D -->|over limit| X["unhandled: falls off the end"]
+  TL -.approve.-> Done["approved"]
+  M -.approve.-> Done
+  D -.approve.-> Done
 ```
 
 A request for `800` is approved by `TeamLead` and stops there. A request for
 `25_000` is passed by `TeamLead` and `Manager` and approved by `Director`. A
 request for `500_000` is passed by everyone and falls off the end **unhandled**.
+
+```mermaid
+sequenceDiagram
+  participant C as Client
+  participant TL as TeamLead
+  participant M as Manager
+  participant D as Director
+  C->>TL: handle(25000)
+  TL->>M: escalate (over 1k)
+  M->>D: escalate (over 10k)
+  D-->>C: approved (<= 100k)
+```
 
 ## Why it's useful
 

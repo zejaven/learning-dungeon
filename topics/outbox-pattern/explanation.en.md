@@ -32,6 +32,14 @@ Whatever order you pick, a crash between the steps breaks you:
 That is the **dual-write problem**: two systems, no shared transaction, an
 inconsistency window in between.
 
+```mermaid
+flowchart TD
+  Change["one logical change"] --> W1["write 1: commit to DB"]
+  Change --> W2["write 2: publish to broker"]
+  W1 -.crash before W2.-> Loss["order saved, event lost"]
+  W2 -.DB rollback after publish.-> Phantom["event sent for a phantom order"]
+```
+
 ## The mental model
 
 Put an **outbox table** in the **same database** as your business data. For each
@@ -43,10 +51,15 @@ change, in **one local transaction**:
 
 Then a separate **relay** moves events out of the database to the broker:
 
-```
-[ write order | insert outbox row ]  one local TX      relay (poller / CDC)
-            business DB ───────────────────────────▶  broker
-              orders        outbox: {e1 PENDING…}        OrderPlaced…
+```mermaid
+flowchart LR
+  subgraph TX["one local DB transaction"]
+    O["write order"]
+    E["insert outbox row (PENDING)"]
+  end
+  TX --> DB[("business DB + outbox")]
+  DB --> Relay["relay (poller / CDC)"]
+  Relay --> Broker["broker"]
 ```
 
 Because the business write and the outbox row share **one ACID transaction**,
@@ -73,6 +86,19 @@ crashes **after sending but before marking**, the row stays `PENDING` and the
 next poll **sends the event again**. So the broker can see **duplicates**: the
 Outbox guarantees *at-least-once* delivery, not exactly-once. Consumers must
 **dedup** — which is exactly the **Inbox pattern** (idempotent consumer).
+
+```mermaid
+sequenceDiagram
+  participant R as Relay
+  participant DB as Outbox table
+  participant B as Broker
+  R->>DB: SELECT rows WHERE status = PENDING
+  R->>B: publish e1
+  Note over R: crash before marking published
+  R->>DB: next poll: e1 still PENDING
+  R->>B: publish e1 again (duplicate)
+  Note over B: consumer dedups via Inbox
+```
 
 ## Outbox vs Inbox
 

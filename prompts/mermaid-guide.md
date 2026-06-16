@@ -2,9 +2,11 @@
 
 Use these as **ready-to-copy templates** when adding diagrams to
 `explanation.en.md` / `explanation.ru.md`. Pick the type that fits the concept,
-then adapt the labels. Keep labels as **English technical terms** so the same
-diagram block is byte-identical in both language files (only the surrounding
-prose is translated).
+then adapt the labels. The templates below use English labels — for
+`explanation.ru.md`, **translate the labels into Russian**, keeping technical
+terms/identifiers/code untranslated (e.g. `bucket empty?` → `бакет пуст?`, but
+`hashCode`, `capacity`, `Eden`, `O(n)`, `h ^ (h >>> 16)` stay as-is). Node **ids**
+stay ASCII; translate only label text and edge labels (`yes`/`no` → `да`/`нет`).
 
 General rules:
 

@@ -30,15 +30,31 @@ local transaction**:
 3. If **no** → insert the id into the inbox **and** do the business work, then
    commit. A `UNIQUE` constraint on the id is the real guard.
 
-```
-broker (at-least-once) ──▶ [ dedup by id | do work ]  one local TX
-                                  │
-                            inbox table: { m1, m2, m3, ... }
+```mermaid
+flowchart TD
+  M["message (unique id)"] --> Q{"id already in inbox?"}
+  Q -->|yes| Skip["skip: redelivery, no effect"]
+  Q -->|no| TX["one local TX: insert id + do business work"]
+  TX --> Commit["commit together"]
 ```
 
 Because the dedup record and the business write live in the **same ACID
 transaction**, they commit or roll back together. That is what upgrades
 at-least-once delivery into **effectively-once processing**.
+
+```mermaid
+sequenceDiagram
+  participant B as Broker
+  participant C as Consumer
+  participant DB as Inbox + business DB
+  B->>C: deliver msg m1
+  C->>DB: TX: insert m1 + charge (commit)
+  Note over C: ack lost / crash before ack
+  B->>C: redeliver m1 (at-least-once)
+  C->>DB: is m1 already in inbox?
+  DB-->>C: yes
+  C-->>B: ack (skip, no double charge)
+```
 
 ## Why one transaction is non-negotiable
 
@@ -70,6 +86,18 @@ They are two halves of reliable messaging and often appear together:
   "publish exactly when the DB commits."
 - **Inbox** (consumer side) — dedup incoming messages so at-least-once delivery
   is processed effectively-once. Solves "handle each message's effect once."
+
+```mermaid
+flowchart LR
+  subgraph Producer
+    PW["business change + outbox row (one TX)"] --> Relay["relay publishes"]
+  end
+  Relay --> Broker["broker (at-least-once)"]
+  subgraph Consumer
+    Dedup["inbox dedup by id + work (one TX)"]
+  end
+  Broker --> Dedup
+```
 
 ## Keeping the table from growing forever
 

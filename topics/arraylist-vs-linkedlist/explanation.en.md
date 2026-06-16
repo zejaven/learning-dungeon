@@ -20,6 +20,20 @@ identical**. Their **internals are opposites**, and that is the whole interview.
   value plus a `prev` and `next` pointer. There is no array to index into, so to
   reach element `i` you must **walk** the chain one node at a time — **O(n)**.
 
+```mermaid
+graph LR
+  subgraph "ArrayList: contiguous array"
+    direction LR
+    A0["[0]"] --- A1["[1]"] --- A2["[2]"] --- A3["[3]"]
+  end
+  subgraph "LinkedList: doubly-linked nodes"
+    direction LR
+    H["head"] <--> N0["node 0"]
+    N0 <--> N1["node 1"]
+    N1 <--> N2["node 2 (tail)"]
+  end
+```
+
 ## Cost, operation by operation
 
 | Operation              | ArrayList            | LinkedList                |
@@ -29,6 +43,16 @@ identical**. Their **internals are opposites**, and that is the whole interview.
 | `addFirst` / `addLast` | O(n) at front, O(1) end | **O(1)** both ends     |
 | `add(i, e)` (middle)   | O(n) (shift right)   | O(n) walk + **O(1)** link |
 | `remove(i)` (middle)   | O(n) (shift left)    | O(n) walk + **O(1)** link |
+
+```mermaid
+flowchart TD
+  subgraph "ArrayList.add(i, e)"
+    AS["shift elements i..n-1 right (O(n))"] --> AP["place e at index i"]
+  end
+  subgraph "LinkedList.add(i, e)"
+    LW["walk to node i (O(n))"] --> LL["relink prev / next (O(1))"]
+  end
+```
 
 Two phrases explain the table:
 
@@ -42,6 +66,14 @@ Two phrases explain the table:
   pointers — but you first pay O(n) to *find* the node. `get(i)` walks from the
   **nearer end** (head or tail), so `get(size-1)` is cheap, `get(size/2)` is the
   worst case.
+
+```mermaid
+flowchart LR
+  F{"backing array full?"} -->|no| P["write into next slot (O(1))"]
+  F -->|yes| G["allocate new array x1.5"]
+  G --> C["copy all elements (O(n))"]
+  C --> P2["write into next slot"]
+```
 
 ## So which one?
 

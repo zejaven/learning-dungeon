@@ -17,6 +17,18 @@ A `HashMap` is an **array of buckets**. To store a key:
 4. Put the entry in that bucket. If the bucket already has entries, this is a
    **collision** and the entry joins the bucket's chain (separate chaining).
 
+```mermaid
+flowchart TD
+  K["key"] --> HC["key.hashCode()"]
+  HC --> SP["spread: h ^ (h >>> 16)"]
+  SP --> IDX["index = hash & (capacity - 1)"]
+  IDX --> B{"bucket empty?"}
+  B -->|yes| PUT["store entry"]
+  B -->|no| EQ{"equal key in chain?"}
+  EQ -->|yes| OVR["overwrite value"]
+  EQ -->|no| CH["append to chain (collision)"]
+```
+
 `get(key)` repeats steps 1–3 to find the bucket, then walks the chain comparing
 with `equals()`.
 
@@ -27,6 +39,19 @@ Different keys can land in the same bucket. Java's `"Aa"` and `"BB"` both have
 until chains get long; the real `HashMap` converts a bucket to a red-black tree
 once a chain passes 8 entries (with capacity ≥ 64) to keep lookups O(log n).
 
+Keys `"Aa"` and `"BB"` both hash to `2112`, so they share a bucket and chain:
+
+```mermaid
+graph LR
+  subgraph "bucket array (capacity 16)"
+    B0["bucket 0"]
+    B5["bucket 5"]
+    B15["bucket 15"]
+  end
+  B5 --> Aa["Aa = 1"]
+  Aa --> BB["BB = 2"]
+```
+
 ## Load factor and resize
 
 - **capacity** — number of buckets (starts at 16, always a power of two).
@@ -36,6 +61,15 @@ once a chain passes 8 entries (with capacity ≥ 64) to keep lookups O(log n).
 When `size` exceeds the threshold, the map **resizes**: capacity doubles and
 every entry is rehashed into the larger array. This keeps chains short so
 average `get`/`put` stay ~O(1).
+
+```mermaid
+flowchart LR
+  S["put increments size"] --> C{"size > threshold (12)?"}
+  C -->|no| K["keep capacity 16"]
+  C -->|yes| R["resize: capacity 16 to 32"]
+  R --> RH["rehash all entries"]
+  RH --> T["new threshold = 24"]
+```
 
 ## The equals / hashCode contract
 

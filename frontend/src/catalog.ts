@@ -311,6 +311,20 @@ export const CATALOG: CatalogCategory[] = [
   },
 ];
 
+/**
+ * Resolves a URL/cross-link id to a catalog entry. Accepts either a catalog entry
+ * id (`java-collections-7`, `topic-inbox-pattern`) or a topic id (`inbox-pattern`),
+ * so links and routes can reference whichever is convenient.
+ */
+export function findCatalogEntry(
+  cats: CatalogCategory[],
+  id: string,
+): { entry: CatalogEntry; categoryId: string } | null {
+  for (const c of cats) for (const e of c.entries) if (e.id === id) return { entry: e, categoryId: c.id };
+  for (const c of cats) for (const e of c.entries) if (e.topicId === id) return { entry: e, categoryId: c.id };
+  return null;
+}
+
 /** Difficulty rendered as stars (1 = Junior, 2 = Middle, 3 = Senior). */
 export function stars(difficulty: Difficulty): string {
   return '★'.repeat(difficulty);

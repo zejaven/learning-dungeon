@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import type { CatalogEntry } from '@app/catalog';
+import { buildCatalog, findCatalogEntry } from '@app/catalog';
 import { useGeneration } from '@app/engine/generationStore';
+import { navigate, routeForPractice, routeForQuestion, useRoute } from '@app/engine/router';
 import { useStore } from '@app/engine/store';
 import { tl, ui, useLang } from '@app/i18n';
 import { AddTopicDialog } from '@app/shell/AddTopicDialog';
@@ -10,47 +11,40 @@ import { LangSwitcher } from '@app/shell/LangSwitcher';
 import { Markdown } from '@app/shell/Markdown';
 import { UsageBar } from '@app/shell/UsageBar';
 
-interface Selection {
-  entry: CatalogEntry;
-  categoryId: string;
-}
-
 /**
  * Home / catalog screen: a tree of interview questions on the left, theory (or a
- * "generate theory" action) on the right. Generation is server-tracked, so a run
- * started here keeps going and is shown again the moment you return to the
- * question (or reopen "Add topic").
+ * "generate theory" action) on the right. The selected question lives in the URL
+ * (`#/q/<id>`), so a refresh restores it; selecting a tree entry just navigates.
+ * Generation is server-tracked, so a run started here keeps going and is shown
+ * again the moment you return to the question (or reopen "Add topic").
  */
 export function HomeScreen() {
   const lang = useLang((s) => s.lang);
+  const topics = useStore((s) => s.topics);
   const topic = useStore((s) => s.topic);
   const loadingTopic = useStore((s) => s.loadingTopic);
-  const selectTopic = useStore((s) => s.selectTopic);
-  const setView = useStore((s) => s.setView);
 
+  const route = useRoute();
   const startGen = useGeneration((s) => s.start);
   const addTask = useGeneration((s) => s.tasks['add-topic']);
 
-  const [selected, setSelected] = useState<Selection | null>(null);
   const [showAdd, setShowAdd] = useState(false);
 
-  function handleSelect(entry: CatalogEntry, categoryId: string) {
-    setSelected({ entry, categoryId });
-    if (entry.topicId) selectTopic(entry.topicId);
-  }
+  const found = route.id ? findCatalogEntry(buildCatalog(topics), route.id) : null;
+  const entry = found?.entry ?? null;
+  const categoryId = found?.categoryId ?? '';
 
-  const entry = selected?.entry ?? null;
   const theoryReady = entry?.topicId && topic?.id === entry.topicId && !loadingTopic;
   const catalogKey = entry ? `catalog:${entry.id}` : '';
   const genTask = useGeneration((s) => (catalogKey ? s.tasks[catalogKey] : undefined));
 
   function generateForSelected() {
-    if (!selected) return;
-    startGen(`catalog:${selected.entry.id}`, {
-      question: tl(selected.entry.question, lang),
-      catalogId: selected.entry.id,
-      categoryId: selected.categoryId,
-      difficulty: selected.entry.difficulty,
+    if (!entry) return;
+    startGen(`catalog:${entry.id}`, {
+      question: tl(entry.question, lang),
+      catalogId: entry.id,
+      categoryId,
+      difficulty: entry.difficulty,
     });
   }
 
@@ -71,7 +65,10 @@ export function HomeScreen() {
         <section className="panel home-tree-panel">
           <div className="panel-title">{ui('catalogTitle', lang)}</div>
           <div className="panel-body tree-body">
-            <CategoryTree selectedId={entry?.id ?? null} onSelect={handleSelect} />
+            <CategoryTree
+              selectedId={entry?.id ?? null}
+              onSelect={(e) => navigate(routeForQuestion(e.id))}
+            />
           </div>
         </section>
 
@@ -104,7 +101,7 @@ export function HomeScreen() {
             {theoryReady && (
               <div className="home-theory">
                 <div className="home-theory-actions">
-                  <button className="primary" onClick={() => setView('workspace')}>
+                  <button className="primary" onClick={() => navigate(routeForPractice(entry!.id))}>
                     {ui('goToPractice', lang)}
                   </button>
                 </div>

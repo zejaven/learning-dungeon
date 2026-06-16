@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { navigate, routeForQuestion, useRoute } from '@app/engine/router';
 import { useStore } from '@app/engine/store';
 import { tl, ui, useLang } from '@app/i18n';
 import { EditorPanel } from '@app/shell/EditorPanel';
@@ -27,13 +28,13 @@ export function WorkspaceScreen() {
   const celebrating = useStore((s) => s.celebrating);
   const setCelebrating = useStore((s) => s.setCelebrating);
 
-  const setView = useStore((s) => s.setView);
   const setCode = useStore((s) => s.setCode);
   const loadExample = useStore((s) => s.loadExample);
   const resetCode = useStore((s) => s.resetCode);
   const run = useStore((s) => s.run);
 
   const lang = useLang((s) => s.lang);
+  const route = useRoute();
 
   const [showAssistant, setShowAssistant] = useState(false);
   const [showBossFight, setShowBossFight] = useState(false);
@@ -41,7 +42,9 @@ export function WorkspaceScreen() {
   return (
     <div className="app">
       <header className="header">
-        <button onClick={() => setView('home')}>{ui('backToCatalog', lang)}</button>
+        <button onClick={() => navigate(route.id ? routeForQuestion(route.id) : '/')}>
+          {ui('backToCatalog', lang)}
+        </button>
         <h1 className="workspace-title">{topic ? tl(topic.title, lang) : 'Java Interview Dungeon'}</h1>
         {topicCompleted && <span className="completed-badge">{ui('topicCompleted', lang)}</span>}
         <div className="spacer" />

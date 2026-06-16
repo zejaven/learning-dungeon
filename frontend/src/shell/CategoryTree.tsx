@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { buildCatalog, stars, type CatalogEntry } from '@app/catalog';
 import { useStore } from '@app/engine/store';
 import { tl, useLang } from '@app/i18n';
@@ -8,13 +8,16 @@ import { tl, useLang } from '@app/i18n';
  * difficulty. Generated topics are merged in (linked to their question or added
  * as new entries). Entries whose topic exists show a 📘 (or ✅ when the topic is
  * fully completed); the rest only offer theory generation.
+ *
+ * The selected entry (driven by the URL) is scrolled into view, so after a
+ * refresh the tree shows the current question without the user hunting for it.
  */
 export function CategoryTree({
   selectedId,
   onSelect,
 }: {
   selectedId: string | null;
-  onSelect: (entry: CatalogEntry, categoryId: string) => void;
+  onSelect: (entry: CatalogEntry) => void;
 }) {
   const topics = useStore((s) => s.topics);
   const lang = useLang((s) => s.lang);
@@ -22,6 +25,12 @@ export function CategoryTree({
   const existing = new Set(topics.map((t) => t.id));
   const completed = new Set(topics.filter((t) => t.completed).map((t) => t.id));
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+
+  // Bring the selected entry into view (e.g. after a reload, once topics load).
+  const selectedRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    selectedRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [selectedId, topics]);
 
   return (
     <div className="tree">
@@ -43,11 +52,13 @@ export function CategoryTree({
                 {entries.map((e) => {
                   const hasTheory = !!e.topicId && existing.has(e.topicId);
                   const isDone = !!e.topicId && completed.has(e.topicId);
+                  const isSelected = selectedId === e.id;
                   return (
                     <button
                       key={e.id}
-                      className={`tree-entry${selectedId === e.id ? ' selected' : ''}`}
-                      onClick={() => onSelect(e, cat.id)}
+                      ref={isSelected ? selectedRef : undefined}
+                      className={`tree-entry${isSelected ? ' selected' : ''}`}
+                      onClick={() => onSelect(e)}
                       title={tl(e.question, lang)}
                     >
                       <span className="tree-stars" data-d={e.difficulty}>

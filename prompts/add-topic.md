@@ -60,8 +60,12 @@ and keep Java source/comments in English. Localize visualizer labels via
    the explanation-files section of `topic-contract.md` and `prompts/mermaid-guide.md`.
 8. **Write `quiz.yaml`** with missions whose `event` matches a trace event type the
    examples can produce, plus a `bossFight` question list (each with a stable `id`).
-9. **Validate**: run `./gradlew :visual-runtime:test` if you added/changed a model,
-   and make sure each example compiles. Confirm the topic folder matches the schema.
+9. **Validate**: run `./gradlew :backend:test --tests "*TopicContractTest"` and fix
+   every reported violation. It strictly parses `topic.yaml` / `quiz.yaml` (a YAML
+   syntax error fails the test) and checks the structure the UI needs — bilingual
+   fields, examples and their referenced files, `missions` and a non-empty
+   `bossFight` list of `{ id, en, ru }`. Also run `./gradlew :visual-runtime:test`
+   if you added/changed a model, and make sure each example compiles.
 
 ## Hard constraints
 

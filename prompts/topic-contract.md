@@ -209,3 +209,18 @@ bossFight:
 Each `bossFight` question needs a stable `id` (a short kebab slug, unique within
 the topic). Learner answers are stored against this id, so never reuse or
 repurpose an id for a different question — add a new one instead.
+
+## YAML quoting (avoid syntax errors)
+
+A YAML syntax error in `topic.yaml` / `quiz.yaml` makes the whole file unreadable
+(the topic loses its missions and boss fight). **Single-quote any value that
+contains quotes, a colon-space, `#`, or starts with punctuation** — e.g.
+`en: '"Change" a string'`, not `en: "Change" a string`. Inside single quotes,
+double a literal apostrophe (`'it''s'`). Russian guillemets `«…»` need no quoting.
+
+## Validation (always run after writing a topic)
+
+`./gradlew :backend:test --tests "*TopicContractTest"` validates every topic with
+the same parser the app uses: it fails on a YAML syntax error and on missing or
+malformed structure (bilingual fields, examples + their files, `missions`, a
+non-empty `bossFight` of `{ id, en, ru }`). A new topic must pass it.

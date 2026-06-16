@@ -125,8 +125,8 @@ the insert is captured. Either way, don't let the outbox grow without bound.
 > database, so they commit atomically. A separate relay — a poller or
 > change-data-capture — then reads unpublished rows and publishes them to the
 > broker, marking them published. The relay is at-least-once, so it can resend on
-> a crash; consumers dedup with the Inbox pattern. It's the producer-side
-> counterpart of the Inbox pattern.
+> a crash; consumers dedup with the [Inbox pattern](topic:inbox-pattern). It's the
+> producer-side counterpart of the Inbox pattern.
 
 ## Common misconceptions
 

@@ -3,6 +3,8 @@ package com.interviewlearning.api;
 import com.interviewlearning.config.RepoPaths;
 import com.interviewlearning.generation.GenerationService;
 import com.interviewlearning.generation.GenerationTask;
+import com.interviewlearning.topics.TopicDtos.TopicSummary;
+import com.interviewlearning.topics.TopicRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -37,15 +39,18 @@ public class TopicGenController {
 
     private final GenerationService generation;
     private final RepoPaths repoPaths;
+    private final TopicRepository topics;
     private final String permissionMode;
     private final String model;
 
     public TopicGenController(GenerationService generation,
                               RepoPaths repoPaths,
+                              TopicRepository topics,
                               @Value("${app.claude.generate-permission-mode:bypassPermissions}") String permissionMode,
                               @Value("${app.claude.generate-model:}") String model) {
         this.generation = generation;
         this.repoPaths = repoPaths;
+        this.topics = topics;
         this.permissionMode = permissionMode;
         this.model = model;
     }
@@ -142,6 +147,34 @@ public class TopicGenController {
             sb.append("- catalogId: ").append(catalogId.trim())
                     .append("   (this links the topic back to the source question — set it exactly)\n");
         }
+
+        appendCrossLinkContext(sb);
         return sb.toString();
+    }
+
+    /**
+     * Lists the topics that already exist so Claude can cross-link to them from the
+     * new explanation via `[label](topic:&lt;id&gt;)` (see topic-contract.md). Only
+     * real, existing ids are offered, so links never dangle.
+     */
+    private void appendCrossLinkContext(StringBuilder sb) {
+        List<TopicSummary> existing;
+        try {
+            existing = topics.listTopics();
+        } catch (RuntimeException e) {
+            log.warn("Could not list topics for cross-link context: {}", e.getMessage());
+            return;
+        }
+        if (existing.isEmpty()) {
+            return;
+        }
+        sb.append("\n\n---\n\nEXISTING TOPICS YOU MAY CROSS-LINK TO. When the explanation "
+                + "mentions one of these concepts, link to it with `[label](topic:<id>)` "
+                + "so the reader can jump to that topic. Use only these exact ids; never "
+                + "invent one. Do NOT link the new topic to itself.\n");
+        for (TopicSummary t : existing) {
+            String title = t.title() == null ? t.id() : t.title().en();
+            sb.append("- topic:").append(t.id()).append(" — ").append(title).append("\n");
+        }
     }
 }

@@ -54,7 +54,9 @@ and keep Java source/comments in English. Localize visualizer labels via
    diagrams** where they aid understanding (structure / interaction / lifecycle /
    relationships): pick the diagram type that fits the concept. **Translate the
    diagram labels too** — Russian labels in `explanation.ru.md`, English in
-   `explanation.en.md` — keeping technical terms/identifiers/code untranslated. See
+   `explanation.en.md` — keeping technical terms/identifiers/code untranslated.
+   **Cross-link** related concepts that already have a topic via
+   `[label](topic:<id>)`, using only the ids listed in the generation request. See
    the explanation-files section of `topic-contract.md` and `prompts/mermaid-guide.md`.
 8. **Write `quiz.yaml`** with missions whose `event` matches a trace event type the
    examples can produce, plus a `bossFight` question list (each with a stable `id`).

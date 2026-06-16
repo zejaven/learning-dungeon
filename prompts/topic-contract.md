@@ -91,6 +91,19 @@ Prose teaching the concept: intuition, a 60-second interview answer, production
 relevance, and the common traps. The Russian file is a faithful translation of
 the English one.
 
+**Cross-link to other topics.** When the explanation mentions a concept that
+already has its own topic, link to it with a `topic:<id>` (or `catalog:<id>`)
+markdown link — the app turns it into in-app navigation to that question:
+
+```
+… deduplicate redelivered messages with the [Inbox pattern](topic:inbox-pattern).
+```
+
+Use only ids that actually exist (the generation request lists the available
+topics under "EXISTING TOPICS YOU MAY CROSS-LINK TO"); never invent an id, and
+never link the new topic to itself. This is what lets a broad/overview question
+point at the focused topics that detail each part of the answer.
+
 **Include 1–3 Mermaid diagrams** where a picture genuinely helps understanding —
 structure, interaction, lifecycle or relationships are far clearer drawn than
 described. Do not add diagrams just to have them. Embed each as a fenced block:

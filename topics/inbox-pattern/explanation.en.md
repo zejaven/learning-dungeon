@@ -117,7 +117,7 @@ forgotten id looks brand new — and gets processed a second time.
 > one transaction, at-least-once becomes effectively-once. The key is the
 > producer's stable message id, not the payload, and you purge old ids on a
 > retention window longer than the broker's redelivery delay. It's the
-> consumer-side counterpart of the Outbox pattern.
+> consumer-side counterpart of the [Outbox pattern](topic:outbox-pattern).
 
 ## Common misconceptions
 

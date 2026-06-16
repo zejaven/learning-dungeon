@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { routeForQuestion } from '@app/engine/router';
 import { MermaidBlock } from './MermaidBlock';
 
 /**
@@ -11,6 +12,9 @@ import { MermaidBlock } from './MermaidBlock';
  * Fenced ```mermaid``` blocks render as diagrams (see {@link MermaidBlock}); all
  * other code blocks stay as plain code. We intercept at the `pre` level so the
  * diagram isn't left nested inside a <pre>.
+ *
+ * Cross-topic links use a `topic:<id>` / `catalog:<id>` href, rendered as in-app
+ * navigation to that question (`#/q/<id>`). Other links open in a new tab.
  *
  * `className` defaults to the boxed, height-capped streaming look used in dialogs.
  * Pass `"markdown"` for full-width, full-height prose (e.g. the theory panel).
@@ -26,11 +30,31 @@ export function Markdown({
     <div className={className}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        // Keep our internal schemes; sanitize everything else as usual.
+        urlTransform={(url) =>
+          /^(topic|catalog):/i.test(url) ? url : defaultUrlTransform(url)
+        }
         components={{
           pre(props) {
             const mermaid = extractMermaid(props.children);
             if (mermaid != null) return <MermaidBlock code={mermaid} />;
             return <pre>{props.children}</pre>;
+          },
+          a(props) {
+            const href = props.href ?? '';
+            const m = /^(?:topic|catalog):(.+)$/i.exec(href);
+            if (m) {
+              return (
+                <a className="md-xref" href={`#${routeForQuestion(m[1])}`}>
+                  {props.children}
+                </a>
+              );
+            }
+            return (
+              <a href={href} target="_blank" rel="noreferrer">
+                {props.children}
+              </a>
+            );
           },
         }}
       >

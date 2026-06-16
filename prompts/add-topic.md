@@ -41,7 +41,9 @@ and keep Java source/comments in English. Localize visualizer labels via
    model in `visual-runtime` (e.g. `visual.VisualHashMap`). If the topic needs a
    new model, add it under `visual-runtime/src/main/java/visual/` and have it call
    `visual.Trace.event(type, descEn, descRu, highlight, state)` with a bilingual
-   description. Keep `visual-runtime` dependency-free.
+   description. Keep `visual-runtime` dependency-free. **When you add a model, also
+   add a `Visual<Name>Test`** under `visual-runtime/src/test/java/visual/` asserting
+   its key trace events (mirror `VisualHashMapTest`).
 4. **Create the topic folder** `topics/<id>/` with all required files (see schema).
 5. **Write 4–8 small examples**, each a full `public class Playground` with a
    `main`, each teaching exactly one idea, importing the `visual.*` model.
@@ -60,12 +62,16 @@ and keep Java source/comments in English. Localize visualizer labels via
    the explanation-files section of `topic-contract.md` and `prompts/mermaid-guide.md`.
 8. **Write `quiz.yaml`** with missions whose `event` matches a trace event type the
    examples can produce, plus a `bossFight` question list (each with a stable `id`).
-9. **Validate**: run `./gradlew :backend:test --tests "*TopicContractTest"` and fix
-   every reported violation. It strictly parses `topic.yaml` / `quiz.yaml` (a YAML
-   syntax error fails the test) and checks the structure the UI needs — bilingual
-   fields, examples and their referenced files, `missions` and a non-empty
-   `bossFight` list of `{ id, en, ru }`. Also run `./gradlew :visual-runtime:test`
-   if you added/changed a model, and make sure each example compiles.
+9. **Validate** — run BOTH and fix every failure before finishing:
+   - `./gradlew :visual-runtime:test` — the learning-model unit tests (always run;
+     this includes the `Visual<Name>Test` you add for a new model).
+   - `./gradlew :backend:test` — runs `TopicContractTest` (strictly parses
+     `topic.yaml` / `quiz.yaml`, so a YAML syntax error fails; checks bilingual
+     fields, examples + their files, `missions`, and a non-empty `bossFight` of
+     `{ id, en, ru }`) AND `TopicExamplesTest` (compiles and runs every example
+     through the real runner, asserting each runs cleanly and that every mission's
+     `event` is actually emitted by some example — i.e. every mission is
+     completable).
 
 ## Hard constraints
 

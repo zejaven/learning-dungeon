@@ -124,6 +124,19 @@ const UI: Record<string, Localized> = {
   usageSession: { en: 'Session', ru: 'Сессия' },
   usageWeekly: { en: 'Week', ru: 'Неделя' },
   usageResets: { en: 'resets in', ru: 'сброс через' },
+  analyze: { en: '🔎 Analyze', ru: '🔎 Проанализировать' },
+  analyzing: { en: 'Analyzing…', ru: 'Анализ…' },
+  classDiagram: { en: 'Class diagram', ru: 'Диаграмма классов' },
+  analyzeHint: {
+    en: 'Create your classes, then click Analyze to see the class diagram.',
+    ru: 'Создайте классы, затем нажмите «Проанализировать», чтобы увидеть диаграмму классов.',
+  },
+  noActiveFile: { en: 'Select or create a file on the left.', ru: 'Выберите или создайте файл слева.' },
+  newFile: { en: 'New file', ru: 'Новый файл' },
+  newFileName: { en: 'NewClass.java', ru: 'NewClass.java' },
+  noFiles: { en: 'No files yet — create one above.', ru: 'Файлов пока нет — создайте выше.' },
+  rename: { en: 'Rename', ru: 'Переименовать' },
+  deleteFile: { en: 'Delete', ru: 'Удалить' },
 };
 
 export function ui(key: keyof typeof UI | string, lang: Lang): string {

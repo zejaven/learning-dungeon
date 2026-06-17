@@ -5,6 +5,7 @@ import com.interviewlearning.topics.TopicDtos.BossQuestion;
 import com.interviewlearning.topics.TopicDtos.Example;
 import com.interviewlearning.topics.TopicDtos.Localized;
 import com.interviewlearning.topics.TopicDtos.Mission;
+import com.interviewlearning.topics.TopicDtos.ProjectFile;
 import com.interviewlearning.topics.TopicDtos.TopicDetail;
 import com.interviewlearning.topics.TopicDtos.TopicSummary;
 import org.slf4j.Logger;
@@ -88,6 +89,10 @@ public class TopicRepository {
         List<Mission> missions = loadMissions(topicDir, meta);
         List<BossQuestion> bossFight = loadBossFight(topicDir, meta);
         List<String> primitives = stringList(meta.get("primitives"));
+        String mode = str(meta, "mode", "trace");
+        List<ProjectFile> starterFiles = "structural".equals(mode)
+                ? loadStarterFiles(topicDir)
+                : List.of();
 
         return Optional.of(new TopicDetail(
                 str(meta, "id", id),
@@ -101,7 +106,9 @@ public class TopicRepository {
                 str(meta, "defaultExample", examples.isEmpty() ? "" : examples.get(0).id()),
                 missions,
                 loc(meta, "assistantExample", ""),
-                bossFight
+                bossFight,
+                mode,
+                starterFiles
         ));
     }
 
@@ -159,7 +166,9 @@ public class TopicRepository {
                                 str(mm, "id", ""),
                                 loc(mm, "title", ""),
                                 loc(mm, "goal", ""),
-                                str(mm, "event", "")
+                                str(mm, "event", ""),
+                                str(mm, "type", "event"),
+                                objectList(mm.get("requires"))
                         ));
                     }
                 }
@@ -216,6 +225,35 @@ public class TopicRepository {
             }
             return result;
         }).orElse(List.of());
+    }
+
+    /**
+     * Reads a structural topic's starter project: every file under
+     * {@code topics/<id>/starter/}, with its path relative to that folder
+     * (forward slashes), so the editor can seed the file tree.
+     */
+    private List<ProjectFile> loadStarterFiles(Path topicDir) {
+        Path starter = topicDir.resolve("starter");
+        if (!Files.isDirectory(starter)) {
+            return List.of();
+        }
+        List<ProjectFile> files = new ArrayList<>();
+        try (Stream<Path> walk = Files.walk(starter)) {
+            walk.filter(Files::isRegularFile).sorted().forEach(p -> {
+                String rel = starter.relativize(p).toString().replace('\\', '/');
+                files.add(new ProjectFile(rel, readFile(p)));
+            });
+        } catch (IOException e) {
+            log.warn("Failed to read starter files in {}: {}", starter, e.getMessage());
+        }
+        return files;
+    }
+
+    private static List<Object> objectList(Object raw) {
+        if (raw instanceof List<?> list) {
+            return new ArrayList<>(list);
+        }
+        return List.of();
     }
 
     private Optional<Map<String, Object>> loadYaml(Path path) {

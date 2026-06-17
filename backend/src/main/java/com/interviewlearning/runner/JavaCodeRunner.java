@@ -2,6 +2,7 @@ package com.interviewlearning.runner;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.interviewlearning.config.RepoPaths;
+import com.interviewlearning.topics.TopicDtos.ProjectFile;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -107,6 +108,53 @@ public class JavaCodeRunner {
 
     /** @return null on success, or the collected compiler diagnostics. */
     private String compile(Path src, Path outDir, String classpath) {
+        return compileSources(List.of(src), outDir, classpath);
+    }
+
+    /**
+     * Compiles a multi-file project for validity only — no execution. Used by the
+     * structural (design-pattern) topics, where we just need to know the sources
+     * are valid before parsing them into a class graph.
+     *
+     * @return null on success, or the collected compiler diagnostics
+     */
+    public String compileFiles(List<ProjectFile> files) {
+        if (files == null || files.isEmpty()) {
+            return "No files to compile.";
+        }
+        Path workDir;
+        try {
+            workDir = Files.createTempDirectory("ilcompile-");
+        } catch (IOException e) {
+            return "Could not create temp dir: " + e.getMessage();
+        }
+        try {
+            List<Path> srcs = new ArrayList<>();
+            for (ProjectFile f : files) {
+                if (f.path() == null || !f.path().endsWith(".java")) {
+                    continue;
+                }
+                Path dest = workDir.resolve(f.path()).normalize();
+                if (!dest.startsWith(workDir)) {
+                    continue; // guard against path traversal in the supplied path
+                }
+                Path parent = dest.getParent();
+                Files.createDirectories(parent == null ? workDir : parent);
+                Files.writeString(dest, f.content() == null ? "" : f.content(), StandardCharsets.UTF_8);
+                srcs.add(dest);
+            }
+            if (srcs.isEmpty()) {
+                return "No .java files to compile.";
+            }
+            return compileSources(srcs, workDir, buildClasspath(workDir));
+        } catch (IOException e) {
+            return "Compile I/O error: " + e.getMessage();
+        } finally {
+            deleteRecursively(workDir);
+        }
+    }
+
+    private String compileSources(List<Path> srcs, Path outDir, String classpath) {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         if (compiler == null) {
             return "No system Java compiler available — backend must run on a JDK.";
@@ -115,7 +163,7 @@ public class JavaCodeRunner {
         try (StandardJavaFileManager fm =
                      compiler.getStandardFileManager(diagnostics, null, StandardCharsets.UTF_8)) {
             Iterable<? extends JavaFileObject> units =
-                    fm.getJavaFileObjectsFromFiles(List.of(src.toFile()));
+                    fm.getJavaFileObjectsFromFiles(srcs.stream().map(Path::toFile).toList());
             List<String> options = List.of(
                     "-classpath", classpath,
                     "-d", outDir.toString()
@@ -127,6 +175,9 @@ public class JavaCodeRunner {
             StringBuilder sb = new StringBuilder("Compilation failed:\n");
             for (Diagnostic<? extends JavaFileObject> d : diagnostics.getDiagnostics()) {
                 sb.append(d.getKind()).append(": ");
+                if (d.getSource() != null) {
+                    sb.append(new File(d.getSource().getName()).getName()).append(' ');
+                }
                 if (d.getLineNumber() >= 0) {
                     sb.append("line ").append(d.getLineNumber()).append(": ");
                 }

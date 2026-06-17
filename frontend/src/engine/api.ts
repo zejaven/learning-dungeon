@@ -1,4 +1,11 @@
-import type { RunResult, TopicDetail, TopicProgress, TopicSummary } from './traceTypes';
+import type {
+  AnalyzeResult,
+  ProjectFile,
+  RunResult,
+  TopicDetail,
+  TopicProgress,
+  TopicSummary,
+} from './traceTypes';
 
 export async function fetchTopics(): Promise<TopicSummary[]> {
   const res = await fetch('/api/topics');
@@ -38,6 +45,17 @@ export interface UsageSnapshot {
 export async function fetchUsage(): Promise<UsageSnapshot> {
   const res = await fetch('/api/usage');
   if (!res.ok) throw new Error(`Failed to load usage (${res.status})`);
+  return res.json();
+}
+
+/** Compiles (validity only) and analyzes a structural topic's project. */
+export async function analyzeProject(topicId: string, files: ProjectFile[]): Promise<AnalyzeResult> {
+  const res = await fetch('/api/analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ topicId, files }),
+  });
+  if (!res.ok) throw new Error(`Analyze failed (${res.status})`);
   return res.json();
 }
 

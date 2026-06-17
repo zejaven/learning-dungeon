@@ -52,6 +52,7 @@ class TopicContractTest {
         List<String> errs = new ArrayList<>();
 
         Map<String, Object> meta = parseYaml(dir.resolve("topic.yaml"), "topic.yaml", errs);
+        boolean structural = meta != null && "structural".equals(str(meta, "mode"));
         if (meta != null) {
             if (!name.equals(str(meta, "id"))) {
                 errs.add("topic.yaml: id '" + str(meta, "id") + "' must equal folder name '" + name + "'");
@@ -59,19 +60,27 @@ class TopicContractTest {
             bilingual(meta.get("title"), "topic.yaml: title", errs);
             bilingual(meta.get("category"), "topic.yaml: category", errs);
             bilingual(meta.get("summary"), "topic.yaml: summary", errs);
-            validateExamples(dir, meta, errs);
+            if (structural) {
+                validateStarter(dir, errs);
+            } else {
+                validateExamples(dir, meta, errs);
+            }
         }
 
         requireNonEmptyFile(dir.resolve("explanation.en.md"), errs);
         requireNonEmptyFile(dir.resolve("explanation.ru.md"), errs);
-        requireExists(dir.resolve("visualizer.tsx"), errs);
-        validateJson(dir.resolve("trace-schema.json"), errs);
+        if (!structural) {
+            // Behavioural topics drive a visualizer from trace events; structural
+            // ones render an analyzed class diagram instead.
+            requireExists(dir.resolve("visualizer.tsx"), errs);
+            validateJson(dir.resolve("trace-schema.json"), errs);
+        }
 
         String quizName = meta != null ? str(meta, "missionsFile") : null;
         if (quizName == null || quizName.isBlank()) quizName = "quiz.yaml";
         Map<String, Object> quiz = parseYaml(dir.resolve(quizName), quizName, errs);
         if (quiz != null) {
-            validateMissions(quiz, errs);
+            validateMissions(quiz, structural, errs);
             validateBossFight(quiz, errs);
         }
 
@@ -118,7 +127,7 @@ class TopicContractTest {
     }
 
     @SuppressWarnings("unchecked")
-    private void validateMissions(Map<String, Object> quiz, List<String> errs) {
+    private void validateMissions(Map<String, Object> quiz, boolean structural, List<String> errs) {
         Object raw = quiz.get("missions");
         if (!(raw instanceof List<?> list) || list.isEmpty()) {
             errs.add("quiz.yaml: missions must be a non-empty list");
@@ -137,7 +146,31 @@ class TopicContractTest {
             else if (!ids.add(id)) errs.add(where + ": duplicate id '" + id + "'");
             bilingual(m.get("title"), where + ".title", errs);
             bilingual(m.get("goal"), where + ".goal", errs);
-            if (str(m, "event").isBlank()) errs.add(where + ": missing event");
+            // A structure mission is checked against the class graph (needs a
+            // non-empty `requires`); a trace mission is checked by event name.
+            String typeRaw = str(m, "type");
+            String type = typeRaw.isBlank() ? (structural ? "structure" : "event") : typeRaw;
+            if ("structure".equals(type)) {
+                if (!(m.get("requires") instanceof List<?> req) || req.isEmpty()) {
+                    errs.add(where + ": a structure mission needs a non-empty 'requires' list");
+                }
+            } else if (str(m, "event").isBlank()) {
+                errs.add(where + ": missing event");
+            }
+        }
+    }
+
+    private void validateStarter(Path dir, List<String> errs) {
+        Path starter = dir.resolve("starter");
+        if (!Files.isDirectory(starter)) {
+            errs.add("structural topic: missing starter/ folder");
+            return;
+        }
+        try (Stream<Path> walk = Files.walk(starter)) {
+            boolean anyJava = walk.anyMatch(p -> Files.isRegularFile(p) && p.toString().endsWith(".java"));
+            if (!anyJava) errs.add("structural topic: starter/ has no .java files");
+        } catch (IOException e) {
+            errs.add("structural topic: could not read starter/ — " + firstLine(e.getMessage()));
         }
     }
 

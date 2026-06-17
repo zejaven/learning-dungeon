@@ -34,6 +34,8 @@ category:
   en: <e.g. Java Core / Collections>
   ru: <напр. Java Core / Коллекции>
 type: <DATA_STRUCTURE | CONCURRENCY | ...>
+mode: <trace | structural>      # OPTIONAL: default `trace`; `structural` = the
+                                # design-pattern class-graph engine (see below)
 summary:
   en: <one paragraph>
   ru: <один абзац>
@@ -84,6 +86,68 @@ omit it when `categoryId` is one of the known ids.
 (it links the topic back to that question) — omit it otherwise. The generation
 request supplies the exact values to use for any of these it has already decided;
 otherwise choose them yourself.
+
+## Structural topics (mode: structural)
+
+Design-pattern topics that are about **class relationships** (Strategy, Observer,
+Factory, Decorator, Adapter, …) use a different engine. The learner builds real
+classes in a multi-file editor and presses **Analyze**, which compiles the project
+and parses it into a class graph (nodes + `extends`/`implements`/`association`
+edges) rendered as a Mermaid class diagram; missions are checked against that
+graph. There is no "Run" and no trace events.
+
+Set `mode: structural`. The folder layout changes:
+
+```
+topics/<id>/
+  topic.yaml          mode: structural   (no primitives/examples/defaultExample)
+  explanation.en.md   prose + a Mermaid classDiagram of the target shape
+  explanation.ru.md
+  starter/            seed .java files the learner opens (MUST compile)
+    PaymentStrategy.java
+    Checkout.java
+  quiz.yaml           structure missions + bossFight
+```
+
+**Omit entirely:** `examples/`, `visualizer.tsx`, `trace-schema.json`,
+`primitives`, `defaultExample`, and any `visual.*` model.
+
+**starter/** seeds the editor: give the interface / abstract base and a stub
+context, but leave the classes and fields the missions ask for **unbuilt** — every
+starter file must compile as-is, and must NOT already satisfy the missions.
+
+**Structure missions** use `type: structure` + a `requires` list of predicates; a
+mission passes when EVERY predicate holds against the analyzed graph:
+
+```yaml
+missions:
+  - id: strategy-interface
+    type: structure
+    title: { en: Define a Strategy interface, ru: Определи интерфейс Strategy }
+    goal:  { en: An interface with two implementations, ru: Интерфейс с двумя реализациями }
+    requires:
+      - { kind: interfaceWithImpls, minImplementations: 2 }
+  - id: context-holds-strategy
+    type: structure
+    title: { en: Context holds a Strategy, ru: Контекст хранит Strategy }
+    goal:  { en: A class has a field of the interface type, ru: У класса есть поле типа интерфейса }
+    requires:
+      - { kind: composition, targetKind: interface }
+```
+
+Predicate kinds:
+
+- `interfaceWithImpls { minImplementations, name? }` — an interface (optionally
+  named) with at least N implementing classes.
+- `composition { targetKind, ownerKind?, name? }` — some class has a field whose
+  type is a node of `targetKind` (`interface` | `class` | `abstractClass` | `enum`).
+- `edge { relation: extends | implements | association, from?, to? }` — such an edge exists.
+- `nodeExists { nodeKind, name? }` — a declared type of that kind (optionally named).
+
+Only types **declared in the project** are nodes (`java.*` references are ignored);
+generic/array field types are unwrapped, so `List<Strategy>` counts as a
+`composition` to `Strategy`. `bossFight` is unchanged. Validate with
+`./gradlew :backend:test`. Mirror `topics/strategy/`.
 
 ## Explanation files (explanation.en.md / explanation.ru.md)
 

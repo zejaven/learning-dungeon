@@ -33,6 +33,12 @@ and keep Java source/comments in English. Localize visualizer labels via
    The generation request may already specify `categoryId`, `difficulty` and a
    `catalogId` — if so, use those exact values; otherwise determine `categoryId`
    and `difficulty` yourself (and omit `catalogId`).
+
+   Then **choose the mode**. Most topics are `mode: trace` (the default — a runnable
+   model + visualizer + trace events; steps 2–8 below). A **design pattern about
+   class relationships** (GoF: Strategy, Observer, Factory, Decorator, Adapter, …)
+   should instead be `mode: structural` — see *Structural topics* below; for those,
+   skip steps 2, 3, 5, 6 and the event-missions in step 8.
 2. **Identify the mental model to visualize.** The primitives that exist today are
    `ArrayGrid`, `LinkedNodes` and `EventLog` (under `frontend/src/primitives/`).
    If none fit your topic, add a new generic, data-driven primitive there following
@@ -72,6 +78,27 @@ and keep Java source/comments in English. Localize visualizer labels via
      through the real runner, asserting each runs cleanly and that every mission's
      `event` is actually emitted by some example — i.e. every mission is
      completable).
+
+## Structural topics (design patterns)
+
+A structural topic teaches a pattern by its **class relationships**, not runtime
+behaviour. Set `mode: structural` in topic.yaml and follow these deltas (full
+schema in `topic-contract.md` → "Structural topics"); mirror `topics/strategy/`:
+
+- **No** `visual.*` model, `examples/`, `visualizer.tsx`, `trace-schema.json` or
+  `primitives` (skip steps 2, 3, 5, 6). The practice screen has no "Run" — it
+  compiles the project and analyzes it into a class diagram via "Analyze".
+- Add a **`starter/`** folder of seed `.java` files the learner opens — give them
+  the interface / abstract base and a stub context, but leave the pieces the
+  missions ask for unbuilt. **Every starter file must compile.**
+- `quiz.yaml` missions use `type: structure` + a `requires` list of predicates
+  checked against the analyzed class graph (`interfaceWithImpls` / `composition` /
+  `edge` / `nodeExists`). Make every mission reachable by the intended solution.
+- Still write `explanation.en.md` / `explanation.ru.md` (step 7) with a Mermaid
+  `classDiagram` of the target shape, and a `bossFight` list (step 8).
+- Validate with `./gradlew :backend:test` (`TopicContractTest` is mode-aware;
+  `TopicExamplesTest` skips structural topics). `:visual-runtime:test` is only
+  needed if you touched a model (structural topics don't).
 
 ## Hard constraints
 

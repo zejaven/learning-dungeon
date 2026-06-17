@@ -135,6 +135,15 @@ public class TopicGenController {
                     + "list in the contract above (use `other` only if nothing fits).\n");
         }
 
+        if ("design-patterns".equals(categoryId)) {
+            sb.append("- mode: if this question is a single GoF pattern defined by class "
+                    + "relationships (Strategy, Observer, Factory, Decorator, Adapter, …), set "
+                    + "`mode: structural` and follow the \"Structural topics\" contract "
+                    + "(starter/ files + structure missions, no model/examples/visualizer). "
+                    + "For an overview question (\"what patterns exist?\") or a trivial one-class "
+                    + "pattern, keep the default `trace` mode or just write prose.\n");
+        }
+
         Integer difficulty = request.difficulty();
         if (difficulty != null && difficulty >= 1 && difficulty <= 3) {
             sb.append("- difficulty: ").append(difficulty).append("\n");

@@ -68,8 +68,49 @@ export interface Mission {
   id: string;
   title: Localized;
   goal: Localized;
-  /** Trace event type whose presence completes this mission. */
+  /** Trace event type whose presence completes this mission (trace topics). */
   event: string;
+  /** 'event' (default) or 'structure' (checked against the class graph). */
+  type: string;
+  /** Structural predicates evaluated against the class graph; raw rule maps. */
+  requires: StructureRule[];
+}
+
+/** One predicate of a structure mission (see engine/structure.ts). */
+export interface StructureRule {
+  kind: string;
+  [key: string]: unknown;
+}
+
+/** A file of a structural topic's project (path + content). */
+export interface ProjectFile {
+  path: string;
+  content: string;
+}
+
+/** A declared type in the analyzed class graph. */
+export interface ClassNode {
+  name: string;
+  /** class | interface | abstractClass | enum */
+  kind: string;
+}
+
+/** A relationship edge: extends | implements | association. */
+export interface ClassEdge {
+  from: string;
+  to: string;
+  kind: string;
+}
+
+export interface ClassGraph {
+  nodes: ClassNode[];
+  edges: ClassEdge[];
+}
+
+export interface AnalyzeResult {
+  ok: boolean;
+  error: string | null;
+  graph: ClassGraph;
 }
 
 export interface TopicDetail {
@@ -87,6 +128,10 @@ export interface TopicDetail {
   assistantExample: Localized;
   /** Interview questions for the Boss Fight practice mode. */
   bossFight: BossQuestion[];
+  /** 'trace' (default behavioural engine) or 'structural' (class-graph engine). */
+  mode: string;
+  /** Seed files for a structural topic's editor; empty for trace topics. */
+  starterFiles: ProjectFile[];
 }
 
 /** Props every topic visualizer receives. */

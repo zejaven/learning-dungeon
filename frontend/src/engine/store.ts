@@ -1,6 +1,7 @@
 import { create } from 'zustand';
-import { fetchProgress, fetchTopic, fetchTopics, runCode, saveMissions } from './api';
-import type { TopicDetail, TopicSummary, TraceEvent } from './traceTypes';
+import { analyzeProject, fetchProgress, fetchTopic, fetchTopics, runCode, saveMissions } from './api';
+import { evaluateStructureMission } from './structure';
+import type { ClassGraph, TopicDetail, TopicSummary, TraceEvent } from './traceTypes';
 
 interface AppState {
   topics: TopicSummary[];
@@ -24,6 +25,16 @@ interface AppState {
   /** Drives the celebration overlay when a topic is finished. */
   celebrating: boolean;
 
+  // --- Structural (design-pattern) topics: a multi-file project + class graph ---
+  /** Virtual filesystem (path → content) for the current structural topic. */
+  files: Record<string, string>;
+  /** Path of the file open in the editor, or null. */
+  activePath: string | null;
+  /** Latest analyzed class graph, or null before the first analysis. */
+  graph: ClassGraph | null;
+  analyzing: boolean;
+  analyzeError: string | null;
+
   loadTopics: () => Promise<void>;
   selectTopic: (id: string) => Promise<void>;
   setCode: (code: string) => void;
@@ -36,6 +47,45 @@ interface AppState {
   setBossFightResult: (questionId: string, result: BossFightResult) => void;
   markTopicCompleted: () => void;
   setCelebrating: (value: boolean) => void;
+
+  selectFile: (path: string) => void;
+  setFileContent: (path: string, content: string) => void;
+  createFile: (path: string) => void;
+  deleteFile: (path: string) => void;
+  renameFile: (oldPath: string, newPath: string) => void;
+  analyze: () => Promise<void>;
+}
+
+/** Persists a structural topic's project to localStorage (survives reload). */
+function persistProject(topicId: string | undefined, files: Record<string, string>): void {
+  if (!topicId) return;
+  try {
+    localStorage.setItem(`project:${topicId}`, JSON.stringify(files));
+  } catch {
+    /* storage may be unavailable */
+  }
+}
+
+function loadProject(topicId: string): Record<string, string> | null {
+  try {
+    const raw = localStorage.getItem(`project:${topicId}`);
+    return raw ? (JSON.parse(raw) as Record<string, string>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function seedFiles(topic: TopicDetail): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const f of topic.starterFiles ?? []) out[f.path] = f.content;
+  return out;
+}
+
+/** Skeleton inserted when the user creates a new .java file. */
+function javaTemplate(path: string): string {
+  const base = path.split('/').pop() ?? 'NewClass.java';
+  const name = base.replace(/\.java$/, '') || 'NewClass';
+  return `public class ${name} {\n}\n`;
 }
 
 /** One graded boss-fight answer; `passed` is score >= 6. */
@@ -66,6 +116,11 @@ export const useStore = create<AppState>((set, get) => ({
   bossFightResults: {},
   topicCompleted: false,
   celebrating: false,
+  files: {},
+  activePath: null,
+  graph: null,
+  analyzing: false,
+  analyzeError: null,
 
   async loadTopics() {
     // Loads the list of generated topics (used for completion flags and to know
@@ -83,6 +138,8 @@ export const useStore = create<AppState>((set, get) => ({
     set({ loadingTopic: true });
     try {
       const topic = await fetchTopic(id);
+      const structural = topic.mode === 'structural';
+      const files = structural ? (loadProject(id) ?? seedFiles(topic)) : {};
       set({
         topic,
         loadingTopic: false,
@@ -95,6 +152,11 @@ export const useStore = create<AppState>((set, get) => ({
         bossFightResults: {},
         topicCompleted: false,
         celebrating: false,
+        files,
+        activePath: structural ? (Object.keys(files)[0] ?? null) : null,
+        graph: null,
+        analyzing: false,
+        analyzeError: null,
       });
       // Restore saved progress (best-effort; never blocks opening the topic).
       try {
@@ -202,5 +264,77 @@ export const useStore = create<AppState>((set, get) => ({
 
   setCelebrating(value) {
     set({ celebrating: value });
+  },
+
+  selectFile(path) {
+    set({ activePath: path });
+  },
+
+  setFileContent(path, content) {
+    const files = { ...get().files, [path]: content };
+    set({ files });
+    persistProject(get().topic?.id, files);
+  },
+
+  createFile(path) {
+    const clean = path.trim();
+    if (!clean || get().files[clean] !== undefined) return;
+    const content = clean.endsWith('.java') ? javaTemplate(clean) : '';
+    const files = { ...get().files, [clean]: content };
+    set({ files, activePath: clean });
+    persistProject(get().topic?.id, files);
+  },
+
+  deleteFile(path) {
+    const files = { ...get().files };
+    if (files[path] === undefined) return;
+    delete files[path];
+    const activePath = get().activePath === path ? (Object.keys(files)[0] ?? null) : get().activePath;
+    set({ files, activePath });
+    persistProject(get().topic?.id, files);
+  },
+
+  renameFile(oldPath, newPath) {
+    const clean = newPath.trim();
+    const files = { ...get().files };
+    if (!clean || files[oldPath] === undefined || files[clean] !== undefined) return;
+    files[clean] = files[oldPath];
+    delete files[oldPath];
+    const activePath = get().activePath === oldPath ? clean : get().activePath;
+    set({ files, activePath });
+    persistProject(get().topic?.id, files);
+  },
+
+  async analyze() {
+    const { topic, files } = get();
+    if (!topic || topic.mode !== 'structural') return;
+    set({ analyzing: true, analyzeError: null });
+    try {
+      const projectFiles = Object.entries(files).map(([path, content]) => ({ path, content }));
+      const res = await analyzeProject(topic.id, projectFiles);
+      // Re-check structure missions against the fresh graph (sticky, like trace
+      // missions: once achieved they stay completed and are persisted).
+      const completed = { ...get().completedMissions };
+      const newly: string[] = [];
+      for (const m of topic.missions) {
+        if (m.type === 'structure' && !completed[m.id] && evaluateStructureMission(m.requires, res.graph)) {
+          completed[m.id] = true;
+          newly.push(m.id);
+        }
+      }
+      set({
+        analyzing: false,
+        graph: res.graph,
+        analyzeError: res.ok ? null : res.error,
+        completedMissions: completed,
+      });
+      if (newly.length > 0) {
+        saveMissions(topic.id, newly).catch(() => {
+          /* persistence is best-effort */
+        });
+      }
+    } catch (e) {
+      set({ analyzing: false, analyzeError: (e as Error).message });
+    }
   },
 }));

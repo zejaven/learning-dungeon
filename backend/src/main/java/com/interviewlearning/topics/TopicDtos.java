@@ -39,14 +39,27 @@ public final class TopicDtos {
     }
 
     /**
-     * A mission/challenge. {@code event} is the trace event type whose presence
-     * in a run satisfies the mission (checked on the frontend).
+     * A mission/challenge. For a trace topic ({@code type == "event"}, the
+     * default) {@code event} is the trace event type whose presence in a run
+     * satisfies it. For a structural topic ({@code type == "structure"})
+     * {@code requires} holds predicates evaluated against the analyzed class
+     * graph (checked on the frontend). Predicates are passed through as raw
+     * maps so the rule schema can evolve without backend changes.
      */
     public record Mission(
             String id,
             Localized title,
             Localized goal,
-            String event
+            String event,
+            String type,
+            List<Object> requires
+    ) {
+    }
+
+    /** One file of a structural topic's starter project (path relative to the topic root). */
+    public record ProjectFile(
+            String path,
+            String content
     ) {
     }
 
@@ -61,7 +74,12 @@ public final class TopicDtos {
     ) {
     }
 
-    /** Full payload for a single topic. */
+    /**
+     * Full payload for a single topic. {@code mode} is {@code "trace"} (the
+     * default behavioural engine: examples + visualizer + trace events) or
+     * {@code "structural"} (a multi-file project analyzed into a class graph;
+     * {@code starterFiles} seeds the editor, {@code examples}/visualizer unused).
+     */
     public record TopicDetail(
             String id,
             Localized title,
@@ -74,7 +92,9 @@ public final class TopicDtos {
             String defaultExampleId,
             List<Mission> missions,
             Localized assistantExample,
-            List<BossQuestion> bossFight
+            List<BossQuestion> bossFight,
+            String mode,
+            List<ProjectFile> starterFiles
     ) {
     }
 }

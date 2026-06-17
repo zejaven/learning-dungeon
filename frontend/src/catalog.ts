@@ -82,6 +82,9 @@ export const CATALOG: CatalogCategory[] = [
       { id: 'java-core-17', difficulty: 2, question: { en: `What is a ClassLoader and what kinds are there?`, ru: `Что такое ClassLoader и какие они бывают?` } },
       { id: 'java-core-18', difficulty: 2, question: { en: `How does the JVM work with source code?`, ru: `Как JVM работает с исходным кодом?` } },
       { id: 'java-core-19', difficulty: 2, question: { en: `Why is Java usually faster than Python, and how can the JVM optimize code at runtime (JIT compilation)?`, ru: `Почему Java обычно быстрее Python и как JVM может оптимизировать код во время выполнения (JIT-компиляция)?` } },
+      { id: 'java-core-20', difficulty: 2, question: { en: `How do you correctly implement equals() and hashCode() for a value class, and what is the contract between them?`, ru: `Как правильно реализовать equals() и hashCode() для класса-значения и какой между ними контракт?` } },
+      { id: 'java-core-21', difficulty: 3, question: { en: `equals() and inheritance: what can break if a base class uses instanceof (e.g. Point vs Point3D), and how does getClass() differ?`, ru: `equals() и наследование: что может сломаться, если базовый класс использует instanceof (например, Point и Point3D), и чем отличается getClass()?` } },
+      { id: 'java-core-22', difficulty: 2, question: { en: `What is the difference between Comparator and Comparable, and how do you implement compareTo() correctly?`, ru: `В чём разница между Comparator и Comparable и как правильно реализовать compareTo()?` } },
     ],
   },
   {
@@ -99,6 +102,7 @@ export const CATALOG: CatalogCategory[] = [
       { id: 'java-collections-9', difficulty: 2, question: { en: `What is the difference between ConcurrentHashMap and a synchronized HashMap?`, ru: `В чём разница между ConcurrentHashMap и синхронизированным HashMap?` } },
       { id: 'java-collections-10', difficulty: 2, question: { en: `How does the JVM know which index corresponds to which object in an ArrayList?`, ru: `Как JVM понимает, что такой-то индекс относится к такому-то объекту в ArrayList?` } },
       { id: 'java-collections-11', difficulty: 2, question: { en: `If ArrayList were implemented naively — allocating a new array and copying all elements on each growth — what would the complexity of adding N elements be?`, ru: `Если бы ArrayList сделали самым примитивным образом — при расширении создавали бы новый массив и копировали все элементы — какая была бы сложность добавления N элементов?` } },
+      { id: 'java-collections-12', difficulty: 2, question: { en: `What Set implementations does Java have (HashSet, LinkedHashSet, TreeSet) and how do they differ?`, ru: `Какие реализации Set есть в Java (HashSet, LinkedHashSet, TreeSet) и чем они отличаются?` } },
     ],
   },
   {
@@ -187,6 +191,7 @@ export const CATALOG: CatalogCategory[] = [
       { id: 'algorithms-9', difficulty: 2, question: { en: `How can you speed up finding an element by value in an array?`, ru: `Как можно ускорить поиск элемента по значению в массиве?` } },
       { id: 'algorithms-10', difficulty: 1, question: { en: `What are a stack and a queue (LIFO vs FIFO), and where is each used?`, ru: `Что такое стек и очередь (LIFO vs FIFO) и где каждое применяется?` } },
       { id: 'algorithms-11', difficulty: 2, question: { en: `How do you implement a queue using only stacks, and what is the amortised cost of enqueue/dequeue?`, ru: `Как реализовать очередь, используя только стеки, и какова амортизированная стоимость enqueue/dequeue?` } },
+      { id: 'algorithms-12', difficulty: 2, question: { en: `How do you find duplicates in an array — a HashSet (O(n) time, O(n) space) versus sort-then-scan (O(n log n) time, O(1) extra)? What are the trade-offs?`, ru: `Как найти дубликаты в массиве — через HashSet (O(n) по времени, O(n) по памяти) или сортировкой и проходом (O(n log n) по времени, O(1) доп. памяти)? Каковы компромиссы?` } },
     ],
   },
   {
@@ -209,6 +214,11 @@ export const CATALOG: CatalogCategory[] = [
       { id: 'databases-14', difficulty: 2, question: { en: `How do you determine which queries need optimization?`, ru: `Как определять, какие запросы нужно оптимизировать?` } },
       { id: 'databases-15', difficulty: 3, question: { en: `How do you store very large numbers in a relational DB — BigInteger / uint256 / 18-decimal amounts that exceed int64 — and what indexing/sorting problems arise if you store numbers as text?`, ru: `Как хранить очень большие числа в реляционной БД — BigInteger / uint256 / суммы с 18 decimals, выходящие за int64 — и какие проблемы с индексацией/сортировкой возникают, если хранить числа как текст?` } },
       { id: 'databases-16', difficulty: 2, question: { en: `When would you use Redis versus PostgreSQL (e.g. to store and check uniqueness of generated values)?`, ru: `Когда использовать Redis, а когда PostgreSQL (например, для хранения и проверки уникальности сгенерированных значений)?` } },
+      { id: 'databases-17', difficulty: 2, question: { en: `How does SQL handle NULL (three-valued logic) — e.g. 1 + NULL, NULL OR TRUE, NULL OR FALSE, and why WHERE NULL filters a row out?`, ru: `Как SQL работает с NULL (трёхзначная логика) — например, 1 + NULL, NULL OR TRUE, NULL OR FALSE, и почему WHERE NULL отсеивает строку?` } },
+      { id: 'databases-18', difficulty: 2, question: { en: `How do you use LEFT JOIN with IS NULL to find rows that have no matching related records (anti-join)?`, ru: `Как с помощью LEFT JOIN и IS NULL найти строки, у которых нет связанных записей (anti-join)?` } },
+      { id: 'databases-19', difficulty: 2, question: { en: `How do you read a PostgreSQL EXPLAIN plan — what do Seq Scan vs Index Scan, cost and join nodes tell you, and what are the red flags?`, ru: `Как читать план EXPLAIN в PostgreSQL — о чём говорят Seq Scan vs Index Scan, cost и join-узлы, и какие признаки тревожны?` } },
+      { id: 'databases-20', difficulty: 3, question: { en: `An index exists but PostgreSQL won't use it — why might that happen and what can you do?`, ru: `Индекс есть, но PostgreSQL его не использует — почему так может быть и что делать?` } },
+      { id: 'databases-21', difficulty: 3, question: { en: `When is it better to split one complex SQL query into several simpler queries on the Java side instead of doing it all in SQL?`, ru: `Когда лучше разбить один сложный SQL-запрос на несколько простых на стороне Java, а не делать всё в SQL?` } },
     ],
   },
   {
@@ -227,6 +237,8 @@ export const CATALOG: CatalogCategory[] = [
       { id: 'spring-10', difficulty: 2, question: { en: `On which exceptions does @Transactional roll back by default (runtime vs checked), how do you change it (rollbackFor), and will it roll back if an external call throws after persist?`, ru: `На каких исключениях @Transactional откатывается по умолчанию (runtime vs checked), как это изменить (rollbackFor) и откатится ли транзакция, если внешний вызов бросит исключение после persist?` } },
       { id: 'spring-11', difficulty: 3, question: { en: `How do you run an action only after a transaction commits (or rolls back)? (@TransactionalEventListener)`, ru: `Как выполнить действие только после коммита (или отката) транзакции? (@TransactionalEventListener)` } },
       { id: 'spring-12', difficulty: 2, question: { en: `What does @Async do (with @EnableAsync), and why might it not work when the method is called from another method of the same class?`, ru: `Что делает @Async (вместе с @EnableAsync) и почему он может не сработать, если метод вызывается из другого метода того же класса?` } },
+      { id: 'spring-13', difficulty: 2, question: { en: `What is @Transactional, what is it for, and how does it work under the hood (proxies / AOP)?`, ru: `Что такое @Transactional, для чего нужна и как работает под капотом (прокси / AOP)?` } },
+      { id: 'spring-14', difficulty: 2, question: { en: `What is the Spring bean lifecycle — do beans always live as long as the context, or can they be destroyed earlier?`, ru: `Какой жизненный цикл у бинов Spring — всегда ли бины живут, пока живёт контекст, или могут быть уничтожены раньше?` } },
     ],
   },
   {
@@ -303,6 +315,11 @@ export const CATALOG: CatalogCategory[] = [
       { id: 'networking-2', difficulty: 2, question: { en: `What is long polling and how does it differ from regular HTTP requests?`, ru: `Что такое long polling и чем он отличается от обычных HTTP-запросов?` } },
       { id: 'networking-3', difficulty: 2, question: { en: `How does a WebSocket connection work (handshake, bidirectional), what transport does it use (TCP/UDP), and is a new endpoint instance created per connection or shared?`, ru: `Как работает WebSocket-соединение (рукопожатие, двусторонний обмен), по какому транспорту (TCP/UDP) и создаётся ли новый экземпляр endpoint на каждое соединение или один общий?` } },
       { id: 'networking-4', difficulty: 3, question: { en: `How do you share thread-safe state across all WebSocket connections and guarantee a value is globally unique across every connection and thread?`, ru: `Как разделять потокобезопасное состояние между всеми WebSocket-соединениями и гарантировать глобальную уникальность значения для всех соединений и потоков?` } },
+      { id: 'networking-5', difficulty: 2, question: { en: `You type google.com in the browser — what happens end to end (DNS, TCP, TLS, HTTP request/response) until the page loads?`, ru: `Вы вводите google.com в браузере — что происходит от начала до конца (DNS, TCP, TLS, HTTP-запрос/ответ), пока страница не загрузится?` } },
+      { id: 'networking-6', difficulty: 2, question: { en: `A single server is overwhelmed by requests — what problems arise and how do you scale it (load balancing, horizontal scaling)?`, ru: `Один сервер перегружен запросами — какие возникают проблемы и как масштабировать (балансировка нагрузки, горизонтальное масштабирование)?` } },
+      { id: 'networking-7', difficulty: 1, question: { en: `What is HTTP, what methods exist and how do they differ?`, ru: `Что такое HTTP, какие есть методы и чем они отличаются?` } },
+      { id: 'networking-8', difficulty: 2, question: { en: `What is idempotency, and which HTTP methods are idempotent?`, ru: `Что такое идемпотентность и какие HTTP-методы идемпотентны?` } },
+      { id: 'networking-9', difficulty: 1, question: { en: `What is the difference between HTTP and HTTPS?`, ru: `В чём отличие HTTP от HTTPS?` } },
     ],
   },
   {
@@ -314,6 +331,10 @@ export const CATALOG: CatalogCategory[] = [
       { id: 'security-3', difficulty: 1, question: { en: `How do you picture authentication working in a system?`, ru: `Как ты представляешь работу аутентификации в системе?` } },
       { id: 'security-4', difficulty: 2, question: { en: `What is JWT? When should you use a session token and when a JWT? For client-server or server-server?`, ru: `Что такое JWT? Когда использовать токен сессии, а когда JWT? Для client-server или server-server?` } },
       { id: 'security-5', difficulty: 2, question: { en: `How does the OAuth or OpenID Connect protocol work?`, ru: `Как работает протокол OAuth или OpenID Connect?` } },
+      { id: 'security-6', difficulty: 2, question: { en: `What is an SSL/TLS certificate and how does it secure a connection (and what encryption does HTTPS use)?`, ru: `Что такое SSL/TLS-сертификат и как он обеспечивает безопасность соединения (и какое шифрование использует HTTPS)?` } },
+      { id: 'security-7', difficulty: 2, question: { en: `What is the difference between symmetric and asymmetric encryption?`, ru: `В чём разница между симметричным и асимметричным шифрованием?` } },
+      { id: 'security-8', difficulty: 2, question: { en: `What is OWASP, and what are the main risks it highlights?`, ru: `Что такое OWASP и какие основные риски он выделяет?` } },
+      { id: 'security-9', difficulty: 2, question: { en: `What are injection attacks (SQL injection, XXE) — how do prepared statements prevent SQL injection, and when do they NOT?`, ru: `Что такое инъекционные атаки (SQL injection, XXE) — как prepared statements защищают от SQL-инъекций и когда НЕ защищают?` } },
     ],
   },
   {

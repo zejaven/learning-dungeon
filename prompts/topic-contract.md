@@ -70,7 +70,7 @@ one of these exact ids:
 ```
 java-core, java-collections, concurrency, memory-gc, oop-design, exceptions,
 streams, algorithms, databases, spring, hibernate, design-patterns,
-microservices, rest, security, devops, performance, kotlin, messaging, other
+microservices, rest, networking, security, devops, performance, kotlin, messaging, other
 ```
 
 Pick the single best fit from that list. If **none** of them genuinely fits the

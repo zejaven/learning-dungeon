@@ -61,7 +61,9 @@ Two phrases explain the table:
 - **ArrayList grows.** When the backing array is full, it allocates a new array
   (×1.5 in the JDK) and copies all elements across. That copy is why append is
   only *amortised* O(1): most adds are O(1), but the occasional grow is O(n),
-  averaging out to O(1) per add.
+  averaging out to O(1) per add. Because the array is indexed by an `int`, an
+  `ArrayList` tops out at about `Integer.MAX_VALUE` (~2.1 billion) elements — that
+  is its hard size ceiling.
 - **LinkedList walks but never shifts.** Inserting in the middle only changes two
   pointers — but you first pay O(n) to *find* the node. `get(i)` walks from the
   **nearer end** (head or tail), so `get(size-1)` is cheap, `get(size/2)` is the

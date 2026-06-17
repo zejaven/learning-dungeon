@@ -49,6 +49,7 @@ export const CATEGORY_IDS = [
   'design-patterns',
   'microservices',
   'rest',
+  'networking',
   'security',
   'devops',
   'performance',
@@ -80,6 +81,7 @@ export const CATALOG: CatalogCategory[] = [
       { id: 'java-core-16', difficulty: 1, question: { en: `What does Lombok's @Data annotation do?`, ru: `Что делает аннотация @Data от Lombok?` } },
       { id: 'java-core-17', difficulty: 2, question: { en: `What is a ClassLoader and what kinds are there?`, ru: `Что такое ClassLoader и какие они бывают?` } },
       { id: 'java-core-18', difficulty: 2, question: { en: `How does the JVM work with source code?`, ru: `Как JVM работает с исходным кодом?` } },
+      { id: 'java-core-19', difficulty: 2, question: { en: `Why is Java usually faster than Python, and how can the JVM optimize code at runtime (JIT compilation)?`, ru: `Почему Java обычно быстрее Python и как JVM может оптимизировать код во время выполнения (JIT-компиляция)?` } },
     ],
   },
   {
@@ -116,6 +118,11 @@ export const CATALOG: CatalogCategory[] = [
       { id: 'concurrency-11', difficulty: 2, question: { en: `What is the compare-and-set concept?`, ru: `Что такое концепция compare and set?` } },
       { id: 'concurrency-12', difficulty: 2, question: { en: `How do you stop a thread after it has been started?`, ru: `Как остановить поток после того, как он был запущен?` } },
       { id: 'concurrency-13', difficulty: 3, question: { en: `What is the happens-before concept?`, ru: `Что такое концепция happens-before?` } },
+      { id: 'concurrency-14', difficulty: 2, question: { en: `What is a semaphore and when do you use one?`, ru: `Что такое семафор и когда он нужен?` } },
+      { id: 'concurrency-15', difficulty: 2, question: { en: `What causes a ConcurrentModificationException, and how do you safely modify a collection shared between threads (e.g. CopyOnWriteArrayList)?`, ru: `Из-за чего возникает ConcurrentModificationException и как безопасно изменять коллекцию, разделяемую между потоками (например, CopyOnWriteArrayList)?` } },
+      { id: 'concurrency-16', difficulty: 3, question: { en: `What alternatives to synchronized exist (ReentrantLock, ReadWriteLock, StampedLock) and when would you choose each?`, ru: `Какие есть альтернативы synchronized (ReentrantLock, ReadWriteLock, StampedLock) и когда выбирать каждую?` } },
+      { id: 'concurrency-17', difficulty: 3, question: { en: `How do wait/notify/notifyAll work inside a synchronized block, and does a thread release the monitor when it calls wait()?`, ru: `Как работают wait/notify/notifyAll внутри synchronized-блока и освобождает ли поток монитор при вызове wait()?` } },
+      { id: 'concurrency-18', difficulty: 2, question: { en: `How do you run many tasks on a limited thread pool and make the main thread wait until all of them finish (CountDownLatch, invokeAll, Futures)?`, ru: `Как выполнить много задач на ограниченном пуле потоков и заставить main дождаться завершения всех (CountDownLatch, invokeAll, Futures)?` } },
     ],
   },
   {
@@ -130,6 +137,8 @@ export const CATALOG: CatalogCategory[] = [
       { id: 'memory-gc-6', difficulty: 2, question: { en: `How many heaps and stacks are there in one JVM instance?`, ru: `Сколько куч и стеков в одном инстансе JVM?` } },
       { id: 'memory-gc-7', difficulty: 2, question: { en: `In what cases can a memory leak happen in Java?`, ru: `В каких случаях может произойти утечка памяти в Java?` } },
       { id: 'memory-gc-8', difficulty: 3, question: { en: `What problems can arise in the Java Memory Model?`, ru: `Какие проблемы могут возникнуть в Java Memory Model?` } },
+      { id: 'memory-gc-9', difficulty: 2, question: { en: `What reference types exist in Java (strong, soft, weak, phantom), what is each for, and how would you build a cache the GC clears under memory pressure?`, ru: `Какие типы ссылок есть в Java (strong, soft, weak, phantom), для чего каждый, и как сделать кэш, который JVM сама очистит при нехватке памяти?` } },
+      { id: 'memory-gc-10', difficulty: 2, question: { en: `How do you diagnose growing memory use or a leak in production — profilers, heap dump, thread dump?`, ru: `Как диагностировать рост потребления памяти или утечку на проде — профилировщики, heap dump, thread dump?` } },
     ],
   },
   {
@@ -176,6 +185,8 @@ export const CATALOG: CatalogCategory[] = [
       { id: 'algorithms-7', difficulty: 2, question: { en: `What is the Big-O complexity of bubble sort, selection sort, insertion sort and heap sort?`, ru: `Какова сложность по нотации O-большое для сортировки пузырьком, выбором, вставками и пирамидальной сортировки?` } },
       { id: 'algorithms-8', difficulty: 2, question: { en: `What is a red-black tree?`, ru: `Что такое красно-чёрное дерево?` } },
       { id: 'algorithms-9', difficulty: 2, question: { en: `How can you speed up finding an element by value in an array?`, ru: `Как можно ускорить поиск элемента по значению в массиве?` } },
+      { id: 'algorithms-10', difficulty: 1, question: { en: `What are a stack and a queue (LIFO vs FIFO), and where is each used?`, ru: `Что такое стек и очередь (LIFO vs FIFO) и где каждое применяется?` } },
+      { id: 'algorithms-11', difficulty: 2, question: { en: `How do you implement a queue using only stacks, and what is the amortised cost of enqueue/dequeue?`, ru: `Как реализовать очередь, используя только стеки, и какова амортизированная стоимость enqueue/dequeue?` } },
     ],
   },
   {
@@ -196,6 +207,8 @@ export const CATALOG: CatalogCategory[] = [
       { id: 'databases-12', difficulty: 2, question: { en: `What are the ways to make a SQL query more efficient?`, ru: `Какие есть способы сделать запрос в SQL более эффективным?` } },
       { id: 'databases-13', difficulty: 2, question: { en: `How would you design a database for a system with order, product and service entities?`, ru: `Как бы ты спроектировал базу данных для системы с сущностями заявки, продукта и сервиса?` } },
       { id: 'databases-14', difficulty: 2, question: { en: `How do you determine which queries need optimization?`, ru: `Как определять, какие запросы нужно оптимизировать?` } },
+      { id: 'databases-15', difficulty: 3, question: { en: `How do you store very large numbers in a relational DB — BigInteger / uint256 / 18-decimal amounts that exceed int64 — and what indexing/sorting problems arise if you store numbers as text?`, ru: `Как хранить очень большие числа в реляционной БД — BigInteger / uint256 / суммы с 18 decimals, выходящие за int64 — и какие проблемы с индексацией/сортировкой возникают, если хранить числа как текст?` } },
+      { id: 'databases-16', difficulty: 2, question: { en: `When would you use Redis versus PostgreSQL (e.g. to store and check uniqueness of generated values)?`, ru: `Когда использовать Redis, а когда PostgreSQL (например, для хранения и проверки уникальности сгенерированных значений)?` } },
     ],
   },
   {
@@ -206,6 +219,14 @@ export const CATALOG: CatalogCategory[] = [
       { id: 'spring-2', difficulty: 2, question: { en: `What bean scopes are there?`, ru: `Какие есть скоупы бинов?` } },
       { id: 'spring-3', difficulty: 2, question: { en: `Name a use case for a prototype bean.`, ru: `Назови use case для prototype-бина.` } },
       { id: 'spring-4', difficulty: 2, question: { en: `What is Spring Boot Starter Web? How do you write your own Spring Boot Starter?`, ru: `Что такое Spring Boot Starter Web? Как написать свой Spring Boot Starter?` } },
+      { id: 'spring-5', difficulty: 2, question: { en: `What is Spring and what does Inversion of Control / Dependency Injection mean?`, ru: `Что такое Spring и что означает Inversion of Control / Dependency Injection?` } },
+      { id: 'spring-6', difficulty: 2, question: { en: `What is @Configuration, and can @Bean methods live outside a @Configuration class?`, ru: `Что такое @Configuration и могут ли @Bean-методы быть вне класса с @Configuration?` } },
+      { id: 'spring-7', difficulty: 2, question: { en: `What is the difference between @Repository and @Service (e.g. exception translation)?`, ru: `В чём разница между @Repository и @Service (например, трансляция исключений)?` } },
+      { id: 'spring-8', difficulty: 2, question: { en: `What happens with a circular bean dependency (A→B→C→A), how do you avoid it, and what if you can't refactor (@Lazy)?`, ru: `Что произойдёт при циклической зависимости бинов (A→B→C→A), как её избежать и что делать, если рефакторинг невозможен (@Lazy)?` } },
+      { id: 'spring-9', difficulty: 3, question: { en: `If a non-transactional method calls a @Transactional method on the same bean, does the transaction start? Why (Spring proxies), and how do you work around it?`, ru: `Если не-транзакционный метод вызывает @Transactional-метод того же бина, начнётся ли транзакция? Почему (прокси Spring) и как это обойти?` } },
+      { id: 'spring-10', difficulty: 2, question: { en: `On which exceptions does @Transactional roll back by default (runtime vs checked), how do you change it (rollbackFor), and will it roll back if an external call throws after persist?`, ru: `На каких исключениях @Transactional откатывается по умолчанию (runtime vs checked), как это изменить (rollbackFor) и откатится ли транзакция, если внешний вызов бросит исключение после persist?` } },
+      { id: 'spring-11', difficulty: 3, question: { en: `How do you run an action only after a transaction commits (or rolls back)? (@TransactionalEventListener)`, ru: `Как выполнить действие только после коммита (или отката) транзакции? (@TransactionalEventListener)` } },
+      { id: 'spring-12', difficulty: 2, question: { en: `What does @Async do (with @EnableAsync), and why might it not work when the method is called from another method of the same class?`, ru: `Что делает @Async (вместе с @EnableAsync) и почему он может не сработать, если метод вызывается из другого метода того же класса?` } },
     ],
   },
   {
@@ -215,6 +236,10 @@ export const CATALOG: CatalogCategory[] = [
       { id: 'hibernate-1', difficulty: 2, question: { en: `What is the default loading strategy for loading entities from the database?`, ru: `Какова стратегия загрузки по умолчанию для загрузки сущностей из базы данных?` } },
       { id: 'hibernate-2', difficulty: 2, question: { en: `If the default strategy is lazy, how do you load entities eagerly for a specific query?`, ru: `Если по умолчанию установлена стратегия lazy, как для конкретного запроса загрузить сущности по стратегии eager?` } },
       { id: 'hibernate-3', difficulty: 2, question: { en: `What is under the hood of Hibernate? How does it differ from plain mapping? What else does it have besides mapping?`, ru: `Что под капотом у Hibernate? Чем он отличается от стандартного маппинга? Что в нём есть кроме маппинга?` } },
+      { id: 'hibernate-4', difficulty: 2, question: { en: `How do you map a one-to-many relationship in JPA (e.g. Person↔Cat), and how would you do it via a join table while keeping each child tied to one parent (UNIQUE)?`, ru: `Как смапить связь one-to-many в JPA (например, Person↔Cat) и как сделать это через промежуточную таблицу, сохранив привязку ребёнка к одному родителю (UNIQUE)?` } },
+      { id: 'hibernate-5', difficulty: 2, question: { en: `What is the N+1 select problem and how do you avoid it (join fetch, entity graph, batch size)?`, ru: `Что такое проблема N+1 и как её избежать (join fetch, entity graph, batch size)?` } },
+      { id: 'hibernate-6', difficulty: 3, question: { en: `What is the difference between optimistic and pessimistic locking, when do you use each, and what SQL does pessimistic locking generate (SELECT ... FOR UPDATE / FOR SHARE)?`, ru: `В чём разница между оптимистической и пессимистической блокировкой, когда что использовать и какой SQL генерирует пессимистическая (SELECT ... FOR UPDATE / FOR SHARE)?` } },
+      { id: 'hibernate-7', difficulty: 2, question: { en: `What entity states are there in JPA (transient, managed, detached, removed) and how do you move between them?`, ru: `Какие состояния сущности есть в JPA (transient, managed, detached, removed) и как между ними переходить?` } },
     ],
   },
   {
@@ -241,6 +266,8 @@ export const CATALOG: CatalogCategory[] = [
       { id: 'microservices-11', difficulty: 3, question: { en: `What microservice patterns exist?`, ru: `Какие существуют микросервисные паттерны?` } },
       { id: 'microservices-12', difficulty: 3, question: { en: `How do you design an API for registering sales over an unreliable connection?`, ru: `Как проектировать API для регистрации продаж по неустойчивому соединению?` } },
       { id: 'microservices-13', difficulty: 3, question: { en: `How do you avoid duplicates when registering sales?`, ru: `Как избежать дубликатов при регистрации продаж?` } },
+      { id: 'microservices-14', difficulty: 3, question: { en: `How do you use data that arrives asynchronously (e.g. exchange rates pushed by another service) at a synchronous decision point — cache it locally / event-carried state transfer?`, ru: `Как использовать данные, приходящие асинхронно (например, курсы, которые другой сервис шлёт по событиям), в момент синхронного решения — локальный кэш / event-carried state transfer?` } },
+      { id: 'microservices-15', difficulty: 3, question: { en: `For a balance/accounting service, should you update the current balance in place or append immutable operation records and compute the balance from them (event sourcing / ledger)? What are the trade-offs?`, ru: `Для сервиса балансов: обновлять текущий баланс на месте или добавлять неизменяемые записи операций и считать баланс из них (event sourcing / ledger)? Каковы компромиссы?` } },
     ],
   },
   {
@@ -257,6 +284,16 @@ export const CATALOG: CatalogCategory[] = [
       { id: 'rest-8', difficulty: 2, question: { en: `How would you manage errors and provide error codes?`, ru: `Как бы вы управляли ошибками и предоставляли коды ошибок?` } },
       { id: 'rest-9', difficulty: 2, question: { en: `What are preflight requests?`, ru: `Что такое предварительные запросы (preflight requests)?` } },
       { id: 'rest-10', difficulty: 3, question: { en: `An endpoint worked and passed tests, you shipped to prod. The next day the Product Owner says nothing works. What are your actions?`, ru: `Endpoint работал и прошёл тесты, выкатили в прод. На следующий день Product Owner говорит, что ничего не работает. Какие твои действия?` } },
+    ],
+  },
+  {
+    id: 'networking',
+    name: 'Real-time & Networking',
+    entries: [
+      { id: 'networking-1', difficulty: 2, question: { en: `How does a server notify a browser client of an event in real time? What technologies fit (polling, long polling, SSE, WebSocket)?`, ru: `Как сервер уведомляет браузерный клиент о событии в реальном времени? Какие технологии подходят (polling, long polling, SSE, WebSocket)?` } },
+      { id: 'networking-2', difficulty: 2, question: { en: `What is long polling and how does it differ from regular HTTP requests?`, ru: `Что такое long polling и чем он отличается от обычных HTTP-запросов?` } },
+      { id: 'networking-3', difficulty: 2, question: { en: `How does a WebSocket connection work (handshake, bidirectional), what transport does it use (TCP/UDP), and is a new endpoint instance created per connection or shared?`, ru: `Как работает WebSocket-соединение (рукопожатие, двусторонний обмен), по какому транспорту (TCP/UDP) и создаётся ли новый экземпляр endpoint на каждое соединение или один общий?` } },
+      { id: 'networking-4', difficulty: 3, question: { en: `How do you share thread-safe state across all WebSocket connections and guarantee a value is globally unique across every connection and thread?`, ru: `Как разделять потокобезопасное состояние между всеми WebSocket-соединениями и гарантировать глобальную уникальность значения для всех соединений и потоков?` } },
     ],
   },
   {

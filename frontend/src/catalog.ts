@@ -247,6 +247,15 @@ export const CATALOG: CatalogCategory[] = [
     name: 'Design Patterns',
     entries: [
       { id: 'design-patterns-1', difficulty: 2, question: { en: `What design patterns exist?`, ru: `Какие существуют шаблоны проектирования?` } },
+      { id: 'design-patterns-2', difficulty: 2, question: { en: `How do you implement a Singleton, and how do you make it thread-safe (enum, double-checked locking)?`, ru: `Как реализовать Singleton и как сделать его потокобезопасным (enum, double-checked locking)?` } },
+      { id: 'design-patterns-3', difficulty: 2, question: { en: `What is the difference between the Factory Method and Abstract Factory patterns?`, ru: `В чём разница между паттернами Factory Method и Abstract Factory?` } },
+      { id: 'design-patterns-4', difficulty: 2, question: { en: `What problem does the Builder pattern solve, and when would you use it?`, ru: `Какую проблему решает паттерн Builder и когда его применять?` } },
+      { id: 'design-patterns-5', difficulty: 2, question: { en: `What is the Strategy pattern, and where would you use it?`, ru: `Что такое паттерн Strategy и где его применять?` } },
+      { id: 'design-patterns-6', difficulty: 2, question: { en: `What is the Observer pattern, and where is it used?`, ru: `Что такое паттерн Observer и где он используется?` } },
+      { id: 'design-patterns-7', difficulty: 3, question: { en: `What is the difference between the Decorator and Proxy patterns?`, ru: `В чём разница между паттернами Decorator и Proxy?` } },
+      { id: 'design-patterns-8', difficulty: 1, question: { en: `What problem does the Adapter pattern solve?`, ru: `Какую проблему решает паттерн Adapter?` } },
+      { id: 'design-patterns-9', difficulty: 3, question: { en: `What is the difference between the Strategy and State patterns?`, ru: `В чём разница между паттернами Strategy и State?` } },
+      { id: 'design-patterns-10', difficulty: 2, question: { en: `What is the Template Method pattern?`, ru: `Что такое паттерн Template Method?` } },
     ],
   },
   {

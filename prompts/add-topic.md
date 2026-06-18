@@ -38,7 +38,10 @@ and keep Java source/comments in English. Localize visualizer labels via
    model + visualizer + trace events; steps 2–8 below). A **design pattern about
    class relationships** (GoF: Strategy, Observer, Factory, Decorator, Adapter, …)
    should instead be `mode: structural` — see *Structural topics* below; for those,
-   skip steps 2, 3, 5, 6 and the event-missions in step 8.
+   skip steps 2, 3, 5, 6 and the event-missions in step 8. A **purely conceptual or
+   overview question** with nothing to run or build (e.g. "what is OWASP?", "what
+   design patterns exist?", "HTTP vs HTTPS", "why microservices?") should be
+   `mode: theory` — just an explanation + a Boss Fight; see *Theory topics* below.
 2. **Identify the mental model to visualize.** The primitives that exist today are
    `ArrayGrid`, `LinkedNodes` and `EventLog` (under `frontend/src/primitives/`).
    If none fit your topic, add a new generic, data-driven primitive there following
@@ -99,6 +102,23 @@ schema in `topic-contract.md` → "Structural topics"); mirror `topics/strategy/
 - Validate with `./gradlew :backend:test` (`TopicContractTest` is mode-aware;
   `TopicExamplesTest` skips structural topics). `:visual-runtime:test` is only
   needed if you touched a model (structural topics don't).
+
+## Theory topics (mode: theory)
+
+A theory topic is a **read-and-discuss** topic for purely conceptual questions:
+there is no editor, no missions and no diagram to build — just the explanation and
+a Boss Fight (the learner's spoken answer, graded by the AI). Set `mode: theory`
+and follow these deltas (mirror `topics/design-patterns-overview/`):
+
+- **Only** `topic.yaml`, `explanation.en.md` / `explanation.ru.md`, and `quiz.yaml`
+  with a `bossFight` list. **Omit** `examples/`, `visualizer.tsx`,
+  `trace-schema.json`, `starter/`, `primitives`, `defaultExample`, and the
+  `missions:` block entirely (skip steps 2, 3, 5, 6, and the missions in step 8).
+- Write a strong explanation (step 7) with Mermaid diagrams where they help and
+  **cross-links** to any focused topics that detail a part of the answer
+  (`[Strategy](topic:strategy)`) — this is what makes an overview question useful.
+- Validate with `./gradlew :backend:test` (the contract test is mode-aware; the
+  examples test skips theory topics).
 
 ## Hard constraints
 

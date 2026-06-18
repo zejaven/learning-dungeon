@@ -50,8 +50,8 @@ class TopicExamplesTest {
         try (Stream<Path> dirs = Files.list(topicsDir)) {
             return dirs.filter(Files::isDirectory)
                     .filter(p -> Files.exists(p.resolve("topic.yaml")))
-                    // Structural (design-pattern) topics have no runnable examples.
-                    .filter(p -> !isStructural(p))
+                    // Only trace topics have runnable examples (structural/theory don't).
+                    .filter(TopicExamplesTest::isTraceTopic)
                     .sorted()
                     .map(dir -> DynamicTest.dynamicTest(dir.getFileName().toString(), () -> validate(dir)))
                     .toList()
@@ -130,9 +130,9 @@ class TopicExamplesTest {
 
     // --- helpers -----------------------------------------------------------
 
-    private static boolean isStructural(Path topicDir) {
+    private static boolean isTraceTopic(Path topicDir) {
         Map<String, Object> meta = loadYaml(topicDir.resolve("topic.yaml"));
-        return meta != null && "structural".equals(str(meta, "mode", "trace"));
+        return meta == null || "trace".equals(str(meta, "mode", "trace"));
     }
 
     private static Map<String, Object> loadYaml(Path path) {

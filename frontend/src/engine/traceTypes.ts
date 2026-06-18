@@ -34,6 +34,8 @@ export interface TopicSummary {
   difficulty: number;
   /** Originating catalog question id, if generated from one; '' otherwise. */
   catalogId: string;
+  /** 'trace' | 'structural' | 'theory'. */
+  mode: string;
 }
 
 /** Persisted progress for a topic, restored on load. */

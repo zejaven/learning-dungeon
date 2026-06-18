@@ -33,12 +33,17 @@ export function App() {
     if (topicId && topic?.id !== topicId) selectTopic(topicId);
   }, [route.id, topics, topic?.id, selectTopic]);
 
-  // The practice screen is only valid for a question that has a topic; otherwise
-  // fall back to the question page (or home).
+  // The practice screen is only valid for a question with a non-theory topic;
+  // otherwise fall back to the question page (or home). Theory topics have no
+  // practice — their Boss Fight lives on the home/theory screen.
   useEffect(() => {
     if (route.view !== 'workspace' || topics.length === 0) return;
     const found = route.id ? findCatalogEntry(buildCatalog(topics), route.id) : null;
-    if (!found?.entry.topicId) navigate(found && route.id ? routeForQuestion(route.id) : '/');
+    const topicId = found?.entry.topicId;
+    const summary = topicId ? topics.find((t) => t.id === topicId) : undefined;
+    if (!topicId || summary?.mode === 'theory') {
+      navigate(found && route.id ? routeForQuestion(route.id) : '/');
+    }
   }, [route, topics]);
 
   return route.view === 'workspace' ? <WorkspaceScreen /> : <HomeScreen />;

@@ -26,7 +26,8 @@ public final class TopicDtos {
             String categoryId,
             String categoryName,
             int difficulty,
-            String catalogId
+            String catalogId,
+            String mode
     ) {
     }
 

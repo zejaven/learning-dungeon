@@ -11,7 +11,7 @@ import { BossFightDialog } from '@app/shell/BossFightDialog';
 import { FileTree } from '@app/shell/FileTree';
 import { LangSwitcher } from '@app/shell/LangSwitcher';
 import { UsageBar } from '@app/shell/UsageBar';
-import { Fireworks } from '@app/shell/Fireworks';
+import { Celebration } from '@app/shell/Celebration';
 
 /**
  * Code workspace. Two engines, chosen by `topic.mode`:
@@ -23,8 +23,6 @@ export function WorkspaceScreen() {
   const topic = useStore((s) => s.topic);
   const completed = useStore((s) => s.completedMissions);
   const topicCompleted = useStore((s) => s.topicCompleted);
-  const celebrating = useStore((s) => s.celebrating);
-  const setCelebrating = useStore((s) => s.setCelebrating);
 
   const lang = useLang((s) => s.lang);
   const route = useRoute();
@@ -94,19 +92,7 @@ export function WorkspaceScreen() {
       {showAssistant && <AssistantDialog onClose={() => setShowAssistant(false)} />}
       {showBossFight && <BossFightDialog onClose={() => setShowBossFight(false)} />}
 
-      {celebrating && (
-        <>
-          <Fireworks />
-          <div className="celebrate-card">
-            <div className="celebrate-emoji">🏆</div>
-            <h2>{ui('congratsTitle', lang)}</h2>
-            <p>{ui('congratsBody', lang)}</p>
-            <button className="primary" onClick={() => setCelebrating(false)}>
-              {ui('celebrateClose', lang)}
-            </button>
-          </div>
-        </>
-      )}
+      <Celebration />
     </div>
   );
 }

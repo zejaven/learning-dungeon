@@ -34,8 +34,9 @@ category:
   en: <e.g. Java Core / Collections>
   ru: <напр. Java Core / Коллекции>
 type: <DATA_STRUCTURE | CONCURRENCY | ...>
-mode: <trace | structural>      # OPTIONAL: default `trace`; `structural` = the
-                                # design-pattern class-graph engine (see below)
+mode: <trace | structural | theory>   # OPTIONAL: default `trace`. `structural` =
+                                # design-pattern class-graph engine; `theory` =
+                                # explanation + Boss Fight only (see below)
 summary:
   en: <one paragraph>
   ru: <один абзац>
@@ -148,6 +149,25 @@ Only types **declared in the project** are nodes (`java.*` references are ignore
 generic/array field types are unwrapped, so `List<Strategy>` counts as a
 `composition` to `Strategy`. `bossFight` is unchanged. Validate with
 `./gradlew :backend:test`. Mirror `topics/strategy/`.
+
+## Theory topics (mode: theory)
+
+For purely conceptual / overview questions with nothing to run or build. The
+learner reads the explanation and does a Boss Fight (no editor, no missions, no
+diagram to build). Set `mode: theory`. The folder is just:
+
+```
+topics/<id>/
+  topic.yaml          mode: theory
+  explanation.en.md   prose (+ Mermaid diagrams and cross-links where useful)
+  explanation.ru.md
+  quiz.yaml           bossFight only — NO `missions:` block
+```
+
+**Omit entirely:** `examples/`, `visualizer.tsx`, `trace-schema.json`, `starter/`,
+`primitives`, `defaultExample`, and `missions`. Lean on **cross-links**
+(`[Strategy](topic:strategy)`) so an overview topic points at the focused topics
+that detail each part. Mirror `topics/design-patterns-overview/`.
 
 ## Explanation files (explanation.en.md / explanation.ru.md)
 

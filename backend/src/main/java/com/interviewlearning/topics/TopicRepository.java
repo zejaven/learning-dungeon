@@ -64,7 +64,8 @@ public class TopicRepository {
                                     str(meta, "categoryId", ""),
                                     str(meta, "categoryName", ""),
                                     intVal(meta, "difficulty", 0),
-                                    str(meta, "catalogId", "")
+                                    str(meta, "catalogId", ""),
+                                    str(meta, "mode", "trace")
                             ))));
         } catch (IOException e) {
             log.warn("Failed to list topics: {}", e.getMessage());

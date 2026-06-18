@@ -140,8 +140,8 @@ public class TopicGenController {
                     + "relationships (Strategy, Observer, Factory, Decorator, Adapter, …), set "
                     + "`mode: structural` and follow the \"Structural topics\" contract "
                     + "(starter/ files + structure missions, no model/examples/visualizer). "
-                    + "For an overview question (\"what patterns exist?\") or a trivial one-class "
-                    + "pattern, keep the default `trace` mode or just write prose.\n");
+                    + "For an overview question (\"what patterns exist?\") set `mode: theory` "
+                    + "(explanation + Boss Fight only, see \"Theory topics\").\n");
         }
 
         Integer difficulty = request.difficulty();

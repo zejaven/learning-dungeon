@@ -52,7 +52,10 @@ class TopicContractTest {
         List<String> errs = new ArrayList<>();
 
         Map<String, Object> meta = parseYaml(dir.resolve("topic.yaml"), "topic.yaml", errs);
-        boolean structural = meta != null && "structural".equals(str(meta, "mode"));
+        String mode = meta == null ? "trace" : str(meta, "mode");
+        if (mode.isBlank()) mode = "trace";
+        boolean structural = "structural".equals(mode);
+        boolean theory = "theory".equals(mode);
         if (meta != null) {
             if (!name.equals(str(meta, "id"))) {
                 errs.add("topic.yaml: id '" + str(meta, "id") + "' must equal folder name '" + name + "'");
@@ -62,16 +65,17 @@ class TopicContractTest {
             bilingual(meta.get("summary"), "topic.yaml: summary", errs);
             if (structural) {
                 validateStarter(dir, errs);
-            } else {
+            } else if (!theory) {
+                // theory topics have no editable project at all.
                 validateExamples(dir, meta, errs);
             }
         }
 
         requireNonEmptyFile(dir.resolve("explanation.en.md"), errs);
         requireNonEmptyFile(dir.resolve("explanation.ru.md"), errs);
-        if (!structural) {
+        if (!structural && !theory) {
             // Behavioural topics drive a visualizer from trace events; structural
-            // ones render an analyzed class diagram instead.
+            // ones render an analyzed class diagram; theory topics have neither.
             requireExists(dir.resolve("visualizer.tsx"), errs);
             validateJson(dir.resolve("trace-schema.json"), errs);
         }
@@ -80,7 +84,10 @@ class TopicContractTest {
         if (quizName == null || quizName.isBlank()) quizName = "quiz.yaml";
         Map<String, Object> quiz = parseYaml(dir.resolve(quizName), quizName, errs);
         if (quiz != null) {
-            validateMissions(quiz, structural, errs);
+            // theory topics have a Boss Fight but no missions.
+            if (!theory) {
+                validateMissions(quiz, structural, errs);
+            }
             validateBossFight(quiz, errs);
         }
 

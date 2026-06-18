@@ -4,12 +4,20 @@ import {
   fetchProgress,
   fetchTopic,
   fetchTopics,
+  runChallenge,
   runCode,
   runSqlQuery,
   saveMissions,
 } from './api';
 import { evaluateStructureMission } from './structure';
-import type { ClassGraph, SqlRunResult, TopicDetail, TopicSummary, TraceEvent } from './traceTypes';
+import type {
+  ClassGraph,
+  SqlRunResult,
+  TestResult,
+  TopicDetail,
+  TopicSummary,
+  TraceEvent,
+} from './traceTypes';
 
 interface AppState {
   topics: TopicSummary[];
@@ -48,6 +56,10 @@ interface AppState {
   sqlResult: SqlRunResult | null;
   runningSql: boolean;
 
+  // --- Challenge topics: the solution editor reuses `code`; this is its tests ---
+  testResults: TestResult[] | null;
+  runningTests: boolean;
+
   loadTopics: () => Promise<void>;
   selectTopic: (id: string) => Promise<void>;
   setCode: (code: string) => void;
@@ -70,6 +82,8 @@ interface AppState {
 
   setSqlQuery: (sql: string) => void;
   runSql: () => Promise<void>;
+
+  runTests: () => Promise<void>;
 }
 
 /** Persists a structural topic's project to localStorage (survives reload). */
@@ -127,6 +141,29 @@ function loadSql(topicId: string): string | null {
   }
 }
 
+/** The editable Solution.java for a challenge topic (from its starter/). */
+function seedSolution(topic: TopicDetail): string {
+  const f = (topic.starterFiles ?? []).find((file) => file.path.endsWith('Solution.java'));
+  return f?.content ?? '';
+}
+
+function persistChallenge(topicId: string | undefined, code: string): void {
+  if (!topicId) return;
+  try {
+    localStorage.setItem(`challenge:${topicId}`, code);
+  } catch {
+    /* storage may be unavailable */
+  }
+}
+
+function loadChallenge(topicId: string): string | null {
+  try {
+    return localStorage.getItem(`challenge:${topicId}`);
+  } catch {
+    return null;
+  }
+}
+
 /** One graded boss-fight answer; `passed` is score >= 6. */
 export interface BossFightResult {
   answer: string;
@@ -163,6 +200,8 @@ export const useStore = create<AppState>((set, get) => ({
   sqlQuery: '',
   sqlResult: null,
   runningSql: false,
+  testResults: null,
+  runningTests: false,
 
   async loadTopics() {
     // Loads the list of generated topics (used for completion flags and to know
@@ -183,10 +222,13 @@ export const useStore = create<AppState>((set, get) => ({
       const structural = topic.mode === 'structural';
       const files = structural ? (loadProject(id) ?? seedFiles(topic)) : {};
       const sqlQuery = topic.mode === 'sql' ? (loadSql(id) ?? seedSqlQuery(topic)) : '';
+      // The challenge editor reuses `code`; seed it from the saved/starter Solution.
+      const code =
+        topic.mode === 'challenge' ? (loadChallenge(id) ?? seedSolution(topic)) : defaultCodeFor(topic);
       set({
         topic,
         loadingTopic: false,
-        code: defaultCodeFor(topic),
+        code,
         output: '',
         runError: null,
         events: [],
@@ -203,6 +245,8 @@ export const useStore = create<AppState>((set, get) => ({
         sqlQuery,
         sqlResult: null,
         runningSql: false,
+        testResults: null,
+        runningTests: false,
       });
       // Restore saved progress (best-effort; never blocks opening the topic).
       try {
@@ -232,6 +276,10 @@ export const useStore = create<AppState>((set, get) => ({
 
   setCode(code) {
     set({ code });
+    // Challenge solutions are persisted so work survives a reload.
+    if (get().topic?.mode === 'challenge') {
+      persistChallenge(get().topic?.id, code);
+    }
   },
 
   loadExample(exampleId) {
@@ -416,6 +464,38 @@ export const useStore = create<AppState>((set, get) => ({
       }
     } catch (e) {
       set({ runningSql: false, sqlResult: { columns: [], rows: [], error: (e as Error).message } });
+    }
+  },
+
+  async runTests() {
+    const { topic, code } = get();
+    if (!topic || topic.mode !== 'challenge') return;
+    set({ runningTests: true });
+    try {
+      const res = await runChallenge(topic.id, code);
+      const completed = { ...get().completedMissions };
+      const newly: string[] = [];
+      for (const [id, pass] of Object.entries(res.missions)) {
+        if (pass && !completed[id]) {
+          completed[id] = true;
+          newly.push(id);
+        }
+      }
+      // A compile/runtime error is surfaced as a single failed "case".
+      const tests: TestResult[] = res.error
+        ? [{ name: 'compile / run', passed: false, expected: '', actual: res.error }]
+        : res.tests;
+      set({ runningTests: false, testResults: tests, completedMissions: completed });
+      if (newly.length > 0) {
+        saveMissions(topic.id, newly).catch(() => {
+          /* persistence is best-effort */
+        });
+      }
+    } catch (e) {
+      set({
+        runningTests: false,
+        testResults: [{ name: 'error', passed: false, expected: '', actual: (e as Error).message }],
+      });
     }
   },
 }));

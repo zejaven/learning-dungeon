@@ -7,6 +7,7 @@ import { VisualizationCanvas } from '@app/shell/VisualizationCanvas';
 import { ClassDiagram } from '@app/shell/ClassDiagram';
 import { SchemaPanel } from '@app/shell/SchemaPanel';
 import { SqlResultTable } from '@app/shell/SqlResultTable';
+import { TestResults } from '@app/shell/TestResults';
 import { MissionPanel } from '@app/shell/MissionPanel';
 import { AssistantDialog } from '@app/shell/AssistantDialog';
 import { BossFightDialog } from '@app/shell/BossFightDialog';
@@ -34,6 +35,8 @@ export function WorkspaceScreen() {
 
   const structural = topic?.mode === 'structural';
   const sqlMode = topic?.mode === 'sql';
+  const challengeMode = topic?.mode === 'challenge';
+  const hasViz = !sqlMode && !challengeMode; // only trace/structural have a right-panel visual
 
   return (
     <div className="app">
@@ -63,25 +66,35 @@ export function WorkspaceScreen() {
             ) : (
               <div className="filetree">
                 <div className="filetree-folder">📂 src</div>
-                <div className="filetree-file selected">📄 Playground.java</div>
+                <div className="filetree-file selected">
+                  📄 {challengeMode ? 'Solution.java' : 'Playground.java'}
+                </div>
               </div>
             )}
           </div>
         </section>
 
         {/* Center: editor */}
-        {sqlMode ? <SqlEditor /> : structural ? <StructuralEditor /> : <TraceEditor />}
+        {sqlMode ? (
+          <SqlEditor />
+        ) : challengeMode ? (
+          <ChallengeEditor />
+        ) : structural ? (
+          <StructuralEditor />
+        ) : (
+          <TraceEditor />
+        )}
 
-        {/* Right: visualization / class diagram (none for sql) + missions + boss fight */}
+        {/* Right: visualization / class diagram (none for sql/challenge) + missions + boss fight */}
         <section className="panel">
           <div className="panel-title">
-            {ui(sqlMode ? 'missions' : structural ? 'classDiagram' : 'visualization', lang)}
+            {ui(hasViz ? (structural ? 'classDiagram' : 'visualization') : 'missions', lang)}
           </div>
           <div className="panel-body">
-            {!sqlMode && (structural ? <ClassDiagram /> : <VisualizationCanvas />)}
+            {hasViz && (structural ? <ClassDiagram /> : <VisualizationCanvas />)}
             {topic && topic.missions.length > 0 && (
               <>
-                {!sqlMode && (
+                {hasViz && (
                   <div className="panel-title" style={{ border: 'none', padding: '14px 0 4px' }}>
                     {ui('missions', lang)}
                   </div>
@@ -198,6 +211,30 @@ function SqlEditor() {
       <EditorPanel code={sqlQuery} onChange={setSqlQuery} language="sql" />
       <div className="sql-result-area">
         <SqlResultTable />
+      </div>
+    </section>
+  );
+}
+
+/** Center panel for challenge topics: solution editor + Run tests + test results. */
+function ChallengeEditor() {
+  const code = useStore((s) => s.code);
+  const setCode = useStore((s) => s.setCode);
+  const runTests = useStore((s) => s.runTests);
+  const runningTests = useStore((s) => s.runningTests);
+  const lang = useLang((s) => s.lang);
+
+  return (
+    <section className="panel">
+      <div className="toolbar">
+        <button className="primary" onClick={runTests} disabled={runningTests}>
+          {runningTests ? ui('running', lang) : ui('runTests', lang)}
+        </button>
+        <span className="active-file">Solution.java</span>
+      </div>
+      <EditorPanel code={code} onChange={setCode} />
+      <div className="sql-result-area">
+        <TestResults />
       </div>
     </section>
   );

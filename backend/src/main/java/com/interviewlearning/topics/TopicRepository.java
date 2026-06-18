@@ -91,10 +91,11 @@ public class TopicRepository {
         List<BossQuestion> bossFight = loadBossFight(topicDir, meta);
         List<String> primitives = stringList(meta.get("primitives"));
         String mode = str(meta, "mode", "trace");
-        // Both structural and SQL topics seed an editor from starter/.
-        List<ProjectFile> starterFiles = "structural".equals(mode) || "sql".equals(mode)
-                ? loadStarterFiles(topicDir)
-                : List.of();
+        // structural / sql / challenge topics seed an editor from starter/.
+        List<ProjectFile> starterFiles =
+                "structural".equals(mode) || "sql".equals(mode) || "challenge".equals(mode)
+                        ? loadStarterFiles(topicDir)
+                        : List.of();
 
         return Optional.of(new TopicDetail(
                 str(meta, "id", id),
@@ -247,6 +248,26 @@ public class TopicRepository {
             });
         } catch (IOException e) {
             log.warn("Failed to read starter files in {}: {}", starter, e.getMessage());
+        }
+        return files;
+    }
+
+    /**
+     * Reads a challenge topic's hidden test harness: every file under
+     * {@code topics/<id>/harness/}. It is compiled and run together with the
+     * learner's solution but is never sent to the frontend.
+     */
+    public List<ProjectFile> harnessFiles(String topicId) {
+        Path harness = repoPaths.topicsDir().resolve(topicId).resolve("harness");
+        if (!Files.isDirectory(harness)) {
+            return List.of();
+        }
+        List<ProjectFile> files = new ArrayList<>();
+        try (Stream<Path> walk = Files.walk(harness)) {
+            walk.filter(Files::isRegularFile).sorted().forEach(p ->
+                    files.add(new ProjectFile(harness.relativize(p).toString().replace('\\', '/'), readFile(p))));
+        } catch (IOException e) {
+            log.warn("Failed to read harness in {}: {}", harness, e.getMessage());
         }
         return files;
     }

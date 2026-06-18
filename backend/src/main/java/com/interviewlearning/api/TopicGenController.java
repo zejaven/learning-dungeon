@@ -150,6 +150,13 @@ public class TopicGenController {
                     + "with expectedSql). For a conceptual DB question (indexes, ACID, EXPLAIN "
                     + "plans) set `mode: theory`.\n");
         }
+        if ("algorithms".equals(categoryId)) {
+            sb.append("- mode: if this is a coding task where the learner implements a method "
+                    + "(find/compute/return something), set `mode: challenge` and follow the "
+                    + "\"Challenge topics\" contract (starter/Solution.java + harness/Main.java "
+                    + "with visual.TestKit + a challenge mission). For a purely conceptual "
+                    + "question (Big-O, when to use X) set `mode: theory`.\n");
+        }
 
         Integer difficulty = request.difficulty();
         if (difficulty != null && difficulty >= 1 && difficulty <= 3) {

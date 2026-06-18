@@ -34,10 +34,11 @@ category:
   en: <e.g. Java Core / Collections>
   ru: <напр. Java Core / Коллекции>
 type: <DATA_STRUCTURE | CONCURRENCY | ...>
-mode: <trace | structural | theory | sql>   # OPTIONAL: default `trace`.
+mode: <trace | structural | theory | sql | challenge>   # OPTIONAL: default `trace`.
                                 # `structural` = design-pattern class-graph engine;
                                 # `theory` = explanation + Boss Fight only;
-                                # `sql` = seeded DB + query editor (see below)
+                                # `sql` = seeded DB + query editor;
+                                # `challenge` = implement a method, graded by tests (see below)
 summary:
   en: <one paragraph>
   ru: <один абзац>
@@ -209,6 +210,42 @@ by position, rows as a multiset unless `ordered`. So **state the expected column
 order in `goal`**. Use only SQL that H2's PostgreSQL mode supports; questions about
 real `EXPLAIN`/`Seq Scan` plans belong in `mode: theory`. Mirror
 `topics/sql-many-to-many/`.
+
+## Challenge topics (mode: challenge)
+
+A coding kata: the learner implements a method in `Solution.java` and runs it
+against a hidden test harness; the result is a list of pass/fail cases. Set
+`mode: challenge`. Folder layout:
+
+```
+topics/<id>/
+  topic.yaml          mode: challenge
+  explanation.en.md   prose (approach, edge cases, complexity)
+  explanation.ru.md
+  starter/
+    Solution.java     public class Solution { <signature> { /* TODO */ } } — must compile
+  harness/
+    Main.java         public class Main { public static void main(...) { ...TestKit.expect... } }
+  quiz.yaml           challenge mission(s) + bossFight
+```
+
+**Omit:** `examples/`, `visualizer.tsx`, `trace-schema.json`, `primitives`,
+`defaultExample`. The harness (hidden from the learner) reports each case with
+`visual.TestKit.expect(String name, Object expected, Object actual)` — it
+deep-compares (handles arrays) and emits a `TEST` event; the backend reads those.
+Call the solution via `new Solution().<method>(...)`. Challenge missions:
+
+```yaml
+missions:
+  - id: all-tests
+    type: challenge
+    title: { en: Pass all tests, ru: Пройди все тесты }
+    goal:  { en: Implement <method> so every test passes., ru: ... }
+    requires:
+      - kind: tests        # passes when every harness case is green
+```
+
+Mirror `topics/algo-max-pair-product/`.
 
 ## Explanation files (explanation.en.md / explanation.ru.md)
 

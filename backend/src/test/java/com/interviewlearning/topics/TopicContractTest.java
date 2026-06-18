@@ -57,6 +57,7 @@ class TopicContractTest {
         boolean structural = "structural".equals(mode);
         boolean theory = "theory".equals(mode);
         boolean sqlMode = "sql".equals(mode);
+        boolean challenge = "challenge".equals(mode);
         if (meta != null) {
             if (!name.equals(str(meta, "id"))) {
                 errs.add("topic.yaml: id '" + str(meta, "id") + "' must equal folder name '" + name + "'");
@@ -68,6 +69,8 @@ class TopicContractTest {
                 validateStarter(dir, errs);
             } else if (sqlMode) {
                 validateSqlStarter(dir, errs);
+            } else if (challenge) {
+                validateChallengeFiles(dir, errs);
             } else if (!theory) {
                 // theory topics have no editable project at all.
                 validateExamples(dir, meta, errs);
@@ -76,7 +79,7 @@ class TopicContractTest {
 
         requireNonEmptyFile(dir.resolve("explanation.en.md"), errs);
         requireNonEmptyFile(dir.resolve("explanation.ru.md"), errs);
-        if (!structural && !theory && !sqlMode) {
+        if (!structural && !theory && !sqlMode && !challenge) {
             // Behavioural topics drive a visualizer from trace events; the other
             // modes render a class diagram / a result table / nothing.
             requireExists(dir.resolve("visualizer.tsx"), errs);
@@ -146,6 +149,7 @@ class TopicContractTest {
         String defaultType = switch (mode) {
             case "structural" -> "structure";
             case "sql" -> "sql";
+            case "challenge" -> "challenge";
             default -> "event";
         };
         Set<String> ids = new HashSet<>();
@@ -165,7 +169,7 @@ class TopicContractTest {
             // (need a non-empty `requires`); a trace mission is checked by event.
             String typeRaw = str(m, "type");
             String type = typeRaw.isBlank() ? defaultType : typeRaw;
-            if ("structure".equals(type) || "sql".equals(type)) {
+            if ("structure".equals(type) || "sql".equals(type) || "challenge".equals(type)) {
                 if (!(m.get("requires") instanceof List<?> req) || req.isEmpty()) {
                     errs.add(where + ": a " + type + " mission needs a non-empty 'requires' list");
                 }
@@ -181,6 +185,24 @@ class TopicContractTest {
         }
         if (!Files.exists(dir.resolve("starter").resolve("query.sql"))) {
             errs.add("sql topic: missing starter/query.sql (the editor's starting query)");
+        }
+    }
+
+    private void validateChallengeFiles(Path dir, List<String> errs) {
+        if (!Files.exists(dir.resolve("starter").resolve("Solution.java"))) {
+            errs.add("challenge topic: missing starter/Solution.java (the editable stub)");
+        }
+        Path harness = dir.resolve("harness");
+        boolean anyJava = false;
+        if (Files.isDirectory(harness)) {
+            try (Stream<Path> walk = Files.walk(harness)) {
+                anyJava = walk.anyMatch(p -> Files.isRegularFile(p) && p.toString().endsWith(".java"));
+            } catch (IOException e) {
+                errs.add("challenge topic: could not read harness/ — " + firstLine(e.getMessage()));
+            }
+        }
+        if (!anyJava) {
+            errs.add("challenge topic: missing harness/ with a Main.java test driver");
         }
     }
 

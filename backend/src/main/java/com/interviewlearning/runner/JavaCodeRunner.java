@@ -88,6 +88,53 @@ public class JavaCodeRunner {
         }
     }
 
+    /**
+     * Compiles a multi-file project and runs {@code mainClass} in the sandboxed
+     * child JVM (same heap/timeout limits as {@link #run}). Used by challenge
+     * topics: the user's Solution plus a hidden test harness, where the harness's
+     * {@code main} drives the test cases and emits {@code @@TRACE@@} TEST events.
+     */
+    public RunResult runProject(List<ProjectFile> files, String mainClass) {
+        if (files == null || files.isEmpty()) {
+            return RunResult.failure("No files to run.");
+        }
+        Path workDir;
+        try {
+            workDir = Files.createTempDirectory("ilproj-");
+        } catch (IOException e) {
+            return RunResult.failure("Could not create temp dir: " + e.getMessage());
+        }
+        try {
+            List<Path> srcs = new ArrayList<>();
+            for (ProjectFile f : files) {
+                if (f.path() == null || !f.path().endsWith(".java")) {
+                    continue;
+                }
+                Path dest = workDir.resolve(f.path()).normalize();
+                if (!dest.startsWith(workDir)) {
+                    continue;
+                }
+                Path parent = dest.getParent();
+                Files.createDirectories(parent == null ? workDir : parent);
+                Files.writeString(dest, f.content() == null ? "" : f.content(), StandardCharsets.UTF_8);
+                srcs.add(dest);
+            }
+            if (srcs.isEmpty()) {
+                return RunResult.failure("No .java files to run.");
+            }
+            String classpath = buildClasspath(workDir);
+            String compileError = compileSources(srcs, workDir, classpath);
+            if (compileError != null) {
+                return new RunResult(false, "", List.of(), compileError);
+            }
+            return execute(mainClass, workDir, classpath);
+        } catch (IOException e) {
+            return RunResult.failure("Runner I/O error: " + e.getMessage());
+        } finally {
+            deleteRecursively(workDir);
+        }
+    }
+
     private String detectClassName(String code) {
         Matcher m = PUBLIC_CLASS.matcher(code);
         if (m.find()) {

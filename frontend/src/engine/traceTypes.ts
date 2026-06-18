@@ -127,6 +127,21 @@ export interface SqlRunResponse extends SqlRunResult {
   missions: Record<string, boolean>;
 }
 
+/** One test case result for a challenge topic. */
+export interface TestResult {
+  name: string;
+  passed: boolean;
+  expected: string;
+  actual: string;
+}
+
+/** Challenge endpoint response: test cases, error, and per-mission pass flags. */
+export interface ChallengeResponse {
+  tests: TestResult[];
+  error: string | null;
+  missions: Record<string, boolean>;
+}
+
 export interface TopicDetail {
   id: string;
   title: Localized;

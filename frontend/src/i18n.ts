@@ -145,6 +145,13 @@ const UI: Record<string, Localized> = {
   },
   noResult: { en: 'Query ran — no rows.', ru: 'Запрос выполнен — строк нет.' },
   rows: { en: 'row(s)', ru: 'строк(и)' },
+  runTests: { en: '▶ Run tests', ru: '▶ Запустить тесты' },
+  testsHint: {
+    en: 'Implement the method and click Run tests.',
+    ru: 'Реализуйте метод и нажмите «Запустить тесты».',
+  },
+  expected: { en: 'expected', ru: 'ожидалось' },
+  actual: { en: 'got', ru: 'получено' },
 };
 
 export function ui(key: keyof typeof UI | string, lang: Lang): string {

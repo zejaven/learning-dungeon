@@ -44,6 +44,9 @@ and keep Java source/comments in English. Localize visualizer labels via
    `mode: theory` — just an explanation + a Boss Fight; see *Theory topics* below.
    A **SQL question** (joins, grouping, NULL semantics, subqueries, …) should be
    `mode: sql` — a seeded in-memory database + a query editor; see *SQL topics* below.
+   A **coding/algorithm task** (implement a method, graded by test cases) should be
+   `mode: challenge` — an editable `Solution.java` + a hidden test harness; see
+   *Challenge topics* below.
 2. **Identify the mental model to visualize.** The primitives that exist today are
    `ArrayGrid`, `LinkedNodes` and `EventLog` (under `frontend/src/primitives/`).
    If none fit your topic, add a new generic, data-driven primitive there following
@@ -143,6 +146,25 @@ the result matches a reference query. Set `mode: sql` and follow these deltas
   `EXPLAIN` / `Seq Scan` plans — those are `mode: theory`.
 - Validate with `./gradlew :backend:test` (the contract test is mode-aware; the
   examples test skips SQL topics).
+
+## Challenge topics (mode: challenge)
+
+A challenge topic is a **coding kata**: the learner implements a method and presses
+**Run tests**; a hidden harness runs it against cases and shows pass/fail. Set
+`mode: challenge` and follow these deltas (mirror `topics/algo-max-pair-product/`):
+
+- **Only** `topic.yaml`, `explanation.en.md` / `explanation.ru.md`, `quiz.yaml`, a
+  `starter/Solution.java` (the editable stub — `public class Solution` with the
+  method signature + a TODO body that compiles), and a **`harness/Main.java`**
+  (hidden test driver — `public class Main` with `main`). **Omit** examples/
+  visualizer/trace-schema/primitives (skip steps 2, 3, 5, 6).
+- The harness reports each case with **`visual.TestKit.expect(name, expected, actual)`**
+  (on the sandbox classpath) — it deep-compares and emits a `TEST` event. Call the
+  learner's code via `new Solution().<method>(...)`. Cover normal + edge cases.
+- Missions use `type: challenge` + `requires: [{ kind: tests }]` — passes when every
+  test case is green. Usually one mission ("pass all tests").
+- Validate with `./gradlew :visual-runtime:test :backend:test` (the contract test is
+  mode-aware; the examples test skips challenge topics).
 
 ## Hard constraints
 

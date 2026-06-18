@@ -1,5 +1,6 @@
 import type {
   AnalyzeResult,
+  ChallengeResponse,
   ProjectFile,
   RunResult,
   SqlRunResponse,
@@ -46,6 +47,17 @@ export interface UsageSnapshot {
 export async function fetchUsage(): Promise<UsageSnapshot> {
   const res = await fetch('/api/usage');
   if (!res.ok) throw new Error(`Failed to load usage (${res.status})`);
+  return res.json();
+}
+
+/** Runs a challenge topic's solution against its hidden tests; returns results + mission flags. */
+export async function runChallenge(topicId: string, code: string): Promise<ChallengeResponse> {
+  const res = await fetch('/api/challenge', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ topicId, code }),
+  });
+  if (!res.ok) throw new Error(`Test run failed (${res.status})`);
   return res.json();
 }
 

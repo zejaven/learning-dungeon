@@ -87,5 +87,14 @@ public class DbInitializer {
                     completed_at TIMESTAMPTZ
                 )
                 """);
+
+        // User-saved generation styles (custom analogy themes for explanations).
+        jdbc.execute("""
+                CREATE TABLE IF NOT EXISTS styles (
+                    name        TEXT        PRIMARY KEY,
+                    instruction TEXT        NOT NULL,
+                    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+                )
+                """);
     }
 }

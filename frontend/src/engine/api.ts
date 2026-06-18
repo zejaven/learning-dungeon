@@ -193,6 +193,35 @@ export interface GenerateBody {
   catalogId?: string;
   categoryId?: string;
   difficulty?: number;
+  /** Optional explanation-style instruction (analogy theme); '' / omitted = default. */
+  style?: string;
+}
+
+export interface StyleDto {
+  name: string;
+  instruction: string;
+}
+
+/** User-saved generation styles (built-in presets live on the frontend). */
+export async function fetchStyles(): Promise<StyleDto[]> {
+  try {
+    const res = await fetch('/api/styles');
+    return res.ok ? res.json() : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function saveStyle(style: StyleDto): Promise<void> {
+  await fetch('/api/styles', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(style),
+  });
+}
+
+export async function deleteStyle(name: string): Promise<void> {
+  await fetch(`/api/styles/${encodeURIComponent(name)}`, { method: 'DELETE' });
 }
 
 export interface GenTaskRef {

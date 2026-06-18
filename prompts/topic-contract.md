@@ -253,6 +253,14 @@ Prose teaching the concept: intuition, a 60-second interview answer, production
 relevance, and the common traps. The Russian file is a faithful translation of
 the English one.
 
+**Explanation style (optional).** The generation request may include an
+`EXPLANATION STYLE` block — an analogy theme (sports, video games, cooking, …).
+When present, weave a short themed analogy into each technical point of the
+explanation prose, in BOTH languages, to aid memorisation. Accuracy comes first:
+the analogy supplements, never replaces, correctness; keep it concise; and do NOT
+style code, Mermaid diagrams, identifiers, missions or boss-fight questions. With
+no style block, write plain (default) prose.
+
 **Cross-link to other topics.** When the explanation mentions a concept that
 already has its own topic, link to it with a `topic:<id>` (or `catalog:<id>`)
 markdown link — the app turns it into in-app navigation to that question:

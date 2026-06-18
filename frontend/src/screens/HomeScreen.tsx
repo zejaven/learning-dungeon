@@ -3,6 +3,7 @@ import { buildCatalog, findCatalogEntry } from '@app/catalog';
 import { useGeneration } from '@app/engine/generationStore';
 import { navigate, routeForPractice, routeForQuestion, useRoute } from '@app/engine/router';
 import { useStore } from '@app/engine/store';
+import { useStyle } from '@app/engine/styleStore';
 import { tl, ui, useLang } from '@app/i18n';
 import { AddTopicDialog } from '@app/shell/AddTopicDialog';
 import { BossFightDialog } from '@app/shell/BossFightDialog';
@@ -11,6 +12,7 @@ import { Celebration } from '@app/shell/Celebration';
 import { GenerationView } from '@app/shell/GenerationView';
 import { LangSwitcher } from '@app/shell/LangSwitcher';
 import { Markdown } from '@app/shell/Markdown';
+import { StyleSelector } from '@app/shell/StyleSelector';
 import { UsageBar } from '@app/shell/UsageBar';
 
 /**
@@ -48,6 +50,7 @@ export function HomeScreen() {
       catalogId: entry.id,
       categoryId,
       difficulty: entry.difficulty,
+      style: useStyle.getState().instruction(),
     });
   }
 
@@ -91,6 +94,7 @@ export function HomeScreen() {
                 ) : (
                   <>
                     <p className="home-hint">{ui('noTheoryYet', lang)}</p>
+                    <StyleSelector />
                     <button className="primary" onClick={generateForSelected}>
                       {ui('generateTheory', lang)}
                     </button>

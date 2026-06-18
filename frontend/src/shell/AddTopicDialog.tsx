@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useGeneration } from '@app/engine/generationStore';
+import { useStyle } from '@app/engine/styleStore';
 import { ui, useLang } from '@app/i18n';
 import { GenerationView } from './GenerationView';
+import { StyleSelector } from './StyleSelector';
 
 const ADD_TOPIC_KEY = 'add-topic';
 
@@ -21,7 +23,7 @@ export function AddTopicDialog({ onClose }: { onClose: () => void }) {
 
   function generate() {
     if (!question.trim() || running) return;
-    start(ADD_TOPIC_KEY, { question });
+    start(ADD_TOPIC_KEY, { question, style: useStyle.getState().instruction() });
   }
 
   return (
@@ -43,6 +45,7 @@ export function AddTopicDialog({ onClose }: { onClose: () => void }) {
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
               />
+              <StyleSelector />
             </>
           ) : (
             <GenerationView taskKey={ADD_TOPIC_KEY} />

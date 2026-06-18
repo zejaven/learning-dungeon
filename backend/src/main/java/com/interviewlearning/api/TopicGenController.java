@@ -62,7 +62,8 @@ public class TopicGenController {
      * @param categoryId the catalog category id to use; when blank, Claude decides
      * @param difficulty 1-3 to use; when null/0, Claude decides
      */
-    public record GenerateRequest(String question, String catalogId, String categoryId, Integer difficulty) {
+    public record GenerateRequest(String question, String catalogId, String categoryId,
+                                  Integer difficulty, String style) {
     }
 
     /**
@@ -171,8 +172,29 @@ public class TopicGenController {
                     .append("   (this links the topic back to the source question — set it exactly)\n");
         }
 
+        appendStyle(sb, request.style());
         appendCrossLinkContext(sb);
         return sb.toString();
+    }
+
+    /**
+     * Adds an optional "explanation style" — weave analogies from a chosen theme
+     * into the explanation prose to aid memorisation, without touching the
+     * technical content, code, diagrams or missions.
+     */
+    private void appendStyle(StringBuilder sb, String style) {
+        if (style == null || style.isBlank()) {
+            return;
+        }
+        sb.append("\n\n---\n\nEXPLANATION STYLE:\n")
+                .append("Apply this style ONLY to the prose in explanation.en.md / explanation.ru.md: ")
+                .append(style.trim())
+                .append("\nFor each technical point, process or interaction, add a short analogy in "
+                        + "that theme — in BOTH languages — to help the reader remember it. Accuracy "
+                        + "comes first: the analogy supplements, never replaces, precise technical "
+                        + "content, and keep it concise. Do NOT style code, Mermaid diagrams, "
+                        + "identifiers, the 60-second answer's correctness, missions or boss-fight "
+                        + "questions.\n");
     }
 
     /**

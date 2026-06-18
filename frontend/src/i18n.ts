@@ -152,6 +152,14 @@ const UI: Record<string, Localized> = {
   },
   expected: { en: 'expected', ru: 'ожидалось' },
   actual: { en: 'got', ru: 'получено' },
+  style: { en: 'Style', ru: 'Стиль' },
+  styleCustom: { en: '✏️ Custom…', ru: '✏️ Свой…' },
+  stylePlaceholder: {
+    en: 'describe a theme, e.g. cooking, Star Wars, chess…',
+    ru: 'опиши тему, напр. кулинария, Star Wars, шахматы…',
+  },
+  styleName: { en: 'Save as…', ru: 'Название…' },
+  save: { en: 'Save', ru: 'Сохранить' },
 };
 
 export function ui(key: keyof typeof UI | string, lang: Lang): string {

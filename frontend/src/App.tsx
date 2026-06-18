@@ -3,6 +3,7 @@ import { buildCatalog, findCatalogEntry } from './catalog';
 import { useGeneration } from './engine/generationStore';
 import { navigate, routeForQuestion, useRoute } from './engine/router';
 import { useStore } from './engine/store';
+import { useStyle } from './engine/styleStore';
 import { useUsage } from './engine/usageStore';
 import { HomeScreen } from './screens/HomeScreen';
 import { WorkspaceScreen } from './screens/WorkspaceScreen';
@@ -15,6 +16,7 @@ export function App() {
   const selectTopic = useStore((s) => s.selectTopic);
   const refreshActiveGenerations = useGeneration((s) => s.refreshActive);
   const startUsagePolling = useUsage((s) => s.start);
+  const loadStyles = useStyle((s) => s.load);
 
   useEffect(() => {
     loadTopics();
@@ -22,7 +24,9 @@ export function App() {
     refreshActiveGenerations();
     // Begin polling Claude usage for the header meter (idempotent).
     startUsagePolling();
-  }, [loadTopics, refreshActiveGenerations, startUsagePolling]);
+    // Load the user's saved generation styles into the dropdown.
+    loadStyles();
+  }, [loadTopics, refreshActiveGenerations, startUsagePolling, loadStyles]);
 
   // Load the topic referenced by the URL once topics are known (also after a
   // reload or when following a deep link / cross-link).

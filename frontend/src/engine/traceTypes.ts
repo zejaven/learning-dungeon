@@ -142,6 +142,15 @@ export interface ChallengeResponse {
   missions: Record<string, boolean>;
 }
 
+/** One theory version of a topic (v1 = on-disk; 2+ = restyled regenerations). */
+export interface TheoryVersion {
+  versionNo: number;
+  style: string;
+  en: string;
+  ru: string;
+  createdAt: string | null;
+}
+
 export interface TopicDetail {
   id: string;
   title: Localized;

@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Runs the Claude Code CLI in headless ({@code -p}) mode and streams its
@@ -73,6 +74,73 @@ public class ClaudeCodeService {
      */
     public void runDetached(String prompt, List<String> extraArgs, Sink sink) {
         executor.submit(() -> runProcessSink(buildCommand(extraArgs), prompt, sink));
+    }
+
+    /**
+     * Runs Claude headlessly to completion and returns its full text output.
+     * Read-only (no file-editing permissions) and synchronous — used to
+     * regenerate a topic's explanation prose into a new version.
+     *
+     * @throws RuntimeException if Claude can't start, times out, or exits non-zero
+     */
+    public String runForResult(String prompt, List<String> extraArgs) {
+        List<String> command = new ArrayList<>();
+        command.add(claudeCommand);
+        command.add("-p");
+        command.addAll(extraArgs);
+
+        ProcessBuilder pb = new ProcessBuilder(command)
+                .directory(repoPaths.repoRoot().toFile())
+                .redirectErrorStream(false);
+        Process process;
+        try {
+            process = pb.start();
+        } catch (IOException e) {
+            throw new RuntimeException("Could not start Claude CLI (is '" + claudeCommand
+                    + "' on PATH?): " + e.getMessage(), e);
+        }
+
+        try (OutputStream stdin = process.getOutputStream()) {
+            stdin.write(prompt.getBytes(StandardCharsets.UTF_8));
+            stdin.flush();
+        } catch (IOException e) {
+            log.warn("Failed writing prompt to Claude stdin: {}", e.getMessage());
+        }
+
+        Thread stderrDrain = new Thread(() -> {
+            try (BufferedReader br = new BufferedReader(
+                    new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))) {
+                while (br.readLine() != null) {
+                    // drained; ignored
+                }
+            } catch (IOException ignored) {
+            }
+        }, "claude-stderr");
+        stderrDrain.setDaemon(true);
+        stderrDrain.start();
+
+        StringBuilder out = new StringBuilder();
+        try (BufferedReader br = new BufferedReader(
+                new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                out.append(line).append('\n');
+            }
+            if (!process.waitFor(4, TimeUnit.MINUTES)) {
+                process.destroyForcibly();
+                throw new RuntimeException("Claude timed out.");
+            }
+            int exit = process.exitValue();
+            if (exit != 0) {
+                throw new RuntimeException("Claude exited with code " + exit + ".");
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Claude stream error: " + e.getMessage(), e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Claude run interrupted.");
+        }
+        return out.toString();
     }
 
     private List<String> buildCommand(List<String> extraArgs) {

@@ -4,6 +4,8 @@ import {
   fetchProgress,
   fetchTopic,
   fetchTopics,
+  fetchVersions,
+  regenerateVersion,
   runChallenge,
   runCode,
   runSqlQuery,
@@ -14,6 +16,7 @@ import type {
   ClassGraph,
   SqlRunResult,
   TestResult,
+  TheoryVersion,
   TopicDetail,
   TopicSummary,
   TraceEvent,
@@ -60,6 +63,11 @@ interface AppState {
   testResults: TestResult[] | null;
   runningTests: boolean;
 
+  // --- Theory versions (styled regenerations) of the current topic ---
+  theoryVersions: TheoryVersion[];
+  activeVersionNo: number;
+  generatingVersion: boolean;
+
   loadTopics: () => Promise<void>;
   selectTopic: (id: string) => Promise<void>;
   setCode: (code: string) => void;
@@ -84,6 +92,28 @@ interface AppState {
   runSql: () => Promise<void>;
 
   runTests: () => Promise<void>;
+
+  loadVersions: (topicId: string) => Promise<void>;
+  setActiveVersion: (versionNo: number) => void;
+  regenerateTheory: (style: string, styleName: string) => Promise<void>;
+}
+
+function persistActiveVersion(topicId: string | undefined, versionNo: number): void {
+  if (!topicId) return;
+  try {
+    localStorage.setItem(`theoryVersion:${topicId}`, String(versionNo));
+  } catch {
+    /* ignore */
+  }
+}
+
+function loadActiveVersion(topicId: string): number | null {
+  try {
+    const raw = localStorage.getItem(`theoryVersion:${topicId}`);
+    return raw ? Number(raw) : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Persists a structural topic's project to localStorage (survives reload). */
@@ -202,6 +232,9 @@ export const useStore = create<AppState>((set, get) => ({
   runningSql: false,
   testResults: null,
   runningTests: false,
+  theoryVersions: [],
+  activeVersionNo: 1,
+  generatingVersion: false,
 
   async loadTopics() {
     // Loads the list of generated topics (used for completion flags and to know
@@ -247,7 +280,12 @@ export const useStore = create<AppState>((set, get) => ({
         runningSql: false,
         testResults: null,
         runningTests: false,
+        theoryVersions: [],
+        activeVersionNo: 1,
+        generatingVersion: false,
       });
+      // Load theory versions (best-effort) so the version dropdown is populated.
+      get().loadVersions(id);
       // Restore saved progress (best-effort; never blocks opening the topic).
       try {
         const progress = await fetchProgress(id);
@@ -496,6 +534,39 @@ export const useStore = create<AppState>((set, get) => ({
         runningTests: false,
         testResults: [{ name: 'error', passed: false, expected: '', actual: (e as Error).message }],
       });
+    }
+  },
+
+  async loadVersions(topicId) {
+    try {
+      const versions = await fetchVersions(topicId);
+      if (get().topic?.id !== topicId || versions.length === 0) return; // stale or none
+      const saved = loadActiveVersion(topicId);
+      const max = Math.max(...versions.map((v) => v.versionNo));
+      const active = saved && versions.some((v) => v.versionNo === saved) ? saved : max;
+      set({ theoryVersions: versions, activeVersionNo: active });
+    } catch {
+      /* versions are a nice-to-have */
+    }
+  },
+
+  setActiveVersion(versionNo) {
+    set({ activeVersionNo: versionNo });
+    persistActiveVersion(get().topic?.id, versionNo);
+  },
+
+  async regenerateTheory(style, styleName) {
+    const topic = get().topic;
+    if (!topic) return;
+    set({ generatingVersion: true });
+    try {
+      const v = await regenerateVersion(topic.id, style, styleName);
+      if (get().topic?.id !== topic.id) return; // switched away meanwhile
+      const versions = [...get().theoryVersions, v];
+      set({ theoryVersions: versions, activeVersionNo: v.versionNo, generatingVersion: false });
+      persistActiveVersion(topic.id, v.versionNo);
+    } catch (e) {
+      set({ generatingVersion: false, runError: (e as Error).message });
     }
   },
 }));

@@ -46,6 +46,8 @@ categoryId: <catalog category id>   # which home-tree category this topic belong
 categoryName: <Human Category Name> # ONLY when categoryId is a brand-new category
 difficulty: <1 | 2 | 3>             # 1 = Junior, 2 = Middle, 3 = Senior
 catalogId: <catalog question id>    # OPTIONAL: only when generated from a tree question
+style: <Style name>                 # OPTIONAL: the explanation style this was generated in
+                                    # (set only when the request supplies one; default omit)
 primitives: [ArrayGrid, LinkedNodes, EventLog]   # primitives the visualizer uses
 defaultExample: <example-id>    # which example loads by default
 examples:

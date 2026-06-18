@@ -111,7 +111,8 @@ public class TopicRepository {
                 loc(meta, "assistantExample", ""),
                 bossFight,
                 mode,
-                starterFiles
+                starterFiles,
+                str(meta, "style", "Default")
         ));
     }
 

@@ -160,6 +160,8 @@ const UI: Record<string, Localized> = {
   },
   styleName: { en: 'Save as…', ru: 'Название…' },
   save: { en: 'Save', ru: 'Сохранить' },
+  version: { en: 'Version', ru: 'Версия' },
+  generateVersion: { en: '✨ New version', ru: '✨ Новая версия' },
 };
 
 export function ui(key: keyof typeof UI | string, lang: Lang): string {

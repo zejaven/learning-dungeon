@@ -23,7 +23,11 @@ export function AddTopicDialog({ onClose }: { onClose: () => void }) {
 
   function generate() {
     if (!question.trim() || running) return;
-    start(ADD_TOPIC_KEY, { question, style: useStyle.getState().instruction() });
+    start(ADD_TOPIC_KEY, {
+      question,
+      style: useStyle.getState().instruction(),
+      styleName: useStyle.getState().currentName(),
+    });
   }
 
   return (

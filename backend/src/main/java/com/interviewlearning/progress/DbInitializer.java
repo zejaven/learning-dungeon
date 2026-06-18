@@ -96,5 +96,20 @@ public class DbInitializer {
                     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
                 )
                 """);
+
+        // Regenerated theory versions: version 1 is the on-disk explanation;
+        // versions 2+ are stored here, each tagged with the style used.
+        jdbc.execute("""
+                CREATE TABLE IF NOT EXISTS theory_version (
+                    id         BIGSERIAL   PRIMARY KEY,
+                    topic_id   TEXT        NOT NULL,
+                    version_no INT         NOT NULL,
+                    style      TEXT        NOT NULL DEFAULT 'Default',
+                    en         TEXT        NOT NULL,
+                    ru         TEXT        NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    UNIQUE (topic_id, version_no)
+                )
+                """);
     }
 }

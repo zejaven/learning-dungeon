@@ -27,6 +27,11 @@ export function HomeScreen() {
   const topics = useStore((s) => s.topics);
   const topic = useStore((s) => s.topic);
   const loadingTopic = useStore((s) => s.loadingTopic);
+  const theoryVersions = useStore((s) => s.theoryVersions);
+  const activeVersionNo = useStore((s) => s.activeVersionNo);
+  const generatingVersion = useStore((s) => s.generatingVersion);
+  const setActiveVersion = useStore((s) => s.setActiveVersion);
+  const regenerateTheory = useStore((s) => s.regenerateTheory);
 
   const route = useRoute();
   const startGen = useGeneration((s) => s.start);
@@ -51,8 +56,14 @@ export function HomeScreen() {
       categoryId,
       difficulty: entry.difficulty,
       style: useStyle.getState().instruction(),
+      styleName: useStyle.getState().currentName(),
     });
   }
+
+  const activeVersion = theoryVersions.find((v) => v.versionNo === activeVersionNo);
+  const activeExplanation = activeVersion
+    ? { en: activeVersion.en, ru: activeVersion.ru }
+    : topic?.explanation;
 
   return (
     <div className="app">
@@ -120,7 +131,33 @@ export function HomeScreen() {
                     </button>
                   )}
                 </div>
-                <Markdown className="markdown">{tl(topic!.explanation, lang)}</Markdown>
+
+                {theoryVersions.length > 0 && (
+                  <div className="version-bar">
+                    <span className="style-label">{ui('version', lang)}</span>
+                    <select
+                      value={activeVersionNo}
+                      onChange={(e) => setActiveVersion(Number(e.target.value))}
+                    >
+                      {theoryVersions.map((v) => (
+                        <option key={v.versionNo} value={v.versionNo}>
+                          v{v.versionNo} · {v.style}
+                        </option>
+                      ))}
+                    </select>
+                    <StyleSelector />
+                    <button
+                      onClick={() =>
+                        regenerateTheory(useStyle.getState().instruction(), useStyle.getState().currentName())
+                      }
+                      disabled={generatingVersion}
+                    >
+                      {generatingVersion ? ui('generating', lang) : ui('generateVersion', lang)}
+                    </button>
+                  </div>
+                )}
+
+                <Markdown className="markdown">{tl(activeExplanation, lang)}</Markdown>
               </div>
             )}
           </div>

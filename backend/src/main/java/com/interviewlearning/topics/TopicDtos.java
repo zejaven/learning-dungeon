@@ -95,7 +95,8 @@ public final class TopicDtos {
             Localized assistantExample,
             List<BossQuestion> bossFight,
             String mode,
-            List<ProjectFile> starterFiles
+            List<ProjectFile> starterFiles,
+            String style
     ) {
     }
 }

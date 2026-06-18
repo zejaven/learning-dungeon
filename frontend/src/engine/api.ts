@@ -4,6 +4,7 @@ import type {
   ProjectFile,
   RunResult,
   SqlRunResponse,
+  TheoryVersion,
   TopicDetail,
   TopicProgress,
   TopicSummary,
@@ -195,6 +196,30 @@ export interface GenerateBody {
   difficulty?: number;
   /** Optional explanation-style instruction (analogy theme); '' / omitted = default. */
   style?: string;
+  /** Display name of the chosen style (recorded in the topic), e.g. 'Sports'. */
+  styleName?: string;
+}
+
+/** Lists a topic's theory versions (v1 = on-disk, 2+ = restyled regenerations). */
+export async function fetchVersions(topicId: string): Promise<TheoryVersion[]> {
+  const res = await fetch(`/api/topics/${encodeURIComponent(topicId)}/versions`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
+/** Regenerates the topic's explanation in a style, storing it as a new version. */
+export async function regenerateVersion(
+  topicId: string,
+  style: string,
+  styleName: string,
+): Promise<TheoryVersion> {
+  const res = await fetch(`/api/topics/${encodeURIComponent(topicId)}/versions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ style, styleName }),
+  });
+  if (!res.ok) throw new Error(await res.text().catch(() => `Regenerate failed (${res.status})`));
+  return res.json();
 }
 
 export interface StyleDto {

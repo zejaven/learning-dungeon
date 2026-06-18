@@ -44,6 +44,8 @@ interface StyleState {
   all: () => Style[];
   /** The instruction for the current selection ('' for Default). */
   instruction: () => string;
+  /** The display name for the current selection ('Custom' for the ad-hoc draft). */
+  currentName: () => string;
 
   load: () => Promise<void>;
   select: (name: string) => void;
@@ -73,6 +75,11 @@ export const useStyle = create<StyleState>((set, get) => ({
     const { selected, draft } = get();
     if (selected === CUSTOM) return draft.trim();
     return get().all().find((s) => s.name === selected)?.instruction ?? '';
+  },
+
+  currentName: () => {
+    const { selected } = get();
+    return selected === CUSTOM ? 'Custom' : selected;
   },
 
   async load() {

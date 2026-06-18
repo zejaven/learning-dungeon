@@ -63,7 +63,7 @@ public class TopicGenController {
      * @param difficulty 1-3 to use; when null/0, Claude decides
      */
     public record GenerateRequest(String question, String catalogId, String categoryId,
-                                  Integer difficulty, String style) {
+                                  Integer difficulty, String style, String styleName) {
     }
 
     /**
@@ -170,6 +170,12 @@ public class TopicGenController {
         if (catalogId != null && !catalogId.isBlank()) {
             sb.append("- catalogId: ").append(catalogId.trim())
                     .append("   (this links the topic back to the source question — set it exactly)\n");
+        }
+
+        String styleName = request.styleName();
+        if (styleName != null && !styleName.isBlank() && !"Default".equalsIgnoreCase(styleName.trim())) {
+            sb.append("- style: ").append(styleName.trim())
+                    .append("   (record this in topic.yaml `style:` — the style this was generated in)\n");
         }
 
         appendStyle(sb, request.style());

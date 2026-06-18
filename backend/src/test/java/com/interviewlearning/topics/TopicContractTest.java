@@ -56,6 +56,7 @@ class TopicContractTest {
         if (mode.isBlank()) mode = "trace";
         boolean structural = "structural".equals(mode);
         boolean theory = "theory".equals(mode);
+        boolean sqlMode = "sql".equals(mode);
         if (meta != null) {
             if (!name.equals(str(meta, "id"))) {
                 errs.add("topic.yaml: id '" + str(meta, "id") + "' must equal folder name '" + name + "'");
@@ -65,6 +66,8 @@ class TopicContractTest {
             bilingual(meta.get("summary"), "topic.yaml: summary", errs);
             if (structural) {
                 validateStarter(dir, errs);
+            } else if (sqlMode) {
+                validateSqlStarter(dir, errs);
             } else if (!theory) {
                 // theory topics have no editable project at all.
                 validateExamples(dir, meta, errs);
@@ -73,9 +76,9 @@ class TopicContractTest {
 
         requireNonEmptyFile(dir.resolve("explanation.en.md"), errs);
         requireNonEmptyFile(dir.resolve("explanation.ru.md"), errs);
-        if (!structural && !theory) {
-            // Behavioural topics drive a visualizer from trace events; structural
-            // ones render an analyzed class diagram; theory topics have neither.
+        if (!structural && !theory && !sqlMode) {
+            // Behavioural topics drive a visualizer from trace events; the other
+            // modes render a class diagram / a result table / nothing.
             requireExists(dir.resolve("visualizer.tsx"), errs);
             validateJson(dir.resolve("trace-schema.json"), errs);
         }
@@ -86,7 +89,7 @@ class TopicContractTest {
         if (quiz != null) {
             // theory topics have a Boss Fight but no missions.
             if (!theory) {
-                validateMissions(quiz, structural, errs);
+                validateMissions(quiz, mode, errs);
             }
             validateBossFight(quiz, errs);
         }
@@ -134,12 +137,17 @@ class TopicContractTest {
     }
 
     @SuppressWarnings("unchecked")
-    private void validateMissions(Map<String, Object> quiz, boolean structural, List<String> errs) {
+    private void validateMissions(Map<String, Object> quiz, String mode, List<String> errs) {
         Object raw = quiz.get("missions");
         if (!(raw instanceof List<?> list) || list.isEmpty()) {
             errs.add("quiz.yaml: missions must be a non-empty list");
             return;
         }
+        String defaultType = switch (mode) {
+            case "structural" -> "structure";
+            case "sql" -> "sql";
+            default -> "event";
+        };
         Set<String> ids = new HashSet<>();
         for (int i = 0; i < list.size(); i++) {
             if (!(list.get(i) instanceof Map<?, ?> mm)) {
@@ -153,17 +161,26 @@ class TopicContractTest {
             else if (!ids.add(id)) errs.add(where + ": duplicate id '" + id + "'");
             bilingual(m.get("title"), where + ".title", errs);
             bilingual(m.get("goal"), where + ".goal", errs);
-            // A structure mission is checked against the class graph (needs a
-            // non-empty `requires`); a trace mission is checked by event name.
+            // structure/sql missions are checked against a graph / query result
+            // (need a non-empty `requires`); a trace mission is checked by event.
             String typeRaw = str(m, "type");
-            String type = typeRaw.isBlank() ? (structural ? "structure" : "event") : typeRaw;
-            if ("structure".equals(type)) {
+            String type = typeRaw.isBlank() ? defaultType : typeRaw;
+            if ("structure".equals(type) || "sql".equals(type)) {
                 if (!(m.get("requires") instanceof List<?> req) || req.isEmpty()) {
-                    errs.add(where + ": a structure mission needs a non-empty 'requires' list");
+                    errs.add(where + ": a " + type + " mission needs a non-empty 'requires' list");
                 }
             } else if (str(m, "event").isBlank()) {
                 errs.add(where + ": missing event");
             }
+        }
+    }
+
+    private void validateSqlStarter(Path dir, List<String> errs) {
+        if (!Files.exists(dir.resolve("starter").resolve("schema.sql"))) {
+            errs.add("sql topic: missing starter/schema.sql (DDL + seed data)");
+        }
+        if (!Files.exists(dir.resolve("starter").resolve("query.sql"))) {
+            errs.add("sql topic: missing starter/query.sql (the editor's starting query)");
         }
     }
 

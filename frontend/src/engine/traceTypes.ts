@@ -115,6 +115,18 @@ export interface AnalyzeResult {
   graph: ClassGraph;
 }
 
+/** Result table of a SQL query (or an error). */
+export interface SqlRunResult {
+  columns: string[];
+  rows: string[][];
+  error: string | null;
+}
+
+/** SQL endpoint response: the result table plus per-mission pass flags. */
+export interface SqlRunResponse extends SqlRunResult {
+  missions: Record<string, boolean>;
+}
+
 export interface TopicDetail {
   id: string;
   title: Localized;

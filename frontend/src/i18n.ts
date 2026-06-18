@@ -137,6 +137,14 @@ const UI: Record<string, Localized> = {
   noFiles: { en: 'No files yet — create one above.', ru: 'Файлов пока нет — создайте выше.' },
   rename: { en: 'Rename', ru: 'Переименовать' },
   deleteFile: { en: 'Delete', ru: 'Удалить' },
+  runQuery: { en: '▶ Run query', ru: '▶ Выполнить запрос' },
+  schema: { en: 'Schema', ru: 'Схема' },
+  runQueryHint: {
+    en: 'Write a query and click Run to see the result.',
+    ru: 'Напишите запрос и нажмите «Выполнить», чтобы увидеть результат.',
+  },
+  noResult: { en: 'Query ran — no rows.', ru: 'Запрос выполнен — строк нет.' },
+  rows: { en: 'row(s)', ru: 'строк(и)' },
 };
 
 export function ui(key: keyof typeof UI | string, lang: Lang): string {

@@ -42,6 +42,8 @@ and keep Java source/comments in English. Localize visualizer labels via
    overview question** with nothing to run or build (e.g. "what is OWASP?", "what
    design patterns exist?", "HTTP vs HTTPS", "why microservices?") should be
    `mode: theory` — just an explanation + a Boss Fight; see *Theory topics* below.
+   A **SQL question** (joins, grouping, NULL semantics, subqueries, …) should be
+   `mode: sql` — a seeded in-memory database + a query editor; see *SQL topics* below.
 2. **Identify the mental model to visualize.** The primitives that exist today are
    `ArrayGrid`, `LinkedNodes` and `EventLog` (under `frontend/src/primitives/`).
    If none fit your topic, add a new generic, data-driven primitive there following
@@ -119,6 +121,28 @@ and follow these deltas (mirror `topics/design-patterns-overview/`):
   (`[Strategy](topic:strategy)`) — this is what makes an overview question useful.
 - Validate with `./gradlew :backend:test` (the contract test is mode-aware; the
   examples test skips theory topics).
+
+## SQL topics (mode: sql)
+
+A SQL topic is a **query playground**: the learner writes SQL against a seeded
+in-memory H2 database (PostgreSQL mode) and sees the result table. Missions check
+the result matches a reference query. Set `mode: sql` and follow these deltas
+(mirror `topics/sql-many-to-many/`):
+
+- **Only** `topic.yaml`, `explanation.en.md` / `explanation.ru.md`, `quiz.yaml`, and
+  a `starter/` with **`schema.sql`** (DDL + seed `INSERT`s — keep deterministic and
+  small) and **`query.sql`** (the editor's opening query, e.g. a `SELECT` stub with
+  the task in comments). **Omit** examples/visualizer/trace-schema/primitives and any
+  `visual.*` model (skip steps 2, 3, 5, 6).
+- Missions use `type: sql` + `requires: [{ kind: sqlResult, expectedSql: "<correct query>", ordered?: false }]`.
+  The result of the learner's query is compared to `expectedSql` run on the same
+  seed — columns by position, rows as a multiset (set `ordered: true` only when the
+  task is about `ORDER BY`). State the expected column order in the mission `goal`.
+- Stay within standard SQL that H2's PostgreSQL mode supports (JOIN, GROUP BY,
+  HAVING, subqueries, CTEs, NULL logic). Do NOT make a SQL topic about real
+  `EXPLAIN` / `Seq Scan` plans — those are `mode: theory`.
+- Validate with `./gradlew :backend:test` (the contract test is mode-aware; the
+  examples test skips SQL topics).
 
 ## Hard constraints
 

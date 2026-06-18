@@ -5,6 +5,8 @@ import { tl, ui, useLang } from '@app/i18n';
 import { EditorPanel } from '@app/shell/EditorPanel';
 import { VisualizationCanvas } from '@app/shell/VisualizationCanvas';
 import { ClassDiagram } from '@app/shell/ClassDiagram';
+import { SchemaPanel } from '@app/shell/SchemaPanel';
+import { SqlResultTable } from '@app/shell/SqlResultTable';
 import { MissionPanel } from '@app/shell/MissionPanel';
 import { AssistantDialog } from '@app/shell/AssistantDialog';
 import { BossFightDialog } from '@app/shell/BossFightDialog';
@@ -31,6 +33,7 @@ export function WorkspaceScreen() {
   const [showBossFight, setShowBossFight] = useState(false);
 
   const structural = topic?.mode === 'structural';
+  const sqlMode = topic?.mode === 'sql';
 
   return (
     <div className="app">
@@ -49,11 +52,13 @@ export function WorkspaceScreen() {
       </header>
 
       <div className="main">
-        {/* Left: file tree */}
+        {/* Left: schema (sql) or file tree */}
         <section className="panel">
-          <div className="panel-title">{ui('files', lang)}</div>
+          <div className="panel-title">{ui(sqlMode ? 'schema' : 'files', lang)}</div>
           <div className="panel-body">
-            {structural ? (
+            {sqlMode ? (
+              <SchemaPanel />
+            ) : structural ? (
               <FileTree />
             ) : (
               <div className="filetree">
@@ -65,18 +70,22 @@ export function WorkspaceScreen() {
         </section>
 
         {/* Center: editor */}
-        {structural ? <StructuralEditor /> : <TraceEditor />}
+        {sqlMode ? <SqlEditor /> : structural ? <StructuralEditor /> : <TraceEditor />}
 
-        {/* Right: visualization / class diagram + missions + boss fight */}
+        {/* Right: visualization / class diagram (none for sql) + missions + boss fight */}
         <section className="panel">
-          <div className="panel-title">{ui(structural ? 'classDiagram' : 'visualization', lang)}</div>
+          <div className="panel-title">
+            {ui(sqlMode ? 'missions' : structural ? 'classDiagram' : 'visualization', lang)}
+          </div>
           <div className="panel-body">
-            {structural ? <ClassDiagram /> : <VisualizationCanvas />}
+            {!sqlMode && (structural ? <ClassDiagram /> : <VisualizationCanvas />)}
             {topic && topic.missions.length > 0 && (
               <>
-                <div className="panel-title" style={{ border: 'none', padding: '14px 0 4px' }}>
-                  {ui('missions', lang)}
-                </div>
+                {!sqlMode && (
+                  <div className="panel-title" style={{ border: 'none', padding: '14px 0 4px' }}>
+                    {ui('missions', lang)}
+                  </div>
+                )}
                 <MissionPanel missions={topic.missions} completed={completed} />
               </>
             )}
@@ -167,6 +176,29 @@ function StructuralEditor() {
         </div>
       )}
       {analyzeError && <div className="output error">{analyzeError}</div>}
+    </section>
+  );
+}
+
+/** Center panel for SQL topics: query editor + Run query + result table. */
+function SqlEditor() {
+  const sqlQuery = useStore((s) => s.sqlQuery);
+  const setSqlQuery = useStore((s) => s.setSqlQuery);
+  const runSql = useStore((s) => s.runSql);
+  const runningSql = useStore((s) => s.runningSql);
+  const lang = useLang((s) => s.lang);
+
+  return (
+    <section className="panel">
+      <div className="toolbar">
+        <button className="primary" onClick={runSql} disabled={runningSql}>
+          {runningSql ? ui('running', lang) : ui('runQuery', lang)}
+        </button>
+      </div>
+      <EditorPanel code={sqlQuery} onChange={setSqlQuery} language="sql" />
+      <div className="sql-result-area">
+        <SqlResultTable />
+      </div>
     </section>
   );
 }

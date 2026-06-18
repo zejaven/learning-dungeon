@@ -143,6 +143,13 @@ public class TopicGenController {
                     + "For an overview question (\"what patterns exist?\") set `mode: theory` "
                     + "(explanation + Boss Fight only, see \"Theory topics\").\n");
         }
+        if ("databases".equals(categoryId)) {
+            sb.append("- mode: if this question is about writing a SQL query (joins, grouping, "
+                    + "NULL semantics, subqueries, …), set `mode: sql` and follow the \"SQL "
+                    + "topics\" contract (starter/schema.sql + starter/query.sql + sql missions "
+                    + "with expectedSql). For a conceptual DB question (indexes, ACID, EXPLAIN "
+                    + "plans) set `mode: theory`.\n");
+        }
 
         Integer difficulty = request.difficulty();
         if (difficulty != null && difficulty >= 1 && difficulty <= 3) {

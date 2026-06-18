@@ -91,7 +91,8 @@ public class TopicRepository {
         List<BossQuestion> bossFight = loadBossFight(topicDir, meta);
         List<String> primitives = stringList(meta.get("primitives"));
         String mode = str(meta, "mode", "trace");
-        List<ProjectFile> starterFiles = "structural".equals(mode)
+        // Both structural and SQL topics seed an editor from starter/.
+        List<ProjectFile> starterFiles = "structural".equals(mode) || "sql".equals(mode)
                 ? loadStarterFiles(topicDir)
                 : List.of();
 

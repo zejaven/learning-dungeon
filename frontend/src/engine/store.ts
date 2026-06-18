@@ -1,7 +1,15 @@
 import { create } from 'zustand';
-import { analyzeProject, fetchProgress, fetchTopic, fetchTopics, runCode, saveMissions } from './api';
+import {
+  analyzeProject,
+  fetchProgress,
+  fetchTopic,
+  fetchTopics,
+  runCode,
+  runSqlQuery,
+  saveMissions,
+} from './api';
 import { evaluateStructureMission } from './structure';
-import type { ClassGraph, TopicDetail, TopicSummary, TraceEvent } from './traceTypes';
+import type { ClassGraph, SqlRunResult, TopicDetail, TopicSummary, TraceEvent } from './traceTypes';
 
 interface AppState {
   topics: TopicSummary[];
@@ -35,6 +43,11 @@ interface AppState {
   analyzing: boolean;
   analyzeError: string | null;
 
+  // --- SQL topics: a query + its result table ---
+  sqlQuery: string;
+  sqlResult: SqlRunResult | null;
+  runningSql: boolean;
+
   loadTopics: () => Promise<void>;
   selectTopic: (id: string) => Promise<void>;
   setCode: (code: string) => void;
@@ -54,6 +67,9 @@ interface AppState {
   deleteFile: (path: string) => void;
   renameFile: (oldPath: string, newPath: string) => void;
   analyze: () => Promise<void>;
+
+  setSqlQuery: (sql: string) => void;
+  runSql: () => Promise<void>;
 }
 
 /** Persists a structural topic's project to localStorage (survives reload). */
@@ -86,6 +102,29 @@ function javaTemplate(path: string): string {
   const base = path.split('/').pop() ?? 'NewClass.java';
   const name = base.replace(/\.java$/, '') || 'NewClass';
   return `public class ${name} {\n}\n`;
+}
+
+/** The opening query for a SQL topic (from its starter/query.sql). */
+function seedSqlQuery(topic: TopicDetail): string {
+  const q = (topic.starterFiles ?? []).find((f) => f.path.endsWith('query.sql'));
+  return q?.content ?? '';
+}
+
+function persistSql(topicId: string | undefined, sql: string): void {
+  if (!topicId) return;
+  try {
+    localStorage.setItem(`sql:${topicId}`, sql);
+  } catch {
+    /* storage may be unavailable */
+  }
+}
+
+function loadSql(topicId: string): string | null {
+  try {
+    return localStorage.getItem(`sql:${topicId}`);
+  } catch {
+    return null;
+  }
 }
 
 /** One graded boss-fight answer; `passed` is score >= 6. */
@@ -121,6 +160,9 @@ export const useStore = create<AppState>((set, get) => ({
   graph: null,
   analyzing: false,
   analyzeError: null,
+  sqlQuery: '',
+  sqlResult: null,
+  runningSql: false,
 
   async loadTopics() {
     // Loads the list of generated topics (used for completion flags and to know
@@ -140,6 +182,7 @@ export const useStore = create<AppState>((set, get) => ({
       const topic = await fetchTopic(id);
       const structural = topic.mode === 'structural';
       const files = structural ? (loadProject(id) ?? seedFiles(topic)) : {};
+      const sqlQuery = topic.mode === 'sql' ? (loadSql(id) ?? seedSqlQuery(topic)) : '';
       set({
         topic,
         loadingTopic: false,
@@ -157,6 +200,9 @@ export const useStore = create<AppState>((set, get) => ({
         graph: null,
         analyzing: false,
         analyzeError: null,
+        sqlQuery,
+        sqlResult: null,
+        runningSql: false,
       });
       // Restore saved progress (best-effort; never blocks opening the topic).
       try {
@@ -335,6 +381,41 @@ export const useStore = create<AppState>((set, get) => ({
       }
     } catch (e) {
       set({ analyzing: false, analyzeError: (e as Error).message });
+    }
+  },
+
+  setSqlQuery(sql) {
+    set({ sqlQuery: sql });
+    persistSql(get().topic?.id, sql);
+  },
+
+  async runSql() {
+    const { topic, sqlQuery } = get();
+    if (!topic || topic.mode !== 'sql') return;
+    set({ runningSql: true });
+    try {
+      const res = await runSqlQuery(topic.id, sqlQuery);
+      // Mission flags come from the server (it compares to each expectedSql).
+      const completed = { ...get().completedMissions };
+      const newly: string[] = [];
+      for (const [id, pass] of Object.entries(res.missions)) {
+        if (pass && !completed[id]) {
+          completed[id] = true;
+          newly.push(id);
+        }
+      }
+      set({
+        runningSql: false,
+        sqlResult: { columns: res.columns, rows: res.rows, error: res.error },
+        completedMissions: completed,
+      });
+      if (newly.length > 0) {
+        saveMissions(topic.id, newly).catch(() => {
+          /* persistence is best-effort */
+        });
+      }
+    } catch (e) {
+      set({ runningSql: false, sqlResult: { columns: [], rows: [], error: (e as Error).message } });
     }
   },
 }));

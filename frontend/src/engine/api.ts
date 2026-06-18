@@ -2,6 +2,7 @@ import type {
   AnalyzeResult,
   ProjectFile,
   RunResult,
+  SqlRunResponse,
   TopicDetail,
   TopicProgress,
   TopicSummary,
@@ -45,6 +46,17 @@ export interface UsageSnapshot {
 export async function fetchUsage(): Promise<UsageSnapshot> {
   const res = await fetch('/api/usage');
   if (!res.ok) throw new Error(`Failed to load usage (${res.status})`);
+  return res.json();
+}
+
+/** Runs a SQL topic's query against its seeded schema; returns the result + mission flags. */
+export async function runSqlQuery(topicId: string, sql: string): Promise<SqlRunResponse> {
+  const res = await fetch('/api/sql', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ topicId, sql }),
+  });
+  if (!res.ok) throw new Error(`SQL run failed (${res.status})`);
   return res.json();
 }
 

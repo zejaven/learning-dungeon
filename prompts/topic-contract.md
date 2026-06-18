@@ -34,9 +34,10 @@ category:
   en: <e.g. Java Core / Collections>
   ru: <напр. Java Core / Коллекции>
 type: <DATA_STRUCTURE | CONCURRENCY | ...>
-mode: <trace | structural | theory>   # OPTIONAL: default `trace`. `structural` =
-                                # design-pattern class-graph engine; `theory` =
-                                # explanation + Boss Fight only (see below)
+mode: <trace | structural | theory | sql>   # OPTIONAL: default `trace`.
+                                # `structural` = design-pattern class-graph engine;
+                                # `theory` = explanation + Boss Fight only;
+                                # `sql` = seeded DB + query editor (see below)
 summary:
   en: <one paragraph>
   ru: <один абзац>
@@ -168,6 +169,46 @@ topics/<id>/
 `primitives`, `defaultExample`, and `missions`. Lean on **cross-links**
 (`[Strategy](topic:strategy)`) so an overview topic points at the focused topics
 that detail each part. Mirror `topics/design-patterns-overview/`.
+
+## SQL topics (mode: sql)
+
+A query playground: the learner writes SQL against a seeded in-memory H2 database
+(PostgreSQL mode), runs it, and sees the result table; missions compare the result
+to a reference query. Set `mode: sql`. Folder layout:
+
+```
+topics/<id>/
+  topic.yaml          mode: sql
+  explanation.en.md   prose (+ an erDiagram of the schema where useful)
+  explanation.ru.md
+  starter/
+    schema.sql        DDL + seed INSERTs (deterministic, small)
+    query.sql         the editor's opening query (a SELECT stub; task in comments)
+  quiz.yaml           sql missions + bossFight
+```
+
+**Omit:** `examples/`, `visualizer.tsx`, `trace-schema.json`, `primitives`,
+`defaultExample`. SQL missions:
+
+```yaml
+missions:
+  - id: courses-over-10
+    type: sql
+    title: { en: ..., ru: ... }
+    goal:  { en: Return the course id and name (in that order)..., ru: ... }
+    requires:
+      - kind: sqlResult
+        expectedSql: >
+          SELECT c.id, c.name FROM courses c JOIN enrollments e ON e.course_id = c.id
+          GROUP BY c.id, c.name HAVING COUNT(*) > 10
+        # ordered: true   # only when the task is about ORDER BY
+```
+
+The learner's result is compared to `expectedSql` (run on the same seed): columns
+by position, rows as a multiset unless `ordered`. So **state the expected column
+order in `goal`**. Use only SQL that H2's PostgreSQL mode supports; questions about
+real `EXPLAIN`/`Seq Scan` plans belong in `mode: theory`. Mirror
+`topics/sql-many-to-many/`.
 
 ## Explanation files (explanation.en.md / explanation.ru.md)
 

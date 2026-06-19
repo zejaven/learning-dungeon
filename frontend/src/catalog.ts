@@ -1,5 +1,5 @@
 import type { Localized } from './i18n';
-import type { TopicSummary } from './engine/traceTypes';
+import type { ManualQuestion, TopicSummary } from './engine/traceTypes';
 
 /**
  * The interview-question catalog shown as a tree on the home screen.
@@ -417,9 +417,26 @@ function prettifyCategoryId(id: string): string {
  *    category it declared (so freshly generated topics appear in the tree).
  * The static catalog is left untouched (a deep copy is returned).
  */
-export function buildCatalog(topics: TopicSummary[]): CatalogCategory[] {
+export function buildCatalog(
+  topics: TopicSummary[],
+  manualQuestions: ManualQuestion[] = [],
+): CatalogCategory[] {
   const cats: CatalogCategory[] = CATALOG.map((c) => ({ ...c, entries: c.entries.map((e) => ({ ...e })) }));
   const byCategory = new Map(cats.map((c) => [c.id, c]));
+
+  // Hand-added questions become catalog entries under their AI-chosen category
+  // (creating it if new). Added before topics so a topic generated for one can
+  // re-attach via catalogId.
+  for (const q of manualQuestions) {
+    let cat = byCategory.get(q.categoryId);
+    if (!cat) {
+      cat = { id: q.categoryId, name: q.categoryName || prettifyCategoryId(q.categoryId), entries: [] };
+      cats.push(cat);
+      byCategory.set(cat.id, cat);
+    }
+    cat.entries.push({ id: q.id, question: q.question, difficulty: normalizeDifficulty(q.difficulty) });
+  }
+
   const entryById = new Map<string, CatalogEntry>();
   for (const c of cats) for (const e of c.entries) entryById.set(e.id, e);
 

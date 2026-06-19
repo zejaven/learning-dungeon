@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import {
+  addQuestion,
   analyzeProject,
   fetchProgress,
+  fetchQuestions,
   fetchTopic,
   fetchTopics,
   fetchVersions,
@@ -14,6 +16,7 @@ import {
 import { evaluateStructureMission } from './structure';
 import type {
   ClassGraph,
+  ManualQuestion,
   SqlRunResult,
   TestResult,
   TheoryVersion,
@@ -25,6 +28,8 @@ import type {
 interface AppState {
   topics: TopicSummary[];
   topicsError: string | null;
+  /** Hand-added catalog questions, merged into the tree via buildCatalog. */
+  manualQuestions: ManualQuestion[];
 
   topic: TopicDetail | null;
   loadingTopic: boolean;
@@ -69,6 +74,8 @@ interface AppState {
   generatingVersion: boolean;
 
   loadTopics: () => Promise<void>;
+  loadQuestions: () => Promise<void>;
+  addManualQuestion: (text: string) => Promise<ManualQuestion>;
   selectTopic: (id: string) => Promise<void>;
   setCode: (code: string) => void;
   loadExample: (exampleId: string) => void;
@@ -210,6 +217,7 @@ function defaultCodeFor(topic: TopicDetail): string {
 export const useStore = create<AppState>((set, get) => ({
   topics: [],
   topicsError: null,
+  manualQuestions: [],
   topic: null,
   loadingTopic: false,
   code: '',
@@ -246,6 +254,17 @@ export const useStore = create<AppState>((set, get) => ({
     } catch (e) {
       set({ topicsError: (e as Error).message });
     }
+  },
+
+  async loadQuestions() {
+    const manualQuestions = await fetchQuestions();
+    set({ manualQuestions });
+  },
+
+  async addManualQuestion(text) {
+    const q = await addQuestion(text);
+    set({ manualQuestions: [...get().manualQuestions, q] });
+    return q;
   },
 
   async selectTopic(id) {

@@ -142,6 +142,16 @@ export interface ChallengeResponse {
   missions: Record<string, boolean>;
 }
 
+/** A hand-added catalog question (category chosen by the AI). */
+export interface ManualQuestion {
+  /** Catalog entry id, of the form `manual-<rowId>`. */
+  id: string;
+  categoryId: string;
+  categoryName: string | null;
+  difficulty: number;
+  question: Localized;
+}
+
 /** One theory version of a topic (v1 = on-disk; 2+ = restyled regenerations). */
 export interface TheoryVersion {
   versionNo: number;

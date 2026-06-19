@@ -5,6 +5,7 @@ import { navigate, routeForPractice, routeForQuestion, useRoute } from '@app/eng
 import { useStore } from '@app/engine/store';
 import { useStyle } from '@app/engine/styleStore';
 import { tl, ui, useLang } from '@app/i18n';
+import { AddQuestionDialog } from '@app/shell/AddQuestionDialog';
 import { AddTopicDialog } from '@app/shell/AddTopicDialog';
 import { BossFightDialog } from '@app/shell/BossFightDialog';
 import { CategoryTree } from '@app/shell/CategoryTree';
@@ -38,9 +39,11 @@ export function HomeScreen() {
   const addTask = useGeneration((s) => s.tasks['add-topic']);
 
   const [showAdd, setShowAdd] = useState(false);
+  const [showAddQuestion, setShowAddQuestion] = useState(false);
   const [showBossFight, setShowBossFight] = useState(false);
 
-  const found = route.id ? findCatalogEntry(buildCatalog(topics), route.id) : null;
+  const manualQuestions = useStore((s) => s.manualQuestions);
+  const found = route.id ? findCatalogEntry(buildCatalog(topics, manualQuestions), route.id) : null;
   const entry = found?.entry ?? null;
   const categoryId = found?.categoryId ?? '';
 
@@ -80,7 +83,16 @@ export function HomeScreen() {
       <div className="home-main">
         {/* Left: question catalog tree */}
         <section className="panel home-tree-panel">
-          <div className="panel-title">{ui('catalogTitle', lang)}</div>
+          <div className="panel-title tree-panel-title">
+            <span>{ui('catalogTitle', lang)}</span>
+            <button
+              className="tree-add-btn"
+              title={ui('addQuestion', lang)}
+              onClick={() => setShowAddQuestion(true)}
+            >
+              ＋
+            </button>
+          </div>
           <div className="panel-body tree-body">
             <CategoryTree
               selectedId={entry?.id ?? null}
@@ -165,6 +177,7 @@ export function HomeScreen() {
       </div>
 
       {showAdd && <AddTopicDialog onClose={() => setShowAdd(false)} />}
+      {showAddQuestion && <AddQuestionDialog onClose={() => setShowAddQuestion(false)} />}
       {showBossFight && <BossFightDialog onClose={() => setShowBossFight(false)} />}
       <Celebration />
     </div>

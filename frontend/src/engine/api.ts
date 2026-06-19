@@ -1,6 +1,7 @@
 import type {
   AnalyzeResult,
   ChallengeResponse,
+  ManualQuestion,
   ProjectFile,
   RunResult,
   SqlRunResponse,
@@ -14,6 +15,31 @@ export async function fetchTopics(): Promise<TopicSummary[]> {
   const res = await fetch('/api/topics');
   if (!res.ok) throw new Error(`Failed to load topics (${res.status})`);
   return res.json();
+}
+
+/** Hand-added catalog questions, merged into the tree by buildCatalog. */
+export async function fetchQuestions(): Promise<ManualQuestion[]> {
+  try {
+    const res = await fetch('/api/questions');
+    return res.ok ? res.json() : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Adds a question; the AI classifies its category/difficulty and translates it. */
+export async function addQuestion(text: string): Promise<ManualQuestion> {
+  const res = await fetch('/api/questions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  });
+  if (!res.ok) throw new Error(await res.text().catch(() => `Add failed (${res.status})`));
+  return res.json();
+}
+
+export async function deleteQuestion(id: string): Promise<void> {
+  await fetch(`/api/questions/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
 export async function fetchTopic(id: string): Promise<TopicDetail> {

@@ -162,6 +162,18 @@ const UI: Record<string, Localized> = {
   save: { en: 'Save', ru: 'Сохранить' },
   version: { en: 'Version', ru: 'Версия' },
   generateVersion: { en: '✨ New version', ru: '✨ Новая версия' },
+  addQuestion: { en: 'Add question', ru: 'Добавить вопрос' },
+  addQuestionTitle: { en: 'Add a question', ru: 'Добавить вопрос' },
+  addQuestionDesc: {
+    en: 'Type an interview question. The AI picks its category (or creates a new one) and difficulty.',
+    ru: 'Введите вопрос с собеседования. ИИ выберет категорию (или создаст новую) и сложность.',
+  },
+  addQuestionPlaceholder: {
+    en: 'e.g. What is the difference between a process and a thread?',
+    ru: 'например: В чём разница между процессом и потоком?',
+  },
+  addQuestionConfirm: { en: 'Add', ru: 'Добавить' },
+  classifying: { en: 'Classifying…', ru: 'Классификация…' },
 };
 
 export function ui(key: keyof typeof UI | string, lang: Lang): string {

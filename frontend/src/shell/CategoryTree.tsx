@@ -20,8 +20,9 @@ export function CategoryTree({
   onSelect: (entry: CatalogEntry) => void;
 }) {
   const topics = useStore((s) => s.topics);
+  const manualQuestions = useStore((s) => s.manualQuestions);
   const lang = useLang((s) => s.lang);
-  const catalog = buildCatalog(topics);
+  const catalog = buildCatalog(topics, manualQuestions);
   const existing = new Set(topics.map((t) => t.id));
   const completed = new Set(topics.filter((t) => t.completed).map((t) => t.id));
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});

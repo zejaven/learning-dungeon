@@ -40,6 +40,7 @@ const UI: Record<string, Localized> = {
   askAI: { en: '💬 Ask AI', ru: '💬 Спросить ИИ' },
   askAbout: { en: 'Ask AI about ', ru: 'Спросить ИИ про ' },
   addTopic: { en: '＋ Add topic', ru: '＋ Добавить тему' },
+  toggleTheme: { en: 'Toggle light/dark theme', ru: 'Переключить светлую/тёмную тему' },
   noTopics: { en: 'No topics yet', ru: 'Пока нет тем' },
   run: { en: '▶ Run', ru: '▶ Запустить' },
   running: { en: 'running…', ru: 'выполняется…' },

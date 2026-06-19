@@ -13,6 +13,7 @@ import { AssistantDialog } from '@app/shell/AssistantDialog';
 import { BossFightDialog } from '@app/shell/BossFightDialog';
 import { FileTree } from '@app/shell/FileTree';
 import { LangSwitcher } from '@app/shell/LangSwitcher';
+import { ThemeSwitcher } from '@app/shell/ThemeSwitcher';
 import { UsageBar } from '@app/shell/UsageBar';
 import { Celebration } from '@app/shell/Celebration';
 
@@ -48,6 +49,7 @@ export function WorkspaceScreen() {
         {topicCompleted && <span className="completed-badge">{ui('topicCompleted', lang)}</span>}
         <div className="spacer" />
         <UsageBar />
+        <ThemeSwitcher />
         <LangSwitcher />
         <button onClick={() => setShowAssistant(true)} disabled={!topic}>
           {ui('askAI', lang)}

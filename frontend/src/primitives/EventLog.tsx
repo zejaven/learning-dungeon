@@ -52,18 +52,18 @@ const itemStyle: CSSProperties = {
   borderRadius: 6,
   cursor: 'pointer',
   fontSize: 13,
-  background: '#16202b',
+  background: 'var(--viz-box)',
 };
 const activeStyle: CSSProperties = {
-  background: '#26384a',
-  boxShadow: 'inset 2px 0 0 #ffcc66',
+  background: 'var(--viz-active)',
+  boxShadow: 'inset 2px 0 0 var(--accent)',
 };
 const badgeStyle: CSSProperties = {
   fontFamily: 'monospace',
   fontSize: 11,
   padding: '1px 6px',
   borderRadius: 4,
-  background: '#324456',
+  background: 'var(--viz-badge)',
   flexShrink: 0,
 };
 const emptyStyle: CSSProperties = { fontSize: 13, opacity: 0.5, padding: 8 };

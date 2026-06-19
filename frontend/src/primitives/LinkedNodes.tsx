@@ -35,16 +35,16 @@ export function LinkedNodes({ nodes }: { nodes: LinkedNode[] }) {
 const rowStyle: CSSProperties = { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2 };
 const chainItemStyle: CSSProperties = { display: 'flex', alignItems: 'center' };
 const boxStyle: CSSProperties = {
-  border: '1px solid #5b6b7a',
+  border: '1px solid var(--border)',
   borderRadius: 6,
   padding: '4px 8px',
-  background: '#1e2a36',
+  background: 'var(--viz-box)',
   minWidth: 54,
   textAlign: 'center',
 };
 const boxHighlightStyle: CSSProperties = {
-  borderColor: '#ffcc66',
-  background: '#3a3320',
+  borderColor: 'var(--accent)',
+  background: 'var(--viz-highlight)',
   boxShadow: '0 0 0 2px rgba(255,204,102,0.35)',
 };
 const titleStyle: CSSProperties = { fontWeight: 600, fontSize: 13 };

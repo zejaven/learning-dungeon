@@ -1,4 +1,5 @@
 import Editor from '@monaco-editor/react';
+import { useTheme } from '@app/engine/themeStore';
 
 export function EditorPanel({
   code,
@@ -9,12 +10,13 @@ export function EditorPanel({
   onChange: (code: string) => void;
   language?: string;
 }) {
+  const theme = useTheme((s) => s.theme);
   return (
     <div className="editor-wrap">
       <Editor
         height="100%"
         language={language}
-        theme="vs-dark"
+        theme={theme === 'light' ? 'vs' : 'vs-dark'}
         value={code}
         onChange={(value) => onChange(value ?? '')}
         options={{

@@ -65,9 +65,9 @@ export default function InboxVisualizer({ event }: VisualizerProps) {
       />
 
       <div style={statsStyle}>
-        <Stat label={tl(LABELS.processed, lang)} value={state.processedCount} color="#7ee787" />
-        <Stat label={tl(LABELS.skipped, lang)} value={state.skippedCount} color="#ff7b72" />
-        <Stat label={tl(LABELS.effect, lang)} value={state.effect} color="#79c0ff" />
+        <Stat label={tl(LABELS.processed, lang)} value={state.processedCount} color="var(--good)" />
+        <Stat label={tl(LABELS.skipped, lang)} value={state.skippedCount} color="var(--bad)" />
+        <Stat label={tl(LABELS.effect, lang)} value={state.effect} color="var(--accent-2)" />
       </div>
 
       <div>
@@ -91,13 +91,13 @@ function MessageBanner({
     return <div style={{ ...bannerStyle, opacity: 0.5 }}>{tl(LABELS.noMessage, lang)}</div>;
   }
   let outcome = tl(LABELS.outcomeReceived, lang);
-  let color = '#ffcc66';
+  let color = 'var(--accent)';
   if (msg.outcome === 'processed') {
     outcome = tl(LABELS.outcomeProcessed, lang);
-    color = '#7ee787';
+    color = 'var(--good)';
   } else if (msg.outcome === 'duplicate') {
     outcome = tl(LABELS.outcomeDuplicate, lang);
-    color = '#ff7b72';
+    color = 'var(--bad)';
   }
   return (
     <div style={{ ...bannerStyle, ...(highlighted ? bannerHighlightStyle : {}) }}>
@@ -128,11 +128,11 @@ const bannerStyle: CSSProperties = {
   gap: 10,
   padding: '8px 12px',
   borderRadius: 8,
-  background: '#16202b',
-  border: '1px solid #2b3a4a',
+  background: 'var(--viz-box)',
+  border: '1px solid var(--viz-active)',
 };
 const bannerHighlightStyle: CSSProperties = {
-  borderColor: '#ffcc66',
+  borderColor: 'var(--accent)',
   boxShadow: '0 0 0 2px rgba(255,204,102,0.30)',
 };
 const tagStyle: CSSProperties = {
@@ -140,7 +140,7 @@ const tagStyle: CSSProperties = {
   fontSize: 11,
   padding: '1px 6px',
   borderRadius: 4,
-  background: '#324456',
+  background: 'var(--viz-badge)',
 };
 const idStyle: CSSProperties = { fontWeight: 700, fontSize: 15, fontFamily: 'monospace' };
 const payloadStyle: CSSProperties = { fontSize: 13, opacity: 0.8 };

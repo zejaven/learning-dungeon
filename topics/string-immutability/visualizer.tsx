@@ -104,13 +104,13 @@ const varBoxStyle: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 6,
-  border: '1px solid #5b6b7a',
+  border: '1px solid var(--border)',
   borderRadius: 6,
   padding: '3px 8px',
-  background: '#16202b',
+  background: 'var(--viz-box)',
 };
 const varHighlightStyle: CSSProperties = {
-  borderColor: '#ffcc66',
+  borderColor: 'var(--accent)',
   boxShadow: '0 0 0 2px rgba(255,204,102,0.35)',
 };
 const varNameStyle: CSSProperties = { fontWeight: 700, fontFamily: 'monospace' };

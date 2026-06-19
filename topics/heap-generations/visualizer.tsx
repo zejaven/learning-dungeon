@@ -121,7 +121,7 @@ const statValueStyle: CSSProperties = {
   fontSize: 18,
   fontWeight: 700,
   fontFamily: 'monospace',
-  color: '#e6edf3',
+  color: 'var(--text)',
 };
 const groupStyle: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 6 };
 const groupTitleStyle: CSSProperties = {

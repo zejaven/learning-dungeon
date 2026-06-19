@@ -39,7 +39,7 @@ const rowStyle: CSSProperties = {
 };
 const rowHighlightStyle: CSSProperties = {
   background: 'rgba(255,204,102,0.10)',
-  borderLeft: '3px solid #ffcc66',
+  borderLeft: '3px solid var(--accent)',
 };
 const gutterStyle: CSSProperties = {
   width: 64,

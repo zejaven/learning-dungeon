@@ -137,7 +137,7 @@ function Stat({ label, value, highlight }: { label: string; value: string; highl
   return (
     <div style={statStyle}>
       <div style={statLabelStyle}>{label}</div>
-      <div style={{ ...statValueStyle, color: highlight ? '#ff8a65' : '#e6edf3' }}>{value}</div>
+      <div style={{ ...statValueStyle, color: highlight ? 'var(--accent)' : 'var(--text)' }}>{value}</div>
     </div>
   );
 }

@@ -14,6 +14,7 @@ import { GenerationView } from '@app/shell/GenerationView';
 import { LangSwitcher } from '@app/shell/LangSwitcher';
 import { Markdown } from '@app/shell/Markdown';
 import { StyleSelector } from '@app/shell/StyleSelector';
+import { ThemeSwitcher } from '@app/shell/ThemeSwitcher';
 import { UsageBar } from '@app/shell/UsageBar';
 
 /**
@@ -74,6 +75,7 @@ export function HomeScreen() {
         <h1>🗡️ Java Interview Dungeon</h1>
         <div className="spacer" />
         <UsageBar />
+        <ThemeSwitcher />
         <LangSwitcher />
         <button className="accent" onClick={() => setShowAdd(true)}>
           {addTask?.status === 'running' ? ui('generating', lang) : ui('addTopic', lang)}

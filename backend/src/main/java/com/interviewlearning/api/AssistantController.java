@@ -1,9 +1,9 @@
 package com.interviewlearning.api;
 
-import com.interviewlearning.claude.ClaudeCodeService;
+import com.interviewlearning.ai.AiCliService;
+import com.interviewlearning.ai.AiTask;
 import com.interviewlearning.topics.TopicDtos.TopicDetail;
 import com.interviewlearning.topics.TopicRepository;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -11,38 +11,34 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.util.List;
 import java.util.Optional;
 
 /**
- * Streams an answer from Claude Code to a question about the current topic.
+ * Streams an answer from the selected AI provider to a question about the current topic.
  * Read-only: no file-editing permissions are granted.
  */
 @RestController
 @RequestMapping("/api/assistant")
 public class AssistantController {
 
-    private final ClaudeCodeService claude;
+    private final AiCliService ai;
     private final TopicRepository topics;
-    private final String model;
 
-    public AssistantController(ClaudeCodeService claude,
-                              TopicRepository topics,
-                              @Value("${app.claude.assistant-model:}") String model) {
-        this.claude = claude;
+    public AssistantController(AiCliService ai,
+                              TopicRepository topics) {
+        this.ai = ai;
         this.topics = topics;
-        this.model = model;
     }
 
-    public record AskRequest(String topicId, String question, String code, String lang) {
+    public record AskRequest(String topicId, String question, String code, String lang, String provider) {
     }
 
     @PostMapping(value = "/ask", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter ask(@RequestBody AskRequest request) {
-        return claude.stream(buildPrompt(request), modelArgs());
+        return ai.stream(request.provider(), buildPrompt(request), AiTask.ASSISTANT);
     }
 
-    public record EvaluateRequest(String topicId, String question, String answer, String lang) {
+    public record EvaluateRequest(String topicId, String question, String answer, String lang, String provider) {
     }
 
     /**
@@ -52,13 +48,7 @@ public class AssistantController {
      */
     @PostMapping(value = "/evaluate", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter evaluate(@RequestBody EvaluateRequest request) {
-        return claude.stream(buildEvaluationPrompt(request), modelArgs());
-    }
-
-    private List<String> modelArgs() {
-        return model == null || model.isBlank()
-                ? List.of()
-                : List.of("--model", model);
+        return ai.stream(request.provider(), buildEvaluationPrompt(request), AiTask.EVALUATE);
     }
 
     private String buildPrompt(AskRequest request) {

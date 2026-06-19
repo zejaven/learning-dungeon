@@ -32,7 +32,9 @@ and keep Java source/comments in English. Localize visualizer labels via
    plus a human-readable `categoryName` (do not dump it into `other`).
    The generation request may already specify `categoryId`, `difficulty` and a
    `catalogId` — if so, use those exact values; otherwise determine `categoryId`
-   and `difficulty` yourself (and omit `catalogId`).
+   and `difficulty` yourself (and omit `catalogId`). The generation request also
+   includes `aiProvider` and usually `aiModel`; copy both into `topic.yaml`
+   exactly as supplied.
 
    Then **choose the mode**. Most topics are `mode: trace` (the default — a runnable
    model + visualizer + trace events; steps 2–8 below). A **design pattern about

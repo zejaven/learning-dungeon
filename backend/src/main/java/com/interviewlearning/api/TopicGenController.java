@@ -1,5 +1,6 @@
 package com.interviewlearning.api;
 
+import com.interviewlearning.ai.AiCliService;
 import com.interviewlearning.config.RepoPaths;
 import com.interviewlearning.generation.GenerationService;
 import com.interviewlearning.generation.GenerationTask;
@@ -7,7 +8,6 @@ import com.interviewlearning.topics.TopicDtos.TopicSummary;
 import com.interviewlearning.topics.TopicRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,12 +21,11 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Streams a Claude Code run that creates a new topic plugin from a pasted
+ * Streams a selected AI coding-agent run that creates a new topic plugin from a pasted
  * interview question. The strict contract lives in prompts/add-topic.md; the
  * question is appended. File-editing permissions are granted because the run
  * must scaffold topics/&lt;id&gt;/ on the local machine.
@@ -40,30 +39,27 @@ public class TopicGenController {
     private final GenerationService generation;
     private final RepoPaths repoPaths;
     private final TopicRepository topics;
-    private final String permissionMode;
-    private final String model;
+    private final AiCliService ai;
 
     public TopicGenController(GenerationService generation,
                               RepoPaths repoPaths,
                               TopicRepository topics,
-                              @Value("${app.claude.generate-permission-mode:bypassPermissions}") String permissionMode,
-                              @Value("${app.claude.generate-model:}") String model) {
+                              AiCliService ai) {
         this.generation = generation;
         this.repoPaths = repoPaths;
         this.topics = topics;
-        this.permissionMode = permissionMode;
-        this.model = model;
+        this.ai = ai;
     }
 
     /**
      * @param question   the interview question to turn into a topic
      * @param catalogId  the originating catalog question id (when generated from a
      *                   tree question); null/blank for a free-form "Add topic"
-     * @param categoryId the catalog category id to use; when blank, Claude decides
-     * @param difficulty 1-3 to use; when null/0, Claude decides
+     * @param categoryId the catalog category id to use; when blank, the selected AI decides
+     * @param difficulty 1-3 to use; when null/0, the selected AI decides
      */
     public record GenerateRequest(String question, String catalogId, String categoryId,
-                                  Integer difficulty, String style, String styleName) {
+                                  Integer difficulty, String style, String styleName, String provider) {
     }
 
     /**
@@ -75,12 +71,7 @@ public class TopicGenController {
         String key = (request.catalogId() != null && !request.catalogId().isBlank())
                 ? "catalog:" + request.catalogId().trim()
                 : "add-topic";
-        List<String> args = new ArrayList<>(List.of("--permission-mode", permissionMode));
-        if (model != null && !model.isBlank()) {
-            args.add("--model");
-            args.add(model);
-        }
-        GenerationTask task = generation.startOrGet(key, buildPrompt(request), args);
+        GenerationTask task = generation.startOrGet(key, request.provider(), buildPrompt(request));
         return Map.of("taskId", task.id(), "key", task.key(), "status", task.status());
     }
 
@@ -127,6 +118,14 @@ public class TopicGenController {
         sb.append("\n\n---\n\nINTERVIEW QUESTION TO TURN INTO A TOPIC:\n\n")
                 .append(request.question() == null ? "" : request.question().trim())
                 .append("\n\n---\n\nTOPIC METADATA TO SET IN topic.yaml:\n");
+
+        String provider = request.provider() == null || request.provider().isBlank()
+                ? "claude" : request.provider().trim().toLowerCase();
+        sb.append("- aiProvider: ").append(provider).append("\n");
+        String model = ai.modelFor(provider, com.interviewlearning.ai.AiTask.GENERATE_TOPIC);
+        if (model != null && !model.isBlank()) {
+            sb.append("- aiModel: ").append(model.trim()).append("\n");
+        }
 
         String categoryId = request.categoryId();
         if (categoryId != null && !categoryId.isBlank()) {
@@ -204,8 +203,8 @@ public class TopicGenController {
     }
 
     /**
-     * Lists the topics that already exist so Claude can cross-link to them from the
-     * new explanation via `[label](topic:&lt;id&gt;)` (see topic-contract.md). Only
+     * Lists the topics that already exist so the selected AI can cross-link to them
+     * from the new explanation via `[label](topic:&lt;id&gt;)` (see topic-contract.md). Only
      * real, existing ids are offered, so links never dangle.
      */
     private void appendCrossLinkContext(StringBuilder sb) {

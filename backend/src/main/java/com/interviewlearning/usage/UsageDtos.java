@@ -1,9 +1,7 @@
 package com.interviewlearning.usage;
 
 /**
- * DTOs for the Claude subscription usage shown in the app header. Mirrors the
- * shape returned by Anthropic's OAuth usage endpoint, trimmed to what the UI
- * needs (the current 5-hour session window and the 7-day weekly window).
+ * DTOs for AI usage/status shown in the app header.
  */
 public final class UsageDtos {
 
@@ -22,15 +20,25 @@ public final class UsageDtos {
     /**
      * A usage reading served to the frontend.
      *
+     * @param providerId   selected provider id
+     * @param providerName selected provider label
+     * @param installed    whether the provider CLI can be started locally
+     * @param downloadUrl  where to install the provider CLI when missing
      * @param available whether session/weekly figures are present and trustworthy
      * @param session   the current 5-hour window (nullable when unavailable)
      * @param weekly    the 7-day window (nullable when unavailable)
      * @param error     a short reason when {@code available} is false (nullable)
      */
-    public record UsageSnapshot(boolean available, UsageWindow session, UsageWindow weekly, String error) {
+    public record UsageSnapshot(String providerId, String providerName, boolean installed, String downloadUrl,
+                                boolean available, UsageWindow session, UsageWindow weekly, String error) {
 
         public static UsageSnapshot unavailable(String error) {
-            return new UsageSnapshot(false, null, null, error);
+            return unavailable("claude", "Claude", true, "https://claude.com/claude-code", error);
+        }
+
+        public static UsageSnapshot unavailable(String providerId, String providerName,
+                                                boolean installed, String downloadUrl, String error) {
+            return new UsageSnapshot(providerId, providerName, installed, downloadUrl, false, null, null, error);
         }
     }
 }

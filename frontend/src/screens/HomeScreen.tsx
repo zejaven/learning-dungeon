@@ -7,6 +7,7 @@ import { useStyle } from '@app/engine/styleStore';
 import { tl, ui, useLang } from '@app/i18n';
 import { AddQuestionDialog } from '@app/shell/AddQuestionDialog';
 import { AddTopicDialog } from '@app/shell/AddTopicDialog';
+import { AiProviderSelector } from '@app/shell/AiProviderSelector';
 import { BossFightDialog } from '@app/shell/BossFightDialog';
 import { CategoryTree } from '@app/shell/CategoryTree';
 import { Celebration } from '@app/shell/Celebration';
@@ -74,6 +75,7 @@ export function HomeScreen() {
       <header className="header">
         <h1>🗡️ Java Interview Dungeon</h1>
         <div className="spacer" />
+        <AiProviderSelector />
         <UsageBar />
         <ThemeSwitcher />
         <LangSwitcher />
@@ -155,10 +157,16 @@ export function HomeScreen() {
                     >
                       {theoryVersions.map((v) => (
                         <option key={v.versionNo} value={v.versionNo}>
-                          v{v.versionNo} · {v.style}
+                          v{v.versionNo} - {v.style} - {v.aiProvider || 'claude'}
                         </option>
                       ))}
                     </select>
+                    <span
+                      className="version-provider"
+                      title={activeVersion?.aiModel || topic!.aiModel || ''}
+                    >
+                      {activeVersion?.aiProvider || topic!.aiProvider || 'claude'}
+                    </span>
                     <StyleSelector />
                     <button
                       onClick={() =>

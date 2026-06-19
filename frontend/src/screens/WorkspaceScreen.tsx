@@ -10,6 +10,7 @@ import { SqlResultTable } from '@app/shell/SqlResultTable';
 import { TestResults } from '@app/shell/TestResults';
 import { MissionPanel } from '@app/shell/MissionPanel';
 import { AssistantDialog } from '@app/shell/AssistantDialog';
+import { AiProviderSelector } from '@app/shell/AiProviderSelector';
 import { BossFightDialog } from '@app/shell/BossFightDialog';
 import { FileTree } from '@app/shell/FileTree';
 import { LangSwitcher } from '@app/shell/LangSwitcher';
@@ -48,6 +49,7 @@ export function WorkspaceScreen() {
         <h1 className="workspace-title">{topic ? tl(topic.title, lang) : 'Java Interview Dungeon'}</h1>
         {topicCompleted && <span className="completed-badge">{ui('topicCompleted', lang)}</span>}
         <div className="spacer" />
+        <AiProviderSelector />
         <UsageBar />
         <ThemeSwitcher />
         <LangSwitcher />

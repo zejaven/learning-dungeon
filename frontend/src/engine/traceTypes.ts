@@ -36,6 +36,10 @@ export interface TopicSummary {
   catalogId: string;
   /** 'trace' | 'structural' | 'theory'. */
   mode: string;
+  /** AI provider that generated this topic, e.g. claude/codex/kimi. */
+  aiProvider: string;
+  /** Model name used for generation, if known. */
+  aiModel: string;
 }
 
 /** Persisted progress for a topic, restored on load. */
@@ -159,6 +163,8 @@ export interface TheoryVersion {
   en: string;
   ru: string;
   createdAt: string | null;
+  aiProvider: string;
+  aiModel: string;
 }
 
 export interface TopicDetail {
@@ -180,6 +186,12 @@ export interface TopicDetail {
   mode: string;
   /** Seed files for a structural topic's editor; empty for trace topics. */
   starterFiles: ProjectFile[];
+  /** Explanation style recorded in topic.yaml. */
+  style: string;
+  /** AI provider that generated this topic, e.g. claude/codex/kimi. */
+  aiProvider: string;
+  /** Model name used for generation, if known. */
+  aiModel: string;
 }
 
 /** Props every topic visualizer receives. */

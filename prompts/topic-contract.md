@@ -48,6 +48,8 @@ difficulty: <1 | 2 | 3>             # 1 = Junior, 2 = Middle, 3 = Senior
 catalogId: <catalog question id>    # OPTIONAL: only when generated from a tree question
 style: <Style name>                 # OPTIONAL: the explanation style this was generated in
                                     # (set only when the request supplies one; default omit)
+aiProvider: <claude | codex | kimi> # AI provider used for generation; copy from request metadata
+aiModel: <model name>               # OPTIONAL: model used for generation, when supplied
 primitives: [ArrayGrid, LinkedNodes, EventLog]   # primitives the visualizer uses
 defaultExample: <example-id>    # which example loads by default
 examples:
@@ -91,6 +93,10 @@ omit it when `categoryId` is one of the known ids.
 (it links the topic back to that question) — omit it otherwise. The generation
 request supplies the exact values to use for any of these it has already decided;
 otherwise choose them yourself.
+
+The generation request also supplies `aiProvider` and usually `aiModel`; copy
+those exact values into `topic.yaml`. Existing topics generated before provider
+selection use `aiProvider: claude`.
 
 ## Structural topics (mode: structural)
 

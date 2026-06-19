@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { streamSse } from '@app/engine/api';
-import { parseTextDelta } from '@app/engine/claudeStream';
+import { useAi } from '@app/engine/aiStore';
+import { parseTextDelta } from '@app/engine/aiStream';
 import { useStore } from '@app/engine/store';
 import { statusLabel, tl, ui, useLang } from '@app/i18n';
 import { Markdown } from './Markdown';
@@ -8,6 +9,7 @@ import { Markdown } from './Markdown';
 export function AssistantDialog({ onClose }: { onClose: () => void }) {
   const topic = useStore((s) => s.topic);
   const code = useStore((s) => s.code);
+  const provider = useAi((s) => s.selectedProvider);
   const lang = useLang((s) => s.lang);
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState('');
@@ -22,9 +24,9 @@ export function AssistantDialog({ onClose }: { onClose: () => void }) {
     try {
       await streamSse(
         '/api/assistant/ask',
-        { topicId: topic?.id, question, code, lang },
+        { topicId: topic?.id, question, code, lang, provider },
         {
-          onClaude: (line) => {
+          onAi: (line) => {
             const delta = parseTextDelta(line);
             if (delta) setAnswer((prev) => prev + delta);
           },

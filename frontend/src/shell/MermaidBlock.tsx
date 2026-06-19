@@ -39,7 +39,7 @@ export function MermaidBlock({ code }: { code: string }) {
         // Re-init per render so a theme toggle re-colors the diagram.
         mermaid.initialize({
           startOnLoad: false,
-          securityLevel: 'strict', // sanitize; content is Claude-generated
+          securityLevel: 'strict', // sanitize; content is AI-generated
           theme: theme === 'light' ? 'default' : 'dark',
           fontFamily: 'inherit',
         });

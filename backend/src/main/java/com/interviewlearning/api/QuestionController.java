@@ -2,14 +2,14 @@ package com.interviewlearning.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.interviewlearning.claude.ClaudeCodeService;
+import com.interviewlearning.ai.AiCliService;
+import com.interviewlearning.ai.AiTask;
 import com.interviewlearning.config.RepoPaths;
 import com.interviewlearning.questions.QuestionRepository;
 import com.interviewlearning.questions.QuestionRepository.ManualQuestion;
 import com.interviewlearning.topics.TopicDtos.Localized;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,7 +23,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Stream;
@@ -31,7 +30,7 @@ import java.util.stream.Stream;
 /**
  * Hand-added catalog questions. On add, the AI classifies the question into an
  * existing or new category, rates its difficulty and produces a bilingual
- * version. Claude writes the JSON to a file (not stdout) so Cyrillic isn't
+ * version. The selected AI provider writes the JSON to a file (not stdout) so Cyrillic isn't
  * mangled by the Windows console encoding.
  */
 @RestController
@@ -46,28 +45,25 @@ public class QuestionController {
             + "kotlin, messaging, other";
 
     private final QuestionRepository questions;
-    private final ClaudeCodeService claude;
+    private final AiCliService ai;
     private final ObjectMapper mapper;
     private final RepoPaths repoPaths;
-    private final String model;
 
     public QuestionController(QuestionRepository questions,
-                              ClaudeCodeService claude,
+                              AiCliService ai,
                               ObjectMapper mapper,
-                              RepoPaths repoPaths,
-                              @Value("${app.claude.assistant-model:}") String model) {
+                              RepoPaths repoPaths) {
         this.questions = questions;
-        this.claude = claude;
+        this.ai = ai;
         this.mapper = mapper;
         this.repoPaths = repoPaths;
-        this.model = model;
     }
 
     public record QuestionDto(String id, String categoryId, String categoryName,
                               int difficulty, Localized question) {
     }
 
-    public record AddRequest(String text) {
+    public record AddRequest(String text, String provider) {
     }
 
     @GetMapping
@@ -93,7 +89,7 @@ public class QuestionController {
         }
         Path jsonPath = dir.resolve("out.json");
         try {
-            claude.runForResult(classifyPrompt(request.text().trim(), jsonPath), fileArgs());
+            ai.runForResult(request.provider(), classifyPrompt(request.text().trim(), jsonPath), AiTask.CLASSIFY);
             JsonNode c = mapper.readTree(Files.readString(jsonPath, StandardCharsets.UTF_8));
 
             String categoryId = text(c, "categoryId", "other");
@@ -126,15 +122,6 @@ public class QuestionController {
     private static QuestionDto toDto(ManualQuestion q) {
         return new QuestionDto("manual-" + q.id(), q.categoryId(), q.categoryName(),
                 q.difficulty(), new Localized(q.en(), q.ru()));
-    }
-
-    private List<String> fileArgs() {
-        List<String> args = new ArrayList<>(List.of("--permission-mode", "bypassPermissions"));
-        if (model != null && !model.isBlank()) {
-            args.add("--model");
-            args.add(model);
-        }
-        return args;
     }
 
     private static int clampDifficulty(int d) {

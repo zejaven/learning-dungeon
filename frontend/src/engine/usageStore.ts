@@ -1,10 +1,10 @@
 import { create } from 'zustand';
 import { fetchUsage, type UsageSnapshot } from './api';
+import { useAi } from './aiStore';
 
 /**
- * Polls the local /api/usage endpoint for Claude session/weekly usage. The
- * backend caches and throttles the real upstream call (safe only ~every 180s),
- * so polling here every minute is cheap and just reflects the cached reading.
+ * Polls the local /api/usage endpoint for the selected provider. The backend
+ * caches and throttles any upstream calls, so polling every minute is cheap.
  *
  * A single module-level interval is shared across screens; mounting either the
  * Home or Workspace header doesn't spin up a second poller.
@@ -25,7 +25,7 @@ export const useUsage = create<UsageState>((set, get) => ({
   snapshot: null,
   refresh: async () => {
     try {
-      const snap = await fetchUsage();
+      const snap = await fetchUsage(useAi.getState().selectedProvider);
       set({ snapshot: snap });
     } catch {
       // Transient failure — keep the previous reading rather than blanking it.

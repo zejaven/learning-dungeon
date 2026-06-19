@@ -52,9 +52,9 @@ public class GenerationTask {
         return !"running".equals(status);
     }
 
-    /** Buffers and broadcasts a raw Claude stream-json line. */
-    public synchronized void addClaude(String line) {
-        add(new Event("claude", line));
+    /** Buffers and broadcasts a normalized AI stream line. */
+    public synchronized void addAi(String line) {
+        add(new Event("ai", line));
     }
 
     /** Buffers and broadcasts a status change; completes subscribers when terminal. */

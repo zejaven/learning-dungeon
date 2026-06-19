@@ -27,7 +27,9 @@ public final class TopicDtos {
             String categoryName,
             int difficulty,
             String catalogId,
-            String mode
+            String mode,
+            String aiProvider,
+            String aiModel
     ) {
     }
 
@@ -96,7 +98,9 @@ public final class TopicDtos {
             List<BossQuestion> bossFight,
             String mode,
             List<ProjectFile> starterFiles,
-            String style
+            String style,
+            String aiProvider,
+            String aiModel
     ) {
     }
 }

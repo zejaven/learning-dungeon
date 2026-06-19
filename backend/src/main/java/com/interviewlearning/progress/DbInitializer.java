@@ -118,11 +118,22 @@ public class DbInitializer {
                     topic_id   TEXT        NOT NULL,
                     version_no INT         NOT NULL,
                     style      TEXT        NOT NULL DEFAULT 'Default',
+                    ai_provider TEXT       NOT NULL DEFAULT 'claude',
+                    ai_model    TEXT       NOT NULL DEFAULT '',
                     en         TEXT        NOT NULL,
                     ru         TEXT        NOT NULL,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                     UNIQUE (topic_id, version_no)
                 )
+                """);
+
+        jdbc.execute("""
+                ALTER TABLE theory_version
+                    ADD COLUMN IF NOT EXISTS ai_provider TEXT NOT NULL DEFAULT 'claude'
+                """);
+        jdbc.execute("""
+                ALTER TABLE theory_version
+                    ADD COLUMN IF NOT EXISTS ai_model TEXT NOT NULL DEFAULT ''
                 """);
     }
 }

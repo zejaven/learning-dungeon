@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { saveBossAnswer, streamSse } from '@app/engine/api';
-import { parseTextDelta } from '@app/engine/claudeStream';
+import { useAi } from '@app/engine/aiStore';
+import { parseTextDelta } from '@app/engine/aiStream';
 import { useStore } from '@app/engine/store';
 import { questionLabel, statusLabel, tl, ui, useLang } from '@app/i18n';
 import { Markdown } from './Markdown';
@@ -27,6 +28,7 @@ export function BossFightDialog({ onClose }: { onClose: () => void }) {
   const setResult = useStore((s) => s.setBossFightResult);
   const markTopicCompleted = useStore((s) => s.markTopicCompleted);
   const alreadyCompleted = useStore((s) => s.topicCompleted);
+  const provider = useAi((s) => s.selectedProvider);
   const lang = useLang((s) => s.lang);
 
   const questions = topic?.bossFight ?? [];
@@ -75,9 +77,9 @@ export function BossFightDialog({ onClose }: { onClose: () => void }) {
     try {
       await streamSse(
         '/api/assistant/evaluate',
-        { topicId, question: questionText, answer, lang },
+        { topicId, question: questionText, answer, lang, provider },
         {
-          onClaude: (line) => {
+          onAi: (line) => {
             const delta = parseTextDelta(line);
             if (!delta) return;
             acc += delta;

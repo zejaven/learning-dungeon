@@ -10,6 +10,18 @@ import type {
   TopicProgress,
   TopicSummary,
 } from './traceTypes';
+import type { AiProviderStatus } from './aiStore';
+
+export interface AiProvidersResponse {
+  defaultProvider: string;
+  providers: AiProviderStatus[];
+}
+
+export async function fetchAiProviders(): Promise<AiProvidersResponse> {
+  const res = await fetch('/api/ai/providers');
+  if (!res.ok) throw new Error(`Failed to load AI providers (${res.status})`);
+  return res.json();
+}
 
 export async function fetchTopics(): Promise<TopicSummary[]> {
   const res = await fetch('/api/topics');
@@ -28,11 +40,11 @@ export async function fetchQuestions(): Promise<ManualQuestion[]> {
 }
 
 /** Adds a question; the AI classifies its category/difficulty and translates it. */
-export async function addQuestion(text: string): Promise<ManualQuestion> {
+export async function addQuestion(text: string, provider: string): Promise<ManualQuestion> {
   const res = await fetch('/api/questions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, provider }),
   });
   if (!res.ok) throw new Error(await res.text().catch(() => `Add failed (${res.status})`));
   return res.json();
@@ -64,15 +76,19 @@ export interface UsageWindow {
 }
 
 export interface UsageSnapshot {
+  providerId: string;
+  providerName: string;
+  installed: boolean;
+  downloadUrl: string;
   available: boolean;
   session: UsageWindow | null;
   weekly: UsageWindow | null;
   error: string | null;
 }
 
-/** Current Claude session/weekly usage for the header meter. */
-export async function fetchUsage(): Promise<UsageSnapshot> {
-  const res = await fetch('/api/usage');
+/** Current selected-provider usage/status for the header meter. */
+export async function fetchUsage(provider: string): Promise<UsageSnapshot> {
+  const res = await fetch(`/api/usage?provider=${encodeURIComponent(provider)}`);
   if (!res.ok) throw new Error(`Failed to load usage (${res.status})`);
   return res.json();
 }
@@ -147,7 +163,7 @@ export async function saveBossAnswer(
 }
 
 export interface SseHandlers {
-  onClaude?: (raw: string) => void;
+  onAi?: (raw: string) => void;
   onStatus?: (status: string, message: string) => void;
   onError?: (message: string) => void;
   onDone?: () => void;
@@ -172,8 +188,8 @@ async function consumeSse(res: Response, handlers: SseHandlers): Promise<void> {
       else if (line.startsWith('data:')) dataLines.push(line.slice(5).replace(/^ /, ''));
     }
     const data = dataLines.join('\n');
-    if (name === 'claude') {
-      handlers.onClaude?.(data);
+    if (name === 'ai' || name === 'claude') {
+      handlers.onAi?.(data);
     } else if (name === 'status') {
       try {
         const parsed = JSON.parse(data);
@@ -217,6 +233,7 @@ export async function streamSse(url: string, body: unknown, handlers: SseHandler
 
 export interface GenerateBody {
   question: string;
+  provider?: string;
   catalogId?: string;
   categoryId?: string;
   difficulty?: number;
@@ -238,11 +255,12 @@ export async function regenerateVersion(
   topicId: string,
   style: string,
   styleName: string,
+  provider: string,
 ): Promise<TheoryVersion> {
   const res = await fetch(`/api/topics/${encodeURIComponent(topicId)}/versions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ style, styleName }),
+    body: JSON.stringify({ style, styleName, provider }),
   });
   if (!res.ok) throw new Error(await res.text().catch(() => `Regenerate failed (${res.status})`));
   return res.json();

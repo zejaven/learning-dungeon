@@ -5,7 +5,8 @@ import {
   streamGenerationEvents,
   type GenerateBody,
 } from './api';
-import { parseActivity } from './claudeStream';
+import { useAi } from './aiStore';
+import { parseActivity } from './aiStream';
 import { useStore } from './store';
 import { ui, useLang } from '../i18n';
 
@@ -45,7 +46,7 @@ export const useGeneration = create<GenerationState>((set, get) => ({
       tasks: { ...s.tasks, [key]: { taskId: '', key, status: 'running', message: '', log: [] } },
     }));
     try {
-      const ref = await startGeneration(body);
+      const ref = await startGeneration({ ...body, provider: useAi.getState().selectedProvider });
       set((s) => ({
         tasks: { ...s.tasks, [key]: { ...s.tasks[key], taskId: ref.taskId, status: 'running' } },
       }));
@@ -83,7 +84,7 @@ export const useGeneration = create<GenerationState>((set, get) => ({
       });
 
     streamGenerationEvents(taskId, {
-      onClaude: (raw) => {
+      onAi: (raw) => {
         const activity = parseActivity(raw);
         if (activity) appendLog(activity);
       },

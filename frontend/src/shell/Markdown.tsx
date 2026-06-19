@@ -5,7 +5,7 @@ import { routeForQuestion } from '@app/engine/router';
 import { MermaidBlock } from './MermaidBlock';
 
 /**
- * Renders a Claude markdown answer (the same renderer used for topic
+ * Renders an AI markdown answer (the same renderer used for topic
  * explanations). Safe to call on partial text while streaming — react-markdown
  * re-parses the growing string on each delta.
  *

@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { buildCatalog, findCatalogEntry } from './catalog';
+import { useAi } from './engine/aiStore';
 import { useGeneration } from './engine/generationStore';
 import { navigate, routeForQuestion, useRoute } from './engine/router';
 import { useStore } from './engine/store';
@@ -19,6 +20,7 @@ export function App() {
   const refreshActiveGenerations = useGeneration((s) => s.refreshActive);
   const startUsagePolling = useUsage((s) => s.start);
   const loadStyles = useStyle((s) => s.load);
+  const loadAiProviders = useAi((s) => s.load);
 
   useEffect(() => {
     loadTopics();
@@ -26,11 +28,13 @@ export function App() {
     loadQuestions();
     // Reattach to any generation still running from before a reload.
     refreshActiveGenerations();
-    // Begin polling Claude usage for the header meter (idempotent).
+    // Begin polling selected-provider usage/status for the header meter (idempotent).
     startUsagePolling();
     // Load the user's saved generation styles into the dropdown.
     loadStyles();
-  }, [loadTopics, loadQuestions, refreshActiveGenerations, startUsagePolling, loadStyles]);
+    // Detect available AI CLIs and choose a provider before AI actions run.
+    loadAiProviders().then(() => useUsage.getState().refresh());
+  }, [loadTopics, loadQuestions, refreshActiveGenerations, startUsagePolling, loadStyles, loadAiProviders]);
 
   // Load the topic referenced by the URL once topics are known (also after a
   // reload or when following a deep link / cross-link).

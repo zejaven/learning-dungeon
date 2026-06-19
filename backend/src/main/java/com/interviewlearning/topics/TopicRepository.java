@@ -65,7 +65,9 @@ public class TopicRepository {
                                     str(meta, "categoryName", ""),
                                     intVal(meta, "difficulty", 0),
                                     str(meta, "catalogId", ""),
-                                    str(meta, "mode", "trace")
+                                    str(meta, "mode", "trace"),
+                                    str(meta, "aiProvider", "claude"),
+                                    str(meta, "aiModel", "")
                             ))));
         } catch (IOException e) {
             log.warn("Failed to list topics: {}", e.getMessage());
@@ -112,7 +114,9 @@ public class TopicRepository {
                 bossFight,
                 mode,
                 starterFiles,
-                str(meta, "style", "Default")
+                str(meta, "style", "Default"),
+                str(meta, "aiProvider", "claude"),
+                str(meta, "aiModel", "")
         ));
     }
 

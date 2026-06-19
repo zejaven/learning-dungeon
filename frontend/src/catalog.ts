@@ -458,7 +458,7 @@ export function buildCatalog(
 
     let cat = byCategory.get(t.categoryId);
     if (!cat) {
-      // A category Claude invented because nothing existing fit.
+      // A category the AI invented because nothing existing fit.
       cat = { id: t.categoryId, name: t.categoryName || prettifyCategoryId(t.categoryId), entries: [] };
       cats.push(cat);
       byCategory.set(cat.id, cat);

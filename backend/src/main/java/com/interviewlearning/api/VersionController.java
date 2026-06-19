@@ -1,12 +1,12 @@
 package com.interviewlearning.api;
 
-import com.interviewlearning.claude.ClaudeCodeService;
+import com.interviewlearning.ai.AiCliService;
+import com.interviewlearning.ai.AiTask;
 import com.interviewlearning.config.RepoPaths;
 import com.interviewlearning.theory.TheoryVersionRepository;
 import com.interviewlearning.theory.TheoryVersionRepository.TheoryVersion;
 import com.interviewlearning.topics.TopicDtos.TopicDetail;
 import com.interviewlearning.topics.TopicRepository;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -30,8 +30,8 @@ import java.util.stream.Stream;
  * style it was generated in); versions 2+ are restyled regenerations stored in
  * the DB, each recording its style.
  *
- * <p>Claude writes the rewritten explanation to files (not stdout) — files are
- * always correct UTF-8, whereas Windows can mangle Cyrillic on a stdout pipe.
+ * <p>The selected AI writes rewritten explanations to files (not stdout);
+ * files are always correct UTF-8, whereas Windows can mangle Cyrillic on stdout.
  */
 @RestController
 @RequestMapping("/api/topics/{id}/versions")
@@ -39,26 +39,24 @@ public class VersionController {
 
     private final TopicRepository topics;
     private final TheoryVersionRepository versions;
-    private final ClaudeCodeService claude;
+    private final AiCliService ai;
     private final RepoPaths repoPaths;
-    private final String model;
 
     public VersionController(TopicRepository topics,
                              TheoryVersionRepository versions,
-                             ClaudeCodeService claude,
-                             RepoPaths repoPaths,
-                             @Value("${app.claude.generate-model:}") String model) {
+                             AiCliService ai,
+                             RepoPaths repoPaths) {
         this.topics = topics;
         this.versions = versions;
-        this.claude = claude;
+        this.ai = ai;
         this.repoPaths = repoPaths;
-        this.model = model;
     }
 
-    public record VersionDto(int versionNo, String style, String en, String ru, String createdAt) {
+    public record VersionDto(int versionNo, String style, String en, String ru, String createdAt,
+                             String aiProvider, String aiModel) {
     }
 
-    public record RegenerateRequest(String style, String styleName) {
+    public record RegenerateRequest(String style, String styleName, String provider) {
     }
 
     @GetMapping
@@ -69,9 +67,11 @@ public class VersionController {
         }
         TopicDetail topic = opt.get();
         List<VersionDto> result = new ArrayList<>();
-        result.add(new VersionDto(1, topic.style(), topic.explanation().en(), topic.explanation().ru(), null));
+        result.add(new VersionDto(1, topic.style(), topic.explanation().en(), topic.explanation().ru(), null,
+                topic.aiProvider(), topic.aiModel()));
         for (TheoryVersion v : safeList(id)) {
-            result.add(new VersionDto(v.versionNo(), v.style(), v.en(), v.ru(), v.createdAt()));
+            result.add(new VersionDto(v.versionNo(), v.style(), v.en(), v.ru(), v.createdAt(),
+                    v.aiProvider(), v.aiModel()));
         }
         return ResponseEntity.ok(result);
     }
@@ -93,7 +93,8 @@ public class VersionController {
         Path enPath = dir.resolve("en.md");
         Path ruPath = dir.resolve("ru.md");
         try {
-            claude.runForResult(buildPrompt(topic, request.style(), enPath, ruPath), fileArgs());
+            ai.runForResult(request.provider(), buildPrompt(topic, request.style(), enPath, ruPath),
+                    AiTask.REGENERATE_VERSION);
             String en = Files.readString(enPath, StandardCharsets.UTF_8).trim();
             String ru = Files.readString(ruPath, StandardCharsets.UTF_8).trim();
             if (en.isEmpty() || ru.isEmpty()) {
@@ -101,11 +102,14 @@ public class VersionController {
             }
             String styleName = request.styleName() == null || request.styleName().isBlank()
                     ? "Default" : request.styleName().trim();
-            int versionNo = versions.add(id, styleName, en, ru);
-            return ResponseEntity.ok(new VersionDto(versionNo, styleName, en, ru, null));
+            String provider = request.provider() == null || request.provider().isBlank()
+                    ? "claude" : request.provider().trim().toLowerCase();
+            String model = ai.modelFor(provider, AiTask.REGENERATE_VERSION);
+            int versionNo = versions.add(id, styleName, en, ru, provider, model);
+            return ResponseEntity.ok(new VersionDto(versionNo, styleName, en, ru, null, provider, model));
         } catch (IOException e) {
             return ResponseEntity.internalServerError()
-                    .body("Claude did not write the explanation files: " + e.getMessage());
+                    .body("AI provider did not write the explanation files: " + e.getMessage());
         } catch (RuntimeException e) {
             return ResponseEntity.internalServerError().body(e.getMessage());
         } finally {
@@ -119,16 +123,6 @@ public class VersionController {
         } catch (RuntimeException e) {
             return List.of();
         }
-    }
-
-    /** File-writing run: bypass permissions so Claude can write the output files. */
-    private List<String> fileArgs() {
-        List<String> args = new ArrayList<>(List.of("--permission-mode", "bypassPermissions"));
-        if (model != null && !model.isBlank()) {
-            args.add("--model");
-            args.add(model);
-        }
-        return args;
     }
 
     private String buildPrompt(TopicDetail topic, String style, Path enPath, Path ruPath) {

@@ -2,15 +2,26 @@ import { useUsage } from '@app/engine/usageStore';
 import { ui, useLang, type Lang } from '@app/i18n';
 
 /**
- * Compact header meter showing Claude usage: the current 5-hour session window
- * and the 7-day weekly window, each as a thin progress bar with a percentage.
- * Renders nothing until a usable reading arrives (e.g. token missing/expired).
+ * Compact header meter/status for the selected AI provider.
  */
 export function UsageBar() {
   const lang = useLang((s) => s.lang);
   const snapshot = useUsage((s) => s.snapshot);
 
-  if (!snapshot || !snapshot.available) return null;
+  if (!snapshot) return null;
+
+  if (!snapshot.available) {
+    return (
+      <div className="usage-status" title={snapshot.error ?? ''}>
+        <span>{snapshot.providerName}: {snapshot.error}</span>
+        {!snapshot.installed && snapshot.downloadUrl && (
+          <a href={snapshot.downloadUrl} target="_blank" rel="noreferrer">
+            {ui('installCli', lang)}
+          </a>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="usage-bars">

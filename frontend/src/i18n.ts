@@ -71,8 +71,8 @@ const UI: Record<string, Localized> = {
   thinking: { en: 'Thinking…', ru: 'Думаю…' },
   addTopicTitle: { en: 'Add a new topic', ru: 'Добавить новую тему' },
   addTopicDesc: {
-    en: 'Paste an interview question. Claude Code will generate a full bilingual topic plugin (explanation, examples, visualizer, missions) under topics/.',
-    ru: 'Вставьте вопрос с собеседования. Claude Code сгенерирует полноценную двуязычную тему (объяснение, примеры, визуализатор, миссии) в папке topics/.',
+    en: 'Paste an interview question. The selected AI will generate a full bilingual topic plugin (explanation, examples, visualizer, missions) under topics/.',
+    ru: 'Вставьте вопрос с собеседования. Выбранная нейросеть сгенерирует полноценную двуязычную тему (объяснение, примеры, визуализатор, миссии) в папке topics/.',
   },
   addTopicPlaceholder: {
     en: 'e.g. What is the difference between ArrayList and LinkedList?',
@@ -125,6 +125,10 @@ const UI: Record<string, Localized> = {
   usageSession: { en: 'Session', ru: 'Сессия' },
   usageWeekly: { en: 'Week', ru: 'Неделя' },
   usageResets: { en: 'resets in', ru: 'сброс через' },
+  aiProvider: { en: 'AI provider', ru: 'Нейросеть' },
+  aiProviderShort: { en: 'AI', ru: 'ИИ' },
+  missing: { en: 'missing', ru: 'нет' },
+  installCli: { en: 'Install CLI', ru: 'Скачать CLI' },
   analyze: { en: '🔎 Analyze', ru: '🔎 Проанализировать' },
   analyzing: { en: 'Analyzing…', ru: 'Анализ…' },
   classDiagram: { en: 'Class diagram', ru: 'Диаграмма классов' },

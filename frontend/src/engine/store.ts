@@ -13,6 +13,7 @@ import {
   runSqlQuery,
   saveMissions,
 } from './api';
+import { useAi } from './aiStore';
 import { evaluateStructureMission } from './structure';
 import type {
   ClassGraph,
@@ -262,7 +263,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   async addManualQuestion(text) {
-    const q = await addQuestion(text);
+    const q = await addQuestion(text, useAi.getState().selectedProvider);
     set({ manualQuestions: [...get().manualQuestions, q] });
     return q;
   },
@@ -579,7 +580,7 @@ export const useStore = create<AppState>((set, get) => ({
     if (!topic) return;
     set({ generatingVersion: true });
     try {
-      const v = await regenerateVersion(topic.id, style, styleName);
+      const v = await regenerateVersion(topic.id, style, styleName, useAi.getState().selectedProvider);
       if (get().topic?.id !== topic.id) return; // switched away meanwhile
       const versions = [...get().theoryVersions, v];
       set({ theoryVersions: versions, activeVersionNo: v.versionNo, generatingVersion: false });

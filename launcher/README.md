@@ -65,7 +65,18 @@ disk relative to the repo root. Copy this folder layout to the other machine:
     tray.ps1
     launch.vbs
     install-shortcut.ps1
+    create-db.ps1
     icon.ico
+```
+
+On the other machine, before the first launch:
+
+```powershell
+# 1. write config\secret.yml with their PostgreSQL credentials (see above)
+# 2. create the database (the app does not create it itself):
+launcher\create-db.ps1
+# 3. install the shortcuts:
+launcher\install-shortcut.ps1
 ```
 
 `frontend/`, source code, and other modules are not needed. `tray.ps1` finds

@@ -40,6 +40,7 @@ export function BossFightDialog({ onClose }: { onClose: () => void }) {
   const [liveScore, setLiveScore] = useState<number | null>(null);
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
+  const [evalError, setEvalError] = useState(false);
 
   const currentQuestion = questions[index];
   const qid = currentQuestion?.id ?? '';
@@ -53,6 +54,7 @@ export function BossFightDialog({ onClose }: { onClose: () => void }) {
     setLiveScore(stored?.score ?? null);
     setStatus('');
     setBusy(false);
+    setEvalError(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index]);
 
@@ -73,7 +75,9 @@ export function BossFightDialog({ onClose }: { onClose: () => void }) {
     setLiveScore(null);
     setStatus('running');
     setBusy(true);
+    setEvalError(false);
     let acc = '';
+    let lastStatus = '';
     try {
       await streamSse(
         '/api/assistant/evaluate',
@@ -87,13 +91,24 @@ export function BossFightDialog({ onClose }: { onClose: () => void }) {
             const s = parseScore(acc);
             if (s != null) setLiveScore(s);
           },
-          onStatus: (s) => setStatus(s),
+          onStatus: (s) => {
+            lastStatus = s;
+            setStatus(s);
+          },
           onDone: () => {
-            const score = parseScore(acc);
-            const verdict = stripScoreLine(acc);
-            const passed = score != null && score >= PASS_SCORE;
-            setResult(qid, { answer, evaluation: verdict, score, passed });
             setBusy(false);
+            const score = parseScore(acc);
+            const verdict = stripScoreLine(acc).trim();
+            // A missing score (or an errored/empty run) means grading did not
+            // actually happen. Surface it as a retryable failure instead of
+            // silently recording a "fail" with no score and no feedback.
+            if (lastStatus === 'error' || score == null) {
+              setStatus('error');
+              setEvalError(true);
+              return;
+            }
+            const passed = score >= PASS_SCORE;
+            setResult(qid, { answer, evaluation: verdict, score, passed });
             // Persist the answer (with full history) and pick up topic completion.
             const wasCompleted = alreadyCompleted;
             saveBossAnswer(topicId, {
@@ -116,6 +131,7 @@ export function BossFightDialog({ onClose }: { onClose: () => void }) {
     } catch (e) {
       setStream((prev) => prev + `\n[error] ${(e as Error).message}`);
       setStatus('error');
+      setEvalError(true);
       setBusy(false);
     }
   }
@@ -153,7 +169,11 @@ export function BossFightDialog({ onClose }: { onClose: () => void }) {
             disabled={busy}
           />
 
-          {(passed || failed) && (
+          {evalError && (
+            <div className="boss-verdict-pill fail">⚠️ {ui('evaluateFailed', lang)}</div>
+          )}
+
+          {!evalError && (passed || failed) && (
             <div className={`boss-verdict-pill ${passed ? 'pass' : 'fail'}`}>
               {passed ? `✅ ${ui('passed', lang)}` : `🔁 ${ui('needMore', lang)}`}
               {failed && <span className="boss-pass-hint"> — {ui('passHint', lang)}</span>}

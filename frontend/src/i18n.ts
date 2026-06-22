@@ -100,6 +100,10 @@ const UI: Record<string, Localized> = {
   },
   passed: { en: 'Passed', ru: 'Зачтено' },
   needMore: { en: 'Needs work — think again', ru: 'Недостаточно — подумайте ещё' },
+  evaluateFailed: {
+    en: "Couldn't grade your answer — the examiner returned no score. Please try again.",
+    ru: 'Не удалось оценить ответ — экзаменатор не вернул оценку. Попробуйте ещё раз.',
+  },
   topicCompleted: { en: '✅ Completed', ru: '✅ Пройдено' },
   catalogTitle: { en: 'Questions', ru: 'Вопросы' },
   theory: { en: 'Theory', ru: 'Теория' },

@@ -327,11 +327,14 @@ public class AiCliService {
         try (BufferedReader br = new BufferedReader(
                 new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
+            Normalizer normalizer = new Normalizer(invocation.format());
             while ((line = br.readLine()) != null) {
                 if (line.isBlank()) {
                     continue;
                 }
-                normalize(invocation.format(), line).ifPresent(sink::ai);
+                for (String event : normalizer.apply(line)) {
+                    sink.ai(event);
+                }
             }
             if (!process.waitFor(RESULT_TIMEOUT_MINUTES, TimeUnit.MINUTES)) {
                 timedOut = true;
@@ -352,52 +355,86 @@ public class AiCliService {
         }
     }
 
-    private Optional<String> normalize(StreamFormat format, String line) {
-        try {
-            return switch (format) {
-                case CLAUDE_JSON -> normalizeClaude(line);
-                case CODEX_JSON -> normalizeCodex(line);
-                case KIMI_JSON -> normalizeKimi(line);
-            };
-        } catch (RuntimeException | IOException e) {
-            log.debug("Could not normalize AI stream line: {}", e.getMessage());
-            return event("activity", line);
+    /**
+     * Per-stream normalizer. Stateful so Claude's final {@code assistant} message
+     * text can be re-emitted as a {@code text_delta} fallback when the run produced
+     * no incremental {@code content_block_delta} text. The frontend only
+     * accumulates {@code text_delta} events, so without this fallback a reply that
+     * arrived only as a single final message would be silently dropped.
+     */
+    private final class Normalizer {
+        private final StreamFormat format;
+        private boolean sawTextDelta = false;
+
+        private Normalizer(StreamFormat format) {
+            this.format = format;
+        }
+
+        List<String> apply(String line) {
+            try {
+                return switch (format) {
+                    case CLAUDE_JSON -> normalizeClaude(line);
+                    case CODEX_JSON -> asList(normalizeCodex(line));
+                    case KIMI_JSON -> asList(normalizeKimi(line));
+                };
+            } catch (RuntimeException | IOException e) {
+                log.debug("Could not normalize AI stream line: {}", e.getMessage());
+                return asList(event("activity", line));
+            }
+        }
+
+        private List<String> normalizeClaude(String line) throws IOException {
+            JsonNode root = mapper.readTree(line);
+            String type = root.path("type").asText("");
+            if ("stream_event".equals(type)) {
+                JsonNode evt = root.path("event");
+                if ("content_block_delta".equals(evt.path("type").asText(""))) {
+                    JsonNode delta = evt.path("delta");
+                    if ("text_delta".equals(delta.path("type").asText(""))) {
+                        sawTextDelta = true;
+                        return asList(event("text_delta", delta.path("text").asText("")));
+                    }
+                }
+            }
+            if ("assistant".equals(type)) {
+                List<String> parts = new ArrayList<>();
+                List<String> textParts = new ArrayList<>();
+                for (JsonNode block : root.path("message").path("content")) {
+                    if ("text".equals(block.path("type").asText("")) && !block.path("text").asText("").isBlank()) {
+                        String text = block.path("text").asText("").trim();
+                        parts.add(text);
+                        textParts.add(text);
+                    } else if ("tool_use".equals(block.path("type").asText(""))) {
+                        String name = block.path("name").asText("tool");
+                        JsonNode input = block.path("input");
+                        String target = firstText(input, "file_path", "path", "command");
+                        parts.add((name + " " + target).trim());
+                    }
+                }
+                List<String> out = new ArrayList<>();
+                // Fallback: if nothing streamed incrementally, deliver the final
+                // assistant text so the frontend still receives the answer.
+                if (!sawTextDelta && !textParts.isEmpty()) {
+                    sawTextDelta = true;
+                    event("text_delta", String.join("\n", textParts)).ifPresent(out::add);
+                }
+                if (!parts.isEmpty()) {
+                    event("activity", String.join("\n", parts)).ifPresent(out::add);
+                }
+                return out;
+            }
+            if ("system".equals(type) && "init".equals(root.path("subtype").asText(""))) {
+                return asList(event("activity", "session started"));
+            }
+            if ("result".equals(type)) {
+                return asList(event("activity", "result: " + root.path("subtype").asText("done")));
+            }
+            return List.of();
         }
     }
 
-    private Optional<String> normalizeClaude(String line) throws IOException {
-        JsonNode root = mapper.readTree(line);
-        String type = root.path("type").asText("");
-        if ("stream_event".equals(type)) {
-            JsonNode event = root.path("event");
-            if ("content_block_delta".equals(event.path("type").asText(""))) {
-                JsonNode delta = event.path("delta");
-                if ("text_delta".equals(delta.path("type").asText(""))) {
-                    return event("text_delta", delta.path("text").asText(""));
-                }
-            }
-        }
-        if ("assistant".equals(type)) {
-            List<String> parts = new ArrayList<>();
-            for (JsonNode block : root.path("message").path("content")) {
-                if ("text".equals(block.path("type").asText("")) && !block.path("text").asText("").isBlank()) {
-                    parts.add(block.path("text").asText("").trim());
-                } else if ("tool_use".equals(block.path("type").asText(""))) {
-                    String name = block.path("name").asText("tool");
-                    JsonNode input = block.path("input");
-                    String target = firstText(input, "file_path", "path", "command");
-                    parts.add((name + " " + target).trim());
-                }
-            }
-            return parts.isEmpty() ? Optional.empty() : event("activity", String.join("\n", parts));
-        }
-        if ("system".equals(type) && "init".equals(root.path("subtype").asText(""))) {
-            return event("activity", "session started");
-        }
-        if ("result".equals(type)) {
-            return event("activity", "result: " + root.path("subtype").asText("done"));
-        }
-        return Optional.empty();
+    private static List<String> asList(Optional<String> event) {
+        return event.map(List::of).orElseGet(List::of);
     }
 
     private Optional<String> normalizeCodex(String line) throws IOException {

@@ -11,56 +11,57 @@
 
 Задача просит четыре операции — добавить, получить по id, изменить зарплату,
 изменить паспорт — и отмечает, что **зарплату и паспорт меняют разные отделы**.
-Твоя цель здесь — сделать это разнесение по отделам видимым в *структуре* кода, а
-не спрятать внутри одного класса.
+Твоя цель здесь — сделать это разнесение по отделам видимым в *структуре* кода и
+провести его через **каждый слой**, а не прятать внутри одного класса.
 
-Поэтому вместо единственного `EmployeeService` с лежащими рядом `changeSalary` и
-`changePassport` ты разделяешь записи по тому, кто ими владеет:
+Поскольку расчётный отдел и кадры — это разные вызывающие с разными правами, ты
+разделяешь **и** поверхность API, **и** логику:
 
-1. **`SalaryService`**, который владеет `changeSalary` (расчётный отдел),
-2. **`PassportService`**, который владеет `changePassport` (кадры),
-3. **`EmployeeQueryService`** для стороны чтения (`getCard`),
-4. **`EmployeeController`**, который держит все три и делегирует нужному.
+1. стек **`SalaryController` → `SalaryService`** (расчётный отдел владеет
+   `changeSalary`),
+2. стек **`PassportController` → `PassportService`** (кадры владеют
+   `changePassport`),
+3. общий **`EmployeeController`** для создания и чтения (дан тебе готовым).
 
-Все они общаются с одним `EmployeeRepository`. Дело не в репозитории — дело в том,
-что каждая *причина меняться* живёт в своём классе.
+Каждый контроллер делегирует своему сервису, а каждый сервис общается с общим
+`EmployeeRepository`. Дело не в репозитории — дело в том, что у каждой *причины
+меняться* свой контроллер и свой сервис.
 
 ## Целевая форма
 
 ```mermaid
 classDiagram
   class EmployeeController
+  class SalaryController
+  class PassportController
   class SalaryService
   class PassportService
-  class EmployeeQueryService
   class EmployeeRepository
   class Employee
-  EmployeeController --> SalaryService
-  EmployeeController --> PassportService
-  EmployeeController --> EmployeeQueryService
+  EmployeeController --> EmployeeRepository
+  SalaryController --> SalaryService
+  PassportController --> PassportService
   SalaryService --> EmployeeRepository
   PassportService --> EmployeeRepository
-  EmployeeQueryService --> EmployeeRepository
   EmployeeRepository --> Employee
 ```
 
-- `Employee`, `EmployeeRepository` — **даны** и готовы; не меняй их.
-- `SalaryService` — добавляешь ты; держит поле `EmployeeRepository` и предоставляет
-  `changeSalary(id, amount)`.
-- `PassportService` — добавляешь ты; держит поле `EmployeeRepository` и
-  предоставляет `changePassport(id, number, date)`.
-- `EmployeeQueryService` — добавляешь ты; держит поле `EmployeeRepository` и
-  возвращает карточку для `getCard(id)`.
-- `EmployeeController` — пока пустая заглушка; дай ему поля под три сервиса и
-  делегируй.
+- `Employee`, `EmployeeRepository`, `EmployeeController` — **даны** и готовы; не
+  меняй их. `EmployeeController` — это общий ресурс (создание + чтение), он здесь
+  как образец формы, которую ты повторишь.
+- `SalaryController` — добавляешь ты; держит поле `SalaryService` и делегирует
+  `changeSalary`.
+- `SalaryService` — добавляешь ты; держит поле `EmployeeRepository` и выполняет
+  изменение зарплаты.
+- `PassportController` / `PassportService` — такой же стек для паспортной зоны.
 
-Миссии зачтены, когда диаграмма показывает, что каждый сервис композирует
-репозиторий, а контроллер композирует **оба** сервиса записи.
+Миссии зачтены, когда диаграмма показывает два отдельных стека
+контроллер→сервис→репозиторий, по одному на отдел.
 
 ## Как это собрать
 
-В сервисе «держит `EmployeeRepository`» означает поле этого типа — именно его
-анализатор читает как ребро-ассоциацию:
+Каждый слой «держит» следующий полем — именно это анализатор читает как
+ребро-ассоциацию. Работу выполняет сервис:
 
 ```java
 public class SalaryService {
@@ -78,37 +79,45 @@ public class SalaryService {
 }
 ```
 
-`PassportService` и `EmployeeQueryService` строятся так же. Затем контроллер держит
-все три:
+…а контроллер остаётся тонким и лишь делегирует своему сервису:
 
 ```java
-public class EmployeeController {
+public class SalaryController {
     private final SalaryService salaryService;
-    private final PassportService passportService;
-    private final EmployeeQueryService queryService;
-    // конструктор + делегирующие методы
+
+    public SalaryController(SalaryService salaryService) {
+        this.salaryService = salaryService;
+    }
+
+    // PATCH /employees/{id}/salary
+    public void changeSalary(Long id, long newSalary) {
+        salaryService.changeSalary(id, newSalary);
+    }
 }
 ```
 
+`PassportController` и `PassportService` строятся точно так же для паспортных полей.
+
 ## Ответ за 60 секунд
 
-> Четыре операции делятся на две зоны записи и одну зону чтения. Поскольку зарплата
-> и паспорт принадлежат разным отделам, каждую запись я кладу в свой сервис —
-> `SalaryService` и `PassportService` — чтобы у каждого была единственная
-> ответственность, своя валидация и свой аудит, и ни один не знал о данных другого.
-> Отдельный `EmployeeQueryService` возвращает карточку ответа. Контроллер тонкий: он
-> лишь держит три сервиса и направляет каждый эндпоинт нужному. Все три идут через
-> один `EmployeeRepository`; если отделам позже понадобится изолированное хранилище,
-> я смогу разделить и его.
+> Четыре операции делятся на две зоны отделов плюс общую. Поскольку зарплата и
+> паспорт принадлежат разным отделам, я разделяю оба слоя: `SalaryController` над
+> `SalaryService` и `PassportController` над `PassportService`, чтобы у каждого
+> отдела был свой независимо защищаемый эндпоинт *и* своя логика с единственной
+> ответственностью, своей валидацией и аудитом. Общий `EmployeeController` отвечает
+> за создание и чтение. Каждый контроллер тонкий и лишь делегирует; логика изменений
+> живёт в сервисах; все они идут через один `EmployeeRepository`, который при
+> необходимости можно потом разделить по отделам.
 
 ## Типичные ловушки
 
-- ❌ **Один `EmployeeService` с обоими методами.** Компилируется и работает, но
-  прячет ровно то разделение, которое проверяет задача — две несвязанные причины
-  меняться в одном классе.
-- ❌ **Логика в контроллере.** Контроллер должен делегировать, а не менять
-  сотрудников сам. Держи логику изменений в сервисах.
+- ❌ **Один `EmployeeController` с обоими эндпоинтами изменений.** Работает, но
+  смешивает поверхность API двух отделов и два правила безопасности в одном классе —
+  ровно то разделение, которое проверяет задача.
+- ❌ **Разделить контроллеры, но делить один `EmployeeService`.** Граница утекает
+  обратно на слое сервисов; разделяй оба слоя, чтобы каждая зона была изолирована
+  насквозь.
+- ❌ **Логика в контроллере.** Контроллеры должны делегировать, а не менять
+  сотрудников. Держи логику изменений в сервисах.
 - ❌ **Сервис, который трогает и зарплату, и паспорт.** Это снова склеивает зоны,
   которые просили разделить.
-- ❌ **Нет стороны чтения.** Возврат сущности прямо из сервиса записи связывает
-  чтение с записью; маленький query-сервис держит маппинг карточки в одном месте.

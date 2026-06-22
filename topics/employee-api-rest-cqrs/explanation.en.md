@@ -59,28 +59,51 @@ own service:
 ```mermaid
 classDiagram
   class EmployeeController
+  class SalaryController
+  class PassportController
   class SalaryService
   class PassportService
-  class EmployeeQueryService
   class EmployeeRepository
-  EmployeeController --> SalaryService
-  EmployeeController --> PassportService
-  EmployeeController --> EmployeeQueryService
+  EmployeeController --> EmployeeRepository
+  SalaryController --> SalaryService
+  PassportController --> PassportService
   SalaryService --> EmployeeRepository
   PassportService --> EmployeeRepository
-  EmployeeQueryService --> EmployeeRepository
 ```
 
 - `SalaryService.changeSalary(id, amount)` — owned by payroll. It can carry payroll
   rules (caps, approval, audit) without knowing anything about passports.
 - `PassportService.changePassport(id, number, date)` — owned by HR/compliance. It can
   validate passport format and effective dates.
-- `EmployeeQueryService.getCard(id)` — the read side; it returns the DTO.
+- `EmployeeController` — the general employee resource: create and read the card.
 
 Each service has its **own reason to change** (that is the SRP test). In a larger
 system these could even be separate bounded contexts, separate tables, or separate
 deployables — but even in one module, keeping the two commands apart is the win the
 note is asking for.
+
+## Split the controllers too, not just the services
+
+The "different departments" hint reaches the **API layer**, not only the services.
+Because payroll and HR are different *callers* with different permissions, it is
+usually stronger to give each department its **own controller** — `SalaryController`
+(role `PAYROLL`) and `PassportController` (role `HR`) — each delegating to its own
+service, with `EmployeeController` left for the general create/read of the resource.
+
+Two layouts are both legitimate REST; know the trade-off:
+
+- **One `EmployeeController` with sub-resources** (`PATCH /employees/{id}/salary`,
+  `…/passport`). Pros: everything about the `employees` resource lives in one
+  cohesive place. Cons: one class mixes two departments' concerns and two security
+  rules; it grows as more per-department actions appear.
+- **Separate controllers per department.** Pros: the department boundary is explicit
+  in the code, each controller is independently securable, documentable, and even
+  separately deployable later; each stays small and single-responsibility. Cons: a
+  few more classes, and you must keep the URL design consistent across them.
+
+Given that the task *explicitly* names different departments, splitting the
+controllers is the answer that shows you heard the hint — the separation then runs
+all the way through: **controller → service**, per department.
 
 ## The response card is a DTO, not the entity
 
@@ -103,10 +126,11 @@ DTO**. Keep it distinct from the `Employee` entity:
 > passport are owned by different departments, so I'd expose `PATCH
 > /employees/{id}/salary` and `PATCH /employees/{id}/passport` as separate
 > sub-resources, each taking its own small request body and each independently
-> authorizable. Behind them I'd put separate `SalaryService` and `PassportService`
-> commands so each concern has a single responsibility and its own validation,
-> with a query service returning the DTO. The response card is a DTO mapped from
-> the entity, never the entity itself.
+> authorizable. I'd carry that split into the code: a `SalaryController` and a
+> `PassportController` per department, each delegating to its own `SalaryService`
+> or `PassportService` command, while a general `EmployeeController` handles create
+> and read. Each piece has a single responsibility and its own validation. The
+> response card is a DTO mapped from the entity, never the entity itself.
 
 ## Common traps
 

@@ -13,56 +13,55 @@
 The task asks for four operations — add, get by id, change salary, change passport
 — and notes that **salary and passport are changed by different departments**. Your
 job here is to make that department split visible in the *structure* of the code,
-not bury it inside one class.
+and to carry it through **every layer**, not bury it inside one class.
 
-So instead of a single `EmployeeService` with `changeSalary` and `changePassport`
-sitting side by side, you split the writes by who owns them:
+Because payroll and HR are different callers with different permissions, you split
+**both** the API surface and the logic:
 
-1. a **`SalaryService`** that owns `changeSalary` (payroll),
-2. a **`PassportService`** that owns `changePassport` (HR),
-3. an **`EmployeeQueryService`** for the read side (`getCard`),
-4. an **`EmployeeController`** that holds all three and delegates to the right one.
+1. a **`SalaryController` → `SalaryService`** stack (payroll owns `changeSalary`),
+2. a **`PassportController` → `PassportService`** stack (HR owns `changePassport`),
+3. a general **`EmployeeController`** for create and read (given to you, complete).
 
-All of them talk to the same `EmployeeRepository`. The point isn't the repository —
-it's that each *reason to change* lives in its own class.
+Each controller delegates to its own service, and each service talks to the shared
+`EmployeeRepository`. The point isn't the repository — it's that each *reason to
+change* has its own controller and its own service.
 
 ## The target shape
 
 ```mermaid
 classDiagram
   class EmployeeController
+  class SalaryController
+  class PassportController
   class SalaryService
   class PassportService
-  class EmployeeQueryService
   class EmployeeRepository
   class Employee
-  EmployeeController --> SalaryService
-  EmployeeController --> PassportService
-  EmployeeController --> EmployeeQueryService
+  EmployeeController --> EmployeeRepository
+  SalaryController --> SalaryService
+  PassportController --> PassportService
   SalaryService --> EmployeeRepository
   PassportService --> EmployeeRepository
-  EmployeeQueryService --> EmployeeRepository
   EmployeeRepository --> Employee
 ```
 
-- `Employee`, `EmployeeRepository` — **given** to you and complete; don't change
-  them.
-- `SalaryService` — you add it; it holds an `EmployeeRepository` field and exposes
-  `changeSalary(id, amount)`.
-- `PassportService` — you add it; it holds an `EmployeeRepository` field and exposes
-  `changePassport(id, number, date)`.
-- `EmployeeQueryService` — you add it; it holds an `EmployeeRepository` field and
-  returns the card for `getCard(id)`.
-- `EmployeeController` — currently an empty stub; give it fields for the three
-  services and delegate.
+- `Employee`, `EmployeeRepository`, `EmployeeController` — **given** and complete;
+  don't change them. `EmployeeController` is the general resource (create + read)
+  and is there as a reference for the shape you'll repeat.
+- `SalaryController` — you add it; it holds a `SalaryService` field and delegates
+  `changeSalary`.
+- `SalaryService` — you add it; it holds an `EmployeeRepository` field and does the
+  salary update.
+- `PassportController` / `PassportService` — the same stack for the passport
+  concern.
 
-The missions pass when the diagram shows each service composing the repository and
-the controller composing **both** write services.
+The missions pass when the diagram shows two separate controller→service→repository
+stacks, one per department.
 
 ## How to build it
 
-In a service, "holds an `EmployeeRepository`" means a field of that type — that is
-what the analyzer reads as an association edge:
+Each layer "holds" the next as a field — that is what the analyzer reads as an
+association edge. The service does the work:
 
 ```java
 public class SalaryService {
@@ -80,37 +79,45 @@ public class SalaryService {
 }
 ```
 
-`PassportService` and `EmployeeQueryService` follow the same shape. Then the
-controller holds all three:
+…and the controller stays thin, just delegating to its service:
 
 ```java
-public class EmployeeController {
+public class SalaryController {
     private final SalaryService salaryService;
-    private final PassportService passportService;
-    private final EmployeeQueryService queryService;
-    // constructor + delegating methods
+
+    public SalaryController(SalaryService salaryService) {
+        this.salaryService = salaryService;
+    }
+
+    // PATCH /employees/{id}/salary
+    public void changeSalary(Long id, long newSalary) {
+        salaryService.changeSalary(id, newSalary);
+    }
 }
 ```
 
+`PassportController` and `PassportService` follow the identical shape for the
+passport fields.
+
 ## 60-second interview answer
 
-> The four operations split into two write concerns and one read concern. Because
-> salary and passport are owned by different departments, I put each write in its
-> own service — `SalaryService` and `PassportService` — so each has a single
-> responsibility, its own validation and its own audit, and neither knows about the
-> other's data. A separate `EmployeeQueryService` returns the response card. The
-> controller is thin: it just holds the three services and routes each endpoint to
-> the right one. All three go through one `EmployeeRepository`; if the departments
-> later needed isolated storage I could split that too.
+> The four operations split into two department concerns plus a general one. Because
+> salary and passport are owned by different departments, I split both layers: a
+> `SalaryController` over a `SalaryService`, and a `PassportController` over a
+> `PassportService`, so each department has its own independently securable endpoint
+> *and* its own single-responsibility logic with its own validation and audit. A
+> general `EmployeeController` handles create and read. Every controller is thin and
+> just delegates; the change logic lives in the services; all of them go through one
+> `EmployeeRepository`, which I could later split per department if needed.
 
 ## Common traps
 
-- ❌ **One `EmployeeService` with both methods.** It compiles and works, but it hides
-  the very separation the task is testing — two unrelated reasons to change in one
-  class.
-- ❌ **Putting logic in the controller.** The controller should delegate, not mutate
-  employees itself. Keep the change logic in the services.
+- ❌ **One `EmployeeController` with both update endpoints.** It works, but it merges
+  two departments' API surface and two security rules into one class — exactly the
+  separation the task is testing.
+- ❌ **Splitting controllers but sharing one `EmployeeService`.** The boundary leaks
+  back at the service layer; split both so each concern is isolated end to end.
+- ❌ **Putting logic in the controller.** Controllers should delegate, not mutate
+  employees. Keep the change logic in the services.
 - ❌ **A service that touches both salary and passport.** That re-merges the concerns
   you were asked to split.
-- ❌ **No read side.** Returning the entity straight from a write service couples
-  reads to writes; a small query service keeps the card mapping in one place.

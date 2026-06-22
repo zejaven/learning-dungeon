@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 
 Write-Host 'Building visual-runtime jar...' -ForegroundColor Cyan
-& "$root\gradlew.bat" :visual-runtime:jar --console=plain
+& "$root\gradlew.bat" -p "$root" :visual-runtime:jar --console=plain
 if ($LASTEXITCODE -ne 0) { throw 'visual-runtime jar build failed' }
 
 Write-Host 'Building frontend bundle (frontend\dist)...' -ForegroundColor Cyan
@@ -23,7 +23,7 @@ try {
 }
 
 Write-Host 'Building backend bootJar...' -ForegroundColor Cyan
-& "$root\gradlew.bat" :backend:bootJar --console=plain
+& "$root\gradlew.bat" -p "$root" :backend:bootJar --console=plain
 if ($LASTEXITCODE -ne 0) { throw 'backend bootJar build failed' }
 
 

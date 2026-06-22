@@ -8,6 +8,7 @@ import { tl, ui, useLang } from '@app/i18n';
 import { AddQuestionDialog } from '@app/shell/AddQuestionDialog';
 import { AddTopicDialog } from '@app/shell/AddTopicDialog';
 import { AiProviderSelector } from '@app/shell/AiProviderSelector';
+import { AssistantDialog } from '@app/shell/AssistantDialog';
 import { BossFightDialog } from '@app/shell/BossFightDialog';
 import { CategoryTree } from '@app/shell/CategoryTree';
 import { Celebration } from '@app/shell/Celebration';
@@ -43,6 +44,7 @@ export function HomeScreen() {
   const [showAdd, setShowAdd] = useState(false);
   const [showAddQuestion, setShowAddQuestion] = useState(false);
   const [showBossFight, setShowBossFight] = useState(false);
+  const [showAssistant, setShowAssistant] = useState(false);
 
   const manualQuestions = useStore((s) => s.manualQuestions);
   const found = route.id ? findCatalogEntry(buildCatalog(topics, manualQuestions), route.id) : null;
@@ -107,8 +109,13 @@ export function HomeScreen() {
 
         {/* Right: theory or generate action */}
         <section className="panel home-theory-panel">
-          <div className="panel-title">
-            {theoryReady ? tl(topic!.category, lang) : ui('theory', lang)}
+          <div className="panel-title tree-panel-title">
+            <span>{theoryReady ? tl(topic!.category, lang) : ui('theory', lang)}</span>
+            {theoryReady && (
+              <button className="theory-ask-btn" onClick={() => setShowAssistant(true)}>
+                {ui('askAI', lang)}
+              </button>
+            )}
           </div>
           <div className="panel-body">
             {!entry && <p className="home-hint">{ui('selectQuestion', lang)}</p>}
@@ -189,6 +196,7 @@ export function HomeScreen() {
       {showAdd && <AddTopicDialog onClose={() => setShowAdd(false)} />}
       {showAddQuestion && <AddQuestionDialog onClose={() => setShowAddQuestion(false)} />}
       {showBossFight && <BossFightDialog onClose={() => setShowBossFight(false)} />}
+      {showAssistant && <AssistantDialog onClose={() => setShowAssistant(false)} />}
       <Celebration />
     </div>
   );

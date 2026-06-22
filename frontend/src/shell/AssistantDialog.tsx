@@ -8,7 +8,8 @@ import { Markdown } from './Markdown';
 
 export function AssistantDialog({ onClose }: { onClose: () => void }) {
   const topic = useStore((s) => s.topic);
-  const code = useStore((s) => s.code);
+  // Theory topics have no editor; don't leak code from a previously opened practice topic.
+  const code = useStore((s) => (s.topic?.mode === 'theory' ? '' : s.code));
   const provider = useAi((s) => s.selectedProvider);
   const lang = useLang((s) => s.lang);
   const [question, setQuestion] = useState('');

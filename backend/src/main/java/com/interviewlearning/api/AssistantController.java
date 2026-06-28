@@ -95,14 +95,25 @@ public class AssistantController {
 
         StringBuilder sb = new StringBuilder();
         sb.append("You are a strict but fair Java technical interviewer grading a ")
-                .append("candidate's answer to ONE interview question. Use the topic ")
-                .append("reference material below as the ground truth.\n\n");
-        sb.append("Grade the answer from 0 to 10, where 0 = empty or wrong, ")
-                .append("6 = acceptable pass, 10 = excellent, complete and precise.\n");
+                .append("candidate's answer to ONE specific interview question. Judge ONLY ")
+                .append("how well the answer addresses THAT question as asked. The topic ")
+                .append("reference material below is provided so you can verify factual ")
+                .append("correctness — it is NOT a checklist the candidate must cover. Do ")
+                .append("NOT lower the score for omitting facts that belong to the broader ")
+                .append("topic but fall outside the scope of THIS question.\n\n");
+        sb.append("Grade the answer from 0 to 10 based on the question asked: 0 = empty or ")
+                .append("wrong, 6 = correct core, 10 = correct, precise and complete FOR ")
+                .append("THIS QUESTION — a concise answer that fully and accurately addresses ")
+                .append("the question earns a 10 even if it never mentions adjacent topics.\n");
+        sb.append("Derive the score from in-scope content only. You MAY add an optional ")
+                .append("extras section with related points for the candidate's broader ")
+                .append("learning, but it MUST NOT affect the score and must be clearly ")
+                .append("marked as optional, not as a gap.\n");
         sb.append("Your VERY FIRST line must be exactly `SCORE: <n>/10` where <n> is a ")
                 .append("single integer from 0 to 10. Then a blank line, then a short, ")
-                .append("specific explanation: what was correct, what was missing or wrong, ")
-                .append("and the key point a strong answer needs. Do not create or edit files.\n");
+                .append("specific explanation: what was correct, what was wrong or missing ")
+                .append("WITHIN THE SCOPE of the question, and — only if relevant — an ")
+                .append("optional extras note. Do not create or edit files.\n");
         sb.append(ru
                 ? "Write the explanation in Russian, but keep code, identifiers and "
                         + "technical terms like Java, HashMap, hashCode in their original form. "

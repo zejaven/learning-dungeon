@@ -43,4 +43,20 @@ public final class ProgressDtos {
     /** Returned after saving an answer: whether the whole topic is now complete. */
     public record BossAnswerResponse(boolean topicCompleted) {
     }
+
+    /** One saved Ask-AI question and its answer for a topic. */
+    public record AssistantQa(
+            long id,
+            String question,
+            String answer,
+            String createdAt
+    ) {
+    }
+
+    /** Payload to persist a freshly asked Ask-AI question and its answer. */
+    public record AssistantQaRequest(
+            String question,
+            String answer
+    ) {
+    }
 }

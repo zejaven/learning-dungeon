@@ -1,16 +1,21 @@
 package com.interviewlearning.progress;
 
+import com.interviewlearning.progress.ProgressDtos.AssistantQa;
+import com.interviewlearning.progress.ProgressDtos.AssistantQaRequest;
 import com.interviewlearning.progress.ProgressDtos.BossAnswerRequest;
 import com.interviewlearning.progress.ProgressDtos.BossAnswerResponse;
 import com.interviewlearning.progress.ProgressDtos.MissionsRequest;
 import com.interviewlearning.progress.ProgressDtos.TopicProgress;
 import com.interviewlearning.topics.TopicRepository;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 /** Reads and writes learner progress (missions, boss-fight answers, completion). */
 @RestController
@@ -47,5 +52,21 @@ public class ProgressController {
         int total = topics.getTopic(topicId).map(t -> t.bossFight().size()).orElse(0);
         boolean completed = progress.recomputeCompletion(topicId, total);
         return new BossAnswerResponse(completed);
+    }
+
+    @GetMapping("/{topicId}/assistant")
+    public List<AssistantQa> assistantHistory(@PathVariable String topicId) {
+        return progress.assistantHistory(topicId);
+    }
+
+    @PostMapping("/{topicId}/assistant")
+    public AssistantQa saveAssistant(@PathVariable String topicId,
+                                     @RequestBody AssistantQaRequest req) {
+        return progress.saveAssistantQa(topicId, req);
+    }
+
+    @DeleteMapping("/{topicId}/assistant/{id}")
+    public void deleteAssistant(@PathVariable String topicId, @PathVariable long id) {
+        progress.deleteAssistantQa(topicId, id);
     }
 }

@@ -88,6 +88,24 @@ public class DbInitializer {
                 )
                 """);
 
+        // Free-form Ask-AI questions, kept as an append-only per-topic log so the
+        // learner can revisit past questions and their answers. Unlike boss-fight
+        // answers there is no fixed question set and no versioning — each ask is a
+        // distinct entry; deletion removes the row outright.
+        jdbc.execute("""
+                CREATE TABLE IF NOT EXISTS assistant_question (
+                    id         BIGSERIAL   PRIMARY KEY,
+                    topic_id   TEXT        NOT NULL,
+                    question   TEXT        NOT NULL,
+                    answer     TEXT        NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                )
+                """);
+        jdbc.execute("""
+                CREATE INDEX IF NOT EXISTS ix_assistant_question
+                    ON assistant_question (topic_id, created_at, id)
+                """);
+
         // User-saved generation styles (custom analogy themes for explanations).
         jdbc.execute("""
                 CREATE TABLE IF NOT EXISTS styles (

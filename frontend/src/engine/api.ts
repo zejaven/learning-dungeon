@@ -162,6 +162,42 @@ export async function saveBossAnswer(
   return res.json();
 }
 
+/** One saved Ask-AI question and its answer (mirrors the backend AssistantQa). */
+export interface AssistantQa {
+  id: number;
+  question: string;
+  answer: string;
+  createdAt: string;
+}
+
+/** A topic's Ask-AI history, oldest first. Best-effort: returns [] on failure. */
+export async function fetchAssistantHistory(topicId: string): Promise<AssistantQa[]> {
+  try {
+    const res = await fetch(`/api/progress/${encodeURIComponent(topicId)}/assistant`);
+    return res.ok ? res.json() : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Appends one asked question + answer; returns it with its generated id. */
+export async function saveAssistantQa(
+  topicId: string,
+  payload: { question: string; answer: string },
+): Promise<AssistantQa> {
+  const res = await fetch(`/api/progress/${encodeURIComponent(topicId)}/assistant`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Failed to save question (${res.status})`);
+  return res.json();
+}
+
+export async function deleteAssistantQa(topicId: string, id: number): Promise<void> {
+  await fetch(`/api/progress/${encodeURIComponent(topicId)}/assistant/${id}`, { method: 'DELETE' });
+}
+
 export interface SseHandlers {
   onAi?: (raw: string) => void;
   onStatus?: (status: string, message: string) => void;

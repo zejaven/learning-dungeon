@@ -1,11 +1,14 @@
 package com.interviewlearning.progress;
 
+import com.interviewlearning.progress.ProgressDtos.AssistantQa;
+import com.interviewlearning.progress.ProgressDtos.AssistantQaRequest;
 import com.interviewlearning.progress.ProgressDtos.BossAnswer;
 import com.interviewlearning.progress.ProgressDtos.BossAnswerRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -90,6 +93,38 @@ public class ProgressRepository {
                 WHERE topic_id = ? AND deleted_at IS NULL AND passed = TRUE
                 """, Integer.class, topicId);
         return n == null ? 0 : n;
+    }
+
+    // --- Ask AI history ---------------------------------------------------
+
+    /** A topic's Ask-AI questions, oldest first. */
+    public List<AssistantQa> assistantHistory(String topicId) {
+        List<AssistantQa> out = new ArrayList<>();
+        jdbc.query("""
+                SELECT id, question, answer, created_at
+                FROM assistant_question
+                WHERE topic_id = ?
+                ORDER BY created_at, id
+                """, rs -> {
+            out.add(new AssistantQa(rs.getLong("id"), rs.getString("question"),
+                    rs.getString("answer"), rs.getTimestamp("created_at").toInstant().toString()));
+        }, topicId);
+        return out;
+    }
+
+    /** Appends one asked question + answer and returns it with its generated id. */
+    public AssistantQa saveAssistantQa(String topicId, AssistantQaRequest req) {
+        return jdbc.queryForObject("""
+                INSERT INTO assistant_question (topic_id, question, answer)
+                VALUES (?, ?, ?)
+                RETURNING id, question, answer, created_at
+                """, (rs, n) -> new AssistantQa(rs.getLong("id"), rs.getString("question"),
+                rs.getString("answer"), rs.getTimestamp("created_at").toInstant().toString()),
+                topicId, req.question(), req.answer());
+    }
+
+    public void deleteAssistantQa(String topicId, long id) {
+        jdbc.update("DELETE FROM assistant_question WHERE topic_id = ? AND id = ?", topicId, id);
     }
 
     // --- Topic completion -------------------------------------------------

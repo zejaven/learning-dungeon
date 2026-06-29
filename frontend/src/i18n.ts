@@ -69,6 +69,10 @@ const UI: Record<string, Localized> = {
   },
   ask: { en: 'Ask (Ctrl+Enter)', ru: 'Спросить (Ctrl+Enter)' },
   thinking: { en: 'Thinking…', ru: 'Думаю…' },
+  askNew: { en: '＋ New question', ru: '＋ Новый вопрос' },
+  newQuestion: { en: 'New question', ru: 'Новый вопрос' },
+  deleteQa: { en: '🗑 Delete', ru: '🗑 Удалить' },
+  noAskHistory: { en: 'No questions yet — ask one above.', ru: 'Пока нет вопросов — задайте выше.' },
   addTopicTitle: { en: 'Add a new topic', ru: 'Добавить новую тему' },
   addTopicDesc: {
     en: 'Paste an interview question. The selected AI will generate a full bilingual topic plugin (explanation, examples, visualizer, missions) under topics/.',

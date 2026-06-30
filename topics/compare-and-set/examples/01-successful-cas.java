@@ -1,0 +1,10 @@
+import visual.VisualCompareAndSet;
+
+public class Playground {
+    public static void main(String[] args) {
+        VisualCompareAndSet counter = new VisualCompareAndSet("counter", 0);
+
+        int expected = counter.read("T1");
+        counter.compareAndSet("T1", expected, expected + 1);
+    }
+}

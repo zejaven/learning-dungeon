@@ -75,6 +75,49 @@ class VisualExceptionTest {
     }
 
     @Test
+    void cacheReleaseCanReduceMemoryPressure() {
+        String out = captureTrace(() -> {
+            VisualException vm = new VisualException();
+            vm.heapBudget(32);
+            vm.allocateMemory("baseline objects", 20);
+            vm.allocateMemory("image cache", 8, "cache");
+            vm.releaseCaches();
+            vm.allocateMemory("next request", 8);
+        });
+        assertTrue(out.contains("MEMORY_PRESSURE"), "expected memory pressure, got:\n" + out);
+        assertTrue(out.contains("CACHE_RELEASED"), "expected cache release, got:\n" + out);
+        assertFalse(out.contains("OUT_OF_MEMORY"), "cache release should avoid OOM, got:\n" + out);
+    }
+
+    @Test
+    void outOfMemoryErrorPropagatesOutsideCatchException() {
+        String out = captureTrace(() -> {
+            VisualException vm = new VisualException();
+            vm.heapBudget(16);
+            vm.call("main", "Exception", false);
+            vm.call("loadReport");
+            vm.allocateMemory("large result", 32);
+        });
+        assertTrue(out.contains("OUT_OF_MEMORY"), "expected OOM event, got:\n" + out);
+        assertTrue(out.contains("UNCAUGHT"), "catch(Exception) should not catch Error, got:\n" + out);
+    }
+
+    @Test
+    void fatalErrorCanBeCaughtAtBoundaryThenFailedFast() {
+        String out = captureTrace(() -> {
+            VisualException vm = new VisualException();
+            vm.heapBudget(16);
+            vm.call("main", "Throwable", true);
+            vm.call("worker");
+            vm.allocateMemory("batch", 32);
+            vm.failFast("write diagnostics and restart");
+        });
+        assertTrue(out.contains("OUT_OF_MEMORY"), "expected OOM event, got:\n" + out);
+        assertTrue(out.contains("CATCH"), "catch(Throwable) should catch the Error at the boundary, got:\n" + out);
+        assertTrue(out.contains("FAIL_FAST"), "expected fail-fast event, got:\n" + out);
+    }
+
+    @Test
     void everyTraceLineIsPrefixed() {
         String out = captureTrace(() -> {
             VisualException vm = new VisualException();

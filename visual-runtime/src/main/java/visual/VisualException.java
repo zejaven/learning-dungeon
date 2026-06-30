@@ -59,6 +59,10 @@ public class VisualException {
 
     private final List<Frame> stack = new ArrayList<>();
     private Thrown exception;
+    private Integer heapLimitMb;
+    private int usedMb;
+    private String memoryPhase = "normal";
+    private final List<Allocation> allocations = new ArrayList<>();
 
     public VisualException() {
         Trace.event("EXCEPTION_SCENE",
@@ -155,6 +159,112 @@ public class VisualException {
     }
 
     /**
+     * Starts a deterministic heap-budget scene. This does not allocate real
+     * memory; it models the decision points around {@code OutOfMemoryError}.
+     */
+    public void heapBudget(int limitMb) {
+        if (limitMb <= 0) {
+            throw new IllegalArgumentException("limitMb must be positive");
+        }
+        heapLimitMb = limitMb;
+        usedMb = 0;
+        allocations.clear();
+        memoryPhase = "normal";
+        exception = null;
+        Trace.event("MEMORY_BASELINE",
+                "Heap budget set to " + limitMb + " MB. The scene tracks retained allocations deterministically.",
+                "Бюджет heap установлен в " + limitMb + " MB. Сцена детерминированно отслеживает удержанные выделения.",
+                List.of("memory"), state());
+    }
+
+    /** Allocates essential memory in the teaching heap budget. */
+    public boolean allocateMemory(String name, int megabytes) {
+        return allocateMemory(name, megabytes, "essential");
+    }
+
+    /**
+     * Allocates memory in the teaching heap budget. {@code kind} may be
+     * {@code essential} or {@code cache}; caches can later be released.
+     */
+    public boolean allocateMemory(String name, int megabytes, String kind) {
+        ensureHeapBudget();
+        if (megabytes <= 0) {
+            throw new IllegalArgumentException("megabytes must be positive");
+        }
+        String normalizedKind = normalizeKind(kind);
+        int freeBefore = freeMb();
+        if (usedMb + megabytes > heapLimitMb) {
+            memoryPhase = "exhausted";
+            exception = new Thrown("OutOfMemoryError", "Java heap space", "ERROR", "in-flight");
+            Trace.event("OUT_OF_MEMORY",
+                    "Allocation '" + name + "' needs " + megabytes + " MB, but only "
+                            + freeBefore + " MB is free - the JVM throws OutOfMemoryError.",
+                    "Выделению '" + name + "' нужно " + megabytes + " MB, но свободно только "
+                            + freeBefore + " MB - JVM бросает OutOfMemoryError.",
+                    List.of("memory", "exception"), state());
+            throwException("OutOfMemoryError", "Java heap space");
+            return false;
+        }
+
+        allocations.add(new Allocation(name, megabytes, normalizedKind, true));
+        usedMb += megabytes;
+        memoryPhase = freeMb() <= pressureThreshold() ? "pressure" : "normal";
+        String event = "pressure".equals(memoryPhase) ? "MEMORY_PRESSURE" : "MEMORY_ALLOCATE";
+        Trace.event(event,
+                "Allocated " + megabytes + " MB for '" + name + "' (" + normalizedKind
+                        + "). Free heap: " + freeMb() + " MB.",
+                "Выделено " + megabytes + " MB для '" + name + "' (" + normalizedKind
+                        + "). Свободно в heap: " + freeMb() + " MB.",
+                List.of("memory", "allocation:" + name), state());
+        return true;
+    }
+
+    /** Releases retained cache allocations, modelling an emergency pressure valve. */
+    public void releaseCaches() {
+        ensureHeapBudget();
+        int released = 0;
+        for (Allocation allocation : allocations) {
+            if (allocation.retained && "cache".equals(allocation.kind)) {
+                allocation.retained = false;
+                released += allocation.megabytes;
+            }
+        }
+        usedMb -= released;
+        if (usedMb < 0) {
+            usedMb = 0;
+        }
+        memoryPhase = freeMb() <= pressureThreshold() ? "pressure" : "recovering";
+        Trace.event("CACHE_RELEASED",
+                released > 0
+                        ? "Released " + released + " MB of optional cache memory before retrying work."
+                        : "No optional cache memory was retained, so nothing could be released.",
+                released > 0
+                        ? "Освобождено " + released + " MB необязательной cache-памяти перед повтором работы."
+                        : "Необязательная cache-память не удерживалась, освобождать нечего.",
+                List.of("memory"), state());
+    }
+
+    /**
+     * Records the production response after a fatal {@code Error}: keep the
+     * process simple, collect diagnostics, and let orchestration restart it.
+     */
+    public void failFast(String reason) {
+        String detail = (reason == null || reason.isBlank())
+                ? "record diagnostics and restart the process"
+                : reason;
+        memoryPhase = "failed";
+        if (exception != null) {
+            exception = exception.withStatus("uncaught");
+        }
+        Trace.event("FAIL_FAST",
+                "After a fatal Error, do not keep serving traffic in a half-broken process: "
+                        + detail + ".",
+                "После fatal Error не продолжай обслуживать трафик в полусломанном процессе: "
+                        + detail + ".",
+                List.of("memory", "exception"), state());
+    }
+
+    /**
      * Classifies a type without throwing it (a "tour" of the hierarchy): shows
      * where it sits — {@code Error}, checked {@code Exception}, or unchecked
      * {@code RuntimeException}.
@@ -215,6 +325,27 @@ public class VisualException {
         };
     }
 
+    private void ensureHeapBudget() {
+        if (heapLimitMb == null) {
+            heapBudget(64);
+        }
+    }
+
+    private int freeMb() {
+        return heapLimitMb == null ? 0 : Math.max(0, heapLimitMb - usedMb);
+    }
+
+    private int pressureThreshold() {
+        return heapLimitMb == null ? 0 : Math.max(1, heapLimitMb / 4);
+    }
+
+    private static String normalizeKind(String kind) {
+        if ("cache".equals(kind)) {
+            return "cache";
+        }
+        return "essential";
+    }
+
     // --- state ----------------------------------------------------------
 
     private List<String> topHighlight(String... extra) {
@@ -245,7 +376,30 @@ public class VisualException {
             e.put("status", exception.status);
             s.put("exception", e);
         }
+        if (heapLimitMb != null) {
+            s.put("memory", memoryState());
+        }
         return s;
+    }
+
+    private Object memoryState() {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("limitMb", heapLimitMb);
+        m.put("usedMb", usedMb);
+        m.put("freeMb", freeMb());
+        m.put("phase", memoryPhase);
+
+        List<Object> allocationList = new ArrayList<>();
+        for (Allocation allocation : allocations) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("name", allocation.name);
+            item.put("megabytes", allocation.megabytes);
+            item.put("kind", allocation.kind);
+            item.put("retained", allocation.retained);
+            allocationList.add(item);
+        }
+        m.put("allocations", allocationList);
+        return m;
     }
 
     private static final class Frame {
@@ -275,6 +429,20 @@ public class VisualException {
 
         Thrown withStatus(String s) {
             return new Thrown(type, message, category, s);
+        }
+    }
+
+    private static final class Allocation {
+        final String name;
+        final int megabytes;
+        final String kind;
+        boolean retained;
+
+        Allocation(String name, int megabytes, String kind, boolean retained) {
+            this.name = name;
+            this.megabytes = megabytes;
+            this.kind = kind;
+            this.retained = retained;
         }
     }
 }

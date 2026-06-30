@@ -40,7 +40,7 @@ sequenceDiagram
   participant T2 as Транзакция B
   T1->>DB: SELECT balance
   DB-->>T1: снимок для statement 1
-  T2->>DB: UPDATE balance; COMMIT
+  T2->>DB: UPDATE balance#59; COMMIT
   T1->>DB: SELECT balance снова
   DB-->>T1: новый снимок видит зафиксированное обновление
   Note over T1,DB: READ COMMITTED может вернуть разные результаты

@@ -7,6 +7,7 @@ import { useStore } from './engine/store';
 import { useStyle } from './engine/styleStore';
 import { useUsage } from './engine/usageStore';
 import { HomeScreen } from './screens/HomeScreen';
+import { ReviewScreen } from './screens/ReviewScreen';
 import { WorkspaceScreen } from './screens/WorkspaceScreen';
 
 export function App() {
@@ -58,5 +59,7 @@ export function App() {
     }
   }, [route, topics, manualQuestions]);
 
-  return route.view === 'workspace' ? <WorkspaceScreen /> : <HomeScreen />;
+  if (route.view === 'workspace') return <WorkspaceScreen />;
+  if (route.view === 'review') return <ReviewScreen />;
+  return <HomeScreen />;
 }

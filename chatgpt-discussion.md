@@ -1304,3 +1304,1143 @@ Fix the broken key class.
 [4]: https://cheerpj.com/?utm_source=chatgpt.com "CheerpJ: Run Java in Modern Browsers | No plugin. No local ..."
 
 ___
+___
+
+## Me:
+
+___
+
+В общем, я реализовал эту идею и уже опробовал изучение тем через такой подход. Могу сказать, что подход с Boss Fight работает норм. Уже после изучения темы, я пытаюсь ответить на вопросы, получаю оценку, иду дальше. Но само изучение темы мне дается тяжело. Я даже добавил генерацию с real-world примерами, но они нисколько не помогают. Изучение темы для меня происходит очень долго, потому что я начинаю читать предложение, отвлекаюсь, снова перечитываю, снова начинаю читать, и так всю тему.
+Как можно было бы изменить подход, чтобы нивелировать отвлечения ввиду моего СДВГ?
+
+У меня есть идея с задачами по изученным темам - генерировать тезисы из темы, затем создавать на основе них задачки, где нужно, например, 1) в правильном порядке из слов собрать утверждение; 2) вписать слово-ответ на вопрос; 3) выбрать вариант ответа итд. Всё это организовать в занятия, уровни, модули, но при этом в течение прохождения периодически повторять предыдущий материал для закрепления. В общем, по принципу Duolingo. В Duolingo мне очень хорошо удается держать фокус. НО! Это, по-моему, больше подходит для закрепления уже изученного материала, а не изучения самого материала.
+
+В общем, я тут тебе пояснил, что для меня держит фокус, а что нет. Подумай, что можно сделать с теорией и предложи идеи, даже если идея полностью меняет подход к приложению, который мы обсудили ранее.
+
+___
+___
+
+## ChatGPT:
+
+___
+
+Да, твоя идея с Duolingo-подходом правильная. Но я бы сделал важный сдвиг:
+
+> Не “сначала теория → потом упражнения”,
+> а **“теория появляется маленькими кусками внутри упражнения”**.
+
+То есть пользователь не читает тему. Он **проходит тему**.
+
+Длинное объяснение нужно оставить как справочник, но не как основной путь изучения.
+
+---
+
+# Почему real-world примеры могли не помочь
+
+Real-world пример часто добавляет ещё больше текста и контекста:
+
+```text
+В продакшене произошла такая-то ситуация...
+В сервисе X был cache...
+При высокой нагрузке...
+```
+
+Для понимания это может быть полезно, но для удержания фокуса — не всегда. Мозгу приходится одновременно держать:
+
+* Java-концепцию;
+* бизнес-контекст;
+* код;
+* причинно-следственную связь;
+* новую терминологию.
+
+То есть пример “реальнее”, но не обязательно “легче”.
+
+Для СДВГ, скорее всего, лучше работает не реалистичность, а:
+
+```text
+короткий стимул → действие → мгновенная обратная связь → следующий маленький шаг
+```
+
+Именно поэтому Duolingo цепляет.
+
+---
+
+# Главная идея: заменить “изучение темы” на “guided discovery”
+
+Вместо страницы:
+
+> `HashMap` хранит данные в массиве бакетов. При добавлении элемента вычисляется hash...
+
+Сделать так:
+
+```text
+Экран 1:
+Вот пустая HashMap.
+
+Вопрос:
+Куда попадёт ключ "Alice"?
+
+[В bucket 0] [В bucket 3] [Сначала вычисляется hash] [В конец массива]
+```
+
+Ты выбираешь.
+
+Приложение отвечает:
+
+```text
+Почти. Сначала вызывается hashCode(), потом из hash вычисляется индекс bucket.
+```
+
+Потом следующий экран:
+
+```text
+Теперь hash = 63350368, capacity = 16.
+
+Задача:
+Найди bucket index.
+```
+
+И визуализация показывает стрелку:
+
+```text
+key → hashCode → hash spreading → bucket index → bucket
+```
+
+То есть теория не читается заранее. Она появляется как ответ на твое действие.
+
+---
+
+# Новый основной режим: “Learn by micro-actions”
+
+Я бы сделал перед Boss Fight отдельный режим:
+
+## Concept Run
+
+Это не чтение, а серия микрошагов.
+
+Каждый шаг содержит:
+
+```text
+1. Один визуальный объект
+2. Одну короткую мысль
+3. Одно действие пользователя
+4. Мгновенный feedback
+```
+
+Правило:
+
+> На экране не должно быть больше 1–2 предложений теории одновременно.
+
+Например:
+
+```text
+HashMap stores entries in buckets.
+
+Task:
+Click the bucket where the new entry will be placed.
+```
+
+После ответа:
+
+```text
+Correct. The bucket is chosen by hash, not by insertion order.
+```
+
+И дальше.
+
+---
+
+# Как должен выглядеть урок по HashMap
+
+Не так:
+
+```text
+Прочитай объяснение HashMap.
+```
+
+А так:
+
+## Уровень 1: “Создай карту”
+
+Экран показывает:
+
+```java
+Map<String, Integer> map = new HashMap<>();
+```
+
+Визуализация: пустой массив buckets.
+
+Вопрос:
+
+```text
+Что сейчас внутри HashMap?
+```
+
+Варианты:
+
+```text
+A. Пустой массив buckets
+B. Один Node
+C. Один Entry с null
+D. Сразу дерево
+```
+
+После ответа приложение объясняет одним куском:
+
+```text
+HashMap готовит внутреннюю таблицу buckets. Элементы появятся после put().
+```
+
+---
+
+## Уровень 2: “Добавь первый элемент”
+
+Код:
+
+```java
+map.put("Alice", 10);
+```
+
+Задача:
+
+```text
+Перетащи entry в правильное место:
+"Alice" → 10
+```
+
+Пользователь drag-and-drop кидает entry в bucket.
+
+После этого приложение показывает:
+
+```text
+Сначала считается hash, потом bucket index.
+```
+
+---
+
+## Уровень 3: “Создай коллизию”
+
+Код:
+
+```java
+map.put("Aa", 1);
+map.put("BB", 2);
+```
+
+Задача:
+
+```text
+Оба ключа попали в один bucket. Что это значит?
+```
+
+Варианты:
+
+```text
+A. Второй ключ перезапишет первый
+B. В bucket будет цепочка из двух nodes
+C. HashMap сломается
+D. Оба значения будут потеряны
+```
+
+После ответа:
+
+```text
+Collision does not mean overwrite. If keys are not equal, HashMap stores both entries in the same bucket chain.
+```
+
+---
+
+## Уровень 4: “Сломай ключ”
+
+Код:
+
+```java
+User user = new User("Alex");
+map.put(user, "admin");
+
+user.setName("Bob");
+
+map.get(user);
+```
+
+Задача:
+
+```text
+Что вернёт map.get(user)?
+```
+
+После ответа:
+
+```text
+Если hashCode зависит от name, после изменения name ключ ищется уже в другом bucket.
+```
+
+---
+
+## Уровень 5: “Собери интервью-ответ”
+
+Теперь приложение просит:
+
+```text
+Собери ответ из блоков в правильном порядке.
+```
+
+Блоки:
+
+```text
+1. HashMap stores entries in buckets.
+2. It calculates hash from the key.
+3. The hash is converted into bucket index.
+4. If several keys land in one bucket, collision happens.
+5. Collisions are handled by chain/tree structure.
+6. equals() is used to distinguish keys inside the same bucket.
+```
+
+Вот это уже похоже на твой Duolingo-подход, но он используется не только для закрепления, а для построения понимания.
+
+---
+
+# Важное изменение: теория должна быть атомизирована
+
+Я бы перестал генерировать “объяснение темы” как текст. Вместо этого ИИ должен генерировать **knowledge atoms**.
+
+Например, для `HashMap`:
+
+```text
+Atom 1: HashMap stores entries in buckets.
+Atom 2: A key is transformed into hash.
+Atom 3: Hash determines bucket index.
+Atom 4: Different keys can land in the same bucket.
+Atom 5: Collision does not mean overwrite.
+Atom 6: equals() decides whether keys are actually the same.
+Atom 7: Mutable keys can break lookup.
+Atom 8: Resize happens when size exceeds threshold.
+Atom 9: HashMap is not thread-safe.
+```
+
+И каждый atom превращается в мини-интеракцию.
+
+Не так:
+
+```text
+explanation.md
+```
+
+А так:
+
+```text
+learning-atoms.json
+```
+
+Пример структуры:
+
+```json
+{
+  "id": "hashmap-collision",
+  "concept": "Collision",
+  "microExplanation": "A collision happens when different keys land in the same bucket.",
+  "visualState": "two nodes in one bucket",
+  "interaction": {
+    "type": "multiple_choice",
+    "question": "Does collision mean the old value is overwritten?",
+    "options": ["Yes", "No", "Only if keys are equal"],
+    "correct": "Only if keys are equal"
+  },
+  "misconception": "Collision automatically overwrites the old value",
+  "feedback": "Overwrite happens only when equals() says the keys are the same."
+}
+```
+
+Тогда приложение сможет строить уроки автоматически.
+
+---
+
+# Я бы сделал 3 режима вместо 2
+
+Сейчас у тебя, условно:
+
+```text
+Theory → Boss Fight
+```
+
+Я бы сделал:
+
+```text
+Discovery Run → Practice Loop → Boss Fight
+```
+
+## 1. Discovery Run
+
+Первое знакомство с темой.
+
+Минимум текста. Много предсказаний, кликов, drag-and-drop, “что произойдет дальше?”.
+
+Цель: не запомнить всё, а построить первичную mental model.
+
+## 2. Practice Loop
+
+Duolingo-подобные упражнения.
+
+Здесь уже можно использовать:
+
+* собрать утверждение из слов;
+* выбрать вариант;
+* вписать термин;
+* найти ошибку в коде;
+* отсортировать шаги;
+* сопоставить понятия;
+* дополнить схему;
+* выбрать правильное объяснение.
+
+Цель: закрепить атомы знания.
+
+## 3. Boss Fight
+
+Собеседование.
+
+Тут уже свободный ответ, оценка, уточняющие вопросы, давление, follow-up.
+
+Цель: научиться говорить как на интервью.
+
+---
+
+# Самая важная механика для теории: “Prediction first”
+
+Почти каждый новый кусок теории должен начинаться не с объяснения, а с предсказания.
+
+Плохо:
+
+```text
+HashMap uses hashCode to calculate bucket index.
+```
+
+Лучше:
+
+```text
+map.put("Alice", 10)
+
+Что HashMap должен сделать первым?
+
+A. Сравнить Alice через equals()
+B. Вызвать hashCode()
+C. Добавить Alice в последний bucket
+D. Отсортировать ключи
+```
+
+Потом объяснение:
+
+```text
+Сначала HashMap вызывает hashCode(), потому что нужно понять, в какой bucket идти.
+```
+
+Так мозг сначала делает действие, а потом получает объяснение. Это лучше держит внимание.
+
+---
+
+# Типы заданий, которые подойдут не только для закрепления, но и для изучения
+
+## 1. Predict next step
+
+```text
+Что произойдет после map.put("Aa", 1)?
+```
+
+Пользователь выбирает следующий шаг.
+
+## 2. Click on diagram
+
+```text
+Кликни на bucket, куда попадёт этот key.
+```
+
+## 3. Drag concept to place
+
+```text
+Перетащи:
+hashCode()
+bucket index
+equals()
+value overwrite
+
+на правильные места в процессе HashMap.put().
+```
+
+## 4. Sort algorithm steps
+
+```text
+Расставь шаги HashMap.get() в правильном порядке.
+```
+
+Например:
+
+```text
+1. Calculate hash
+2. Find bucket index
+3. Check first node
+4. Compare key using equals
+5. Return value or null
+```
+
+## 5. Fill one missing word
+
+```text
+HashMap uses ______ to choose a bucket.
+```
+
+Ответ: `hash`.
+
+## 6. Fix broken code
+
+```java
+class User {
+    String name;
+
+    @Override
+    public boolean equals(Object o) {
+        return o instanceof User u && name.equals(u.name);
+    }
+}
+```
+
+Задача:
+
+```text
+Что здесь забыли?
+```
+
+Ответ: `hashCode()`.
+
+## 7. Minimal edit challenge
+
+```text
+Измени код минимально так, чтобы map.get(user) снова работал.
+```
+
+## 8. Misconception duel
+
+Приложение показывает утверждение:
+
+```text
+If two keys have the same hashCode, one value overwrites another.
+```
+
+Пользователь жмет:
+
+```text
+True / False / Depends
+```
+
+Потом короткое объяснение.
+
+---
+
+# Главное: убрать “экран с теорией” как обязательный этап
+
+Я бы сделал так, чтобы теория была доступна, но не была дорогой по вниманию.
+
+Например:
+
+```text
+[Explain in 1 sentence]
+[Show visually]
+[Give example]
+[Ask me]
+```
+
+Пользователь не читает длинный блок. Он нажимает, когда нужно.
+
+---
+
+# Хороший формат объяснения: карточки по 15 секунд
+
+Каждая карточка:
+
+```text
+Title: Bucket
+
+Text:
+A bucket is a cell inside HashMap's internal array.
+
+Action:
+Click where the first entry will be stored.
+```
+
+Следующая карточка открывается только после действия.
+
+Это важно: **нельзя просто скроллить текст**. Скролл — враг фокуса. Лучше step-by-step flow.
+
+---
+
+# Ещё одна сильная идея: “Explain after error”
+
+Вместо того чтобы объяснять всё заранее, приложение может намеренно дать задачу чуть раньше объяснения.
+
+Например:
+
+```text
+Question:
+Why did map.get(user) return null?
+```
+
+Пользователь ошибается.
+
+Только после ошибки приложение показывает:
+
+```text
+Because the key was mutated after insertion. Its hash changed, so HashMap looks in another bucket.
+```
+
+Так объяснение становится ответом на реальное любопытство/ошибку, а не абстрактным текстом.
+
+---
+
+# Для СДВГ я бы добавил “anti-reread mode”
+
+Проблема, которую ты описал:
+
+> начал читать → отвлекся → перечитал → снова отвлекся
+
+Значит, нужно убрать саму возможность читать длинный блок.
+
+Anti-reread mode:
+
+```text
+1. Показывается одно предложение.
+2. Через действие оно превращается в вопрос.
+3. Чтобы идти дальше, нужно ответить.
+4. Старый текст сворачивается в короткую карточку.
+```
+
+Например:
+
+Сначала:
+
+```text
+HashMap uses hashCode to choose a bucket.
+```
+
+Потом текст сворачивается:
+
+```text
+Key idea: hashCode → bucket
+```
+
+И сразу вопрос:
+
+```text
+What chooses the bucket?
+```
+
+Так ты не перечитываешь абзац. Ты работаешь с одной мыслью.
+
+---
+
+# Можно сделать “теорию как комикс/анимацию”
+
+Для некоторых тем хорошо подойдет формат:
+
+```text
+Frame 1: key enters HashMap
+Frame 2: hashCode machine
+Frame 3: bucket index calculator
+Frame 4: bucket array
+Frame 5: collision chain
+```
+
+Каждый кадр требует маленького действия:
+
+```text
+Click Next Step
+Choose what happens
+Drag key to bucket
+Explain this step
+```
+
+Это особенно хорошо для:
+
+* `HashMap`;
+* GC;
+* thread lifecycle;
+* transactions;
+* Spring bean lifecycle;
+* request processing.
+
+---
+
+# Как генерировать такие уроки через ИИ
+
+Я бы изменил prompt для генерации темы.
+
+Сейчас, возможно, ты просишь:
+
+```text
+Generate explanation, examples, visualization, boss fight.
+```
+
+Я бы просил:
+
+```text
+Generate a no-passive-reading lesson.
+```
+
+Пример prompt-правила:
+
+```text
+For this topic, do not create a long theory article as the main learning path.
+
+Instead, create:
+1. 8-15 knowledge atoms.
+2. For each atom:
+   - one-sentence explanation, max 160 characters
+   - one interactive task
+   - one visual state
+   - one common wrong answer
+   - feedback for the wrong answer
+3. Create a Discovery Run where each atom is introduced through prediction or action before explanation.
+4. Create a Practice Loop with spaced repetition.
+5. Create a Boss Fight only after the learner has completed the Practice Loop.
+```
+
+---
+
+# Пример схемы lesson atom
+
+```ts
+type LearningAtom = {
+  id: string;
+  title: string;
+
+  // максимум 1 короткая мысль
+  microExplanation: string;
+
+  // сначала действие, потом объяснение
+  discoveryTask: {
+    type:
+      | "predict_next_step"
+      | "click_diagram"
+      | "sort_steps"
+      | "fill_blank"
+      | "multiple_choice"
+      | "drag_to_diagram"
+      | "fix_code"
+      | "spot_bug";
+
+    prompt: string;
+    correctAnswer: string;
+    wrongAnswers: string[];
+    feedback: string;
+  };
+
+  visualState: unknown;
+
+  reviewTasks: Task[];
+
+  interviewUsage: {
+    shortAnswer: string;
+    commonFollowUp: string;
+  };
+};
+```
+
+Это намного лучше, чем просто `explanation.md`.
+
+---
+
+# Что делать с “описанием темы”
+
+Описание всё равно нужно, но в другом виде.
+
+Я бы сделал 3 слоя объяснения:
+
+## Layer 1: One-liner
+
+```text
+HashMap stores key-value pairs in buckets chosen by key hash.
+```
+
+## Layer 2: Step explanation
+
+```text
+put(key, value):
+1. calculate hash
+2. find bucket
+3. compare keys if needed
+4. insert or replace
+```
+
+## Layer 3: Full article
+
+Длинная теория, но только как справочник:
+
+```text
+Open full explanation
+```
+
+То есть основной путь — Layer 1 и Layer 2. Layer 3 нужен, когда уже появилась потребность.
+
+---
+
+# Повторение предыдущего материала
+
+Да, spaced repetition нужно встроить прямо в прохождение.
+
+Например, урок по `HashMap` идет так:
+
+```text
+New atom 1
+New atom 2
+Review atom 1
+New atom 3
+Review atom 1 + 2
+New atom 4
+Mini challenge
+Review atom 2 + 3
+```
+
+И потом в следующих темах:
+
+```text
+ArrayList lesson:
+- 80% ArrayList
+- 20% HashMap review
+```
+
+Так будет как Duolingo: старые темы постоянно всплывают.
+
+---
+
+# Очень полезная механика: “interleaving”
+
+Не изучать тему изолированно слишком долго.
+
+Например, вместо:
+
+```text
+30 минут только HashMap
+```
+
+Лучше:
+
+```text
+5 минут HashMap
+2 минуты equals/hashCode
+3 минуты ArrayList comparison
+5 минут HashMap challenge
+2 минуты old topic review
+Boss mini-round
+```
+
+Для интервью это даже полезнее, потому что на собеседовании темы тоже скачут.
+
+---
+
+# Я бы добавил energy-based session design
+
+Пусть занятие не будет “прочитай тему”. Пусть будет:
+
+```text
+Daily Run: 12 минут
+```
+
+Внутри:
+
+```text
+2 минуты — разогрев старых карточек
+4 минуты — discovery новых атомов
+3 минуты — practice loop
+3 минуты — mini boss
+```
+
+И всё. Даже если тема большая, она режется на несколько runs.
+
+Для СДВГ полезнее короткие завершенные циклы, чем огромная тема “HashMap internals”.
+
+---
+
+# Как изменить твою текущую структуру приложения
+
+Сейчас у тебя, вероятно, есть:
+
+```text
+Topic
+ ├─ explanation
+ ├─ examples
+ ├─ visualization
+ └─ boss fight
+```
+
+Я бы сделал так:
+
+```text
+Topic
+ ├─ atoms
+ │   ├─ micro explanation
+ │   ├─ visual state
+ │   ├─ discovery task
+ │   ├─ review tasks
+ │   └─ misconceptions
+ │
+ ├─ discovery run
+ ├─ practice loop
+ ├─ sandbox examples
+ ├─ boss fight
+ └─ reference article
+```
+
+То есть `explanation` перестает быть главным входом.
+
+---
+
+# Идея, которая может полностью поменять приложение
+
+Сделать не “интерактивную энциклопедию Java”, а **Java Duolingo + visual debugger**.
+
+Основной экран не editor, а lesson flow:
+
+```text
+Question → action → visual feedback → micro explanation → next question
+```
+
+А code editor открывается только когда нужен:
+
+```text
+Try in sandbox
+```
+
+То есть editor не главный экран. Главный экран — **упражнение**.
+
+Это может быть важным изменением. Потому что если сразу дать editor + длинное объяснение, внимание рассеивается. А если дать один вопрос и одну кнопку — фокус удерживается лучше.
+
+---
+
+# Как может выглядеть новый lesson screen
+
+```text
+┌──────────────────────────────────────────────┐
+│ HashMap: Collision                           │
+├──────────────────────────────────────────────┤
+│                                              │
+│  map.put("Aa", 1)                            │
+│  map.put("BB", 2)                            │
+│                                              │
+│  Both keys land in bucket 0.                 │
+│                                              │
+│  What happens now?                           │
+│                                              │
+│  [Overwrite old value]                       │
+│  [Store both in same bucket]                 │
+│  [Throw exception]                           │
+│                                              │
+├──────────────────────────────────────────────┤
+│ Visualization:                               │
+│ Bucket 0:  Aa → 1                            │
+│            BB → 2                            │
+└──────────────────────────────────────────────┘
+```
+
+После ответа:
+
+```text
+Correct.
+
+Collision means same bucket, not same key.
+HashMap uses equals() to decide whether to replace or add another node.
+```
+
+Затем:
+
+```text
+Now explain it in one sentence.
+```
+
+Это и есть изучение.
+
+---
+
+# Что делать с кодом
+
+Я бы оставил 2 режима:
+
+## Lesson mode
+
+Код нельзя свободно редактировать или можно редактировать только маленькие места.
+
+Например:
+
+```java
+map.put("___", 1);
+map.put("___", 2);
+```
+
+Задача:
+
+```text
+Choose keys that create a collision.
+```
+
+Это удерживает фокус.
+
+## Sandbox mode
+
+Полный editor, examples, reset, визуализация.
+
+Это уже после того, как базовая идея понята.
+
+То есть:
+
+```text
+Lesson mode → Sandbox mode → Boss fight
+```
+
+А не:
+
+```text
+Theory + Sandbox → Boss fight
+```
+
+---
+
+# Конкретный learning loop, который я бы попробовал
+
+Для каждой темы:
+
+```text
+1. Cold open
+   Сразу вопрос/код/визуализация. Без теории.
+
+2. Prediction
+   “Что произойдет?”
+
+3. Reveal
+   Показать результат визуально.
+
+4. Micro explanation
+   Максимум 1–2 предложения.
+
+5. Do it yourself
+   Пользователь меняет маленький кусок кода или диаграммы.
+
+6. Recall
+   Вписать слово / выбрать утверждение / собрать порядок.
+
+7. Mini interview
+   Объяснить в 30 секунд.
+
+8. Repeat later
+   Вернуть этот atom через 3–5 минут.
+```
+
+---
+
+# Твои идеи с задачками я бы использовал, но не только после теории
+
+Твои типы заданий:
+
+```text
+1. собрать утверждение из слов;
+2. вписать слово;
+3. выбрать вариант;
+```
+
+Да, это хорошо. Но я бы добавил более “программистские” задания:
+
+```text
+4. предсказать output;
+5. выбрать bucket/объект/поток на схеме;
+6. расставить шаги алгоритма;
+7. найти баг;
+8. исправить код минимальным изменением;
+9. выбрать правильный follow-up ответ;
+10. объяснить визуальное событие.
+```
+
+Для Java interview это будет полезнее, чем только языковые упражнения.
+
+---
+
+# Самый важный принцип
+
+Я бы сформулировал так:
+
+> Любой кусок теории должен быть превращен в действие до того, как пользователь успеет заскучать.
+
+Практическое правило:
+
+```text
+Максимум 10–20 секунд между действиями пользователя.
+```
+
+Если пользователь читает 60–90 секунд без действия — для тебя это уже опасная зона.
+
+---
+
+# Что бы я сделал в первую очередь
+
+Не переписывал бы всё приложение. Я бы добавил новый режим поверх текущего:
+
+## Discovery Mode
+
+Для одной темы `HashMap`.
+
+В нем:
+
+```text
+10 knowledge atoms
+10 micro interactions
+короткие объяснения
+визуализация
+повторение через каждые 2–3 шага
+мини-босс в конце
+```
+
+И проверил бы на себе:
+
+```text
+Могу ли я пройти тему без ощущения “я читаю статью”?
+```
+
+Если да — потом переносить на другие темы.
+
+---
+
+# Итоговая рекомендация
+
+Твоя текущая система хорошо работает на этапе:
+
+```text
+проверка знаний → Boss Fight
+```
+
+Но этап:
+
+```text
+получение знаний
+```
+
+лучше сделать не через чтение, а через **интерактивное открытие темы**.
+
+Я бы изменил подход так:
+
+```text
+Было:
+Explanation → Examples → Boss Fight
+
+Стало:
+Discovery Run → Practice Loop → Sandbox → Boss Fight → Spaced Review
+```
+
+Где:
+
+```text
+Discovery Run = изучение через микродействия
+Practice Loop = Duolingo-подобное закрепление
+Sandbox = свободное исследование кода
+Boss Fight = интервью-тренировка
+Spaced Review = возврат старых тем
+```
+
+Самая сильная идея: **генерировать не “объяснение темы”, а набор атомов знания, каждый из которых обязан иметь интерактивное действие**.
+
+Тогда теория перестает быть стеной текста и становится игровым процессом.
+
+___

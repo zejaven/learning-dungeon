@@ -40,6 +40,8 @@ export interface TopicSummary {
   aiProvider: string;
   /** Model name used for generation, if known. */
   aiModel: string;
+  /** True when topics/<id>/learning-atoms.json exists (micro-actions lesson available). */
+  hasAtoms: boolean;
 }
 
 /** Persisted progress for a topic, restored on load. */
@@ -192,6 +194,8 @@ export interface TopicDetail {
   aiProvider: string;
   /** Model name used for generation, if known. */
   aiModel: string;
+  /** True when topics/<id>/learning-atoms.json exists (micro-actions lesson available). */
+  hasAtoms: boolean;
 }
 
 /** Props every topic visualizer receives. */

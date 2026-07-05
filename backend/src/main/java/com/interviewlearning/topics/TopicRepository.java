@@ -67,7 +67,8 @@ public class TopicRepository {
                                     str(meta, "catalogId", ""),
                                     str(meta, "mode", "trace"),
                                     str(meta, "aiProvider", "claude"),
-                                    str(meta, "aiModel", "")
+                                    str(meta, "aiModel", ""),
+                                    Files.exists(p.resolve("learning-atoms.json"))
                             ))));
         } catch (IOException e) {
             log.warn("Failed to list topics: {}", e.getMessage());
@@ -116,7 +117,8 @@ public class TopicRepository {
                 starterFiles,
                 str(meta, "style", "Default"),
                 str(meta, "aiProvider", "claude"),
-                str(meta, "aiModel", "")
+                str(meta, "aiModel", ""),
+                Files.exists(topicDir.resolve("learning-atoms.json"))
         ));
     }
 

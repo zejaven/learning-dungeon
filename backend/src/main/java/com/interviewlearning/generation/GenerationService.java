@@ -29,7 +29,7 @@ public class GenerationService {
     }
 
     /** Starts a task for the key, or returns the one already running for it. */
-    public GenerationTask startOrGet(String key, String provider, String prompt) {
+    public GenerationTask startOrGet(String key, String provider, String prompt, AiTask aiTask) {
         GenerationTask existing = byKey.get(key);
         if (existing != null && !existing.isTerminal()) {
             return existing;
@@ -37,7 +37,7 @@ public class GenerationService {
         GenerationTask task = new GenerationTask(UUID.randomUUID().toString(), key);
         byKey.put(key, task);
         byId.put(task.id(), task);
-        ai.runDetached(provider, prompt, AiTask.GENERATE_TOPIC, new AiCliService.Sink() {
+        ai.runDetached(provider, prompt, aiTask, new AiCliService.Sink() {
             @Override
             public void ai(String line) {
                 task.addAi(line);

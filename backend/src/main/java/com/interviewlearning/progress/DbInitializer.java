@@ -153,5 +153,104 @@ public class DbInitializer {
                 ALTER TABLE theory_version
                     ADD COLUMN IF NOT EXISTS ai_model TEXT NOT NULL DEFAULT ''
                 """);
+
+        // --- "Learn by micro-actions" lesson mode --------------------------
+
+        // Append-only log of every answered micro-exercise (lesson and review
+        // contexts). atoms_hash records which generation of learning-atoms.json
+        // the answer belonged to.
+        jdbc.execute("""
+                CREATE TABLE IF NOT EXISTS lesson_exercise_answer (
+                    id          BIGSERIAL   PRIMARY KEY,
+                    topic_id    TEXT        NOT NULL,
+                    exercise_id TEXT        NOT NULL,
+                    atom_id     TEXT,
+                    unit_id     TEXT,
+                    context     TEXT        NOT NULL DEFAULT 'lesson',
+                    atoms_hash  TEXT        NOT NULL DEFAULT '',
+                    answer_json TEXT        NOT NULL,
+                    correct     BOOLEAN     NOT NULL,
+                    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+                )
+                """);
+        jdbc.execute("""
+                CREATE INDEX IF NOT EXISTS ix_lesson_answer
+                    ON lesson_exercise_answer (topic_id, exercise_id, created_at)
+                """);
+        // Keep at most one answer per (topic, exercise, context): re-answering
+        // updates the row instead of piling up history. De-duplicate any rows
+        // written before this index existed (keep the latest by id), then
+        // enforce it.
+        jdbc.execute("""
+                DELETE FROM lesson_exercise_answer a
+                USING lesson_exercise_answer b
+                WHERE a.id < b.id
+                  AND a.topic_id = b.topic_id
+                  AND a.exercise_id = b.exercise_id
+                  AND a.context = b.context
+                """);
+        jdbc.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS ux_lesson_answer_current
+                    ON lesson_exercise_answer (topic_id, exercise_id, context)
+                """);
+
+        // One row per completed lesson unit per atoms generation: regenerating
+        // learning-atoms.json changes the hash and thereby resets progress
+        // without deleting history.
+        jdbc.execute("""
+                CREATE TABLE IF NOT EXISTS lesson_unit_progress (
+                    id           BIGSERIAL   PRIMARY KEY,
+                    topic_id     TEXT        NOT NULL,
+                    unit_id      TEXT        NOT NULL,
+                    atoms_hash   TEXT        NOT NULL,
+                    completed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    UNIQUE (topic_id, unit_id, atoms_hash)
+                )
+                """);
+
+        // Lesson-level completion; distinct from topic_progress (which stays
+        // boss-fight-driven). Scoped by atoms_hash for the same reset semantics.
+        jdbc.execute("""
+                CREATE TABLE IF NOT EXISTS lesson_progress (
+                    topic_id     TEXT        PRIMARY KEY,
+                    atoms_hash   TEXT        NOT NULL,
+                    completed    BOOLEAN     NOT NULL DEFAULT FALSE,
+                    completed_at TIMESTAMPTZ
+                )
+                """);
+
+        // Explicit membership of the global review pool: a topic's practice
+        // exercises join when its lesson is fully completed. Stale rows (the
+        // exercise no longer exists after a regeneration) are pruned lazily.
+        jdbc.execute("""
+                CREATE TABLE IF NOT EXISTS review_pool (
+                    id               BIGSERIAL   PRIMARY KEY,
+                    topic_id         TEXT        NOT NULL,
+                    exercise_id      TEXT        NOT NULL,
+                    atom_id          TEXT,
+                    atoms_hash       TEXT        NOT NULL,
+                    added_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    last_reviewed_at TIMESTAMPTZ,
+                    last_correct     BOOLEAN,
+                    correct_count    INT         NOT NULL DEFAULT 0,
+                    wrong_count      INT         NOT NULL DEFAULT 0,
+                    UNIQUE (topic_id, exercise_id)
+                )
+                """);
+
+        // A review run over the pool; state_json holds the shuffled item list,
+        // the requeue queue and the cursor, so a reload resumes mid-session.
+        jdbc.execute("""
+                CREATE TABLE IF NOT EXISTS review_session (
+                    id          BIGSERIAL   PRIMARY KEY,
+                    started_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    finished_at TIMESTAMPTZ,
+                    state_json  TEXT        NOT NULL
+                )
+                """);
+        jdbc.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS ux_review_session_active
+                    ON review_session ((1)) WHERE finished_at IS NULL
+                """);
     }
 }

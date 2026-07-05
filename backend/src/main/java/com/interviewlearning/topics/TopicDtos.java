@@ -29,7 +29,8 @@ public final class TopicDtos {
             String catalogId,
             String mode,
             String aiProvider,
-            String aiModel
+            String aiModel,
+            boolean hasAtoms
     ) {
     }
 
@@ -100,7 +101,8 @@ public final class TopicDtos {
             List<ProjectFile> starterFiles,
             String style,
             String aiProvider,
-            String aiModel
+            String aiModel,
+            boolean hasAtoms
     ) {
     }
 }

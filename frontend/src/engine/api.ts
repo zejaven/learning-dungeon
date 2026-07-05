@@ -11,6 +11,13 @@ import type {
   TopicSummary,
 } from './traceTypes';
 import type { AiProviderStatus } from './aiStore';
+import type {
+  AnswerValue,
+  AtomsResponse,
+  LessonState,
+  ReviewSession,
+  ReviewSummary,
+} from './lessonTypes';
 
 export interface AiProvidersResponse {
   defaultProvider: string;
@@ -364,4 +371,120 @@ export async function streamGenerationEvents(
     signal: handlers.signal,
   });
   await consumeSse(res, handlers);
+}
+
+// --- "Learn by micro-actions" lesson ---------------------------------------
+
+/** The topic's learning atoms, or null when no lesson has been generated yet. */
+export async function fetchAtoms(topicId: string): Promise<AtomsResponse | null> {
+  const res = await fetch(`/api/topics/${encodeURIComponent(topicId)}/atoms`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Failed to load lesson (${res.status})`);
+  return res.json();
+}
+
+export async function fetchLessonState(topicId: string): Promise<LessonState | null> {
+  const res = await fetch(`/api/lesson/${encodeURIComponent(topicId)}/state`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Failed to load lesson state (${res.status})`);
+  return res.json();
+}
+
+export interface ExerciseAnswerPayload {
+  exerciseId: string;
+  atomId: string;
+  unitId: string;
+  /** 'lesson' | 'review' */
+  context: string;
+  atomsHash: string;
+  answer: AnswerValue;
+  correct: boolean;
+}
+
+/** Best-effort append-only answer log; a failure never blocks the lesson flow. */
+export async function saveExerciseAnswer(topicId: string, payload: ExerciseAnswerPayload): Promise<void> {
+  try {
+    await fetch(`/api/lesson/${encodeURIComponent(topicId)}/answer`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...payload, answer: undefined, answerJson: JSON.stringify(payload.answer) }),
+    });
+  } catch {
+    /* offline logging is not worth interrupting the lesson */
+  }
+}
+
+/** Marks a unit complete; 409 means the lesson was regenerated meanwhile. */
+export async function completeUnit(
+  topicId: string,
+  unitId: string,
+  atomsHash: string,
+): Promise<{ lessonCompleted: boolean; stale: boolean }> {
+  const res = await fetch(`/api/lesson/${encodeURIComponent(topicId)}/unit-complete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ unitId, atomsHash }),
+  });
+  if (res.status === 409) return { lessonCompleted: false, stale: true };
+  if (!res.ok) throw new Error(`Failed to save unit (${res.status})`);
+  const body = await res.json();
+  return { lessonCompleted: !!body.lessonCompleted, stale: false };
+}
+
+/** Starts (or reuses) the atoms-generation task for the topic (key `atoms:<id>`). */
+export async function startAtomsGeneration(
+  topicId: string,
+  provider: string,
+  versionNo: number,
+): Promise<GenTaskRef> {
+  const res = await fetch(`/api/topics/${encodeURIComponent(topicId)}/atoms/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider, versionNo }),
+  });
+  if (!res.ok) throw new Error(`Failed to start lesson generation (${res.status})`);
+  return res.json();
+}
+
+// --- Global review ----------------------------------------------------------
+
+export async function fetchReviewSummary(): Promise<ReviewSummary> {
+  const res = await fetch('/api/review/summary');
+  if (!res.ok) throw new Error(`Failed to load review summary (${res.status})`);
+  return res.json();
+}
+
+/** Returns the active session if one exists, else shuffles the pool into a new one. */
+export async function startReviewSession(): Promise<ReviewSession> {
+  const res = await fetch('/api/review/session/start', { method: 'POST' });
+  if (!res.ok) throw new Error(`Failed to start review (${res.status})`);
+  return res.json();
+}
+
+export async function fetchActiveReviewSession(): Promise<ReviewSession | null> {
+  const res = await fetch('/api/review/session/active');
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Failed to load review session (${res.status})`);
+  return res.json();
+}
+
+export async function answerReview(
+  sessionId: number,
+  payload: { itemIndex: number; correct: boolean; answer: AnswerValue },
+): Promise<{ queue: number[]; position: number; finished: boolean }> {
+  const res = await fetch(`/api/review/session/${sessionId}/answer`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      itemIndex: payload.itemIndex,
+      correct: payload.correct,
+      answerJson: JSON.stringify(payload.answer),
+    }),
+  });
+  if (!res.ok) throw new Error(`Failed to save review answer (${res.status})`);
+  return res.json();
+}
+
+export async function abandonReviewSession(sessionId: number): Promise<void> {
+  await fetch(`/api/review/session/${sessionId}/abandon`, { method: 'POST' });
 }

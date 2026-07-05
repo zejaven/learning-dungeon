@@ -71,7 +71,8 @@ public class TopicGenController {
         String key = (request.catalogId() != null && !request.catalogId().isBlank())
                 ? "catalog:" + request.catalogId().trim()
                 : "add-topic";
-        GenerationTask task = generation.startOrGet(key, request.provider(), buildPrompt(request));
+        GenerationTask task = generation.startOrGet(key, request.provider(), buildPrompt(request),
+                com.interviewlearning.ai.AiTask.GENERATE_TOPIC);
         return Map.of("taskId", task.id(), "key", task.key(), "status", task.status());
     }
 

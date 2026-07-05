@@ -1,7 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { buildCatalog, findCatalogEntry } from '@app/catalog';
+import { useAi } from '@app/engine/aiStore';
+import { startAtomsGeneration } from '@app/engine/api';
 import { useGeneration } from '@app/engine/generationStore';
-import { navigate, routeForPractice, routeForQuestion, useRoute } from '@app/engine/router';
+import { useReview } from '@app/engine/reviewStore';
+import {
+  navigate,
+  routeForPractice,
+  routeForQuestion,
+  routeForReview,
+  useRoute,
+} from '@app/engine/router';
 import { useStore } from '@app/engine/store';
 import { useStyle } from '@app/engine/styleStore';
 import { tl, ui, useLang } from '@app/i18n';
@@ -14,6 +23,7 @@ import { CategoryTree } from '@app/shell/CategoryTree';
 import { Celebration } from '@app/shell/Celebration';
 import { GenerationView } from '@app/shell/GenerationView';
 import { LangSwitcher } from '@app/shell/LangSwitcher';
+import { LessonPanel } from '@app/shell/lesson/LessonPanel';
 import { Markdown } from '@app/shell/Markdown';
 import { StyleSelector } from '@app/shell/StyleSelector';
 import { ThemeSwitcher } from '@app/shell/ThemeSwitcher';
@@ -55,6 +65,41 @@ export function HomeScreen() {
   const catalogKey = entry ? `catalog:${entry.id}` : '';
   const genTask = useGeneration((s) => (catalogKey ? s.tasks[catalogKey] : undefined));
 
+  // "Learn by micro-actions" lesson: default view of a topic that has one.
+  const atomsKey = topic ? `atoms:${topic.id}` : '';
+  const atomsTask = useGeneration((s) => (atomsKey ? s.tasks[atomsKey] : undefined));
+  const lessonReady = !!(theoryReady && topic!.hasAtoms);
+  const showLesson = lessonReady && route.sub !== 'theory';
+  const selectTopic = useStore((s) => s.selectTopic);
+
+  // When a lesson generation finishes, re-fetch the topic so hasAtoms flips
+  // and the lesson replaces the theory view.
+  useEffect(() => {
+    if (atomsTask?.status === 'done' && topic && !topic.hasAtoms) void selectTopic(topic.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [atomsTask?.status]);
+
+  // Review-pool badge for the header button.
+  const reviewSummary = useReview((s) => s.summary);
+  const loadReviewSummary = useReview((s) => s.loadSummary);
+  useEffect(() => {
+    void loadReviewSummary();
+  }, [loadReviewSummary]);
+
+  async function generateLesson() {
+    if (!topic) return;
+    try {
+      const ref = await startAtomsGeneration(
+        topic.id,
+        useAi.getState().selectedProvider,
+        useStore.getState().activeVersionNo,
+      );
+      useGeneration.getState().attach(ref.taskId, ref.key);
+    } catch {
+      /* the button stays; retry is cheap */
+    }
+  }
+
   function generateForSelected() {
     if (!entry) return;
     startGen(`catalog:${entry.id}`, {
@@ -81,6 +126,12 @@ export function HomeScreen() {
         <UsageBar />
         <ThemeSwitcher />
         <LangSwitcher />
+        <button onClick={() => navigate(routeForReview())}>
+          {ui('review', lang)}
+          {reviewSummary && reviewSummary.poolSize > 0 && (
+            <span className="review-badge">{reviewSummary.poolSize}</span>
+          )}
+        </button>
         <button className="accent" onClick={() => setShowAdd(true)}>
           {addTask?.status === 'running' ? ui('generating', lang) : ui('addTopic', lang)}
         </button>
@@ -139,21 +190,46 @@ export function HomeScreen() {
 
             {entry?.topicId && !theoryReady && <p className="home-hint">{ui('openingTheory', lang)}</p>}
 
-            {theoryReady && (
+            {theoryReady && showLesson && <LessonPanel />}
+
+            {theoryReady && !showLesson && (
               <div className="home-theory">
                 <div className="home-theory-actions">
+                  {lessonReady && (
+                    <button className="primary" onClick={() => navigate(routeForQuestion(entry!.id))}>
+                      {ui('backToLesson', lang)}
+                    </button>
+                  )}
+                  {!lessonReady
+                    && (atomsTask?.status === 'running' ? (
+                      <span className="home-hint">{ui('generatingLesson', lang)}</span>
+                    ) : (
+                      <button className="accent" title={ui('lessonGenHint', lang)} onClick={generateLesson}>
+                        {ui('generateLesson', lang)}
+                      </button>
+                    ))}
+                  {/* Boss Fight moves inside the lesson once one exists. */}
                   {topic!.mode === 'theory' ? (
-                    topic!.bossFight.length > 0 && (
+                    !lessonReady
+                    && topic!.bossFight.length > 0 && (
                       <button className="accent" onClick={() => setShowBossFight(true)}>
                         {ui('bossFight', lang)}
                       </button>
                     )
                   ) : (
-                    <button className="primary" onClick={() => navigate(routeForPractice(entry!.id))}>
-                      {ui('goToPractice', lang)}
-                    </button>
+                    // Trace missions are visual toy tasks the lesson replaces;
+                    // sql/challenge/structural practice is real code and keeps
+                    // its entry point. Trace workspaces stay reachable by the
+                    // direct #/q/<id>/practice URL.
+                    topic!.mode !== 'trace' && (
+                      <button className="primary" onClick={() => navigate(routeForPractice(entry!.id))}>
+                        {ui('goToPractice', lang)}
+                      </button>
+                    )
                   )}
                 </div>
+
+                {!lessonReady && atomsTask?.status === 'running' && <GenerationView taskKey={atomsKey} />}
 
                 {theoryVersions.length > 0 && (
                   <div className="version-bar">

@@ -54,8 +54,13 @@ interface ExerciseBase {
   /** Optional code snippet; code is never localized. */
   code?: string | null;
   codeLang?: string | null;
-  /** Optional static Mermaid diagram per language. */
+  /** Optional static Mermaid diagram per language (shown above the input). */
   mermaid?: Localized | null;
+  /**
+   * Optional teaching card shown AFTER answering (Markdown, may embed a
+   * ```mermaid``` diagram). Teaches the concept; feedback stays a short verdict.
+   */
+  reveal?: Localized | null;
   feedback: ExerciseFeedback;
 }
 
@@ -71,10 +76,12 @@ export interface TrueFalseExercise extends ExerciseBase {
 
 export interface FillBlankExercise extends ExerciseBase {
   type: 'fill_blank';
-  /** Statement with exactly one ___ per language. */
+  /** Statement with one or more ___ per language. */
   text: Localized;
-  /** Accepted answers per language (compared trimmed, case-insensitively). */
-  answers: LocalizedList;
+  /** Accepted answers per blank, in order (supports multiple ___). */
+  blanks?: LocalizedList[];
+  /** Legacy single-blank accepted answers; use `blanks` for one or more blanks. */
+  answers?: LocalizedList;
 }
 
 export interface WordBankExercise extends ExerciseBase {
@@ -110,6 +117,8 @@ export interface LearningAtom {
   summary: Localized;
   discovery: Exercise[];
   practice: Exercise[];
+  /** A capstone atom synthesizes across atoms; its practice is a final block before the boss. */
+  capstone?: boolean;
 }
 
 /** The whole learning-atoms.json payload. */
@@ -122,13 +131,7 @@ export interface LearningAtoms {
   atoms: LearningAtom[];
 }
 
-/** Atoms plus the server-computed hash that scopes all lesson progress. */
-export interface AtomsResponse {
-  atomsHash: string;
-  atoms: LearningAtoms;
-}
-
-export type UnitKind = 'discovery' | 'practice' | 'boss';
+export type UnitKind = 'discovery' | 'practice' | 'capstone' | 'mistakes' | 'boss';
 
 /** One derived lesson unit (a circle in the unit track). */
 export interface LessonUnit {
@@ -146,10 +149,8 @@ export interface SavedAnswer {
   answerJson: string;
 }
 
-/** Lesson progress for the current atoms file. */
+/** Lesson progress. Unit/lesson state is derived on the client from `answers`. */
 export interface LessonState {
-  atomsHash: string;
-  completedUnits: string[];
   lessonCompleted: boolean;
   answers: SavedAnswer[];
 }
@@ -158,7 +159,8 @@ export interface LessonState {
 export type AnswerValue =
   | { kind: 'option'; optionId: string }
   | { kind: 'bool'; value: boolean }
-  | { kind: 'text'; value: string }
+  // `values` holds one typed answer per blank; `value` is the legacy single-blank shape.
+  | { kind: 'text'; values?: string[]; value?: string }
   | { kind: 'order'; ids: string[] }
   | { kind: 'tokens'; tokens: string[] }
   | { kind: 'pairs'; matches: Record<string, string>; mistakes: number };

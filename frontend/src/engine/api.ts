@@ -13,7 +13,7 @@ import type {
 import type { AiProviderStatus } from './aiStore';
 import type {
   AnswerValue,
-  AtomsResponse,
+  LearningAtoms,
   LessonState,
   ReviewSession,
   ReviewSummary,
@@ -376,7 +376,7 @@ export async function streamGenerationEvents(
 // --- "Learn by micro-actions" lesson ---------------------------------------
 
 /** The topic's learning atoms, or null when no lesson has been generated yet. */
-export async function fetchAtoms(topicId: string): Promise<AtomsResponse | null> {
+export async function fetchAtoms(topicId: string): Promise<LearningAtoms | null> {
   const res = await fetch(`/api/topics/${encodeURIComponent(topicId)}/atoms`);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Failed to load lesson (${res.status})`);
@@ -396,7 +396,6 @@ export interface ExerciseAnswerPayload {
   unitId: string;
   /** 'lesson' | 'review' */
   context: string;
-  atomsHash: string;
   answer: AnswerValue;
   correct: boolean;
 }
@@ -414,21 +413,12 @@ export async function saveExerciseAnswer(topicId: string, payload: ExerciseAnswe
   }
 }
 
-/** Marks a unit complete; 409 means the lesson was regenerated meanwhile. */
-export async function completeUnit(
-  topicId: string,
-  unitId: string,
-  atomsHash: string,
-): Promise<{ lessonCompleted: boolean; stale: boolean }> {
-  const res = await fetch(`/api/lesson/${encodeURIComponent(topicId)}/unit-complete`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ unitId, atomsHash }),
-  });
-  if (res.status === 409) return { lessonCompleted: false, stale: true };
-  if (!res.ok) throw new Error(`Failed to save unit (${res.status})`);
+/** Recomputes lesson completion from the persisted answers + boss passes. */
+export async function recomputeLesson(topicId: string): Promise<{ lessonCompleted: boolean }> {
+  const res = await fetch(`/api/lesson/${encodeURIComponent(topicId)}/recompute`, { method: 'POST' });
+  if (!res.ok) throw new Error(`Failed to recompute lesson (${res.status})`);
   const body = await res.json();
-  return { lessonCompleted: !!body.lessonCompleted, stale: false };
+  return { lessonCompleted: !!body.lessonCompleted };
 }
 
 /** Starts (or reuses) the atoms-generation task for the topic (key `atoms:<id>`). */

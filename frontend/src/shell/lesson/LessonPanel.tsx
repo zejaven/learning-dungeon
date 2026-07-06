@@ -51,33 +51,53 @@ export function LessonPanel() {
   }
 
   const unit = lesson.units.find((u) => u.id === lesson.currentUnitId) ?? null;
-  const exerciseId = unit && unit.kind !== 'boss' ? unit.exerciseIds[lesson.exerciseIndex] : null;
-  const exercise = exerciseId ? lesson.exerciseById[exerciseId] : null;
-  const atom = exercise ? lesson.atoms?.atoms.atoms.find((a) => a.id === lesson.atomIdByExerciseId[exercise.id]) : null;
+  const isBoss = unit?.kind === 'boss';
+  const isMistakes = unit?.kind === 'mistakes';
   const generating = genTask?.status === 'running';
 
-  // A saved answer for the current exercise means we are revisiting (or just
+  // The exercise on screen: for a normal unit it is the indexed one; for the
+  // mistakes loop it is the head of the requeue queue.
+  const normalExerciseId = unit && !isBoss && !isMistakes ? unit.exerciseIds[lesson.exerciseIndex] : null;
+  const mistakeExerciseId = isMistakes ? lesson.mistakesQueue[0] ?? null : null;
+  const activeExerciseId = normalExerciseId ?? mistakeExerciseId;
+  const activeExercise = activeExerciseId ? lesson.exerciseById[activeExerciseId] : null;
+  const atom = activeExercise
+    ? lesson.atoms?.atoms.find((a) => a.id === lesson.atomIdByExerciseId[activeExercise.id])
+    : null;
+
+  // A saved answer for a normal exercise means we are revisiting (or just
   // answered) it — show it in the feedback phase; otherwise ask.
-  const result = exercise ? lesson.results[exercise.id] : undefined;
+  const result = normalExerciseId ? lesson.results[normalExerciseId] : undefined;
   const phase = result ? 'feedback' : 'answering';
+
+  const phaseLabel = !unit
+    ? ui('lesson', lang)
+    : isBoss
+      ? `⚔ ${ui('bossPhase', lang)}`
+      : isMistakes
+        ? `🔁 ${ui('mistakesTitle', lang)}`
+        : unit.kind === 'discovery'
+          ? `◆ ${ui('discoveryPhase', lang)}`
+          : unit.kind === 'capstone'
+            ? `★ ${ui('capstonePhase', lang)}`
+            : `● ${ui('practicePhase', lang)}`;
 
   return (
     <div className="lesson-panel">
       <div className="lesson-head">
         <span className="lesson-phase">
-          {unit
-            ? unit.kind === 'discovery'
-              ? `◆ ${ui('discoveryPhase', lang)}`
-              : unit.kind === 'practice'
-                ? `● ${ui('practicePhase', lang)}`
-                : `⚔ ${ui('bossPhase', lang)}`
-            : ui('lesson', lang)}
+          {phaseLabel}
           {atom && <span className="lesson-atom-title"> — {tl(atom.title, lang)}</span>}
         </span>
         <span className="spacer" style={{ flex: 1 }} />
-        {unit && unit.kind !== 'boss' && (
+        {unit && !isBoss && !isMistakes && (
           <span className="lesson-progress">
             {lesson.exerciseIndex + 1} / {unit.exerciseIds.length}
+          </span>
+        )}
+        {isMistakes && lesson.mistakesQueue.length > 0 && (
+          <span className="lesson-progress">
+            {lesson.mistakesQueue.length} {ui('mistakesLeft', lang)}
           </span>
         )}
         <button onClick={() => navigate(routeForTheory(topicId))}>{ui('reference', lang)}</button>
@@ -88,16 +108,7 @@ export function LessonPanel() {
 
       {generating && <GenerationView taskKey={genKey} />}
 
-      {!generating && lesson.stale && (
-        <div className="lesson-banner warn">
-          {ui('lessonStale', lang)}{' '}
-          <button onClick={() => void useLesson.getState().loadLesson(topicId)}>
-            {ui('reloadLesson', lang)}
-          </button>
-        </div>
-      )}
-
-      {!generating && !lesson.stale && (
+      {!generating && (
         <>
           {lesson.loading && <p className="home-hint">{ui('loading', lang)}</p>}
 
@@ -105,12 +116,35 @@ export function LessonPanel() {
             <div className="lesson-banner done">{ui('lessonCompleted', lang)}</div>
           )}
 
-          {!lesson.loading && unit && unit.kind === 'boss' && <BossFightUnit unit={unit} />}
+          {!lesson.loading && isBoss && unit && <BossFightUnit unit={unit} />}
 
-          {!lesson.loading && unit && unit.kind !== 'boss' && exercise && (
+          {!lesson.loading && isMistakes && !mistakeExerciseId && (
+            <>
+              <div className="lesson-banner done">{ui('noMistakes', lang)}</div>
+              <div className="ex-actions">
+                <button className="primary" onClick={() => lesson.continueMistake()}>
+                  {ui('continueBtn', lang)}
+                </button>
+              </div>
+            </>
+          )}
+
+          {!lesson.loading && isMistakes && activeExercise && mistakeExerciseId && (
             <ExerciseCard
-              key={exercise.id}
-              exercise={exercise}
+              key={`m:${activeExercise.id}`}
+              exercise={activeExercise}
+              phase={lesson.mistakesPhase}
+              lastCorrect={lesson.mistakesLastCorrect}
+              presetAnswer={lesson.mistakesLastAnswer}
+              onSubmit={(answer) => lesson.submitMistake(answer)}
+              onContinue={() => lesson.continueMistake()}
+            />
+          )}
+
+          {!lesson.loading && unit && !isBoss && !isMistakes && activeExercise && (
+            <ExerciseCard
+              key={activeExercise.id}
+              exercise={activeExercise}
               phase={phase}
               lastCorrect={result?.correct ?? false}
               presetAnswer={result?.answer ?? null}
@@ -123,7 +157,6 @@ export function LessonPanel() {
 
       <UnitTrack
         units={lesson.units}
-        completedUnits={lesson.completedUnits}
         results={lesson.results}
         currentUnitId={lesson.currentUnitId}
         onSelect={(id) => lesson.goToUnit(id)}

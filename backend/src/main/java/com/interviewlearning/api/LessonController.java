@@ -2,19 +2,15 @@ package com.interviewlearning.api;
 
 import com.interviewlearning.lesson.LearningAtomsRepository;
 import com.interviewlearning.lesson.LessonDtos.Atom;
-import com.interviewlearning.lesson.LessonDtos.AtomsResponse;
 import com.interviewlearning.lesson.LessonDtos.Exercise;
 import com.interviewlearning.lesson.LessonDtos.ExerciseAnswerRequest;
+import com.interviewlearning.lesson.LessonDtos.LearningAtoms;
 import com.interviewlearning.lesson.LessonDtos.LessonState;
-import com.interviewlearning.lesson.LessonDtos.UnitCompleteRequest;
-import com.interviewlearning.lesson.LessonDtos.UnitCompleteResponse;
+import com.interviewlearning.lesson.LessonDtos.RecomputeResponse;
 import com.interviewlearning.lesson.LessonProgressRepository;
 import com.interviewlearning.lesson.LessonProgressRepository.PoolEntry;
-import com.interviewlearning.lesson.LessonUnits;
-import com.interviewlearning.lesson.LessonUnits.UnitRef;
 import com.interviewlearning.topics.TopicDtos.BossQuestion;
 import com.interviewlearning.topics.TopicRepository;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -27,8 +23,10 @@ import java.util.List;
 
 /**
  * Serves the "Learn by micro-actions" lesson content and progress. Exercise
- * grading is deterministic and happens on the frontend; endpoints here only
- * persist results and recompute unit/lesson completion.
+ * grading is deterministic and happens on the frontend; unit and lesson
+ * completion are DERIVED from which exercises are answered (see
+ * {@link LessonProgressRepository}), so these endpoints only persist answers
+ * and recompute lesson completion from stable ids.
  */
 @RestController
 public class LessonController {
@@ -47,29 +45,23 @@ public class LessonController {
 
     /** 404 when the topic has no (valid) learning-atoms.json yet. */
     @GetMapping("/api/topics/{id}/atoms")
-    public ResponseEntity<AtomsResponse> atoms(@PathVariable String id) {
+    public ResponseEntity<LearningAtoms> atoms(@PathVariable String id) {
         return atomsRepository.load(id)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
-    /**
-     * Progress for the CURRENT atoms file. Unit rows written against an older
-     * hash simply do not match, so a regenerated lesson reports as fresh.
-     */
+    /** Progress: all saved answers (the client derives unit/lesson state from them). */
     @GetMapping("/api/lesson/{topicId}/state")
     public ResponseEntity<LessonState> state(@PathVariable String topicId) {
-        return atomsRepository.load(topicId)
-                .map(atoms -> new LessonState(
-                        atoms.atomsHash(),
-                        progress.completedUnits(topicId, atoms.atomsHash()),
-                        progress.isLessonCompleted(topicId, atoms.atomsHash()),
-                        progress.lessonAnswers(topicId, atoms.atomsHash())))
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+        if (atomsRepository.load(topicId).isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(new LessonState(
+                progress.isLessonCompleted(topicId), progress.lessonAnswers(topicId)));
     }
 
-    /** Append-only answer log; correctness is computed by the frontend and trusted. */
+    /** Append-only answer log (upserted per exercise); correctness is trusted from the client. */
     @PostMapping("/api/lesson/{topicId}/answer")
     public ResponseEntity<Void> answer(@PathVariable String topicId,
                                        @RequestBody ExerciseAnswerRequest req) {
@@ -78,34 +70,39 @@ public class LessonController {
     }
 
     /**
-     * Marks a unit complete and recomputes lesson completion. 409 when the
-     * client answered against a stale atoms file (regenerated meanwhile).
+     * Recomputes lesson completion from the persisted answers + boss passes
+     * (all discovery/practice exercises answered AND all boss questions passed).
+     * On completion the topic's practice exercises join the global review pool.
      */
-    @PostMapping("/api/lesson/{topicId}/unit-complete")
-    public ResponseEntity<UnitCompleteResponse> unitComplete(@PathVariable String topicId,
-                                                             @RequestBody UnitCompleteRequest req) {
-        AtomsResponse atoms = atomsRepository.load(topicId).orElse(null);
+    @PostMapping("/api/lesson/{topicId}/recompute")
+    public ResponseEntity<RecomputeResponse> recompute(@PathVariable String topicId) {
+        LearningAtoms atoms = atomsRepository.load(topicId).orElse(null);
         if (atoms == null) {
             return ResponseEntity.notFound().build();
         }
-        if (!atoms.atomsHash().equals(req.atomsHash())) {
-            return ResponseEntity.status(HttpStatus.CONFLICT).build();
-        }
-        progress.completeUnit(topicId, req.unitId(), atoms.atomsHash());
-
-        List<BossQuestion> bossFight = topics.getTopic(topicId)
-                .map(t -> t.bossFight())
+        List<String> bossQids = topics.getTopic(topicId)
+                .map(t -> t.bossFight().stream().map(BossQuestion::id).toList())
                 .orElse(List.of());
-        List<UnitRef> units = LessonUnits.derive(atoms.atoms(), bossFight);
         boolean completed = progress.recomputeLessonCompletion(
-                topicId, atoms.atomsHash(), units, practicePool(atoms));
-        return ResponseEntity.ok(new UnitCompleteResponse(completed));
+                topicId, requiredExerciseIds(atoms), bossQids, practicePool(atoms));
+        return ResponseEntity.ok(new RecomputeResponse(completed));
+    }
+
+    /** Every discovery + practice exercise id — all of these must be answered to complete. */
+    private static List<String> requiredExerciseIds(LearningAtoms atoms) {
+        List<String> ids = new ArrayList<>();
+        for (Atom atom : atoms.atoms()) {
+            for (Exercise ex : allExercises(atom)) {
+                ids.add(ex.id());
+            }
+        }
+        return ids;
     }
 
     /** All practice exercises of the file — the topic's contribution to the review pool. */
-    private static List<PoolEntry> practicePool(AtomsResponse atoms) {
+    private static List<PoolEntry> practicePool(LearningAtoms atoms) {
         List<PoolEntry> pool = new ArrayList<>();
-        for (Atom atom : atoms.atoms().atoms()) {
+        for (Atom atom : atoms.atoms()) {
             if (atom.practice() == null) {
                 continue;
             }
@@ -114,5 +111,12 @@ public class LessonController {
             }
         }
         return pool;
+    }
+
+    private static List<Exercise> allExercises(Atom atom) {
+        List<Exercise> all = new ArrayList<>();
+        if (atom.discovery() != null) all.addAll(atom.discovery());
+        if (atom.practice() != null) all.addAll(atom.practice());
+        return all;
     }
 }

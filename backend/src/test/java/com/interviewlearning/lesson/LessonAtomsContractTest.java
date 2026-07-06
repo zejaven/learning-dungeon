@@ -123,6 +123,9 @@ class LessonAtomsContractTest {
         if (ex.mermaid() != null) {
             localized(ex.mermaid(), where + ".mermaid", errs);
         }
+        if (ex.reveal() != null) {
+            localized(ex.reveal(), where + ".reveal", errs);
+        }
 
         switch (type) {
             case "multiple_choice", "predict_output", "spot_bug" -> validateOptions(ex, where, errs);
@@ -168,11 +171,30 @@ class LessonAtomsContractTest {
 
     private void validateFillBlank(Exercise ex, String where, List<String> errs) {
         localized(ex.text(), where + ".text", errs);
-        if (ex.text() != null) {
-            if (countBlanks(ex.text().en()) != 1) errs.add(where + ".text.en: must contain exactly one ___");
-            if (countBlanks(ex.text().ru()) != 1) errs.add(where + ".text.ru: must contain exactly one ___");
+        // Accepted answers come from `blanks` (one entry per ___, supports
+        // several blanks) or the legacy single-blank `answers`.
+        List<LocalizedList> blanks = ex.blanks();
+        int expected;
+        if (blanks != null && !blanks.isEmpty()) {
+            expected = blanks.size();
+            for (int i = 0; i < blanks.size(); i++) {
+                localizedList(blanks.get(i), where + ".blanks[" + i + "]", errs);
+            }
+        } else if (ex.answers() != null) {
+            expected = 1;
+            localizedList(ex.answers(), where + ".answers", errs);
+        } else {
+            errs.add(where + ": fill_blank needs 'blanks' or 'answers'");
+            return;
         }
-        localizedList(ex.answers(), where + ".answers", errs);
+        if (ex.text() != null) {
+            if (countBlanks(ex.text().en()) != expected) {
+                errs.add(where + ".text.en: must contain exactly " + expected + " ___");
+            }
+            if (countBlanks(ex.text().ru()) != expected) {
+                errs.add(where + ".text.ru: must contain exactly " + expected + " ___");
+            }
+        }
     }
 
     private void validateSteps(List<Step> steps, String where, List<String> errs) {

@@ -27,14 +27,19 @@ public final class LessonDtos {
     ) {
     }
 
-    /** One knowledge atom: a single idea with its discovery and practice exercises. */
+    /**
+     * One knowledge atom: a single idea with its discovery and practice
+     * exercises. A {@code capstone} atom instead synthesizes across atoms; its
+     * practice is rendered as a dedicated final block before the Boss Fight.
+     */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Atom(
             String id,
             Localized title,
             Localized summary,
             List<Exercise> discovery,
-            List<Exercise> practice
+            List<Exercise> practice,
+            boolean capstone
     ) {
     }
 
@@ -61,11 +66,21 @@ public final class LessonDtos {
             String code,
             String codeLang,
             Localized mermaid,
+            /**
+             * Optional teaching card shown AFTER the learner answers (feedback
+             * phase). Markdown, so it may embed a fenced ```mermaid``` diagram,
+             * code, and cross-links. This is where the concept is actually
+             * taught; {@code feedback} stays a short verdict.
+             */
+            Localized reveal,
             Feedback feedback,
             List<Option> options,
             Boolean answer,
             Localized text,
+            /** Legacy single-blank accepted answers; use {@code blanks} for one or more blanks. */
             LocalizedList answers,
+            /** Accepted answers per {@code ___} in order (fill_blank); supports multiple blanks. */
+            List<LocalizedList> blanks,
             LocalizedList tokens,
             LocalizedList distractors,
             List<Step> steps,
@@ -97,16 +112,11 @@ public final class LessonDtos {
     }
 
     /**
-     * Atoms plus the sha-256 of the file bytes. The hash scopes all lesson
-     * progress: regenerating the file changes the hash and thereby resets
-     * discovery/practice progress without touching history rows.
+     * Lesson progress. Unit/lesson completion is derived on the client from
+     * {@code answers} (keyed by stable exercise ids), so edits to other atoms
+     * never wipe it.
      */
-    public record AtomsResponse(String atomsHash, LearningAtoms atoms) {
-    }
-
-    /** Lesson progress for the current atoms file (older hashes report as empty). */
-    public record LessonState(String atomsHash, List<String> completedUnits, boolean lessonCompleted,
-                              List<SavedAnswer> answers) {
+    public record LessonState(boolean lessonCompleted, List<SavedAnswer> answers) {
     }
 
     /** One saved answer, for restoring the lesson when the learner revisits a unit. */
@@ -119,16 +129,12 @@ public final class LessonDtos {
             String atomId,
             String unitId,
             String context,
-            String atomsHash,
             String answerJson,
             boolean correct
     ) {
     }
 
-    public record UnitCompleteRequest(String unitId, String atomsHash) {
-    }
-
-    public record UnitCompleteResponse(boolean lessonCompleted) {
+    public record RecomputeResponse(boolean lessonCompleted) {
     }
 
     /** Home-screen badge payload for the global review mode. */

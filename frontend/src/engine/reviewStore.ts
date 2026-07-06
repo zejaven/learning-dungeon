@@ -83,7 +83,6 @@ export const useReview = create<ReviewSlice>((set, get) => ({
       atomId: item.atomId,
       unitId: '',
       context: 'review',
-      atomsHash: '',
       answer,
       correct,
     });

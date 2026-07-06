@@ -156,9 +156,8 @@ public class DbInitializer {
 
         // --- "Learn by micro-actions" lesson mode --------------------------
 
-        // Append-only log of every answered micro-exercise (lesson and review
-        // contexts). atoms_hash records which generation of learning-atoms.json
-        // the answer belonged to.
+        // One row per answered micro-exercise (lesson and review contexts),
+        // keyed by the stable exercise id — progress is not tied to the file.
         jdbc.execute("""
                 CREATE TABLE IF NOT EXISTS lesson_exercise_answer (
                     id          BIGSERIAL   PRIMARY KEY,
@@ -167,7 +166,6 @@ public class DbInitializer {
                     atom_id     TEXT,
                     unit_id     TEXT,
                     context     TEXT        NOT NULL DEFAULT 'lesson',
-                    atoms_hash  TEXT        NOT NULL DEFAULT '',
                     answer_json TEXT        NOT NULL,
                     correct     BOOLEAN     NOT NULL,
                     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -194,26 +192,11 @@ public class DbInitializer {
                     ON lesson_exercise_answer (topic_id, exercise_id, context)
                 """);
 
-        // One row per completed lesson unit per atoms generation: regenerating
-        // learning-atoms.json changes the hash and thereby resets progress
-        // without deleting history.
-        jdbc.execute("""
-                CREATE TABLE IF NOT EXISTS lesson_unit_progress (
-                    id           BIGSERIAL   PRIMARY KEY,
-                    topic_id     TEXT        NOT NULL,
-                    unit_id      TEXT        NOT NULL,
-                    atoms_hash   TEXT        NOT NULL,
-                    completed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                    UNIQUE (topic_id, unit_id, atoms_hash)
-                )
-                """);
-
         // Lesson-level completion; distinct from topic_progress (which stays
-        // boss-fight-driven). Scoped by atoms_hash for the same reset semantics.
+        // boss-fight-driven). Derived from answers, keyed by topic.
         jdbc.execute("""
                 CREATE TABLE IF NOT EXISTS lesson_progress (
                     topic_id     TEXT        PRIMARY KEY,
-                    atoms_hash   TEXT        NOT NULL,
                     completed    BOOLEAN     NOT NULL DEFAULT FALSE,
                     completed_at TIMESTAMPTZ
                 )
@@ -221,14 +204,13 @@ public class DbInitializer {
 
         // Explicit membership of the global review pool: a topic's practice
         // exercises join when its lesson is fully completed. Stale rows (the
-        // exercise no longer exists after a regeneration) are pruned lazily.
+        // exercise no longer exists after an edit) are pruned lazily.
         jdbc.execute("""
                 CREATE TABLE IF NOT EXISTS review_pool (
                     id               BIGSERIAL   PRIMARY KEY,
                     topic_id         TEXT        NOT NULL,
                     exercise_id      TEXT        NOT NULL,
                     atom_id          TEXT,
-                    atoms_hash       TEXT        NOT NULL,
                     added_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
                     last_reviewed_at TIMESTAMPTZ,
                     last_correct     BOOLEAN,
@@ -237,6 +219,14 @@ public class DbInitializer {
                     UNIQUE (topic_id, exercise_id)
                 )
                 """);
+
+        // Migration: progress is now keyed by stable exercise ids, so the
+        // atoms_hash columns (and the hash-scoped lesson_unit_progress table)
+        // are gone. Drop them from databases created before this change.
+        jdbc.execute("DROP TABLE IF EXISTS lesson_unit_progress");
+        jdbc.execute("ALTER TABLE lesson_exercise_answer DROP COLUMN IF EXISTS atoms_hash");
+        jdbc.execute("ALTER TABLE lesson_progress DROP COLUMN IF EXISTS atoms_hash");
+        jdbc.execute("ALTER TABLE review_pool DROP COLUMN IF EXISTS atoms_hash");
 
         // A review run over the pool; state_json holds the shuffled item list,
         // the requeue queue and the cursor, so a reload resumes mid-session.

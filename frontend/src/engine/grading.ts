@@ -1,5 +1,19 @@
 import type { Lang } from '../i18n';
-import type { AnswerValue, Exercise } from './lessonTypes';
+import type { AnswerValue, FillBlankExercise, LocalizedList } from './lessonTypes';
+import type { Exercise } from './lessonTypes';
+
+/** Accepted answers per blank, from `blanks` or the legacy single-blank `answers`. */
+export function fillBlanks(exercise: FillBlankExercise): LocalizedList[] {
+  if (exercise.blanks && exercise.blanks.length > 0) return exercise.blanks;
+  return exercise.answers ? [exercise.answers] : [];
+}
+
+/** Typed answers per blank, tolerating the legacy single-string `value` shape. */
+export function textValues(answer: AnswerValue): string[] {
+  if (answer.kind !== 'text') return [];
+  if (answer.values) return answer.values;
+  return answer.value != null ? [answer.value] : [];
+}
 
 /**
  * Deterministic client-side grading for micro-exercises. Shared by the lesson
@@ -19,11 +33,15 @@ export function grade(exercise: Exercise, answer: AnswerValue, lang: Lang): bool
       return answer.kind === 'bool' && answer.value === exercise.answer;
     case 'fill_blank': {
       if (answer.kind !== 'text') return false;
-      const typed = normalize(answer.value);
+      const blanks = fillBlanks(exercise);
+      const typed = textValues(answer);
+      if (blanks.length === 0 || typed.length !== blanks.length) return false;
       // Technical tokens are usually identical in both languages; accepting
       // either list is deliberately forgiving.
-      const accepted = [...(exercise.answers[lang] ?? []), ...(exercise.answers.en ?? []), ...(exercise.answers.ru ?? [])];
-      return accepted.some((a) => normalize(a) === typed);
+      return blanks.every((b, i) => {
+        const accepted = [...(b[lang] ?? []), ...(b.en ?? []), ...(b.ru ?? [])].map(normalize);
+        return accepted.includes(normalize(typed[i] ?? ''));
+      });
     }
     case 'word_bank': {
       if (answer.kind !== 'tokens') return false;

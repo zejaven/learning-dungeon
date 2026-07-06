@@ -1,13 +1,13 @@
 import { create } from 'zustand';
 import { useLang } from '../i18n';
 import {
-  completeUnit as apiCompleteUnit,
   fetchAtoms,
   fetchLessonState,
+  recomputeLesson,
   saveExerciseAnswer,
 } from './api';
-import { grade } from './grading';
-import type { AnswerValue, AtomsResponse, Exercise, LessonUnit } from './lessonTypes';
+import { grade, shuffled } from './grading';
+import type { AnswerValue, Exercise, LearningAtoms, LessonUnit } from './lessonTypes';
 import { deriveUnits } from './lessonUnits';
 import { useStore } from './store';
 
@@ -23,63 +23,118 @@ interface LessonSlice {
   /** Topic the loaded lesson belongs to (guards against stale async loads). */
   topicId: string | null;
   loading: boolean;
-  atoms: AtomsResponse | null;
+  atoms: LearningAtoms | null;
   units: LessonUnit[];
-  /** Unit ids completed for the current atoms hash (server-confirmed). */
-  completedUnits: Record<string, boolean>;
   lessonCompleted: boolean;
   /** The unit open in the panel; null while loading or when there is no lesson. */
   currentUnitId: string | null;
   exerciseIndex: number;
   /**
-   * Submitted answers keyed by exercise id (loaded from the server + updated
-   * live). The current exercise's phase is derived from this: a stored result
-   * means "feedback" (show the saved answer), otherwise "answering".
+   * Submitted answers keyed by STABLE exercise id (loaded from the server +
+   * updated live). Unit and lesson completion are DERIVED from this: a unit is
+   * done when all its exercises are answered, so editing other atoms never
+   * resets progress. The current exercise's phase is derived from it too.
    */
   results: Record<string, ExerciseResult>;
-  /** Set when the server said the atoms file changed under us (409). */
-  stale: boolean;
+
+  // --- Mistakes unit: a requeue-until-correct loop over the wrong answers. ---
+  mistakesQueue: string[];
+  mistakesPhase: LessonPhase;
+  mistakesLastCorrect: boolean;
+  mistakesLastAnswer: AnswerValue | null;
 
   /** Exercise/atom lookups derived from the atoms file. */
   exerciseById: Record<string, Exercise>;
   atomIdByExerciseId: Record<string, string>;
+  /** Last in-flight answer save, awaited before a recompute so it sees it. */
+  pendingSave: Promise<void> | null;
 
   loadLesson: (topicId: string) => Promise<void>;
   submitAnswer: (answer: AnswerValue) => void;
   continueNext: () => Promise<void>;
   goToUnit: (unitId: string) => void;
-  /** Called by the boss unit after a passing grade; persists + advances. */
-  bossUnitPassed: (unitId: string) => Promise<void>;
+  submitMistake: (answer: AnswerValue) => void;
+  continueMistake: () => void;
+  /** Called by the boss unit after a passing grade; recomputes completion. */
+  bossUnitPassed: () => Promise<void>;
   reset: () => void;
 }
 
-/** A boss unit also counts as done when its question was passed in the old dialog. */
+/**
+ * A discovery/practice unit is done when all its exercises are answered; a boss
+ * unit when its question was passed; the mistakes unit when the wrong pool is
+ * empty. All derived from stable data — no server-stored unit rows.
+ */
 export function isUnitDone(
   unit: LessonUnit,
-  completedUnits: Record<string, boolean>,
+  results: Record<string, ExerciseResult>,
+  passedBossIds: Record<string, boolean>,
+  mistakesDone: boolean,
+): boolean {
+  if (unit.kind === 'mistakes') return mistakesDone;
+  if (unit.kind === 'boss') return !!passedBossIds[unit.id.slice(2)];
+  return unit.exerciseIds.length > 0 && unit.exerciseIds.every((id) => results[id] != null);
+}
+
+/** Exercises whose latest recorded answer is wrong — the mistakes-loop pool. */
+export function wrongExerciseIds(
+  units: LessonUnit[],
+  results: Record<string, ExerciseResult>,
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const u of units) {
+    if (u.kind !== 'discovery' && u.kind !== 'practice' && u.kind !== 'capstone') continue;
+    for (const id of u.exerciseIds) {
+      if (results[id]?.correct === false && !seen.has(id)) {
+        seen.add(id);
+        out.push(id);
+      }
+    }
+  }
+  return out;
+}
+
+/** True when there is nothing left in the mistakes pool. */
+export function mistakesCleared(
+  units: LessonUnit[],
+  results: Record<string, ExerciseResult>,
+): boolean {
+  return wrongExerciseIds(units, results).length === 0;
+}
+
+/**
+ * Derived lesson completion (same rule as the server): every discovery/practice
+ * exercise answered AND every boss question passed. Derived so a stale stored
+ * flag never shows "completed" after new exercises are added.
+ */
+export function lessonComplete(
+  units: LessonUnit[],
+  results: Record<string, ExerciseResult>,
   passedBossIds: Record<string, boolean>,
 ): boolean {
-  if (completedUnits[unit.id]) return true;
-  if (unit.kind === 'boss') {
-    return !!passedBossIds[unit.id.slice(2)];
-  }
-  return false;
+  const required = units
+    .filter((u) => u.kind === 'discovery' || u.kind === 'practice' || u.kind === 'capstone')
+    .flatMap((u) => u.exerciseIds);
+  if (required.length === 0 || !required.every((id) => results[id] != null)) return false;
+  return units.filter((u) => u.kind === 'boss').every((u) => !!passedBossIds[u.id.slice(2)]);
 }
 
 /** True when any exercise of a (non-boss) unit was answered incorrectly. */
 export function unitHasMistake(unit: LessonUnit, results: Record<string, ExerciseResult>): boolean {
-  if (unit.kind === 'boss') return false;
+  if (unit.kind === 'boss' || unit.kind === 'mistakes') return false;
   return unit.exerciseIds.some((id) => results[id]?.correct === false);
 }
 
 /** Index of the first not-yet-done unit (the unlock frontier); units.length when all done. */
 export function frontierIndex(
   units: LessonUnit[],
-  completedUnits: Record<string, boolean>,
+  results: Record<string, ExerciseResult>,
   passedBossIds: Record<string, boolean>,
+  mistakesDone: boolean,
 ): number {
   for (let i = 0; i < units.length; i++) {
-    if (!isUnitDone(units[i], completedUnits, passedBossIds)) return i;
+    if (!isUnitDone(units[i], results, passedBossIds, mistakesDone)) return i;
   }
   return units.length;
 }
@@ -95,19 +150,23 @@ function passedBossIds(): Record<string, boolean> {
 
 const EMPTY: Pick<
   LessonSlice,
-  | 'atoms' | 'units' | 'completedUnits' | 'lessonCompleted' | 'currentUnitId'
-  | 'exerciseIndex' | 'results' | 'stale' | 'exerciseById' | 'atomIdByExerciseId'
+  | 'atoms' | 'units' | 'lessonCompleted' | 'currentUnitId' | 'exerciseIndex'
+  | 'results' | 'mistakesQueue' | 'mistakesPhase' | 'mistakesLastCorrect'
+  | 'mistakesLastAnswer' | 'exerciseById' | 'atomIdByExerciseId' | 'pendingSave'
 > = {
   atoms: null,
   units: [],
-  completedUnits: {},
   lessonCompleted: false,
   currentUnitId: null,
   exerciseIndex: 0,
   results: {},
-  stale: false,
+  mistakesQueue: [],
+  mistakesPhase: 'answering',
+  mistakesLastCorrect: false,
+  mistakesLastAnswer: null,
   exerciseById: {},
   atomIdByExerciseId: {},
+  pendingSave: null,
 };
 
 export const useLesson = create<LessonSlice>((set, get) => ({
@@ -125,9 +184,7 @@ export const useLesson = create<LessonSlice>((set, get) => ({
         return;
       }
       const bossFight = useStore.getState().topic?.bossFight ?? [];
-      const units = deriveUnits(atoms.atoms, bossFight);
-      const completedUnits: Record<string, boolean> = {};
-      for (const id of state?.completedUnits ?? []) completedUnits[id] = true;
+      const units = deriveUnits(atoms, bossFight);
 
       const results: Record<string, ExerciseResult> = {};
       for (const a of state?.answers ?? []) {
@@ -140,22 +197,26 @@ export const useLesson = create<LessonSlice>((set, get) => ({
 
       const exerciseById: Record<string, Exercise> = {};
       const atomIdByExerciseId: Record<string, string> = {};
-      for (const atom of atoms.atoms.atoms) {
+      for (const atom of atoms.atoms) {
         for (const ex of [...(atom.discovery ?? []), ...(atom.practice ?? [])]) {
           exerciseById[ex.id] = ex;
           atomIdByExerciseId[ex.id] = atom.id;
         }
       }
 
-      const frontier = frontierIndex(units, completedUnits, passedBossIds());
+      const cleared = mistakesCleared(units, results);
+      const frontier = frontierIndex(units, results, passedBossIds(), cleared);
+      const currentUnitId = units.length === 0 ? null : units[Math.min(frontier, units.length - 1)].id;
+      const mistakesQueue =
+        currentUnitId === 'mistakes' ? shuffled(wrongExerciseIds(units, results)) : [];
       set({
         loading: false,
         atoms,
         units,
-        completedUnits,
-        lessonCompleted: state?.lessonCompleted ?? false,
-        currentUnitId: units.length === 0 ? null : units[Math.min(frontier, units.length - 1)].id,
+        lessonCompleted: lessonComplete(units, results, passedBossIds()),
+        currentUnitId,
         results,
+        mistakesQueue,
         exerciseById,
         atomIdByExerciseId,
       });
@@ -174,16 +235,15 @@ export const useLesson = create<LessonSlice>((set, get) => ({
     const correct = grade(exercise, answer, useLang.getState().lang);
     // Recording the result flips this exercise into the feedback phase (phase
     // is derived from results in the panel) and keeps the answer for revisits.
-    set({ results: { ...s.results, [exercise.id]: { answer, correct } } });
-    void saveExerciseAnswer(s.topicId, {
+    const pendingSave = saveExerciseAnswer(s.topicId, {
       exerciseId: exercise.id,
       atomId: s.atomIdByExerciseId[exercise.id] ?? '',
       unitId: unit.id,
       context: 'lesson',
-      atomsHash: s.atoms.atomsHash,
       answer,
       correct,
     });
+    set({ results: { ...s.results, [exercise.id]: { answer, correct } }, pendingSave });
   },
 
   async continueNext() {
@@ -196,29 +256,31 @@ export const useLesson = create<LessonSlice>((set, get) => ({
       return;
     }
 
-    // Unit finished: persist (idempotent) and advance to the next unlocked unit.
+    // Unit finished: advance to the next unlocked unit and recompute lesson
+    // completion (all exercises answered + all boss passed) on the server.
+    const cleared = mistakesCleared(s.units, s.results);
+    let nextIndex = s.units.findIndex((u) => u.id === unit.id) + 1;
+    while (s.units[nextIndex]?.kind === 'mistakes' && cleared) nextIndex++;
+    const next = s.units[nextIndex] ?? null;
+    const enteringMistakes = next?.kind === 'mistakes';
+    set({
+      currentUnitId: next ? next.id : unit.id,
+      exerciseIndex: 0,
+      mistakesQueue: enteringMistakes ? shuffled(wrongExerciseIds(s.units, s.results)) : [],
+      mistakesPhase: 'answering',
+      mistakesLastAnswer: null,
+    });
+
     try {
-      const res = await apiCompleteUnit(s.topicId, unit.id, s.atoms.atomsHash);
-      if (res.stale) {
-        set({ stale: true });
-        return;
-      }
-      const completedUnits = { ...get().completedUnits, [unit.id]: true };
-      const index = s.units.findIndex((u) => u.id === unit.id);
-      const next = s.units[index + 1] ?? null;
-      set({
-        completedUnits,
-        lessonCompleted: res.lessonCompleted || get().lessonCompleted,
-        currentUnitId: next ? next.id : unit.id,
-        exerciseIndex: 0,
-      });
+      await s.pendingSave; // make sure the last answer is persisted before recompute
+      const res = await recomputeLesson(s.topicId);
+      set({ lessonCompleted: res.lessonCompleted || get().lessonCompleted });
       if (res.lessonCompleted && !s.lessonCompleted) {
-        // Same celebration as the boss dialog; lesson completion implies the
-        // boss-driven topic completion, so the flags agree.
+        // Lesson completion implies the boss-driven topic completion.
         useStore.getState().markTopicCompleted();
       }
     } catch {
-      /* leave the unit open; the learner can hit Continue again */
+      /* completion is recomputed again on the next answer/boss pass */
     }
   },
 
@@ -226,24 +288,73 @@ export const useLesson = create<LessonSlice>((set, get) => ({
     const s = get();
     const index = s.units.findIndex((u) => u.id === unitId);
     if (index < 0) return;
-    const frontier = frontierIndex(s.units, s.completedUnits, passedBossIds());
+    const cleared = mistakesCleared(s.units, s.results);
+    const frontier = frontierIndex(s.units, s.results, passedBossIds(), cleared);
     if (index > frontier) return; // locked
-    set({ currentUnitId: unitId, exerciseIndex: 0 });
+    set({
+      currentUnitId: unitId,
+      exerciseIndex: 0,
+      mistakesQueue: unitId === 'mistakes' ? shuffled(wrongExerciseIds(s.units, s.results)) : [],
+      mistakesPhase: 'answering',
+      mistakesLastAnswer: null,
+    });
   },
 
-  async bossUnitPassed(unitId) {
+  submitMistake(answer) {
     const s = get();
-    if (!s.topicId || !s.atoms) return;
-    try {
-      const res = await apiCompleteUnit(s.topicId, unitId, s.atoms.atomsHash);
-      if (res.stale) {
-        set({ stale: true });
-        return;
-      }
+    const exId = s.mistakesQueue[0];
+    const exercise = exId ? s.exerciseById[exId] : undefined;
+    if (!s.topicId || !s.atoms || !exercise) return;
+
+    const correct = grade(exercise, answer, useLang.getState().lang);
+    // Re-answering upserts the same lesson row: a correct answer flips it to
+    // correct (dropping it from the pool and turning the source unit's ✗ → ✓).
+    const pendingSave = saveExerciseAnswer(s.topicId, {
+      exerciseId: exercise.id,
+      atomId: s.atomIdByExerciseId[exercise.id] ?? '',
+      unitId: 'mistakes',
+      context: 'lesson',
+      answer,
+      correct,
+    });
+    set({
+      mistakesPhase: 'feedback',
+      mistakesLastCorrect: correct,
+      mistakesLastAnswer: answer,
+      results: { ...s.results, [exercise.id]: { answer, correct } },
+      pendingSave,
+    });
+  },
+
+  continueMistake() {
+    const s = get();
+    const exId = s.mistakesQueue[0];
+    let queue = exId && s.results[exId]?.correct === false
+      ? [...s.mistakesQueue.slice(1), exId]
+      : s.mistakesQueue.slice(1);
+    queue = queue.filter((id) => s.results[id]?.correct === false);
+
+    if (queue.length === 0) {
+      const idx = s.units.findIndex((u) => u.id === 'mistakes');
+      const next = s.units[idx + 1] ?? null;
       set({
-        completedUnits: { ...get().completedUnits, [unitId]: true },
-        lessonCompleted: res.lessonCompleted || get().lessonCompleted,
+        mistakesQueue: [],
+        currentUnitId: next ? next.id : s.currentUnitId,
+        exerciseIndex: 0,
+        mistakesPhase: 'answering',
+        mistakesLastAnswer: null,
       });
+    } else {
+      set({ mistakesQueue: queue, mistakesPhase: 'answering', mistakesLastAnswer: null });
+    }
+  },
+
+  async bossUnitPassed() {
+    const s = get();
+    if (!s.topicId) return;
+    try {
+      const res = await recomputeLesson(s.topicId);
+      set({ lessonCompleted: res.lessonCompleted || get().lessonCompleted });
       if (res.lessonCompleted && !s.lessonCompleted) {
         useStore.getState().markTopicCompleted();
       }

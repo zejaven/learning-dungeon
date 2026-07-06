@@ -4,8 +4,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.interviewlearning.lesson.LearningAtomsRepository;
 import com.interviewlearning.lesson.LessonDtos.Atom;
-import com.interviewlearning.lesson.LessonDtos.AtomsResponse;
 import com.interviewlearning.lesson.LessonDtos.Exercise;
+import com.interviewlearning.lesson.LessonDtos.LearningAtoms;
 import com.interviewlearning.lesson.LessonDtos.ReviewAnswerRequest;
 import com.interviewlearning.lesson.LessonDtos.ReviewAnswerResponse;
 import com.interviewlearning.lesson.LessonDtos.ReviewItem;
@@ -168,11 +168,11 @@ public class ReviewController {
     /** Practice exercises of the topic's current atoms file, keyed by exercise id. */
     private Map<String, ReviewItem> practiceExercises(String topicId, Localized title) {
         Map<String, ReviewItem> out = new HashMap<>();
-        Optional<AtomsResponse> atoms = atomsRepository.load(topicId);
+        Optional<LearningAtoms> atoms = atomsRepository.load(topicId);
         if (atoms.isEmpty()) {
             return out;
         }
-        for (Atom atom : atoms.get().atoms().atoms()) {
+        for (Atom atom : atoms.get().atoms()) {
             if (atom.practice() == null) {
                 continue;
             }

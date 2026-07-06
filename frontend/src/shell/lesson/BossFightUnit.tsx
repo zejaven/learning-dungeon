@@ -17,7 +17,6 @@ export function BossFightUnit({ unit }: Props) {
   const lang = useLang((s) => s.lang);
   const topic = useStore((s) => s.topic);
   const results = useStore((s) => s.bossFightResults);
-  const completedUnits = useLesson((s) => s.completedUnits);
   const units = useLesson((s) => s.units);
   const bossUnitPassed = useLesson((s) => s.bossUnitPassed);
   const goToUnit = useLesson((s) => s.goToUnit);
@@ -26,7 +25,7 @@ export function BossFightUnit({ unit }: Props) {
   const question = topic?.bossFight.find((q) => q.id === qid);
   if (!topic || !question) return null;
 
-  const passed = !!results[qid]?.passed || !!completedUnits[unit.id];
+  const passed = !!results[qid]?.passed;
   const index = units.findIndex((u) => u.id === unit.id);
   const next = units[index + 1] ?? null;
 
@@ -35,7 +34,7 @@ export function BossFightUnit({ unit }: Props) {
       <BossQuestionForm
         topicId={topic.id}
         question={question}
-        onPassed={() => void bossUnitPassed(unit.id)}
+        onPassed={() => void bossUnitPassed()}
       />
       {passed && next && (
         <div className="ex-actions">

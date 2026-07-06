@@ -19,10 +19,18 @@ import java.util.List;
  * <ol>
  *   <li>Discovery units: one per atom with a non-empty {@code discovery} list,
  *       in file order; id {@code d:<atomId>}.</li>
- *   <li>Practice units: practice exercises flattened round-robin across atoms
- *       (1st of each atom, then 2nd, ...) so consecutive exercises mix ideas,
- *       chunked into groups of {@link #PRACTICE_CHUNK}; a trailing chunk of
- *       fewer than 3 merges into the previous one; ids {@code p1}, {@code p2}, ...</li>
+ *   <li>Practice units: practice exercises of the NON-capstone atoms flattened
+ *       round-robin (1st of each atom, then 2nd, ...) so consecutive exercises
+ *       mix ideas, chunked into groups of {@link #PRACTICE_CHUNK}; a trailing
+ *       chunk of fewer than 3 merges into the previous one; ids {@code p1}, ...</li>
+ *   <li>Capstone units: the practice of {@code capstone: true} atoms (synthesis
+ *       exercises) as a dedicated final block after regular practice, in file
+ *       order, chunked; ids {@code c1}, {@code c2}, ... — the difficulty peak
+ *       right before the Boss Fight.</li>
+ *   <li>Mistakes unit: a single {@code mistakes} unit after practice and before
+ *       the boss units. Its contents are dynamic (the exercises the learner
+ *       answered wrong, computed on the client from saved answers), so it
+ *       carries no exercise ids here; lesson completion ignores it.</li>
  *   <li>Boss units: one per boss-fight question, id {@code b:<questionId>}.</li>
  * </ol>
  */
@@ -50,11 +58,30 @@ public final class LessonUnits {
             }
         }
 
-        List<String> flat = roundRobinPractice(all);
-        List<List<String>> chunks = chunk(flat);
+        List<Atom> regular = all.stream().filter(a -> !a.capstone()).toList();
+        List<Atom> capstones = all.stream().filter(Atom::capstone).toList();
+
+        List<List<String>> chunks = chunk(roundRobinPractice(regular));
         for (int i = 0; i < chunks.size(); i++) {
             units.add(new UnitRef("p" + (i + 1), "practice", List.copyOf(chunks.get(i))));
         }
+
+        // Capstone synthesis: the capstone atoms' practice, in file order, as a
+        // dedicated final block right before the mistakes/boss units.
+        List<String> capFlat = new ArrayList<>();
+        for (Atom atom : capstones) {
+            if (atom.practice() != null) {
+                atom.practice().forEach(e -> capFlat.add(e.id()));
+            }
+        }
+        List<List<String>> capChunks = chunk(capFlat);
+        for (int i = 0; i < capChunks.size(); i++) {
+            units.add(new UnitRef("c" + (i + 1), "capstone", List.copyOf(capChunks.get(i))));
+        }
+
+        // Single "fix your mistakes" unit: contents are derived on the client
+        // from the learner's wrong answers, so no exercise ids here.
+        units.add(new UnitRef("mistakes", "mistakes", List.of()));
 
         for (BossQuestion q : bossFight) {
             units.add(new UnitRef("b:" + q.id(), "boss", List.of()));

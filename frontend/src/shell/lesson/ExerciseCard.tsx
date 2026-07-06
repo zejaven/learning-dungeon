@@ -80,6 +80,12 @@ export function ExerciseCard({
         </div>
       )}
 
+      {showResult && exercise.reveal && (
+        <div className="ex-reveal">
+          <Markdown>{tl(exercise.reveal, lang)}</Markdown>
+        </div>
+      )}
+
       <div className="ex-actions">
         {showResult ? (
           <button className="primary" onClick={onContinue} autoFocus>

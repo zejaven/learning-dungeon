@@ -258,7 +258,15 @@ the topic's default view from theory to the micro-actions lesson. Rules when
 authoring one by hand: 8-15 atoms, each with >= 1 `discovery` and >= 2
 `practice` exercise; every id (atoms and exercises) is kebab-case and unique
 across the whole file; every exercise has bilingual `prompt` and `feedback`
-(`correct`/`incorrect`, each 1-2 sentences); exercises are neutral in tone
+(short one-line verdicts); every discovery exercise has a `reveal` teaching card
+(Markdown, may embed a fenced ```mermaid``` diagram) that defines new terms,
+gives the "why", and shows a worked example/diagram — this is where the concept
+is actually taught, so terms must be introduced in a `reveal` before any later
+exercise tests them; each atom's `practice` ramps recognition → arrange →
+produce (fill_blank supports multiple `blanks`); the LAST atom is a
+`"capstone": true` synthesis atom whose practice the engine renders as a final
+block (unit kind `capstone`, ids `c1`..) right before the Boss Fight; exercises
+are neutral in tone
 (ignore any generation-style analogies baked into the source explanation) and
 must be answerable standalone, since practice exercises are later reused out of
 context in the global review pool. `LessonAtomsContractTest` enforces the exact
@@ -287,6 +295,9 @@ Use these as templates:
 - SQL topic: `topics/sql-many-to-many/`
 - Challenge topic: `topics/algo-max-pair-product/`
 - `learning-atoms.json` (micro-actions lesson): `topics/hashmap/learning-atoms.json`
+  — the canonical quality reference for lesson generation (the generator prompt
+  points the model at it). Keep it exemplary: if you change how lessons should
+  look, update this file to match so it stays the gold standard.
 
 ## Claude and Generation Notes
 

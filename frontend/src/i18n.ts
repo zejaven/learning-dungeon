@@ -217,7 +217,7 @@ const UI: Record<string, Localized> = {
   lessonCompleted: { en: '🏆 Lesson completed!', ru: '🏆 Урок пройден!' },
   typeAnswerPlaceholder: { en: 'Type your answer…', ru: 'Введите ответ…' },
   wordBankHint: { en: 'Tap the words in the right order.', ru: 'Нажимайте слова в правильном порядке.' },
-  sortStepsHint: { en: 'Arrange the steps with the arrows.', ru: 'Расставьте шаги стрелками.' },
+  sortStepsHint: { en: 'Drag the steps into order.', ru: 'Перетащите шаги, чтобы расставить их по порядку.' },
   matchPairsHint: { en: 'Match each item on the left with one on the right.', ru: 'Соотнесите элементы слева с элементами справа.' },
   trueLabel: { en: 'True', ru: 'Верно' },
   falseLabel: { en: 'False', ru: 'Неверно' },

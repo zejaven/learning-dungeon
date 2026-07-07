@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { shuffled } from '@app/engine/grading';
 import type { AnswerValue, SortStepsExercise } from '@app/engine/lessonTypes';
 import { tl, ui, useLang } from '@app/i18n';
@@ -10,7 +10,7 @@ interface Props {
   showResult: boolean;
 }
 
-/** Reorder shuffled steps with up/down arrows (no drag-and-drop in v1). */
+/** Reorder shuffled steps by dragging rows. */
 export function SortSteps({ exercise, answer, onChange, showResult }: Props) {
   const lang = useLang((s) => s.lang);
   const initial = useMemo(
@@ -26,11 +26,14 @@ export function SortSteps({ exercise, answer, onChange, showResult }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exercise.id]);
 
-  function move(index: number, delta: number) {
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [overIndex, setOverIndex] = useState<number | null>(null);
+
+  function reorder(from: number, to: number) {
+    if (from === to) return;
     const next = [...order];
-    const j = index + delta;
-    if (j < 0 || j >= next.length) return;
-    [next[index], next[j]] = [next[j], next[index]];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
     onChange({ kind: 'order', ids: next });
   }
 
@@ -41,17 +44,42 @@ export function SortSteps({ exercise, answer, onChange, showResult }: Props) {
         const step = exercise.steps.find((s) => s.id === id);
         const correctHere = exercise.steps[i]?.id === id;
         let cls = 'ex-sort-row';
-        if (showResult) cls += correctHere ? ' correct' : ' wrong';
+        if (showResult) {
+          cls += correctHere ? ' correct' : ' wrong';
+        } else {
+          cls += ' draggable';
+          if (dragIndex === i) cls += ' dragging';
+          if (overIndex === i && dragIndex !== null && dragIndex !== i) cls += ' drag-over';
+        }
         return (
-          <div key={id} className={cls}>
+          <div
+            key={id}
+            className={cls}
+            draggable={!showResult}
+            onDragStart={(e) => {
+              setDragIndex(i);
+              e.dataTransfer.effectAllowed = 'move';
+            }}
+            onDragOver={(e) => {
+              if (dragIndex === null) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'move';
+              if (overIndex !== i) setOverIndex(i);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (dragIndex !== null) reorder(dragIndex, i);
+              setDragIndex(null);
+              setOverIndex(null);
+            }}
+            onDragEnd={() => {
+              setDragIndex(null);
+              setOverIndex(null);
+            }}
+          >
             <span className="ex-sort-num">{i + 1}.</span>
             <span className="ex-sort-text">{tl(step?.text, lang)}</span>
-            {!showResult && (
-              <span className="ex-sort-arrows">
-                <button disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
-                <button disabled={i === order.length - 1} onClick={() => move(i, 1)}>↓</button>
-              </span>
-            )}
+            {!showResult && <span className="ex-sort-handle">⠿</span>}
           </div>
         );
       })}

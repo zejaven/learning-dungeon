@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { AnswerValue, Exercise } from '@app/engine/lessonTypes';
 import { tl, ui, useLang } from '@app/i18n';
 import { Markdown } from '@app/shell/Markdown';
@@ -45,11 +45,19 @@ export function ExerciseCard({
 }: Props) {
   const lang = useLang((s) => s.lang);
   const [draft, setDraft] = useState<AnswerValue | null>(presetAnswer ?? null);
+  const mounted = useRef(false);
 
   // Answering: start blank. Feedback: seed the draft from the preset answer so
   // a revisited exercise shows what was chosen (on a fresh submit the parent
-  // supplies the same answer as preset, so nothing is lost).
+  // supplies the same answer as preset, so nothing is lost). Skipped on the
+  // initial mount — the useState initializer above already computes the same
+  // value, and running it anyway would fire after (and clobber) an input's own
+  // mount-time default, like sort_steps seeding its shuffled starting order.
   useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
     setDraft(phase === 'feedback' ? presetAnswer ?? null : null);
   }, [exercise.id, phase, presetAnswer]);
 

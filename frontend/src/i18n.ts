@@ -204,6 +204,7 @@ const UI: Record<string, Localized> = {
   },
   check: { en: 'Check', ru: 'Проверить' },
   continueBtn: { en: 'Continue', ru: 'Продолжить' },
+  backBtn: { en: '← Back', ru: '← Назад' },
   correct: { en: 'Correct!', ru: 'Верно!' },
   incorrect: { en: 'Not quite', ru: 'Не совсем' },
   unitLocked: { en: 'Complete the previous steps first', ru: 'Сначала пройдите предыдущие шаги' },

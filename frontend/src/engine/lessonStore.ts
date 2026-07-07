@@ -52,6 +52,8 @@ interface LessonSlice {
   loadLesson: (topicId: string) => Promise<void>;
   submitAnswer: (answer: AnswerValue) => void;
   continueNext: () => Promise<void>;
+  /** Moves to the previous exercise (across units); a no-op at the first one. */
+  goBack: () => void;
   goToUnit: (unitId: string) => void;
   submitMistake: (answer: AnswerValue) => void;
   continueMistake: () => void;
@@ -124,6 +126,27 @@ export function lessonComplete(
 export function unitHasMistake(unit: LessonUnit, results: Record<string, ExerciseResult>): boolean {
   if (unit.kind === 'boss' || unit.kind === 'mistakes') return false;
   return unit.exerciseIds.some((id) => results[id]?.correct === false);
+}
+
+/**
+ * The unit/exerciseIndex `goBack` would land on, or null at the very first
+ * exercise of the lesson. Skips units with no indexed exercises (mistakes,
+ * boss) since they aren't part of this back/forward sequence.
+ */
+export function previousPosition(
+  units: LessonUnit[],
+  currentUnitId: string | null,
+  exerciseIndex: number,
+): { unitId: string; exerciseIndex: number } | null {
+  const unit = units.find((u) => u.id === currentUnitId);
+  if (!unit) return null;
+  if (exerciseIndex > 0) return { unitId: unit.id, exerciseIndex: exerciseIndex - 1 };
+
+  let prevIndex = units.findIndex((u) => u.id === unit.id) - 1;
+  while (prevIndex >= 0 && units[prevIndex].exerciseIds.length === 0) prevIndex--;
+  if (prevIndex < 0) return null;
+  const prev = units[prevIndex];
+  return { unitId: prev.id, exerciseIndex: prev.exerciseIds.length - 1 };
 }
 
 /** Index of the first not-yet-done unit (the unlock frontier); units.length when all done. */
@@ -282,6 +305,13 @@ export const useLesson = create<LessonSlice>((set, get) => ({
     } catch {
       /* completion is recomputed again on the next answer/boss pass */
     }
+  },
+
+  goBack() {
+    const s = get();
+    const target = previousPosition(s.units, s.currentUnitId, s.exerciseIndex);
+    if (!target) return;
+    set({ currentUnitId: target.unitId, exerciseIndex: target.exerciseIndex });
   },
 
   goToUnit(unitId) {

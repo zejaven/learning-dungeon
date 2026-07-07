@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useAi } from '@app/engine/aiStore';
 import { startAtomsGeneration } from '@app/engine/api';
 import { useGeneration } from '@app/engine/generationStore';
-import { useLesson } from '@app/engine/lessonStore';
+import { previousPosition, useLesson } from '@app/engine/lessonStore';
 import { navigate, routeForTheory } from '@app/engine/router';
 import { useStore } from '@app/engine/store';
 import { tl, ui, useLang } from '@app/i18n';
@@ -69,6 +69,7 @@ export function LessonPanel() {
   // answered) it — show it in the feedback phase; otherwise ask.
   const result = normalExerciseId ? lesson.results[normalExerciseId] : undefined;
   const phase = result ? 'feedback' : 'answering';
+  const backTarget = previousPosition(lesson.units, lesson.currentUnitId, lesson.exerciseIndex);
 
   const phaseLabel = !unit
     ? ui('lesson', lang)
@@ -151,6 +152,8 @@ export function LessonPanel() {
                 presetAnswer={result?.answer ?? null}
                 onSubmit={(answer) => lesson.submitAnswer(answer)}
                 onContinue={() => void lesson.continueNext()}
+                onBack={() => lesson.goBack()}
+                backDisabled={!backTarget}
               />
             )}
           </>

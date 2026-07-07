@@ -21,6 +21,10 @@ interface Props {
   onContinue: () => void;
   /** Label override for the continue button (e.g. while saving). */
   continueLabel?: string;
+  /** When set, renders a Back button that moves to the previous exercise. */
+  onBack?: () => void;
+  /** Disables the Back button (already at the first exercise). */
+  backDisabled?: boolean;
 }
 
 /**
@@ -36,6 +40,8 @@ export function ExerciseCard({
   onSubmit,
   onContinue,
   continueLabel,
+  onBack,
+  backDisabled,
 }: Props) {
   const lang = useLang((s) => s.lang);
   const [draft, setDraft] = useState<AnswerValue | null>(presetAnswer ?? null);
@@ -87,6 +93,11 @@ export function ExerciseCard({
       )}
 
       <div className="ex-actions">
+        {onBack && (
+          <button className="ex-back" onClick={onBack} disabled={backDisabled}>
+            {ui('backBtn', lang)}
+          </button>
+        )}
         {showResult ? (
           <button className="primary" onClick={onContinue} autoFocus>
             {continueLabel ?? ui('continueBtn', lang)}

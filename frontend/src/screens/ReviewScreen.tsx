@@ -15,6 +15,8 @@ export function ReviewScreen() {
   const lang = useLang((s) => s.lang);
   const review = useReview();
   const session = review.session;
+  // The cursor stays on the answered item until Continue (the store defers the
+  // advance), so during feedback this is still the item just answered.
   const item = currentReviewItem(session);
 
   useEffect(() => {

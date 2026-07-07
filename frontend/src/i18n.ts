@@ -198,6 +198,37 @@ const UI: Record<string, Localized> = {
     en: 'Regenerating replaces all exercises and resets lesson progress (Boss Fight progress is kept). Continue?',
     ru: 'Перегенерация заменит все упражнения и сбросит прогресс урока (прогресс Битвы с боссом сохранится). Продолжить?',
   },
+  regenerateTitle: { en: 'Regenerate lesson', ru: 'Перегенерировать урок' },
+  regenerateFullMode: {
+    en: 'Full regeneration (otherwise: augment the existing lesson)',
+    ru: 'Полная перегенерация (иначе — дополнить текущий урок)',
+  },
+  regenerateFullWarning: {
+    en: 'Full regeneration replaces all exercises and resets lesson progress (Boss Fight progress is kept).',
+    ru: 'Полная перегенерация заменит все упражнения и сбросит прогресс урока (прогресс Битвы с боссом сохранится).',
+  },
+  regenerateAugmentHint: {
+    en: 'Augment keeps the current lesson and adds new atoms/exercises to it.',
+    ru: 'Дополнение сохраняет текущий урок и добавляет к нему новые атомы и упражнения.',
+  },
+  regenerateCommentAugmentLabel: { en: 'What to add (required)', ru: 'Чем дополнить (обязательно)' },
+  regenerateCommentFullLabel: {
+    en: 'What must be in the atoms (optional)',
+    ru: 'Что точно должно быть в атомах (необязательно)',
+  },
+  regenerateCommentFullHint: {
+    en: 'This is an extra requirement — things the lesson must cover — not the basis for the whole lesson.',
+    ru: 'Это дополнительное требование — что урок обязан покрыть, — а не основа всего урока.',
+  },
+  regenerateCommentAugmentPlaceholder: {
+    en: 'e.g. add a section on collision handling and load factor',
+    ru: 'напр. добавить раздел про коллизии и коэффициент загрузки',
+  },
+  regenerateCommentFullPlaceholder: {
+    en: 'e.g. must include a comparison with TreeMap',
+    ru: 'напр. обязательно включить сравнение с TreeMap',
+  },
+  regenerateConfirm: { en: 'Regenerate', ru: 'Перегенерировать' },
   generatingLesson: { en: 'Generating lesson…', ru: 'Генерация урока…' },
   lessonGenHint: {
     en: 'Turn this theory into a micro-actions lesson: short exercises instead of a wall of text.',

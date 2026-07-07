@@ -58,8 +58,15 @@ public class LessonGenController {
         this.ai = ai;
     }
 
-    /** @param versionNo theory version to generate from; null/1 = the on-disk explanation */
-    public record GenerateAtomsRequest(String provider, Integer versionNo) {
+    /**
+     * @param versionNo theory version to generate from; null/1 = the on-disk explanation
+     * @param mode      "augment" (keep the existing lesson and add to it) or "full"
+     *                  (replace everything); null defaults to "full"
+     * @param comment   for "augment": what to add (required); for "full": things the
+     *                  lesson must cover (optional, an extra requirement — not the basis
+     *                  for the whole lesson)
+     */
+    public record GenerateAtomsRequest(String provider, Integer versionNo, String mode, String comment) {
     }
 
     @PostMapping("/api/topics/{id}/atoms/generate")
@@ -73,10 +80,33 @@ public class LessonGenController {
                 ? "claude" : request.provider().trim().toLowerCase();
         int versionNo = request.versionNo() == null || request.versionNo() < 1 ? 1 : request.versionNo();
         Localized explanation = explanationOf(topic, versionNo);
+        boolean augment = "augment".equalsIgnoreCase(request.mode() == null ? "" : request.mode().trim());
+        String comment = request.comment() == null ? "" : request.comment().trim();
+        // Augmenting requires an existing lesson to extend; fall back to a full run otherwise.
+        String existingAtoms = augment ? readExistingAtoms(topic.id()) : null;
+        if (augment && existingAtoms == null) {
+            augment = false;
+        }
 
         GenerationTask task = generation.startOrGet("atoms:" + id, provider,
-                buildPrompt(topic, provider, versionNo, explanation), AiTask.GENERATE_ATOMS);
+                buildPrompt(topic, provider, versionNo, explanation, augment, comment, existingAtoms),
+                AiTask.GENERATE_ATOMS);
         return ResponseEntity.ok(Map.of("taskId", task.id(), "key", task.key(), "status", task.status()));
+    }
+
+    /** The current learning-atoms.json contents, or null if there is no lesson to augment. */
+    private String readExistingAtoms(String topicId) {
+        Path file = repoPaths.topicsDir().resolve(topicId).resolve("learning-atoms.json");
+        if (!Files.exists(file)) {
+            return null;
+        }
+        try {
+            String content = Files.readString(file, StandardCharsets.UTF_8).trim();
+            return content.isEmpty() ? null : content;
+        } catch (IOException e) {
+            log.warn("Could not read existing atoms for augment at {}: {}", file, e.getMessage());
+            return null;
+        }
     }
 
     /** Version 1 is the on-disk explanation; 2+ come from the theory_version table. */
@@ -91,7 +121,8 @@ public class LessonGenController {
         return topic.explanation();
     }
 
-    private String buildPrompt(TopicDetail topic, String provider, int versionNo, Localized explanation) {
+    private String buildPrompt(TopicDetail topic, String provider, int versionNo, Localized explanation,
+                               boolean augment, String comment, String existingAtoms) {
         Path promptFile = repoPaths.promptsDir().resolve("generate-learning-atoms.md");
         String contract;
         try {
@@ -125,6 +156,23 @@ public class LessonGenController {
             for (BossQuestion q : boss) {
                 sb.append("- ").append(q.text().en()).append("\n");
             }
+        }
+
+        if (augment) {
+            sb.append("\n---\n\nMODE: AUGMENT AN EXISTING LESSON.\n")
+                    .append("A learning-atoms.json already exists for this topic (shown below). Do NOT ")
+                    .append("regenerate it from scratch. Keep the existing atoms and their exercises ")
+                    .append("intact, and ADD new atoms and/or exercises to satisfy the addition ")
+                    .append("requested below. Preserve every existing id unchanged, keep all new ids ")
+                    .append("kebab-case and unique across the whole file, keep exactly one capstone ")
+                    .append("atom and keep it LAST, and write the full merged JSON (existing + new) to ")
+                    .append("the output file. The rest of the contract above still applies to any new ")
+                    .append("content.\n\nADDITION TO MAKE:\n").append(comment)
+                    .append("\n\n---\n\nEXISTING LEARNING-ATOMS.JSON:\n\n").append(existingAtoms);
+        } else if (!comment.isEmpty()) {
+            sb.append("\n---\n\nMUST INCLUDE (an extra requirement, NOT the basis for the whole ")
+                    .append("lesson): the lesson must definitely cover the following, in addition to ")
+                    .append("faithfully covering the full source explanation below:\n").append(comment);
         }
 
         sb.append("\n---\n\nSOURCE EXPLANATION (ENGLISH):\n\n").append(explanation.en())

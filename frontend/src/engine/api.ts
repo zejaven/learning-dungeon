@@ -426,11 +426,13 @@ export async function startAtomsGeneration(
   topicId: string,
   provider: string,
   versionNo: number,
+  mode: 'full' | 'augment' = 'full',
+  comment = '',
 ): Promise<GenTaskRef> {
   const res = await fetch(`/api/topics/${encodeURIComponent(topicId)}/atoms/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ provider, versionNo }),
+    body: JSON.stringify({ provider, versionNo, mode, comment }),
   });
   if (!res.ok) throw new Error(`Failed to start lesson generation (${res.status})`);
   return res.json();

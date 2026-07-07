@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useAi } from '@app/engine/aiStore';
 import { startAtomsGeneration } from '@app/engine/api';
 import { useGeneration } from '@app/engine/generationStore';
@@ -9,6 +9,7 @@ import { tl, ui, useLang } from '@app/i18n';
 import { GenerationView } from '@app/shell/GenerationView';
 import { BossFightUnit } from './BossFightUnit';
 import { ExerciseCard } from './ExerciseCard';
+import { RegenerateLessonDialog, type RegenerateOptions } from './RegenerateLessonDialog';
 import { UnitTrack } from './UnitTrack';
 
 /**
@@ -26,6 +27,7 @@ export function LessonPanel() {
   const lesson = useLesson();
   const genKey = `atoms:${topicId}`;
   const genTask = useGeneration((s) => (topicId ? s.tasks[genKey] : undefined));
+  const [regenOpen, setRegenOpen] = useState(false);
 
   useEffect(() => {
     if (topicId) void useLesson.getState().loadLesson(topicId);
@@ -40,10 +42,16 @@ export function LessonPanel() {
 
   if (!topic) return null;
 
-  async function regenerate() {
-    if (!window.confirm(ui('regenerateLessonWarning', lang))) return;
+  async function regenerate(options: RegenerateOptions) {
+    setRegenOpen(false);
     try {
-      const ref = await startAtomsGeneration(topicId, useAi.getState().selectedProvider, activeVersionNo);
+      const ref = await startAtomsGeneration(
+        topicId,
+        useAi.getState().selectedProvider,
+        activeVersionNo,
+        options.mode,
+        options.comment,
+      );
       useGeneration.getState().attach(ref.taskId, ref.key);
     } catch {
       /* the button stays; the learner can retry */
@@ -102,10 +110,18 @@ export function LessonPanel() {
           </span>
         )}
         <button onClick={() => navigate(routeForTheory(topicId))}>{ui('reference', lang)}</button>
-        <button onClick={regenerate} disabled={generating} title={ui('regenerateLesson', lang)}>
+        <button
+          onClick={() => setRegenOpen(true)}
+          disabled={generating}
+          title={ui('regenerateLesson', lang)}
+        >
           {generating ? ui('generating', lang) : '↻'}
         </button>
       </div>
+
+      {regenOpen && (
+        <RegenerateLessonDialog onConfirm={regenerate} onClose={() => setRegenOpen(false)} />
+      )}
 
       <div className="lesson-body">
         {generating && <GenerationView taskKey={genKey} />}

@@ -39,6 +39,7 @@ export const useLang = create<LangState>((set) => ({
 const UI: Record<string, Localized> = {
   askAI: { en: '💬 Ask AI', ru: '💬 Спросить ИИ' },
   askAbout: { en: 'Ask AI about ', ru: 'Спросить ИИ про ' },
+  askAboutSelection: { en: 'Ask AI about the selected text', ru: 'Спросить ИИ про выделенный текст' },
   addTopic: { en: '＋ Add topic', ru: '＋ Добавить тему' },
   toggleTheme: { en: 'Toggle light/dark theme', ru: 'Переключить светлую/тёмную тему' },
   noTopics: { en: 'No topics yet', ru: 'Пока нет тем' },

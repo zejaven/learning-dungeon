@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { buildCatalog, findCatalogEntry } from '@app/catalog';
 import { useAi } from '@app/engine/aiStore';
 import { startAtomsGeneration } from '@app/engine/api';
@@ -25,6 +25,7 @@ import { GenerationView } from '@app/shell/GenerationView';
 import { LangSwitcher } from '@app/shell/LangSwitcher';
 import { LessonPanel } from '@app/shell/lesson/LessonPanel';
 import { Markdown } from '@app/shell/Markdown';
+import { SelectionAsk } from '@app/shell/SelectionAsk';
 import { StyleSelector } from '@app/shell/StyleSelector';
 import { ThemeSwitcher } from '@app/shell/ThemeSwitcher';
 import { UsageBar } from '@app/shell/UsageBar';
@@ -55,6 +56,19 @@ export function HomeScreen() {
   const [showAddQuestion, setShowAddQuestion] = useState(false);
   const [showBossFight, setShowBossFight] = useState(false);
   const [showAssistant, setShowAssistant] = useState(false);
+  // Text selected in the reference/lesson to pre-quote in the assistant.
+  const [assistantQuote, setAssistantQuote] = useState<string | null>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  function askAboutSelection(text: string) {
+    setAssistantQuote(text);
+    setShowAssistant(true);
+  }
+
+  function closeAssistant() {
+    setShowAssistant(false);
+    setAssistantQuote(null);
+  }
 
   const manualQuestions = useStore((s) => s.manualQuestions);
   const found = route.id ? findCatalogEntry(buildCatalog(topics, manualQuestions), route.id) : null;
@@ -163,12 +177,18 @@ export function HomeScreen() {
           <div className="panel-title tree-panel-title">
             <span>{theoryReady ? tl(topic!.category, lang) : ui('theory', lang)}</span>
             {theoryReady && (
-              <button className="theory-ask-btn" onClick={() => setShowAssistant(true)}>
+              <button
+                className="theory-ask-btn"
+                onClick={() => {
+                  setAssistantQuote(null);
+                  setShowAssistant(true);
+                }}
+              >
                 {ui('askAI', lang)}
               </button>
             )}
           </div>
-          <div className="panel-body">
+          <div className="panel-body" ref={contentRef}>
             {!entry && <p className="home-hint">{ui('selectQuestion', lang)}</p>}
 
             {entry && !entry.topicId && (
@@ -272,7 +292,8 @@ export function HomeScreen() {
       {showAdd && <AddTopicDialog onClose={() => setShowAdd(false)} />}
       {showAddQuestion && <AddQuestionDialog onClose={() => setShowAddQuestion(false)} />}
       {showBossFight && <BossFightDialog onClose={() => setShowBossFight(false)} />}
-      {showAssistant && <AssistantDialog onClose={() => setShowAssistant(false)} />}
+      {theoryReady && <SelectionAsk containerRef={contentRef} onAsk={askAboutSelection} />}
+      {showAssistant && <AssistantDialog onClose={closeAssistant} quote={assistantQuote} />}
       <Celebration />
     </div>
   );

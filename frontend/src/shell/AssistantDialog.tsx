@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   deleteAssistantQa,
   fetchAssistantHistory,
@@ -12,7 +12,24 @@ import { useStore } from '@app/engine/store';
 import { questionLabel, statusLabel, tl, ui, useLang } from '@app/i18n';
 import { Markdown } from './Markdown';
 
-export function AssistantDialog({ onClose }: { onClose: () => void }) {
+/** Formats selected screen text as a Markdown blockquote for the composer. */
+function asQuote(text: string): string {
+  const quoted = text
+    .trim()
+    .split('\n')
+    .map((line) => `> ${line}`)
+    .join('\n');
+  return `${quoted}\n\n`;
+}
+
+export function AssistantDialog({
+  onClose,
+  quote,
+}: {
+  onClose: () => void;
+  /** Optional selected text to pre-fill the composer with, as a quote. */
+  quote?: string | null;
+}) {
   const topic = useStore((s) => s.topic);
   // Theory topics have no editor; don't leak code from a previously opened practice topic.
   const code = useStore((s) => (s.topic?.mode === 'theory' ? '' : s.code));
@@ -24,12 +41,23 @@ export function AssistantDialog({ onClose }: { onClose: () => void }) {
   // history entry being viewed read-only. Selection is keyed by id, not index,
   // so it stays valid across appends and deletes.
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [question, setQuestion] = useState('');
+  const [question, setQuestion] = useState(() => (quote ? asQuote(quote) : ''));
   const [answer, setAnswer] = useState('');
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const topicId = topic?.id;
+
+  // When opened from a text selection, drop the cursor after the quote so the
+  // user can immediately type their question.
+  useEffect(() => {
+    if (!quote) return;
+    const el = textareaRef.current;
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }, [quote]);
 
   // Load this topic's question history once; always open on an empty composer.
   useEffect(() => {
@@ -177,6 +205,7 @@ export function AssistantDialog({ onClose }: { onClose: () => void }) {
             <div className="boss-question">{viewing.question}</div>
           ) : (
             <textarea
+              ref={textareaRef}
               rows={3}
               placeholder={tl(topic?.assistantExample, lang) || ui('assistantPlaceholder', lang)}
               value={question}

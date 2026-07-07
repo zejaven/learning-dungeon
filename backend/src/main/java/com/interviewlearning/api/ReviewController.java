@@ -92,6 +92,11 @@ public class ReviewController {
         }
         SessionState state = new SessionState(items, queue, 0);
         long id = reviews.insertSession(write(state));
+        if (items.isEmpty()) {
+            // An empty session is already finished; close it now so it never
+            // lingers as the "active" session and masks a later-populated pool.
+            reviews.finishSession(id);
+        }
         return ResponseEntity.ok(new ReviewSessionDto(id, items, queue, 0, items.isEmpty()));
     }
 
@@ -204,6 +209,13 @@ public class ReviewController {
             return Optional.empty();
         }
         boolean finished = state.position() >= state.queue().size();
+        if (finished) {
+            // A logically-finished session (empty pool, or every item answered)
+            // must not resurface as resumable — close it and let the caller
+            // start a fresh session over the current pool.
+            reviews.finishSession(row.id());
+            return Optional.empty();
+        }
         return Optional.of(new ReviewSessionDto(
                 row.id(), state.items(), state.queue(), state.position(), finished));
     }

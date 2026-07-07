@@ -172,20 +172,22 @@ export interface ReviewSummary {
   topicCount: number;
 }
 
-/** One review-pool exercise, self-contained (topic title included for the header). */
+/**
+ * A topic with pooled practice exercises: how many are still in the review list
+ * ({@link pending}), the topic {@link total}, and whether it participates.
+ */
+export interface ReviewTopic {
+  topicId: string;
+  title: Localized;
+  pending: number;
+  total: number;
+  enabled: boolean;
+}
+
+/** One review-list exercise, self-contained (topic title included for the header). */
 export interface ReviewItem {
   topicId: string;
   topicTitle: Localized;
   atomId: string;
   exercise: Exercise;
-}
-
-export interface ReviewSession {
-  sessionId: number;
-  items: ReviewItem[];
-  /** Indexes into items; wrong answers re-enter at the tail. */
-  queue: number[];
-  /** Cursor into queue. */
-  position: number;
-  finished: boolean;
 }

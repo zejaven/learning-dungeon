@@ -220,6 +220,13 @@ public class DbInitializer {
                 )
                 """);
 
+        // Whether a pooled exercise is currently in the review list. Answering it
+        // correctly clears the flag (it leaves the list); a wrong answer keeps it
+        // set. A per-topic or global "start again" sets it back to TRUE. This is
+        // the persistent membership of the review list — there is no session
+        // snapshot; ordering/requeue is a client concern over this live set.
+        jdbc.execute("ALTER TABLE review_pool ADD COLUMN IF NOT EXISTS pending BOOLEAN NOT NULL DEFAULT TRUE");
+
         // Migration: progress is now keyed by stable exercise ids, so the
         // atoms_hash columns (and the hash-scoped lesson_unit_progress table)
         // are gone. Drop them from databases created before this change.
@@ -228,19 +235,18 @@ public class DbInitializer {
         jdbc.execute("ALTER TABLE lesson_progress DROP COLUMN IF EXISTS atoms_hash");
         jdbc.execute("ALTER TABLE review_pool DROP COLUMN IF EXISTS atoms_hash");
 
-        // A review run over the pool; state_json holds the shuffled item list,
-        // the requeue queue and the cursor, so a reload resumes mid-session.
+        // Per-topic review preference: whether a topic's pooled exercises take
+        // part in review sessions. Absence of a row means enabled (the default),
+        // so a topic joins review automatically once its lesson is completed.
         jdbc.execute("""
-                CREATE TABLE IF NOT EXISTS review_session (
-                    id          BIGSERIAL   PRIMARY KEY,
-                    started_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-                    finished_at TIMESTAMPTZ,
-                    state_json  TEXT        NOT NULL
+                CREATE TABLE IF NOT EXISTS review_topic_pref (
+                    topic_id TEXT    PRIMARY KEY,
+                    enabled  BOOLEAN NOT NULL DEFAULT TRUE
                 )
                 """);
-        jdbc.execute("""
-                CREATE UNIQUE INDEX IF NOT EXISTS ux_review_session_active
-                    ON review_session ((1)) WHERE finished_at IS NULL
-                """);
+
+        // The review list is now persistent per-exercise state (review_pool.pending)
+        // rather than a shuffled session snapshot. Drop the obsolete session table.
+        jdbc.execute("DROP TABLE IF EXISTS review_session");
     }
 }

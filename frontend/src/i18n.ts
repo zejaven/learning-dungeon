@@ -266,6 +266,12 @@ const UI: Record<string, Localized> = {
   reviewStartAgain: { en: 'Start again', ru: 'Начать заново' },
   reviewProgress: { en: 'answered', ru: 'отвечено' },
   reviewRemaining: { en: 'left', ru: 'осталось' },
+  reviewTopicsTitle: { en: 'Topics in review', ru: 'Топики для повторения' },
+  reviewOther: { en: 'Other', ru: 'Другое' },
+  reviewTopicCount: { en: 'in the list / total', ru: 'в списке / всего' },
+  reviewRestartAll: { en: 'Start over — return every answered exercise', ru: 'Начать заново — вернуть все отвеченные вопросы' },
+  reviewRestartTopic: { en: "Return this topic's answered exercises", ru: 'Вернуть отвеченные вопросы этой темы' },
+  reviewAllOff: { en: 'All topics are off — enable one on the left to review.', ru: 'Все темы выключены — включите тему слева, чтобы повторять.' },
   backHome: { en: '← Home', ru: '← На главную' },
 };
 

@@ -137,31 +137,27 @@ public final class LessonDtos {
     public record RecomputeResponse(boolean lessonCompleted) {
     }
 
-    /** Home-screen badge payload for the global review mode. */
+    /** Home-screen badge payload for the global review mode ({@code poolSize} = pending∩enabled). */
     public record ReviewSummary(int poolSize, int topicCount) {
     }
 
-    /** One review-pool exercise, self-contained so the review screen never loads topics. */
+    /**
+     * One topic that has practice exercises in the review pool: how many are
+     * still in the list ({@code pending}), the topic total, and whether it is
+     * enabled (its pending exercises take part in review).
+     */
+    public record ReviewTopic(String topicId, Localized title, int pending, int total, boolean enabled) {
+    }
+
+    /** Toggles whether a topic's exercises participate in review sessions. */
+    public record ReviewTopicPrefRequest(boolean enabled) {
+    }
+
+    /** One review-list exercise, self-contained so the review screen never loads topics. */
     public record ReviewItem(String topicId, Localized topicTitle, String atomId, Exercise exercise) {
     }
 
-    /**
-     * A running review session. {@code queue} holds indexes into {@code items};
-     * wrong answers push their index back onto the tail, {@code position} is the
-     * cursor into {@code queue}.
-     */
-    public record ReviewSessionDto(
-            long sessionId,
-            List<ReviewItem> items,
-            List<Integer> queue,
-            int position,
-            boolean finished
-    ) {
-    }
-
-    public record ReviewAnswerRequest(int itemIndex, boolean correct, String answerJson) {
-    }
-
-    public record ReviewAnswerResponse(List<Integer> queue, int position, boolean finished) {
+    /** Records a review answer; a correct answer drops the exercise from the list. */
+    public record ReviewMarkRequest(String topicId, String exerciseId, boolean correct) {
     }
 }

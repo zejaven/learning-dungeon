@@ -15,8 +15,9 @@ import type {
   AnswerValue,
   LearningAtoms,
   LessonState,
-  ReviewSession,
+  ReviewItem,
   ReviewSummary,
+  ReviewTopic,
 } from './lessonTypes';
 
 export interface AiProvidersResponse {
@@ -446,37 +447,53 @@ export async function fetchReviewSummary(): Promise<ReviewSummary> {
   return res.json();
 }
 
-/** Returns the active session if one exists, else shuffles the pool into a new one. */
-export async function startReviewSession(): Promise<ReviewSession> {
-  const res = await fetch('/api/review/session/start', { method: 'POST' });
-  if (!res.ok) throw new Error(`Failed to start review (${res.status})`);
+/** Topics with pooled exercises, each flagged whether it participates in review. */
+export async function fetchReviewTopics(): Promise<ReviewTopic[]> {
+  const res = await fetch('/api/review/topics');
+  if (!res.ok) throw new Error(`Failed to load review topics (${res.status})`);
   return res.json();
 }
 
-export async function fetchActiveReviewSession(): Promise<ReviewSession | null> {
-  const res = await fetch('/api/review/session/active');
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`Failed to load review session (${res.status})`);
-  return res.json();
-}
-
-export async function answerReview(
-  sessionId: number,
-  payload: { itemIndex: number; correct: boolean; answer: AnswerValue },
-): Promise<{ queue: number[]; position: number; finished: boolean }> {
-  const res = await fetch(`/api/review/session/${sessionId}/answer`, {
+export async function setReviewTopicEnabled(topicId: string, enabled: boolean): Promise<void> {
+  const res = await fetch(`/api/review/topics/${encodeURIComponent(topicId)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      itemIndex: payload.itemIndex,
-      correct: payload.correct,
-      answerJson: JSON.stringify(payload.answer),
-    }),
+    body: JSON.stringify({ enabled }),
   });
-  if (!res.ok) throw new Error(`Failed to save review answer (${res.status})`);
+  if (!res.ok) throw new Error(`Failed to update review topic (${res.status})`);
+}
+
+/** The current review list: pending exercises of enabled topics (client shuffles). */
+export async function fetchReviewList(): Promise<ReviewItem[]> {
+  const res = await fetch('/api/review/list');
+  if (!res.ok) throw new Error(`Failed to load review list (${res.status})`);
   return res.json();
 }
 
-export async function abandonReviewSession(sessionId: number): Promise<void> {
-  await fetch(`/api/review/session/${sessionId}/abandon`, { method: 'POST' });
+/** Records a review answer; a correct answer drops the exercise from the list. */
+export async function markReviewAnswer(
+  topicId: string,
+  exerciseId: string,
+  correct: boolean,
+): Promise<void> {
+  const res = await fetch('/api/review/answer', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ topicId, exerciseId, correct }),
+  });
+  if (!res.ok) throw new Error(`Failed to save review answer (${res.status})`);
+}
+
+/** Per-topic "start again": returns the topic's answered exercises to the list. */
+export async function restartReviewTopic(topicId: string): Promise<void> {
+  const res = await fetch(`/api/review/topics/${encodeURIComponent(topicId)}/restart`, {
+    method: 'POST',
+  });
+  if (!res.ok) throw new Error(`Failed to restart topic (${res.status})`);
+}
+
+/** Global "start again": returns every answered exercise, across all topics, to the list. */
+export async function restartReviewAll(): Promise<void> {
+  const res = await fetch('/api/review/restart', { method: 'POST' });
+  if (!res.ok) throw new Error(`Failed to restart review (${res.status})`);
 }

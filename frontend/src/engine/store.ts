@@ -405,9 +405,14 @@ export const useStore = create<AppState>((set, get) => ({
 
   markTopicCompleted() {
     const id = get().topic?.id;
+    // Celebrate only on the real first-time transition. Reopening an already
+    // completed topic (topicCompleted restored from saved progress) must not
+    // re-fire the fireworks — the derived lesson flag can lag behind the loaded
+    // boss results, so callers can't reliably detect the transition themselves.
+    const alreadyCompleted = get().topicCompleted;
     set({
       topicCompleted: true,
-      celebrating: true,
+      celebrating: !alreadyCompleted,
       topics: id
         ? get().topics.map((t) => (t.id === id ? { ...t, completed: true } : t))
         : get().topics,

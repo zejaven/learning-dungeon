@@ -56,11 +56,8 @@ export function grade(exercise: Exercise, answer: AnswerValue, lang: Lang): bool
         && answer.ids.every((id, i) => id === correct[i]);
     }
     case 'match_pairs': {
-      // Matched pairs lock in the UI, so the final mapping is always right;
-      // the exercise counts as failed when any wrong match was attempted.
       if (answer.kind !== 'pairs') return false;
-      const allMatched = exercise.pairs.every((p) => answer.matches[p.id] === p.id);
-      return allMatched && answer.mistakes === 0;
+      return exercise.pairs.every((p) => answer.matches[p.id] === p.id);
     }
     default:
       return false;

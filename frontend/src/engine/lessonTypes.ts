@@ -163,7 +163,7 @@ export type AnswerValue =
   | { kind: 'text'; values?: string[]; value?: string }
   | { kind: 'order'; ids: string[] }
   | { kind: 'tokens'; tokens: string[] }
-  | { kind: 'pairs'; matches: Record<string, string>; mistakes: number };
+  | { kind: 'pairs'; matches: Record<string, string> };
 
 // --- Global review ---------------------------------------------------------
 

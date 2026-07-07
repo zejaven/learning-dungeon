@@ -25,10 +25,13 @@ export function WordBank({ exercise, answer, onChange, showResult, correct }: Pr
   }, [exercise.id, lang]);
 
   const pickedKeys = answer?.kind === 'tokens' ? (answer as { keys?: string[] }).keys ?? [] : [];
-  // A restored answer (revisit) carries tokens but no per-mount keys, so show
+  // Saved words, parallel to `pickedKeys`. On a revisit the saved keys come from
+  // a previous shuffle and no longer resolve against this mount's pool, so we
+  // fall back to these tokens by index to render the chip label.
+  const answerTokens = answer?.kind === 'tokens' ? answer.tokens : [];
+  // A restored answer (revisit) may carry tokens but no per-mount keys, so show
   // the saved tokens as static chips instead of an empty line.
-  const restoredTokens =
-    showResult && pickedKeys.length === 0 && answer?.kind === 'tokens' ? answer.tokens : [];
+  const restoredTokens = showResult && pickedKeys.length === 0 ? answerTokens : [];
 
   function setPicked(keys: string[]) {
     const words = keys.map((k) => pool.find((c) => c.key === k)?.word ?? '');
@@ -47,14 +50,14 @@ export function WordBank({ exercise, answer, onChange, showResult, correct }: Pr
             {word}
           </span>
         ))}
-        {pickedKeys.map((key) => (
+        {pickedKeys.map((key, i) => (
           <button
             key={key}
             className="ex-chip picked"
             disabled={showResult}
             onClick={() => setPicked(pickedKeys.filter((k) => k !== key))}
           >
-            {pool.find((c) => c.key === key)?.word}
+            {pool.find((c) => c.key === key)?.word ?? answerTokens[i]}
           </button>
         ))}
       </div>

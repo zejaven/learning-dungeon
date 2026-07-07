@@ -20,8 +20,13 @@ export function MatchPairs({ exercise, answer, onChange, showResult }: Props) {
   const rights = useMemo(() => shuffled(exercise.pairs.map((p) => p.id)), [exercise.id]);
 
   const [selectedLeft, setSelectedLeft] = useState<string | null>(null);
-  const [matched, setMatched] = useState<Record<string, string>>({});
-  const [mistakes, setMistakes] = useState(0);
+  // Seed from a restored answer (revisit) so a completed atom shows its matches
+  // instead of an empty grid; ExerciseCard remounts per exercise (keyed by id),
+  // so this initializer re-runs for each exercise.
+  const [matched, setMatched] = useState<Record<string, string>>(
+    answer?.kind === 'pairs' ? answer.matches : {},
+  );
+  const [mistakes, setMistakes] = useState(answer?.kind === 'pairs' ? answer.mistakes : 0);
   const [flashWrong, setFlashWrong] = useState<string | null>(null);
 
   const done = answer?.kind === 'pairs';

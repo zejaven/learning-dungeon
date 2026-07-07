@@ -59,7 +59,7 @@ export function ExerciseCard({
   return (
     <div className="exercise-card">
       <div className="ex-prompt">
-        <Markdown>{tl(exercise.prompt, lang)}</Markdown>
+        <Markdown className="markdown">{tl(exercise.prompt, lang)}</Markdown>
       </div>
 
       {exercise.code && (
@@ -76,13 +76,13 @@ export function ExerciseCard({
           <div className="ex-feedback-title">
             {lastCorrect ? `✅ ${ui('correct', lang)}` : `❌ ${ui('incorrect', lang)}`}
           </div>
-          {feedbackText && <Markdown>{tl(feedbackText, lang)}</Markdown>}
+          {feedbackText && <Markdown className="markdown">{tl(feedbackText, lang)}</Markdown>}
         </div>
       )}
 
       {showResult && exercise.reveal && (
         <div className="ex-reveal">
-          <Markdown>{tl(exercise.reveal, lang)}</Markdown>
+          <Markdown className="markdown">{tl(exercise.reveal, lang)}</Markdown>
         </div>
       )}
 

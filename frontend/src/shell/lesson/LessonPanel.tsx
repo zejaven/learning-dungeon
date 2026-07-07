@@ -106,54 +106,56 @@ export function LessonPanel() {
         </button>
       </div>
 
-      {generating && <GenerationView taskKey={genKey} />}
+      <div className="lesson-body">
+        {generating && <GenerationView taskKey={genKey} />}
 
-      {!generating && (
-        <>
-          {lesson.loading && <p className="home-hint">{ui('loading', lang)}</p>}
+        {!generating && (
+          <>
+            {lesson.loading && <p className="home-hint">{ui('loading', lang)}</p>}
 
-          {!lesson.loading && lesson.lessonCompleted && (
-            <div className="lesson-banner done">{ui('lessonCompleted', lang)}</div>
-          )}
+            {!lesson.loading && lesson.lessonCompleted && (
+              <div className="lesson-banner done">{ui('lessonCompleted', lang)}</div>
+            )}
 
-          {!lesson.loading && isBoss && unit && <BossFightUnit unit={unit} />}
+            {!lesson.loading && isBoss && unit && <BossFightUnit unit={unit} />}
 
-          {!lesson.loading && isMistakes && !mistakeExerciseId && (
-            <>
-              <div className="lesson-banner done">{ui('noMistakes', lang)}</div>
-              <div className="ex-actions">
-                <button className="primary" onClick={() => lesson.continueMistake()}>
-                  {ui('continueBtn', lang)}
-                </button>
-              </div>
-            </>
-          )}
+            {!lesson.loading && isMistakes && !mistakeExerciseId && (
+              <>
+                <div className="lesson-banner done">{ui('noMistakes', lang)}</div>
+                <div className="ex-actions">
+                  <button className="primary" onClick={() => lesson.continueMistake()}>
+                    {ui('continueBtn', lang)}
+                  </button>
+                </div>
+              </>
+            )}
 
-          {!lesson.loading && isMistakes && activeExercise && mistakeExerciseId && (
-            <ExerciseCard
-              key={`m:${activeExercise.id}`}
-              exercise={activeExercise}
-              phase={lesson.mistakesPhase}
-              lastCorrect={lesson.mistakesLastCorrect}
-              presetAnswer={lesson.mistakesLastAnswer}
-              onSubmit={(answer) => lesson.submitMistake(answer)}
-              onContinue={() => lesson.continueMistake()}
-            />
-          )}
+            {!lesson.loading && isMistakes && activeExercise && mistakeExerciseId && (
+              <ExerciseCard
+                key={`m:${activeExercise.id}`}
+                exercise={activeExercise}
+                phase={lesson.mistakesPhase}
+                lastCorrect={lesson.mistakesLastCorrect}
+                presetAnswer={lesson.mistakesLastAnswer}
+                onSubmit={(answer) => lesson.submitMistake(answer)}
+                onContinue={() => lesson.continueMistake()}
+              />
+            )}
 
-          {!lesson.loading && unit && !isBoss && !isMistakes && activeExercise && (
-            <ExerciseCard
-              key={activeExercise.id}
-              exercise={activeExercise}
-              phase={phase}
-              lastCorrect={result?.correct ?? false}
-              presetAnswer={result?.answer ?? null}
-              onSubmit={(answer) => lesson.submitAnswer(answer)}
-              onContinue={() => void lesson.continueNext()}
-            />
-          )}
-        </>
-      )}
+            {!lesson.loading && unit && !isBoss && !isMistakes && activeExercise && (
+              <ExerciseCard
+                key={activeExercise.id}
+                exercise={activeExercise}
+                phase={phase}
+                lastCorrect={result?.correct ?? false}
+                presetAnswer={result?.answer ?? null}
+                onSubmit={(answer) => lesson.submitAnswer(answer)}
+                onContinue={() => void lesson.continueNext()}
+              />
+            )}
+          </>
+        )}
+      </div>
 
       <UnitTrack
         units={lesson.units}

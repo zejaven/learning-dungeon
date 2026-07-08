@@ -5,10 +5,12 @@ import { useGeneration } from './engine/generationStore';
 import { navigate, routeForQuestion, useRoute } from './engine/router';
 import { useStore } from './engine/store';
 import { useStyle } from './engine/styleStore';
+import { useSystem } from './engine/systemStore';
 import { useUsage } from './engine/usageStore';
 import { HomeScreen } from './screens/HomeScreen';
 import { ReviewScreen } from './screens/ReviewScreen';
 import { WorkspaceScreen } from './screens/WorkspaceScreen';
+import { UpdatingOverlay } from './shell/UpdatingOverlay';
 
 export function App() {
   const route = useRoute();
@@ -22,6 +24,7 @@ export function App() {
   const startUsagePolling = useUsage((s) => s.start);
   const loadStyles = useStyle((s) => s.load);
   const loadAiProviders = useAi((s) => s.load);
+  const startSystemPolling = useSystem((s) => s.start);
 
   useEffect(() => {
     loadTopics();
@@ -31,11 +34,13 @@ export function App() {
     refreshActiveGenerations();
     // Begin polling selected-provider usage/status for the header meter (idempotent).
     startUsagePolling();
+    // Poll app self-update status for the settings gear badge (idempotent).
+    startSystemPolling();
     // Load the user's saved generation styles into the dropdown.
     loadStyles();
     // Detect available AI CLIs and choose a provider before AI actions run.
     loadAiProviders().then(() => useUsage.getState().refresh());
-  }, [loadTopics, loadQuestions, refreshActiveGenerations, startUsagePolling, loadStyles, loadAiProviders]);
+  }, [loadTopics, loadQuestions, refreshActiveGenerations, startUsagePolling, startSystemPolling, loadStyles, loadAiProviders]);
 
   // Load the topic referenced by the URL once topics are known (also after a
   // reload or when following a deep link / cross-link).
@@ -59,7 +64,19 @@ export function App() {
     }
   }, [route, topics, manualQuestions]);
 
-  if (route.view === 'workspace') return <WorkspaceScreen />;
-  if (route.view === 'review') return <ReviewScreen />;
-  return <HomeScreen />;
+  const screen =
+    route.view === 'workspace' ? (
+      <WorkspaceScreen />
+    ) : route.view === 'review' ? (
+      <ReviewScreen />
+    ) : (
+      <HomeScreen />
+    );
+
+  return (
+    <>
+      {screen}
+      <UpdatingOverlay />
+    </>
+  );
 }

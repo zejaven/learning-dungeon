@@ -37,6 +37,38 @@ export async function fetchTopics(): Promise<TopicSummary[]> {
   return res.json();
 }
 
+/** App self-update/restart capability + current commits-behind (settings gear). */
+export interface SystemStatus {
+  /** Running under the tray launcher, so it can rebuild+restart itself. */
+  supervised: boolean;
+  /** Source tree present next to the app, so a rebuild is possible. */
+  canRebuild: boolean;
+  /** A git checkout with an upstream, so "Update" can pull from GitHub. */
+  canPull: boolean;
+  /** Commits the upstream is ahead of local; -1 when unknown. */
+  behind: number;
+  /** Short HEAD sha (informational). */
+  version: string;
+  /** Unique per process start; a change means the server restarted. */
+  bootId: string;
+}
+
+export async function fetchSystemStatus(): Promise<SystemStatus> {
+  const res = await fetch('/api/system/status');
+  if (!res.ok) throw new Error(`Failed to load system status (${res.status})`);
+  return res.json();
+}
+
+/** Triggers a rebuild+restart. pull=true also pulls from GitHub first. Returns 202. */
+export async function postSystemUpdate(pull: boolean): Promise<void> {
+  const res = await fetch('/api/system/update', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pull }),
+  });
+  if (!res.ok) throw new Error(`Update request refused (${res.status})`);
+}
+
 /** Hand-added catalog questions, merged into the tree by buildCatalog. */
 export async function fetchQuestions(): Promise<ManualQuestion[]> {
   try {

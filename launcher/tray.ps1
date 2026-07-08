@@ -12,12 +12,16 @@ Add-Type -AssemblyName System.Drawing
 
 $ErrorActionPreference = 'Stop'
 
-$root     = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$port     = 8080
-$url      = "http://localhost:$port"
-$iconPath = Join-Path $PSScriptRoot 'icon.ico'
-$logPath  = Join-Path $PSScriptRoot 'app.log'
-$title    = 'Java Interview Dungeon'
+$root       = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$port       = 8080
+$url        = "http://localhost:$port"
+$iconPath   = Join-Path $PSScriptRoot 'icon.ico'
+$logPath    = Join-Path $PSScriptRoot 'app.log'
+$title      = 'Java Interview Dungeon'
+# Sentinel written by the backend's /api/system/update; its presence on JVM exit
+# means "rebuild+restart" rather than a normal shutdown (see update.ps1).
+$updateFlag   = Join-Path $PSScriptRoot 'update.flag'
+$updateScript = Join-Path $PSScriptRoot 'update.ps1'
 
 function Show-Error([string]$text) {
     [System.Windows.Forms.MessageBox]::Show($text, $title,
@@ -80,7 +84,7 @@ Set-Content -Path $startupLog -Value '' -ErrorAction SilentlyContinue
 
 $psi = New-Object System.Diagnostics.ProcessStartInfo
 $psi.FileName = $javaw
-$psi.Arguments = "-Dapp.repo-root=`"$root`" -jar `"$jar`" --logging.file.name=`"$logPath`""
+$psi.Arguments = "-Dapp.repo-root=`"$root`" -Dapp.launcher=tray -jar `"$jar`" --logging.file.name=`"$logPath`""
 $psi.WorkingDirectory = $root
 $psi.UseShellExecute = $false
 $psi.CreateNoWindow = $true
@@ -142,6 +146,20 @@ $shutdown = {
 }
 $quitItem.add_Click($shutdown)
 
+# The backend exited after writing update.flag: hand rebuild+restart off to a
+# detached updater (survives this tray quitting) and close the tray. The updater
+# relaunches a fresh tray + jar when the build finishes.
+$handoffUpdate = {
+    $notify.ShowBalloonTip(3000, $title, 'Updating - rebuilding and restarting...',
+        [System.Windows.Forms.ToolTipIcon]::Info)
+    try {
+        Start-Process powershell.exe -WindowStyle Hidden -ArgumentList @(
+            '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $updateScript)
+    } catch {}
+    if ($notify) { $notify.Visible = $false; $notify.Dispose() }
+    [System.Windows.Forms.Application]::Exit()
+}
+
 # --- wait for readiness, keeping the tray responsive ---
 $notify.ShowBalloonTip(3000, $title, 'Starting...', [System.Windows.Forms.ToolTipIcon]::Info)
 $deadline = (Get-Date).AddSeconds(90)
@@ -177,7 +195,12 @@ if ($ready) {
 # --- exit the tray if the backend dies on its own ---
 $timer = New-Object System.Windows.Forms.Timer
 $timer.Interval = 3000
-$timer.add_Tick({ if ($java.HasExited) { $timer.Stop(); & $shutdown } })
+$timer.add_Tick({
+    if ($java.HasExited) {
+        $timer.Stop()
+        if (Test-Path $updateFlag) { & $handoffUpdate } else { & $shutdown }
+    }
+})
 $timer.Start()
 
 [System.Windows.Forms.Application]::Run()

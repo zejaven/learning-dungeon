@@ -26,6 +26,7 @@ import { LangSwitcher } from '@app/shell/LangSwitcher';
 import { LessonPanel } from '@app/shell/lesson/LessonPanel';
 import { Markdown } from '@app/shell/Markdown';
 import { SelectionAsk } from '@app/shell/SelectionAsk';
+import { SettingsButton } from '@app/shell/SettingsButton';
 import { StyleSelector } from '@app/shell/StyleSelector';
 import { ThemeSwitcher } from '@app/shell/ThemeSwitcher';
 import { UsageBar } from '@app/shell/UsageBar';
@@ -135,6 +136,7 @@ export function HomeScreen() {
     <div className="app">
       <header className="header">
         <h1>🗡️ Java Interview Dungeon</h1>
+        <SettingsButton />
         <div className="spacer" />
         <AiProviderSelector />
         <UsageBar />

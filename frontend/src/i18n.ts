@@ -273,6 +273,42 @@ const UI: Record<string, Localized> = {
   reviewRestartTopic: { en: "Return this topic's answered exercises", ru: 'Вернуть отвеченные вопросы этой темы' },
   reviewAllOff: { en: 'All topics are off — enable one on the left to review.', ru: 'Все темы выключены — включите тему слева, чтобы повторять.' },
   backHome: { en: '← Home', ru: '← На главную' },
+  // --- Settings / self-update ---
+  settings: { en: 'Settings', ru: 'Настройки' },
+  settingsTitle: { en: '⚙️ Settings', ru: '⚙️ Настройки' },
+  settingsUpdate: { en: '⬇️ Update', ru: '⬇️ Обновить' },
+  settingsUpdateDesc: {
+    en: 'Pull the latest commits from GitHub, rebuild and restart.',
+    ru: 'Подтянуть новые коммиты из GitHub, пересобрать и перезапустить.',
+  },
+  settingsRestart: { en: '↻ Restart', ru: '↻ Перезапустить' },
+  settingsRestartDesc: {
+    en: 'Rebuild from the current local files and restart.',
+    ru: 'Пересобрать из текущих локальных файлов и перезапустить.',
+  },
+  settingsUpToDate: { en: 'Up to date', ru: 'Актуально' },
+  settingsCommitsBehind: { en: 'new commit(s)', ru: 'нов. коммит(ов)' },
+  settingsUnsupervised: {
+    en: 'Update/restart is available only when the app is launched from its desktop icon.',
+    ru: 'Обновление/перезапуск доступны только при запуске через ярлык на рабочем столе.',
+  },
+  settingsNoSource: {
+    en: 'The source tree was not found next to the app, so it cannot rebuild here.',
+    ru: 'Рядом с приложением нет исходников, пересборка на этой машине невозможна.',
+  },
+  settingsNoGit: {
+    en: 'No git checkout with an upstream — pulling from GitHub is unavailable here.',
+    ru: 'Нет git-репозитория с апстримом — обновление из GitHub недоступно.',
+  },
+  settingsRestarting: {
+    en: 'Updating — the app is rebuilding and restarting. This can take a couple of minutes…',
+    ru: 'Обновление — приложение пересобирается и перезапускается. Это может занять пару минут…',
+  },
+  settingsRestartTimeout: {
+    en: "The app is taking longer than expected. It's usually still rebuilding — reload to check.",
+    ru: 'Приложение отвечает дольше обычного. Обычно оно ещё пересобирается — обновите страницу для проверки.',
+  },
+  settingsReloadNow: { en: 'Reload now', ru: 'Обновить страницу' },
 };
 
 export function ui(key: keyof typeof UI | string, lang: Lang): string {

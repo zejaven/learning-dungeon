@@ -5,6 +5,7 @@ import { tl, ui, useLang } from '@app/i18n';
 import { ExerciseCard } from '@app/shell/lesson/ExerciseCard';
 import { LangSwitcher } from '@app/shell/LangSwitcher';
 import { ReviewTree } from '@app/shell/ReviewTree';
+import { SettingsButton } from '@app/shell/SettingsButton';
 import { ThemeSwitcher } from '@app/shell/ThemeSwitcher';
 
 /**
@@ -36,6 +37,7 @@ export function ReviewScreen() {
       <header className="header">
         <button onClick={() => navigate('/')}>{ui('backHome', lang)}</button>
         <h1>{ui('reviewTitle', lang)}</h1>
+        <SettingsButton />
         <div className="spacer" />
         {item && (
           <span className="review-progress">

@@ -14,6 +14,7 @@ import { AiProviderSelector } from '@app/shell/AiProviderSelector';
 import { BossFightDialog } from '@app/shell/BossFightDialog';
 import { FileTree } from '@app/shell/FileTree';
 import { LangSwitcher } from '@app/shell/LangSwitcher';
+import { SettingsButton } from '@app/shell/SettingsButton';
 import { ThemeSwitcher } from '@app/shell/ThemeSwitcher';
 import { UsageBar } from '@app/shell/UsageBar';
 import { Celebration } from '@app/shell/Celebration';
@@ -47,6 +48,7 @@ export function WorkspaceScreen() {
           {ui('backToCatalog', lang)}
         </button>
         <h1 className="workspace-title">{topic ? tl(topic.title, lang) : 'Java Interview Dungeon'}</h1>
+        <SettingsButton />
         {topicCompleted && <span className="completed-badge">{ui('topicCompleted', lang)}</span>}
         <div className="spacer" />
         <AiProviderSelector />

@@ -14,6 +14,10 @@ export default defineConfig({
     },
   },
   server: {
+    // Listen on 0.0.0.0 so other devices on the LAN (e.g. a VR headset browser)
+    // can reach the dev server at http://<pc-ip>:5173. The /api proxy below still
+    // targets localhost:8080, so the backend stays bound to the PC only.
+    host: true,
     port: 5173,
     fs: {
       // Allow importing topic files that live outside the frontend root.

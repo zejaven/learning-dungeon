@@ -81,6 +81,20 @@ npm install
 npm run dev
 ```
 
+Packaged (tray) run — a single JVM on `http://localhost:8080` serving the API and
+the built frontend (bundled into the jar under `static/`), with no Vite. Build
+once, then launch from the tray:
+
+```powershell
+launcher\build-app.ps1
+```
+
+This is the mode the in-app settings gear self-updates: the tray supervisor
+(`launcher/tray.ps1`) launches the jar with `-Dapp.launcher=tray`, and on a
+flagged exit hands off to `launcher/update.ps1` to rebuild and relaunch (see
+Backend Notes — the `system` package). Editing `tray.ps1`/`update.ps1`/backend
+startup args only takes effect after a fresh `build-app.ps1` + relaunch.
+
 Validation commands:
 
 ```powershell
@@ -173,6 +187,23 @@ If a command cannot be run, say exactly why and what remains unverified.
     mission completion). Boss Fight units reuse the existing AI-graded
     `POST /api/assistant/evaluate` flow and `boss_fight_answer` persistence
     unchanged — Boss Fight progress is not scoped by `atomsHash`.
+- The `system` package (`backend/src/main/java/com/interviewlearning/system/`)
+  is the settings-gear self-update/restart domain:
+  - `SystemService` detects deployment capabilities (`supervised` — set only
+    when the tray launcher passes `-Dapp.launcher=tray`; `canRebuild` — the
+    source tree is present next to the app; `canPull` — a git checkout with an
+    upstream), periodically shells out to `git fetch` + `git rev-list --count
+    HEAD..@{u}` to cache how many commits the upstream is ahead, and holds a
+    random per-process `bootId`.
+  - "Update"/"Restart" cannot be done in-process (a running JVM holds its own
+    jar open on Windows), so `requestUpdate` writes a `launcher/update.flag`
+    sentinel and exits the JVM; the tray supervisor (`launcher/tray.ps1`) sees
+    the flagged exit and hands off to `launcher/update.ps1`, which optionally
+    `git pull`s, runs `launcher/build-app.ps1`, and relaunches. The frontend
+    polls `GET /api/system/status` and reloads once `bootId` changes.
+  - `api/SystemController` serves `GET /api/system/status` and
+    `POST /api/system/update {pull}` (the latter 409s unless `supervised` and
+    the requested capability is present). No PostgreSQL state is involved.
 
 ## visual-runtime Rules
 
@@ -214,6 +245,13 @@ When adding or changing a `visual.Visual*` model:
   grading form itself is shared with the standalone dialog via
   `frontend/src/shell/BossQuestionForm.tsx` — do not duplicate that logic.
 - `ReviewScreen` (`#/review`) reuses `ExerciseCard` outside the lesson context.
+- The settings gear (`frontend/src/shell/SettingsButton.tsx`, in every screen's
+  header) opens `SettingsDialog` (Update = git pull + rebuild + restart; Restart
+  = rebuild from local files + restart). `frontend/src/engine/systemStore.ts`
+  polls `GET /api/system/status` for the commits-behind badge and drives the
+  update: it POSTs, then polls for a changed `bootId` and reloads. `UpdatingOverlay`
+  covers the screen while the backend rebuilds (see Backend Notes — the `system`
+  package). Buttons disable themselves per the status capabilities.
 - Router (`frontend/src/engine/router.ts`) routes: `#/q/<id>` (lesson if one
   exists, else theory), `#/q/<id>/theory` (forces the reference explanation),
   `#/q/<id>/practice` (trace/structural/sql/challenge workspace — the "Go to

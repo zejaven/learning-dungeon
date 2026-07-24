@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { buildCatalog, stars, type CatalogEntry } from '@app/catalog';
+import { buildCatalog, compareEntries, stars, type CatalogEntry } from '@app/catalog';
+import { useDomain } from '@app/engine/domainStore';
 import { useStore } from '@app/engine/store';
 import { tl, useLang } from '@app/i18n';
 
@@ -22,7 +23,8 @@ export function CategoryTree({
   const topics = useStore((s) => s.topics);
   const manualQuestions = useStore((s) => s.manualQuestions);
   const lang = useLang((s) => s.lang);
-  const catalog = buildCatalog(topics, manualQuestions);
+  const domainId = useDomain((s) => s.domainId);
+  const catalog = buildCatalog(topics, manualQuestions, domainId);
   const existing = new Set(topics.map((t) => t.id));
   const completed = new Set(topics.filter((t) => t.completed).map((t) => t.id));
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -37,7 +39,7 @@ export function CategoryTree({
     <div className="tree">
       {catalog.map((cat) => {
         const open = !collapsed[cat.id];
-        const entries = [...cat.entries].sort((a, b) => a.difficulty - b.difficulty);
+        const entries = [...cat.entries].sort(compareEntries);
         return (
           <div key={cat.id} className="tree-cat">
             <button

@@ -1,5 +1,6 @@
 import type { Localized } from './i18n';
 import type { ManualQuestion, TopicSummary } from './engine/traceTypes';
+import { DOMAINS, domainOf } from './domains';
 
 /**
  * The interview-question catalog shown as a tree on the home screen.
@@ -24,6 +25,13 @@ export interface CatalogEntry {
   difficulty: Difficulty;
   /** Set when a generated topic exists for this question. */
   topicId?: string;
+  /** Explicit position (e.g. lecture number) from the topic; sorts before difficulty. */
+  order?: number;
+}
+
+/** Tree sort: explicit order (lecture number) first, then difficulty stars. */
+export function compareEntries(a: CatalogEntry, b: CatalogEntry): number {
+  return (a.order ?? 0) - (b.order ?? 0) || a.difficulty - b.difficulty;
 }
 
 export interface CatalogCategory {
@@ -416,18 +424,31 @@ function prettifyCategoryId(id: string): string {
  *  - a topic without a matching question is added as a new entry under the
  *    category it declared (so freshly generated topics appear in the tree).
  * The static catalog is left untouched (a deep copy is returned).
+ *
+ * Only topics of the requested domain are included. The static CATALOG (and
+ * manual questions) belong to the 'java' domain; other domains start from an
+ * empty tree and get their categories invented from categoryId/categoryName.
  */
 export function buildCatalog(
   topics: TopicSummary[],
   manualQuestions: ManualQuestion[] = [],
+  domainId = 'java',
 ): CatalogCategory[] {
-  const cats: CatalogCategory[] = CATALOG.map((c) => ({ ...c, entries: c.entries.map((e) => ({ ...e })) }));
+  const isJava = domainId === 'java';
+  // Sorting by explicit order here also makes invented categories appear in
+  // lecture order (a category is created when its first topic is placed).
+  const domainTopics = topics
+    .filter((t) => domainOf(t) === domainId)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const cats: CatalogCategory[] = isJava
+    ? CATALOG.map((c) => ({ ...c, entries: c.entries.map((e) => ({ ...e })) }))
+    : [];
   const byCategory = new Map(cats.map((c) => [c.id, c]));
 
   // Hand-added questions become catalog entries under their AI-chosen category
   // (creating it if new). Added before topics so a topic generated for one can
   // re-attach via catalogId.
-  for (const q of manualQuestions) {
+  for (const q of isJava ? manualQuestions : []) {
     let cat = byCategory.get(q.categoryId);
     if (!cat) {
       cat = { id: q.categoryId, name: q.categoryName || prettifyCategoryId(q.categoryId), entries: [] };
@@ -443,7 +464,7 @@ export function buildCatalog(
   const linkedTopicIds = new Set<string>();
   for (const c of cats) for (const e of c.entries) if (e.topicId) linkedTopicIds.add(e.topicId);
 
-  for (const t of topics) {
+  for (const t of domainTopics) {
     // Re-attach to the originating question, if any.
     if (t.catalogId && entryById.has(t.catalogId)) {
       const entry = entryById.get(t.catalogId)!;
@@ -468,8 +489,33 @@ export function buildCatalog(
       question: t.title,
       difficulty: normalizeDifficulty(t.difficulty),
       topicId: t.id,
+      order: t.order || undefined,
     });
     linkedTopicIds.add(t.id);
   }
   return cats;
+}
+
+/**
+ * Concatenation of every domain's catalog, for domain-agnostic lookups
+ * (deep links, review grouping). Category ids are unique across domains, so
+ * {@link findCatalogEntry} works on the combined list unchanged.
+ */
+export function buildAllCatalogs(
+  topics: TopicSummary[],
+  manualQuestions: ManualQuestion[] = [],
+): CatalogCategory[] {
+  return DOMAINS.flatMap((d) => buildCatalog(topics, manualQuestions, d.id));
+}
+
+/** Domain owning a catalog entry id, resolved via per-domain catalogs. */
+export function domainOfEntry(
+  topics: TopicSummary[],
+  manualQuestions: ManualQuestion[],
+  id: string,
+): string | null {
+  for (const d of DOMAINS) {
+    if (findCatalogEntry(buildCatalog(topics, manualQuestions, d.id), id)) return d.id;
+  }
+  return null;
 }

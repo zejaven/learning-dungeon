@@ -18,13 +18,19 @@ import { MermaidBlock } from './MermaidBlock';
  *
  * `className` defaults to the boxed, height-capped streaming look used in dialogs.
  * Pass `"markdown"` for full-width, full-height prose (e.g. the theory panel).
+ *
+ * `assetBase` resolves relative image paths (e.g. `images/x.png` in a topic
+ * explanation) against a base URL such as `/api/topics/<id>/assets`; absolute
+ * URLs and other schemes pass through untouched.
  */
 export function Markdown({
   children,
   className = 'md-stream markdown',
+  assetBase,
 }: {
   children: string;
   className?: string;
+  assetBase?: string;
 }) {
   return (
     <div className={className}>
@@ -39,6 +45,12 @@ export function Markdown({
             const mermaid = extractMermaid(props.children);
             if (mermaid != null) return <MermaidBlock code={mermaid} />;
             return <pre>{props.children}</pre>;
+          },
+          img(props) {
+            const src = props.src ?? '';
+            const relative = src && !/^([a-z][a-z0-9+.-]*:|\/|#)/i.test(src);
+            const resolved = assetBase && relative ? `${assetBase}/${src}` : src;
+            return <img src={resolved} alt={props.alt ?? ''} loading="lazy" />;
           },
           a(props) {
             const href = props.href ?? '';

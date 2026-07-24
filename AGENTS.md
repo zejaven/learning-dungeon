@@ -28,6 +28,33 @@ The architecture is intentionally split:
 This is a local personal tool. The Java runner has a timeout and heap cap, but it
 is not a production-grade sandbox.
 
+### Domains (subject areas)
+
+The app is multi-domain: a "domain" is a subject area above categories, and the
+home screen shows one domain at a time. Current domains: `java` (the original
+interview prep, with the static question catalog) and `ndm` (the IT8516
+"Network Design and Management" university course, imported as theory topics).
+
+- A topic declares its domain via `domainId` in `topic.yaml`. An absent
+  `domainId` means `java`, so all legacy topics are unaffected.
+- The domain list lives in `frontend/src/domains.ts` (id, bilingual title,
+  icon); the active domain is persisted by
+  `frontend/src/engine/domainStore.ts` (localStorage, like the language).
+- The header renders domain-switcher pills; the app title is the active
+  domain's title. A deep link to a topic of another domain (`#/q/ndm-...`)
+  auto-switches the domain.
+- Only the `java` domain has the static `CATALOG`, manual questions, and the
+  "Add topic"/"Add question" buttons; other domains build their category tree
+  purely from their topics' `categoryId`/`categoryName`, and their content is
+  imported rather than AI-generated (`prompts/add-topic.md` stays Java-only).
+- Progress tables still key by `topic_id` only — topic ids are a single global
+  namespace, so new domains use an id prefix (e.g. `ndm-`) by convention.
+- The global review pool is filtered to the active domain on the frontend; the
+  backend review endpoints stay domain-agnostic.
+- Non-programming domains use `mode: theory` topics (explanation + Boss Fight);
+  their explanations may embed images from `topics/<id>/images/`, served by
+  `GET /api/topics/{id}/assets/**`.
+
 ### Learn by micro-actions
 
 A topic's default learning path is not its long-form explanation but a
@@ -151,7 +178,18 @@ If a command cannot be run, say exactly why and what remains unverified.
 - Main package: `com.interviewlearning`.
 - Controllers live mostly under `backend/src/main/java/com/interviewlearning/api`.
 - Topic loading is in `topics/TopicRepository`. It rereads `topics/` from disk on
-  requests so new folders appear without a backend restart.
+  requests so new folders appear without a backend restart. It reads `domainId`
+  from `topic.yaml` (default `java`) into `TopicSummary`/`TopicDetail`; when
+  adding a record component, also update the positional copy in
+  `api/TopicController.list()` and the mirrored TS types in
+  `frontend/src/engine/traceTypes.ts` (TS fails silently).
+- `api/AssistantController` picks its prompt wording per domain (`DomainVoice`
+  map: mentor role, grader intro, example technical terms). A new domain that
+  should not sound like a Java interviewer needs an entry there.
+- `api/TopicAssetController` serves `GET /api/topics/{id}/assets/{*path}` from
+  the topic folder for explanation images: image-extension allowlist plus
+  path-traversal checks (unit-tested in `TopicAssetControllerTest`). Keep the
+  allowlist tight — it is what stops quiz.yaml/harness/ from leaking.
 - The runtime loader is lenient, but `TopicContractTest` is strict and should be
   trusted when fixing YAML or topic shape.
 - `JavaCodeRunner` compiles code with the JDK compiler API, runs it in a child JVM,
@@ -227,6 +265,15 @@ When adding or changing a `visual.Visual*` model:
 - The Vite dev server allows importing files outside `frontend/` so topic
   visualizers can live under `topics/`.
 - Global app state is primarily in `frontend/src/engine/store.ts`.
+- Domains: `buildCatalog(topics, manualQuestions, domainId)` in
+  `frontend/src/catalog.ts` builds one domain's tree (`java` seeds the static
+  `CATALOG`; other domains start empty and invent categories from topic
+  metadata). Use `buildAllCatalogs(...)` for domain-agnostic lookups (route
+  resolution in `App.tsx`/`HomeScreen`, review grouping). The review pool is
+  scoped to the active domain in `reviewStore.ts` (`activeDomainFilter`).
+- `shell/Markdown.tsx` takes an optional `assetBase` prop that resolves
+  relative image paths (`images/x.png`) against
+  `/api/topics/<id>/assets`; the theory panel passes it, dialogs don't.
 - Localized labels should use `tl(...)`, `ui(...)`, and `useLang` from `@app/i18n`.
 - Visualizers are pure React components of the current trace event and language.
   They must not call the backend or run Java.
@@ -269,7 +316,15 @@ Before adding or significantly editing a topic, read:
   `learning-atoms.json`
 
 The topic `id` in `topic.yaml` must match the folder name. New topics must include
-`categoryId`, `difficulty`, and usually `assistantExample`.
+`categoryId`, `difficulty`, and usually `assistantExample`. Topics outside the
+Java domain also set `domainId` (kebab-case; enforced by `TopicContractTest`)
+and prefix their id with the domain (e.g. `ndm-scalability`) so ids stay
+globally unique. An optional `order:` (e.g. the lecture number; ndm topics use
+1-16) sorts entries within a category before difficulty and puts invented
+categories in first-lecture order; topics without it (all Java topics) keep
+sorting by difficulty. Explanations may embed images: put files under
+`topics/<id>/images/` and reference them with relative links
+(`![...](images/x.png)`) — `TopicContractTest` fails on links to missing files.
 
 Known modes:
 
@@ -330,6 +385,7 @@ Use these as templates:
 - Trace topic: `topics/hashmap/`
 - Structural topic: `topics/strategy/`
 - Theory topic: `topics/design-patterns-overview/`
+- Non-Java (domain) theory topic with images: `topics/ndm-scalability/`
 - SQL topic: `topics/sql-many-to-many/`
 - Challenge topic: `topics/algo-max-pair-product/`
 - `learning-atoms.json` (micro-actions lesson): `topics/hashmap/learning-atoms.json`

@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -28,6 +29,37 @@ public class AssistantController {
                               TopicRepository topics) {
         this.ai = ai;
         this.topics = topics;
+    }
+
+    /**
+     * Domain-specific wording for the mentor/grader prompts, keyed by
+     * {@link TopicDetail#domainId()}. Unknown domains fall back to a neutral
+     * voice; no topic at all keeps the historical Java voice.
+     */
+    private record DomainVoice(String mentorRole, String graderIntro, String termsExample) {
+    }
+
+    private static final Map<String, DomainVoice> VOICES = Map.of(
+            "java", new DomainVoice(
+                    "concise, friendly Java interview mentor",
+                    "You are a strict but fair Java technical interviewer grading a "
+                            + "candidate's answer to ONE specific interview question. ",
+                    "Java, HashMap, hashCode"),
+            "ndm", new DomainVoice(
+                    "concise, friendly mentor for a Network Design and Management course",
+                    "You are a strict but fair examiner in a Network Design and Management "
+                            + "course grading a student's answer to ONE specific discussion question. ",
+                    "OSPF, TCAM, leaf-spine"));
+
+    private static final DomainVoice GENERIC_VOICE = new DomainVoice(
+            "concise, friendly technical mentor",
+            "You are a strict but fair technical interviewer grading a "
+                    + "candidate's answer to ONE specific question. ",
+            "HTTP, JSON");
+
+    private static DomainVoice voiceFor(Optional<TopicDetail> topic) {
+        return topic.map(t -> VOICES.getOrDefault(t.domainId(), GENERIC_VOICE))
+                .orElse(VOICES.get("java"));
     }
 
     public record AskRequest(String topicId, String question, String code, String lang, String provider) {
@@ -56,15 +88,16 @@ public class AssistantController {
                 ? Optional.empty()
                 : topics.getTopic(request.topicId());
         boolean ru = "ru".equalsIgnoreCase(request.lang());
+        DomainVoice voice = voiceFor(topic);
 
         StringBuilder sb = new StringBuilder();
-        sb.append("You are a concise, friendly Java interview mentor. ");
+        sb.append("You are a ").append(voice.mentorRole()).append(". ");
         sb.append("Answer the user's question directly and practically, with a short ")
                 .append("interview-ready explanation and a tiny example if helpful. ")
                 .append("Do not create or edit any files; just answer in text. ");
         sb.append(ru
                 ? "Reply in Russian, but keep code, identifiers and technical terms "
-                        + "like Java, HashMap, hashCode in their original form.\n\n"
+                        + "like " + voice.termsExample() + " in their original form.\n\n"
                 : "Reply in English.\n\n");
 
         topic.ifPresent(t -> {
@@ -92,10 +125,11 @@ public class AssistantController {
                 ? Optional.empty()
                 : topics.getTopic(request.topicId());
         boolean ru = "ru".equalsIgnoreCase(request.lang());
+        DomainVoice voice = voiceFor(topic);
 
         StringBuilder sb = new StringBuilder();
-        sb.append("You are a strict but fair Java technical interviewer grading a ")
-                .append("candidate's answer to ONE specific interview question. Judge ONLY ")
+        sb.append(voice.graderIntro());
+        sb.append("Judge ONLY ")
                 .append("how well the answer addresses THAT question as asked. The topic ")
                 .append("reference material below is provided so you can verify factual ")
                 .append("correctness — it is NOT a checklist the candidate must cover. Do ")
@@ -116,7 +150,7 @@ public class AssistantController {
                 .append("optional extras note. Do not create or edit files.\n");
         sb.append(ru
                 ? "Write the explanation in Russian, but keep code, identifiers and "
-                        + "technical terms like Java, HashMap, hashCode in their original form. "
+                        + "technical terms like " + voice.termsExample() + " in their original form. "
                         + "The SCORE line stays in English exactly as specified.\n\n"
                 : "Write the explanation in English.\n\n");
 

@@ -1,4 +1,6 @@
 import { useEffect } from 'react';
+import { domainById } from '@app/domains';
+import { useDomain } from '@app/engine/domainStore';
 import { currentReviewItem, useReview } from '@app/engine/reviewStore';
 import { navigate } from '@app/engine/router';
 import { tl, ui, useLang } from '@app/i18n';
@@ -22,11 +24,14 @@ export function ReviewScreen() {
   const lang = useLang((s) => s.lang);
   const review = useReview();
   const item = currentReviewItem(review.queue);
+  const domainId = useDomain((s) => s.domainId);
+  const domain = domainById(domainId);
 
+  // Review is scoped to the active domain; restart if it changes.
   useEffect(() => {
     void useReview.getState().start();
     return () => useReview.getState().reset();
-  }, []);
+  }, [domainId]);
 
   const poolExists = review.topics.length > 0;
   const anyEnabled = review.topics.some((t) => t.enabled);
@@ -36,7 +41,9 @@ export function ReviewScreen() {
     <div className="app">
       <header className="header">
         <button onClick={() => navigate('/')}>{ui('backHome', lang)}</button>
-        <h1>{ui('reviewTitle', lang)}</h1>
+        <h1>
+          {ui('reviewTitle', lang)} · {domain.icon} {tl(domain.title, lang)}
+        </h1>
         <SettingsButton />
         <div className="spacer" />
         {item && (

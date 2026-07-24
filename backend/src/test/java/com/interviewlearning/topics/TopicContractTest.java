@@ -65,6 +65,10 @@ class TopicContractTest {
             bilingual(meta.get("title"), "topic.yaml: title", errs);
             bilingual(meta.get("category"), "topic.yaml: category", errs);
             bilingual(meta.get("summary"), "topic.yaml: summary", errs);
+            String domainId = str(meta, "domainId");
+            if (!domainId.isBlank() && !domainId.matches("[a-z0-9]+(-[a-z0-9]+)*")) {
+                errs.add("topic.yaml: domainId '" + domainId + "' must be kebab-case lowercase");
+            }
             if (structural) {
                 validateStarter(dir, errs);
             } else if (sqlMode) {
@@ -79,6 +83,8 @@ class TopicContractTest {
 
         requireNonEmptyFile(dir.resolve("explanation.en.md"), errs);
         requireNonEmptyFile(dir.resolve("explanation.ru.md"), errs);
+        validateImageLinks(dir.resolve("explanation.en.md"), errs);
+        validateImageLinks(dir.resolve("explanation.ru.md"), errs);
         if (!structural && !theory && !sqlMode && !challenge) {
             // Behavioural topics drive a visualizer from trace events; the other
             // modes render a class diagram / a result table / nothing.
@@ -240,6 +246,34 @@ class TopicContractTest {
             else if (!ids.add(id)) errs.add(where + ": duplicate id '" + id + "'");
             if (str(q, "en").isBlank()) errs.add(where + ": missing en");
             if (str(q, "ru").isBlank()) errs.add(where + ": missing ru");
+        }
+    }
+
+    /**
+     * Every relative image reference in an explanation (e.g. {@code ](images/x.png)},
+     * served at runtime through {@code /api/topics/<id>/assets/}) must point to an
+     * existing file inside the topic folder — catches broken copies early.
+     */
+    private void validateImageLinks(Path explanation, List<String> errs) {
+        if (!Files.exists(explanation)) return;
+        String text;
+        try {
+            text = Files.readString(explanation, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            return; // unreadable files are reported by requireNonEmptyFile
+        }
+        var m = java.util.regex.Pattern.compile("!\\[[^\\]]*\\]\\(([^)]+)\\)").matcher(text);
+        while (m.find()) {
+            String src = m.group(1).trim();
+            if (src.matches("(?i)^([a-z][a-z0-9+.-]*:|/|#).*")) continue; // absolute / external
+            if (src.contains("..")) {
+                errs.add(explanation.getFileName() + ": image link '" + src + "' must not leave the topic folder");
+                continue;
+            }
+            String decoded = java.net.URLDecoder.decode(src, StandardCharsets.UTF_8);
+            if (!Files.isRegularFile(explanation.getParent().resolve(decoded))) {
+                errs.add(explanation.getFileName() + ": image '" + src + "' does not exist in the topic folder");
+            }
         }
     }
 

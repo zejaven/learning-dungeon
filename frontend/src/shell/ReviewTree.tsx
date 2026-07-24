@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { buildCatalog, stars, type CatalogCategory } from '@app/catalog';
+import { buildAllCatalogs, compareEntries, stars, type CatalogCategory } from '@app/catalog';
 import { useReview } from '@app/engine/reviewStore';
 import { useStore } from '@app/engine/store';
 import { tl, ui, useLang } from '@app/i18n';
@@ -23,9 +23,10 @@ export function ReviewTree() {
   const restartTopic = useReview((s) => s.restartTopic);
   const poolById = new Map(poolTopics.map((t) => [t.topicId, t]));
 
-  // Group pooled topics under their catalog categories, dropping empty ones.
+  // Group pooled topics under their catalog categories (across every domain —
+  // the pool itself is already scoped to the active one), dropping empty ones.
   const placed = new Set<string>();
-  const cats: CatalogCategory[] = buildCatalog(topics, manualQuestions)
+  const cats: CatalogCategory[] = buildAllCatalogs(topics, manualQuestions)
     .map((cat) => ({
       ...cat,
       entries: cat.entries
@@ -34,7 +35,7 @@ export function ReviewTree() {
           placed.add(e.topicId);
           return true;
         })
-        .sort((a, b) => a.difficulty - b.difficulty),
+        .sort(compareEntries),
     }))
     .filter((cat) => cat.entries.length > 0);
 

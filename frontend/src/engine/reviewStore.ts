@@ -1,5 +1,8 @@
 import { create } from 'zustand';
+import { domainOf } from '../domains';
 import { useLang } from '../i18n';
+import { useDomain } from './domainStore';
+import { useStore } from './store';
 import {
   fetchReviewList,
   fetchReviewSummary,
@@ -81,10 +84,27 @@ function shuffled<T>(arr: T[]): T[] {
 async function rebuild(
   preserve: ReviewItem | null,
 ): Promise<{ queue: ReviewItem[]; topics: ReviewTopic[] }> {
-  const [items, topics] = await Promise.all([fetchReviewList(), fetchReviewTopics()]);
+  const [allItems, allTopics] = await Promise.all([fetchReviewList(), fetchReviewTopics()]);
+  const inDomain = activeDomainFilter();
+  const items = allItems.filter((i) => inDomain(i.topicId));
+  const topics = allTopics.filter((t) => inDomain(t.topicId));
   const keep = preserve && items.some((i) => sameItem(i, preserve)) ? preserve : null;
   const rest = shuffled(keep ? items.filter((i) => !sameItem(i, keep)) : items);
   return { queue: keep ? [keep, ...rest] : rest, topics };
+}
+
+/**
+ * Review is scoped to the active subject area: only exercises of topics in the
+ * current domain take part. Topics missing from the loaded summaries count as
+ * 'java' (same default as {@link domainOf}); before summaries load nothing is
+ * filtered out, which only ever shows extra items briefly.
+ */
+function activeDomainFilter(): (topicId: string) => boolean {
+  const summaries = useStore.getState().topics;
+  if (summaries.length === 0) return () => true;
+  const domainId = useDomain.getState().domainId;
+  const byId = new Map(summaries.map((t) => [t.id, t]));
+  return (topicId) => domainOf(byId.get(topicId) ?? {}) === domainId;
 }
 
 export const useReview = create<ReviewSlice>((set, get) => ({

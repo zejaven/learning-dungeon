@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { domainById } from '@app/domains';
+import { useDomain } from '@app/engine/domainStore';
 import { navigate, routeForQuestion, useRoute } from '@app/engine/router';
 import { useStore } from '@app/engine/store';
 import { tl, ui, useLang } from '@app/i18n';
@@ -32,6 +34,7 @@ export function WorkspaceScreen() {
 
   const lang = useLang((s) => s.lang);
   const route = useRoute();
+  const domain = domainById(useDomain((s) => s.domainId));
 
   const [showAssistant, setShowAssistant] = useState(false);
   const [showBossFight, setShowBossFight] = useState(false);
@@ -47,7 +50,7 @@ export function WorkspaceScreen() {
         <button onClick={() => navigate(route.id ? routeForQuestion(route.id) : '/')}>
           {ui('backToCatalog', lang)}
         </button>
-        <h1 className="workspace-title">{topic ? tl(topic.title, lang) : 'Java Interview Dungeon'}</h1>
+        <h1 className="workspace-title">{topic ? tl(topic.title, lang) : tl(domain.title, lang)}</h1>
         <SettingsButton />
         {topicCompleted && <span className="completed-badge">{ui('topicCompleted', lang)}</span>}
         <div className="spacer" />

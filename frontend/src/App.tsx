@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { buildCatalog, findCatalogEntry } from './catalog';
+import { buildAllCatalogs, findCatalogEntry } from './catalog';
 import { useAi } from './engine/aiStore';
 import { useGeneration } from './engine/generationStore';
 import { navigate, routeForQuestion, useRoute } from './engine/router';
@@ -46,7 +46,7 @@ export function App() {
   // reload or when following a deep link / cross-link).
   useEffect(() => {
     if (!route.id) return;
-    const found = findCatalogEntry(buildCatalog(topics, manualQuestions), route.id);
+    const found = findCatalogEntry(buildAllCatalogs(topics, manualQuestions), route.id);
     const topicId = found?.entry.topicId;
     if (topicId && topic?.id !== topicId) selectTopic(topicId);
   }, [route.id, topics, manualQuestions, topic?.id, selectTopic]);
@@ -56,7 +56,7 @@ export function App() {
   // practice — their Boss Fight lives on the home/theory screen.
   useEffect(() => {
     if (route.view !== 'workspace' || topics.length === 0) return;
-    const found = route.id ? findCatalogEntry(buildCatalog(topics, manualQuestions), route.id) : null;
+    const found = route.id ? findCatalogEntry(buildAllCatalogs(topics, manualQuestions), route.id) : null;
     const topicId = found?.entry.topicId;
     const summary = topicId ? topics.find((t) => t.id === topicId) : undefined;
     if (!topicId || summary?.mode === 'theory') {

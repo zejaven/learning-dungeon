@@ -30,7 +30,10 @@ public final class TopicDtos {
             String mode,
             String aiProvider,
             String aiModel,
-            boolean hasAtoms
+            boolean hasAtoms,
+            String domainId,
+            /** Position within the catalog (e.g. lecture number); 0 = unordered. */
+            int order
     ) {
     }
 
@@ -102,7 +105,8 @@ public final class TopicDtos {
             String style,
             String aiProvider,
             String aiModel,
-            boolean hasAtoms
+            boolean hasAtoms,
+            String domainId
     ) {
     }
 }

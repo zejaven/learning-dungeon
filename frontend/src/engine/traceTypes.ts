@@ -42,6 +42,10 @@ export interface TopicSummary {
   aiModel: string;
   /** True when topics/<id>/learning-atoms.json exists (micro-actions lesson available). */
   hasAtoms: boolean;
+  /** Subject area this topic belongs to (e.g. 'java', 'ndm'); 'java' by default. */
+  domainId: string;
+  /** Position within the catalog (e.g. lecture number); 0 = unordered. */
+  order: number;
 }
 
 /** Persisted progress for a topic, restored on load. */
@@ -196,6 +200,8 @@ export interface TopicDetail {
   aiModel: string;
   /** True when topics/<id>/learning-atoms.json exists (micro-actions lesson available). */
   hasAtoms: boolean;
+  /** Subject area this topic belongs to (e.g. 'java', 'ndm'); 'java' by default. */
+  domainId: string;
 }
 
 /** Props every topic visualizer receives. */

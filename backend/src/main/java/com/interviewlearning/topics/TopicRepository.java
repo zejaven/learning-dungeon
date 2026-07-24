@@ -68,7 +68,9 @@ public class TopicRepository {
                                     str(meta, "mode", "trace"),
                                     str(meta, "aiProvider", "claude"),
                                     str(meta, "aiModel", ""),
-                                    Files.exists(p.resolve("learning-atoms.json"))
+                                    Files.exists(p.resolve("learning-atoms.json")),
+                                    str(meta, "domainId", "java"),
+                                    intVal(meta, "order", 0)
                             ))));
         } catch (IOException e) {
             log.warn("Failed to list topics: {}", e.getMessage());
@@ -118,7 +120,8 @@ public class TopicRepository {
                 str(meta, "style", "Default"),
                 str(meta, "aiProvider", "claude"),
                 str(meta, "aiModel", ""),
-                Files.exists(topicDir.resolve("learning-atoms.json"))
+                Files.exists(topicDir.resolve("learning-atoms.json")),
+                str(meta, "domainId", "java")
         ));
     }
 

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { buildCatalog, findCatalogEntry } from '@app/catalog';
+import { buildAllCatalogs, findCatalogEntry } from '@app/catalog';
+import { DOMAINS, domainById, domainOf } from '@app/domains';
 import { useAi } from '@app/engine/aiStore';
+import { useDomain } from '@app/engine/domainStore';
 import { startAtomsGeneration } from '@app/engine/api';
 import { useGeneration } from '@app/engine/generationStore';
 import { useReview } from '@app/engine/reviewStore';
@@ -72,9 +74,24 @@ export function HomeScreen() {
   }
 
   const manualQuestions = useStore((s) => s.manualQuestions);
-  const found = route.id ? findCatalogEntry(buildCatalog(topics, manualQuestions), route.id) : null;
+  const domainId = useDomain((s) => s.domainId);
+  const setDomain = useDomain((s) => s.setDomain);
+  const domain = domainById(domainId);
+  // Resolve the route against every domain's catalog so deep links and
+  // cross-links to another domain's topics keep working.
+  const found = route.id
+    ? findCatalogEntry(buildAllCatalogs(topics, manualQuestions), route.id)
+    : null;
   const entry = found?.entry ?? null;
   const categoryId = found?.categoryId ?? '';
+
+  // A deep link into another domain switches the app to that domain.
+  const entryTopic = entry?.topicId ? topics.find((t) => t.id === entry.topicId) : undefined;
+  const entryDomain = entryTopic ? domainOf(entryTopic) : null;
+  useEffect(() => {
+    if (entryDomain && entryDomain !== domainId) setDomain(entryDomain);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entryDomain]);
 
   const theoryReady = entry?.topicId && topic?.id === entry.topicId && !loadingTopic;
   const catalogKey = entry ? `catalog:${entry.id}` : '';
@@ -135,7 +152,28 @@ export function HomeScreen() {
   return (
     <div className="app">
       <header className="header">
-        <h1>🗡️ Java Interview Dungeon</h1>
+        <h1>
+          {domain.icon} {tl(domain.title, lang)}
+        </h1>
+        {DOMAINS.length > 1 && (
+          <div className="domain-tabs">
+            {DOMAINS.map((d) => (
+              <button
+                key={d.id}
+                className={`domain-tab${d.id === domainId ? ' active' : ''}`}
+                title={tl(d.title, lang)}
+                onClick={() => {
+                  if (d.id !== domainId) {
+                    setDomain(d.id);
+                    navigate('/');
+                  }
+                }}
+              >
+                {d.icon}
+              </button>
+            ))}
+          </div>
+        )}
         <SettingsButton />
         <div className="spacer" />
         <AiProviderSelector />
@@ -148,9 +186,11 @@ export function HomeScreen() {
             <span className="review-badge">{reviewSummary.poolSize}</span>
           )}
         </button>
-        <button className="accent" onClick={() => setShowAdd(true)}>
-          {addTask?.status === 'running' ? ui('generating', lang) : ui('addTopic', lang)}
-        </button>
+        {domainId === 'java' && (
+          <button className="accent" onClick={() => setShowAdd(true)}>
+            {addTask?.status === 'running' ? ui('generating', lang) : ui('addTopic', lang)}
+          </button>
+        )}
       </header>
 
       <div className="home-main">
@@ -158,13 +198,15 @@ export function HomeScreen() {
         <section className="panel home-tree-panel">
           <div className="panel-title tree-panel-title">
             <span>{ui('catalogTitle', lang)}</span>
-            <button
-              className="tree-add-btn"
-              title={ui('addQuestion', lang)}
-              onClick={() => setShowAddQuestion(true)}
-            >
-              ＋
-            </button>
+            {domainId === 'java' && (
+              <button
+                className="tree-add-btn"
+                title={ui('addQuestion', lang)}
+                onClick={() => setShowAddQuestion(true)}
+              >
+                ＋
+              </button>
+            )}
           </div>
           <div className="panel-body tree-body">
             <CategoryTree
@@ -284,7 +326,9 @@ export function HomeScreen() {
                   </div>
                 )}
 
-                <Markdown className="markdown">{tl(activeExplanation, lang)}</Markdown>
+                <Markdown className="markdown" assetBase={`/api/topics/${topic!.id}/assets`}>
+                  {tl(activeExplanation, lang)}
+                </Markdown>
               </div>
             )}
           </div>

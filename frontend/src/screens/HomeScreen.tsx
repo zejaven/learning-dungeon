@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
-import { buildAllCatalogs, findCatalogEntry } from '@app/catalog';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { buildAllCatalogs, buildCatalog, findCatalogEntry } from '@app/catalog';
 import { DOMAINS, domainById, domainOf } from '@app/domains';
 import { useAi } from '@app/engine/aiStore';
+import { useBulk } from '@app/engine/bulkStore';
 import { useDomain } from '@app/engine/domainStore';
-import { startAtomsGeneration } from '@app/engine/api';
+import { startAtomsGeneration, type BulkKind } from '@app/engine/api';
 import { useGeneration } from '@app/engine/generationStore';
 import { useReview } from '@app/engine/reviewStore';
 import {
@@ -21,6 +22,8 @@ import { AddTopicDialog } from '@app/shell/AddTopicDialog';
 import { AiProviderSelector } from '@app/shell/AiProviderSelector';
 import { AssistantDialog } from '@app/shell/AssistantDialog';
 import { BossFightDialog } from '@app/shell/BossFightDialog';
+import { BulkGenBar } from '@app/shell/BulkGenBar';
+import { BulkGenDialog } from '@app/shell/BulkGenDialog';
 import { CategoryTree } from '@app/shell/CategoryTree';
 import { Celebration } from '@app/shell/Celebration';
 import { GenerationView } from '@app/shell/GenerationView';
@@ -57,6 +60,7 @@ export function HomeScreen() {
 
   const [showAdd, setShowAdd] = useState(false);
   const [showAddQuestion, setShowAddQuestion] = useState(false);
+  const [bulkKind, setBulkKind] = useState<BulkKind | null>(null);
   const [showBossFight, setShowBossFight] = useState(false);
   const [showAssistant, setShowAssistant] = useState(false);
   // Text selected in the reference/lesson to pre-quote in the assistant.
@@ -77,6 +81,39 @@ export function HomeScreen() {
   const domainId = useDomain((s) => s.domainId);
   const setDomain = useDomain((s) => s.setDomain);
   const domain = domainById(domainId);
+
+  // Bulk generation: the backend runs the loop; here we only know what is
+  // missing in the active domain and whether a run exists (drives the strip).
+  const selectedProvider = useAi((s) => s.selectedProvider);
+  const bulkActive = useBulk((s) => !!s.status?.active);
+  const bulkVisible = useBulk((s) => !!s.status?.run);
+  const startBulkRun = useBulk((s) => s.start);
+  const bulkMissing = useMemo(() => {
+    const catalog = buildCatalog(topics, manualQuestions, domainId);
+    const theory = catalog.flatMap((c) =>
+      c.entries.filter((e) => !e.topicId).map((e) => ({ categoryId: c.id, entry: e })),
+    );
+    const atoms = topics.filter((t) => domainOf(t) === domainId && !t.hasAtoms);
+    return { theory, atoms };
+  }, [topics, manualQuestions, domainId]);
+
+  async function confirmBulk(kind: BulkKind, endTime: string, maxPercent: number) {
+    const items =
+      kind === 'theory'
+        ? bulkMissing.theory.map(({ categoryId: catId, entry: e }) => ({
+            id: e.id,
+            label: e.question,
+            question: tl(e.question, lang),
+            catalogId: e.id,
+            categoryId: catId,
+            difficulty: e.difficulty,
+            style: useStyle.getState().instruction(),
+            styleName: useStyle.getState().currentName(),
+          }))
+        : bulkMissing.atoms.map((t) => ({ id: t.id, label: t.title }));
+    const ok = await startBulkRun({ kind, provider: 'claude', domainId, endTime, maxPercent, items });
+    if (ok) setBulkKind(null);
+  }
   // Resolve the route against every domain's catalog so deep links and
   // cross-links to another domain's topics keep working.
   const found = route.id
@@ -150,7 +187,7 @@ export function HomeScreen() {
     : topic?.explanation;
 
   return (
-    <div className="app">
+    <div className={`app${bulkVisible ? ' app-bulk' : ''}`}>
       <header className="header">
         <h1>
           {domain.icon} {tl(domain.title, lang)}
@@ -193,20 +230,44 @@ export function HomeScreen() {
         )}
       </header>
 
+      <BulkGenBar />
+
       <div className="home-main">
         {/* Left: question catalog tree */}
         <section className="panel home-tree-panel">
           <div className="panel-title tree-panel-title">
             <span>{ui('catalogTitle', lang)}</span>
-            {domainId === 'java' && (
-              <button
-                className="tree-add-btn"
-                title={ui('addQuestion', lang)}
-                onClick={() => setShowAddQuestion(true)}
-              >
-                ＋
-              </button>
-            )}
+            <div className="tree-title-actions">
+              {selectedProvider === 'claude' && bulkMissing.theory.length > 0 && (
+                <button
+                  className="tree-add-btn"
+                  title={`${ui('bulkDialogTitleTheory', lang)} (${bulkMissing.theory.length})`}
+                  disabled={bulkActive}
+                  onClick={() => setBulkKind('theory')}
+                >
+                  📖
+                </button>
+              )}
+              {selectedProvider === 'claude' && bulkMissing.atoms.length > 0 && (
+                <button
+                  className="tree-add-btn"
+                  title={`${ui('bulkDialogTitleAtoms', lang)} (${bulkMissing.atoms.length})`}
+                  disabled={bulkActive}
+                  onClick={() => setBulkKind('atoms')}
+                >
+                  ✨
+                </button>
+              )}
+              {domainId === 'java' && (
+                <button
+                  className="tree-add-btn"
+                  title={ui('addQuestion', lang)}
+                  onClick={() => setShowAddQuestion(true)}
+                >
+                  ＋
+                </button>
+              )}
+            </div>
           </div>
           <div className="panel-body tree-body">
             <CategoryTree
@@ -335,6 +396,14 @@ export function HomeScreen() {
         </section>
       </div>
 
+      {bulkKind && (
+        <BulkGenDialog
+          kind={bulkKind}
+          count={bulkKind === 'theory' ? bulkMissing.theory.length : bulkMissing.atoms.length}
+          onConfirm={(endTime, maxPercent) => void confirmBulk(bulkKind, endTime, maxPercent)}
+          onClose={() => setBulkKind(null)}
+        />
+      )}
       {showAdd && <AddTopicDialog onClose={() => setShowAdd(false)} />}
       {showAddQuestion && <AddQuestionDialog onClose={() => setShowAddQuestion(false)} />}
       {showBossFight && <BossFightDialog onClose={() => setShowBossFight(false)} />}

@@ -309,6 +309,44 @@ const UI: Record<string, Localized> = {
     ru: 'Приложение отвечает дольше обычного. Обычно оно ещё пересобирается — обновите страницу для проверки.',
   },
   settingsReloadNow: { en: 'Reload now', ru: 'Обновить страницу' },
+  bulkDialogTitleTheory: {
+    en: 'Generate theory for all questions without it',
+    ru: 'Сгенерировать теорию для всех вопросов без неё',
+  },
+  bulkDialogTitleAtoms: {
+    en: 'Generate lessons for all topics without one',
+    ru: 'Сгенерировать уроки для всех тем без них',
+  },
+  bulkDialogCount: { en: 'Items to generate:', ru: 'Будет сгенерировано:' },
+  bulkEndTime: { en: 'Stop by', ru: 'Остановить к' },
+  bulkEndTimeHint: {
+    en: 'A time already past today means tomorrow (e.g. 10:00 tonight = tomorrow morning).',
+    ru: 'Время, уже прошедшее сегодня, означает завтра (например, 10:00 ночью = завтра утром).',
+  },
+  bulkMaxPercent: { en: 'Max usage by that time', ru: 'Максимум расхода к этому времени' },
+  bulkMaxPercentHint: {
+    en: 'While the 5-hour limit window resets before the stop time, up to 100% may be used; '
+      + 'after the last reset the loop keeps usage under this cap so you are not locked out.',
+    ru: 'Пока 5-часовое окно лимитов сбрасывается до времени остановки, можно тратить до 100%; '
+      + 'после последнего сброса цикл держит расход ниже этого порога, чтобы не заблокировать вас.',
+  },
+  bulkStart: { en: 'Start', ru: 'Начать' },
+  bulkStop: { en: 'Stop', ru: 'Остановить' },
+  bulkStopping: { en: 'Stopping…', ru: 'Останавливается…' },
+  bulkDismiss: { en: 'Hide', ru: 'Скрыть' },
+  bulkUntil: { en: 'until', ru: 'до' },
+  bulkPhaseGenerating: { en: 'Generating', ru: 'Генерация' },
+  bulkPhaseWaitingPace: { en: 'Waiting (request spacing)', ru: 'Ожидание (пауза между запросами)' },
+  bulkPhaseWaitingUsage: { en: 'Waiting for usage data', ru: 'Ожидание данных о лимитах' },
+  bulkPhaseWaitingReset: { en: 'Paused until the limit resets', ru: 'Пауза до сброса лимита' },
+  bulkPhaseFinished: { en: 'Done', ru: 'Готово' },
+  bulkPhaseStopped: { en: 'Stopped', ru: 'Остановлено' },
+  bulkPhaseEndReached: { en: 'Stop time reached', ru: 'Достигнуто время остановки' },
+  bulkPhaseCapReached: { en: 'Usage cap reached', ru: 'Достигнут порог расхода' },
+  bulkPhaseNoResetInfo: {
+    en: 'Stopped: no limit-reset info',
+    ru: 'Остановлено: нет данных о сбросе лимитов',
+  },
 };
 
 export function ui(key: keyof typeof UI | string, lang: Lang): string {

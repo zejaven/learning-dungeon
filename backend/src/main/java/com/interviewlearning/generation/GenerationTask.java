@@ -74,7 +74,25 @@ public class GenerationTask {
                 }
             }
             subscribers.clear();
+            notifyAll();
         }
+    }
+
+    /**
+     * Blocks until the task reaches a terminal status ({@code done}/{@code error}).
+     *
+     * @return true when terminal; false when the timeout elapsed first
+     */
+    public synchronized boolean awaitTerminal(long timeoutMillis) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + timeoutMillis;
+        while (!isTerminal()) {
+            long remaining = deadline - System.currentTimeMillis();
+            if (remaining <= 0) {
+                return false;
+            }
+            wait(remaining);
+        }
+        return true;
     }
 
     private void add(Event event) {

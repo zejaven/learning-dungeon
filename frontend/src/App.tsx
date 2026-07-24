@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { buildAllCatalogs, findCatalogEntry } from './catalog';
 import { useAi } from './engine/aiStore';
+import { useBulk } from './engine/bulkStore';
 import { useGeneration } from './engine/generationStore';
 import { navigate, routeForQuestion, useRoute } from './engine/router';
 import { useStore } from './engine/store';
@@ -32,6 +33,8 @@ export function App() {
     loadQuestions();
     // Reattach to any generation still running from before a reload.
     refreshActiveGenerations();
+    // Resume showing a bulk-generation run that survived the reload (backend-side).
+    void useBulk.getState().checkOnce();
     // Begin polling selected-provider usage/status for the header meter (idempotent).
     startUsagePolling();
     // Poll app self-update status for the settings gear badge (idempotent).

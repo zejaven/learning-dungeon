@@ -471,6 +471,95 @@ export async function startAtomsGeneration(
   return res.json();
 }
 
+// --- Bulk generation (backend-side loop over missing theory/lessons) --------
+
+export type BulkKind = 'theory' | 'atoms';
+export type BulkItemStatus = 'pending' | 'running' | 'done' | 'error' | 'skipped';
+
+/** One unit of work; theory items carry the same fields startGeneration takes. */
+export interface BulkItemInput {
+  id: string;
+  label: { en: string; ru: string };
+  question?: string;
+  catalogId?: string;
+  categoryId?: string;
+  difficulty?: number;
+  style?: string;
+  styleName?: string;
+}
+
+export interface BulkItemView {
+  id: string;
+  label: { en: string; ru: string };
+  status: BulkItemStatus;
+  taskKey: string | null;
+}
+
+export interface BulkRunView {
+  kind: BulkKind;
+  domainId: string;
+  provider: string;
+  endTime: string;
+  maxPercent: number;
+  items: BulkItemView[];
+  currentIndex: number;
+  phase: string;
+  waitUntil: string | null;
+  stopRequested: boolean;
+  startedAt: string;
+  finishedAt: string | null;
+  utilization: number | null;
+  resetsAt: string | null;
+  maxDeltaObserved: number | null;
+}
+
+export interface BulkStatus {
+  active: boolean;
+  run: BulkRunView | null;
+}
+
+export interface StartBulkBody {
+  kind: BulkKind;
+  provider: string;
+  domainId: string;
+  /** Time-of-day "HH:mm"; already past today means tomorrow. */
+  endTime: string;
+  maxPercent: number;
+  items: BulkItemInput[];
+}
+
+/** Starts the bulk loop; throws with the server's message on 400/409. */
+export async function startBulk(body: StartBulkBody): Promise<BulkStatus> {
+  const res = await fetch('/api/bulk/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => null);
+    throw new Error(err?.error ?? `Failed to start bulk generation (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function fetchBulkStatus(): Promise<BulkStatus> {
+  const res = await fetch('/api/bulk/status');
+  if (!res.ok) throw new Error(`Failed to load bulk status (${res.status})`);
+  return res.json();
+}
+
+/** Graceful stop: the in-flight generation finishes before the run ends. */
+export async function stopBulk(): Promise<BulkStatus> {
+  const res = await fetch('/api/bulk/stop', { method: 'POST' });
+  if (!res.ok) throw new Error(`Failed to stop bulk generation (${res.status})`);
+  return res.json();
+}
+
+/** Clears a finished run so the strip disappears. */
+export async function dismissBulk(): Promise<void> {
+  await fetch('/api/bulk/dismiss', { method: 'POST' });
+}
+
 // --- Global review ----------------------------------------------------------
 
 export async function fetchReviewSummary(): Promise<ReviewSummary> {

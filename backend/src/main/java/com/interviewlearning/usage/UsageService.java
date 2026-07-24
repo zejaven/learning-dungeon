@@ -49,6 +49,13 @@ public class UsageService {
     private final Map<String, Long> lastFetchAt = new HashMap<>();
     private final Map<String, Long> cooldownUntil = new HashMap<>();
 
+    /**
+     * While a bulk-generation run is active, passive callers (the frontend's
+     * 60-second poll) are served from cache only, so the bulk loop alone decides
+     * when the upstream endpoint is hit.
+     */
+    private volatile boolean passivePaused;
+
     public UsageService(ObjectMapper mapper,
                         AiCliService ai,
                         @Value("${app.usage.enabled:true}") boolean enabled,
@@ -90,6 +97,9 @@ public class UsageService {
 
         long now = System.currentTimeMillis();
         UsageSnapshot current = cached.getOrDefault(status.id(), unavailable(status, "Not fetched yet."));
+        if (passivePaused) {
+            return current;
+        }
         long last = lastFetchAt.getOrDefault(status.id(), 0L);
         long cooldown = cooldownUntil.getOrDefault(status.id(), 0L);
         if (now < cooldown || (last != 0 && now - last < refreshMillis)) {
@@ -99,6 +109,58 @@ public class UsageService {
         UsageSnapshot fetched = fetchClaude(status);
         cached.put(status.id(), fetched);
         return fetched;
+    }
+
+    public void setPassivePaused(boolean paused) {
+        this.passivePaused = paused;
+    }
+
+    /**
+     * Earliest wall-clock millis at which a real upstream fetch is allowed —
+     * honours both the minimum refresh spacing and any 429 cooldown.
+     */
+    public synchronized long nextAllowedFetchAt(String providerId) {
+        String id = normalize(providerId);
+        long last = lastFetchAt.getOrDefault(id, 0L);
+        long spaced = last == 0 ? 0 : last + refreshMillis;
+        return Math.max(spaced, cooldownUntil.getOrDefault(id, 0L));
+    }
+
+    /**
+     * A bulk-loop refresh attempt.
+     *
+     * @param snapshot            the freshest snapshot we have (may be stale)
+     * @param fresh               true when an upstream fetch happened just now and
+     *                            did not hit a rate limit
+     * @param nextAllowedAtMillis when the next real fetch becomes allowed
+     */
+    public record BulkRefresh(UsageSnapshot snapshot, boolean fresh, long nextAllowedAtMillis) {
+    }
+
+    /**
+     * Fetches usage for the bulk loop, honouring the same global spacing as the
+     * passive path. Never throws: a denied or rate-limited attempt comes back
+     * with {@code fresh=false} and the time to wait until.
+     */
+    public synchronized BulkRefresh forceRefresh(String providerId) {
+        String id = normalize(providerId);
+        AiProviderStatus status = ai.status(id);
+        long now = System.currentTimeMillis();
+        long nextAllowed = nextAllowedFetchAt(id);
+        if (now < nextAllowed) {
+            UsageSnapshot current = cached.getOrDefault(id, unavailable(status, "Not fetched yet."));
+            return new BulkRefresh(current, false, nextAllowed);
+        }
+        lastFetchAt.put(id, now);
+        UsageSnapshot fetched = fetchClaude(status);
+        cached.put(id, fetched);
+        // fetchClaude sets cooldownUntil on a 429; report that as not-fresh.
+        boolean rateLimited = cooldownUntil.getOrDefault(id, 0L) > now;
+        return new BulkRefresh(fetched, !rateLimited, nextAllowedFetchAt(id));
+    }
+
+    private static String normalize(String providerId) {
+        return providerId == null || providerId.isBlank() ? "claude" : providerId.trim().toLowerCase();
     }
 
     private UsageSnapshot fetchClaude(AiProviderStatus status) {

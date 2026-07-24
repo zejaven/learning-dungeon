@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { buildAllCatalogs, buildCatalog, findCatalogEntry } from '@app/catalog';
+import { buildAllCatalogs, buildCatalog, compareEntries, findCatalogEntry } from '@app/catalog';
 import { DOMAINS, domainById, domainOf } from '@app/domains';
 import { useAi } from '@app/engine/aiStore';
 import { useBulk } from '@app/engine/bulkStore';
@@ -89,11 +89,18 @@ export function HomeScreen() {
   const bulkVisible = useBulk((s) => !!s.status?.run);
   const startBulkRun = useBulk((s) => s.start);
   const bulkMissing = useMemo(() => {
+    // Walk the catalog in the exact order the tree renders it (categories in
+    // catalog order, entries sorted like CategoryTree), so the generation loop
+    // processes topics top to bottom as the user sees them.
     const catalog = buildCatalog(topics, manualQuestions, domainId);
-    const theory = catalog.flatMap((c) =>
-      c.entries.filter((e) => !e.topicId).map((e) => ({ categoryId: c.id, entry: e })),
+    const ordered = catalog.flatMap((c) =>
+      [...c.entries].sort(compareEntries).map((entry) => ({ categoryId: c.id, entry })),
     );
-    const atoms = topics.filter((t) => domainOf(t) === domainId && !t.hasAtoms);
+    const theory = ordered.filter(({ entry }) => !entry.topicId);
+    const byId = new Map(topics.map((t) => [t.id, t]));
+    const atoms = ordered
+      .map(({ entry }) => (entry.topicId ? byId.get(entry.topicId) : undefined))
+      .filter((t): t is NonNullable<typeof t> => !!t && !t.hasAtoms);
     return { theory, atoms };
   }, [topics, manualQuestions, domainId]);
 

@@ -242,6 +242,12 @@ If a command cannot be run, say exactly why and what remains unverified.
   - `api/SystemController` serves `GET /api/system/status` and
     `POST /api/system/update {pull}` (the latter 409s unless `supervised` and
     the requested capability is present). No PostgreSQL state is involved.
+  - `KeepAwakeService` stops Windows from sleeping while AI runs are active
+    (refcounted around `AiCliService.runProcess`): it holds a child PowerShell
+    process asserting `SetThreadExecutionState(ES_CONTINUOUS |
+    ES_SYSTEM_REQUIRED)` and releases it ~90s after the last run ends. Display
+    sleep stays allowed; non-Windows is a no-op. Every AI code path must keep
+    funneling through `runProcess` for this to hold.
 
 ## visual-runtime Rules
 

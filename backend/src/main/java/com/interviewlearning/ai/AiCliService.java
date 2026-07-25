@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.interviewlearning.ai.AiDtos.AiProviderStatus;
 import com.interviewlearning.ai.AiDtos.AiProvidersResponse;
 import com.interviewlearning.config.RepoPaths;
+import com.interviewlearning.system.KeepAwakeService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -45,6 +46,7 @@ public class AiCliService {
 
     private final RepoPaths repoPaths;
     private final ObjectMapper mapper;
+    private final KeepAwakeService keepAwake;
     private final Map<String, ProviderConfig> providers;
     private final ExecutorService executor = Executors.newCachedThreadPool(r -> {
         Thread t = new Thread(r, "ai-cli-stream");
@@ -57,6 +59,7 @@ public class AiCliService {
     public AiCliService(
             RepoPaths repoPaths,
             ObjectMapper mapper,
+            KeepAwakeService keepAwake,
             @Value("${app.ai.claude.command:${app.claude.command:claude}}") String claudeCommand,
             @Value("${app.ai.claude.assistant-model:${app.claude.assistant-model:claude-sonnet-4-6}}")
             String claudeAssistantModel,
@@ -74,6 +77,7 @@ public class AiCliService {
             @Value("${app.ai.kimi.generate-model:kimi-k2.7-code}") String kimiGenerateModel) {
         this.repoPaths = repoPaths;
         this.mapper = mapper;
+        this.keepAwake = keepAwake;
         this.providers = Map.of(
                 "claude", new ProviderConfig(
                         "claude",
@@ -295,6 +299,15 @@ public class AiCliService {
     }
 
     private void runProcess(Invocation invocation, String prompt, Sink sink) {
+        keepAwake.acquire();
+        try {
+            runProcessInner(invocation, prompt, sink);
+        } finally {
+            keepAwake.release();
+        }
+    }
+
+    private void runProcessInner(Invocation invocation, String prompt, Sink sink) {
         ProviderConfig cfg = invocation.config();
         ProcessBuilder pb = new ProcessBuilder(invocation.command())
                 .directory(repoPaths.repoRoot().toFile())

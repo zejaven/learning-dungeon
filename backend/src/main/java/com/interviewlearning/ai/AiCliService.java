@@ -28,6 +28,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -55,15 +56,17 @@ public class AiCliService {
     });
 
     private final Map<String, ResolvedCommand> resolvedCache = new LinkedHashMap<>();
+    /** Configured model name (possibly an alias) -> concrete id reported by the CLI. */
+    private final Map<String, String> resolvedModels = new ConcurrentHashMap<>();
 
     public AiCliService(
             RepoPaths repoPaths,
             ObjectMapper mapper,
             KeepAwakeService keepAwake,
             @Value("${app.ai.claude.command:${app.claude.command:claude}}") String claudeCommand,
-            @Value("${app.ai.claude.assistant-model:${app.claude.assistant-model:claude-sonnet-4-6}}")
+            @Value("${app.ai.claude.assistant-model:${app.claude.assistant-model:sonnet}}")
             String claudeAssistantModel,
-            @Value("${app.ai.claude.generate-model:${app.claude.generate-model:claude-opus-4-8}}")
+            @Value("${app.ai.claude.generate-model:${app.claude.generate-model:opus}}")
             String claudeGenerateModel,
             @Value("${app.ai.claude.generate-permission-mode:${app.claude.generate-permission-mode:bypassPermissions}}")
             String claudePermissionMode,
@@ -139,8 +142,8 @@ public class AiCliService {
                 resolved.version(),
                 resolved.error(),
                 cfg.downloadUrl(),
-                cfg.assistantModel(),
-                cfg.generateModel()
+                modelFor(cfg.id(), AiTask.ASSISTANT),
+                modelFor(cfg.id(), AiTask.GENERATE_TOPIC)
         );
     }
 
@@ -152,9 +155,33 @@ public class AiCliService {
         return config(providerId).label();
     }
 
+    /**
+     * Model name for display and generation provenance. Configuration may hold a
+     * moving alias (Claude resolves {@code sonnet}/{@code opus} to the latest model
+     * of that tier); once a run has reported which concrete id an alias resolved
+     * to, that id is returned instead, so generated topics record the model that
+     * actually produced them rather than the alias.
+     */
     public String modelFor(String providerId, AiTask task) {
         ProviderConfig cfg = config(providerId);
+        String configured = configuredModel(cfg, task);
+        return resolvedModels.getOrDefault(modelKey(cfg.id(), configured), configured);
+    }
+
+    /** Model name passed to the CLI: always as configured, so aliases stay aliases. */
+    private static String configuredModel(ProviderConfig cfg, AiTask task) {
         return task.needsStrongModel() ? cfg.generateModel() : cfg.assistantModel();
+    }
+
+    private static String modelKey(String providerId, String configuredModel) {
+        return providerId + "|" + (configuredModel == null ? "" : configuredModel);
+    }
+
+    private void rememberResolvedModel(Invocation invocation, String reported) {
+        if (reported == null || reported.isBlank()) {
+            return;
+        }
+        resolvedModels.put(modelKey(invocation.config().id(), invocation.model()), reported.trim());
     }
 
     public SseEmitter stream(String providerId, String prompt, AiTask task) {
@@ -212,7 +239,7 @@ public class AiCliService {
         if (!resolved.available()) {
             throw new RuntimeException(cfg.label() + " CLI is not available: " + resolved.error());
         }
-        String model = modelFor(cfg.id(), task);
+        String model = configuredModel(cfg, task);
         return switch (cfg.kind()) {
             case CLAUDE -> claudeInvocation(cfg, resolved.command(), task, model);
             case CODEX -> codexInvocation(cfg, resolved.command(), task, model);
@@ -236,7 +263,7 @@ public class AiCliService {
             cmd.add("--model");
             cmd.add(model);
         }
-        return new Invocation(cfg, cmd, null, StreamFormat.CLAUDE_JSON);
+        return new Invocation(cfg, cmd, null, StreamFormat.CLAUDE_JSON, model);
     }
 
     private Invocation codexInvocation(ProviderConfig cfg, String command, AiTask task, String model) {
@@ -262,7 +289,7 @@ public class AiCliService {
         cmd.add("-C");
         cmd.add(repoPaths.repoRoot().toString());
         cmd.add("-");
-        return new Invocation(cfg, cmd, null, StreamFormat.CODEX_JSON);
+        return new Invocation(cfg, cmd, null, StreamFormat.CODEX_JSON, model);
     }
 
     private Invocation kimiInvocation(ProviderConfig cfg, String command, AiTask task, String model, String prompt) {
@@ -292,7 +319,7 @@ public class AiCliService {
             cmd.add("--prompt");
             cmd.add("Read the full task instructions from this UTF-8 file and execute them exactly: "
                     + promptFile.toAbsolutePath());
-            return new Invocation(cfg, cmd, promptFile, StreamFormat.KIMI_JSON);
+            return new Invocation(cfg, cmd, promptFile, StreamFormat.KIMI_JSON, model);
         } catch (IOException e) {
             throw new RuntimeException("Could not write Kimi prompt file: " + e.getMessage(), e);
         }
@@ -340,7 +367,7 @@ public class AiCliService {
         try (BufferedReader br = new BufferedReader(
                 new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
-            Normalizer normalizer = new Normalizer(invocation.format());
+            Normalizer normalizer = new Normalizer(invocation);
             while ((line = br.readLine()) != null) {
                 if (line.isBlank()) {
                     continue;
@@ -376,16 +403,16 @@ public class AiCliService {
      * arrived only as a single final message would be silently dropped.
      */
     private final class Normalizer {
-        private final StreamFormat format;
+        private final Invocation invocation;
         private boolean sawTextDelta = false;
 
-        private Normalizer(StreamFormat format) {
-            this.format = format;
+        private Normalizer(Invocation invocation) {
+            this.invocation = invocation;
         }
 
         List<String> apply(String line) {
             try {
-                return switch (format) {
+                return switch (invocation.format()) {
                     case CLAUDE_JSON -> normalizeClaude(line);
                     case CODEX_JSON -> asList(normalizeCodex(line));
                     case KIMI_JSON -> asList(normalizeKimi(line));
@@ -410,6 +437,7 @@ public class AiCliService {
                 }
             }
             if ("assistant".equals(type)) {
+                rememberResolvedModel(invocation, root.path("message").path("model").asText(""));
                 List<String> parts = new ArrayList<>();
                 List<String> textParts = new ArrayList<>();
                 for (JsonNode block : root.path("message").path("content")) {
@@ -437,6 +465,7 @@ public class AiCliService {
                 return out;
             }
             if ("system".equals(type) && "init".equals(root.path("subtype").asText(""))) {
+                rememberResolvedModel(invocation, root.path("model").asText(""));
                 return asList(event("activity", "session started"));
             }
             if ("result".equals(type)) {
@@ -657,7 +686,9 @@ public class AiCliService {
             ProviderConfig config,
             List<String> command,
             Path promptFile,
-            StreamFormat format
+            StreamFormat format,
+            // Model name as configured, i.e. the key an alias resolution is cached under.
+            String model
     ) {
     }
 

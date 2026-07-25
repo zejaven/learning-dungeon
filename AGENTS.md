@@ -402,8 +402,16 @@ Use these as templates:
 ## Claude and Generation Notes
 
 The backend uses the Claude Code CLI for generation and assistant flows. Relevant
-settings are under `app.claude` and `app.usage` in
-`backend/src/main/resources/application.yml`.
+settings are under `app.ai.*` (legacy `app.claude.*` still works as a fallback)
+and `app.usage` in `backend/src/main/resources/application.yml`.
+
+Claude models are configured as tier aliases (`sonnet`, `opus`), not pinned ids,
+so a new model release needs no config change. `AiCliService` passes the
+configured value to `--model` verbatim and separately caches the concrete id the
+CLI reports (`system`/`init` and `assistant` stream events) under that alias;
+`modelFor(...)` returns the cached id when known, which is what lands in
+`aiModel` of generated `topic.yaml` / `learning-atoms.json` / theory versions.
+Do not re-pin these to exact model ids.
 
 Topic generation is intentionally constrained by `prompts/add-topic.md`. Do not
 loosen the contract unless you also update tests and the app logic that relies on

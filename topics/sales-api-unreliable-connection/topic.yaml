@@ -1,0 +1,148 @@
+id: sales-api-unreliable-connection
+title:
+  en: Registering Sales over an Unreliable Connection
+  ru: Регистрация продаж при ненадёжном соединении
+category:
+  en: Microservices / API Design
+  ru: Микросервисы / Проектирование API
+type: OTHER
+mode: trace
+aiProvider: claude
+aiModel: claude-opus-5
+categoryId: microservices
+difficulty: 3
+catalogId: microservices-12
+summary:
+  en: >
+    When the link between a till (or a courier's phone) and the backend can drop
+    mid-request, the client can never tell "the request never arrived" from "the
+    sale was registered and the response was lost". The design that survives
+    this is offline-first plus idempotent writes: the client mints an
+    idempotency key and writes the sale into a durable local queue BEFORE the
+    first send, retries the same key with capped exponential backoff and jitter,
+    and the server keeps an idempotency store so the first request with a key
+    applies the sale and every later one replays the stored response. The result
+    is at-least-once delivery with effectively-once registration — no lost
+    sales, no double charges.
+  ru: >
+    Когда связь между кассой (или телефоном курьера) и бэкендом может оборваться
+    посреди запроса, клиент никогда не отличит «запрос не дошёл» от «продажа
+    зарегистрирована, а ответ потерян». Выживает такой дизайн: offline-first плюс
+    идемпотентная запись. Клиент генерирует ключ идемпотентности и записывает
+    продажу в надёжную локальную очередь ДО первой отправки, повторяет попытки с
+    тем же ключом по экспоненциальному backoff с ограничением и джиттером, а
+    сервер держит хранилище идемпотентности: первый запрос с ключом применяет
+    продажу, а все последующие возвращают сохранённый ответ. Получается доставка
+    at-least-once с регистрацией effectively-once — ни потерянных продаж, ни
+    двойных списаний.
+
+# Visual primitives this topic's visualizer composes (frontend).
+primitives:
+  - BoxGroup
+  - EventLog
+
+defaultExample: ack-lost
+
+# Examples shown as buttons. `file` is relative to examples/.
+examples:
+  - id: happy-path
+    title:
+      en: Local write, then send
+      ru: Сначала локальная запись, потом отправка
+    file: 01-happy-path.java
+    explanation:
+      en: >
+        The baseline shape. The client generates the idempotency key and writes
+        the sale into its own durable queue before touching the network, then
+        sends it. Nothing is ever "lost in the request" because the request is
+        not where the sale lives.
+      ru: >
+        Базовая форма. Клиент генерирует ключ идемпотентности и записывает
+        продажу в свою надёжную очередь до обращения к сети, а затем отправляет
+        её. Ничего не «теряется в запросе», потому что продажа живёт не в
+        запросе.
+  - id: request-lost
+    title:
+      en: Request never arrives
+      ru: Запрос не доходит
+    file: 02-request-lost.java
+    explanation:
+      en: >
+        The connection dies on the way out, so the server never saw the request
+        and its state is unchanged. The sale stays pending locally and the retry
+        — same key — becomes its first real registration.
+      ru: >
+        Соединение обрывается на пути туда, поэтому сервер не видел запроса и его
+        состояние не изменилось. Продажа остаётся неподтверждённой локально, а
+        повтор — с тем же ключом — становится её первой настоящей регистрацией.
+  - id: ack-lost
+    title:
+      en: Response is lost (the hard case)
+      ru: Потерян ответ (сложный случай)
+    file: 03-ack-lost.java
+    explanation:
+      en: >
+        The server registered the sale and the response vanished on the way
+        back. From the client this looks exactly like a lost request, so it
+        retries — and the idempotency store recognises the key, applies nothing
+        and replays the stored response. Two requests, one sale.
+      ru: >
+        Сервер зарегистрировал продажу, а ответ пропал на обратном пути. С точки
+        зрения клиента это выглядит точно как потерянный запрос, поэтому он
+        повторяет — и хранилище идемпотентности узнаёт ключ, ничего не применяет
+        и возвращает сохранённый ответ. Два запроса, одна продажа.
+  - id: offline-queue
+    title:
+      en: Sell offline, sync later
+      ru: Продавать офлайн, синхронизировать позже
+    file: 04-offline-queue.java
+    explanation:
+      en: >
+        Store-and-forward: the link is down, the till keeps selling into its
+        local queue, and on reconnect the queue is drained. Each sale carries
+        the key it was born with, so a re-sync can never register anything
+        twice.
+      ru: >
+        Store-and-forward: связи нет, касса продолжает продавать в локальную
+        очередь, а при восстановлении связи очередь выгружается. Каждая продажа
+        несёт ключ, с которым родилась, поэтому повторная синхронизация не
+        зарегистрирует ничего дважды.
+  - id: new-key-per-retry
+    title:
+      en: A new key per retry (trap)
+      ru: Новый ключ на каждый повтор (ловушка)
+    file: 05-new-key-per-retry.java
+    explanation:
+      en: >
+        The retry path re-creates the sale and generates a fresh key, so the
+        server sees a second, different sale and the customer is charged twice.
+        The key must be minted once per business action, not once per HTTP
+        attempt — this is the mistake that breaks the whole design.
+      ru: >
+        Путь повтора пересоздаёт продажу и генерирует новый ключ, поэтому сервер
+        видит вторую, другую продажу, и с клиента списывают дважды. Ключ должен
+        создаваться один раз на бизнес-действие, а не на каждую HTTP-попытку —
+        именно эта ошибка ломает весь дизайн.
+  - id: backoff-cap
+    title:
+      en: Backoff, capped
+      ru: Backoff с ограничением
+    file: 06-backoff-cap.java
+    explanation:
+      en: >
+        A long outage. Each failed attempt doubles the wait before the next one
+        and the delay is capped, so a fleet of tills does not hammer the server
+        the moment it recovers. Real clients also add random jitter so they do
+        not retry in lockstep.
+      ru: >
+        Долгий сбой. Каждая неудачная попытка удваивает паузу перед следующей, а
+        задержка ограничена сверху, поэтому парк касс не забивает сервер в момент
+        его восстановления. Реальные клиенты ещё добавляют случайный джиттер,
+        чтобы не повторять запросы синхронно.
+
+# Example question pre-filled as the Ask AI placeholder.
+assistantExample:
+  en: "e.g. Who should generate the idempotency key for a sale — the client or the server, and why?"
+  ru: "например: Кто должен генерировать ключ идемпотентности для продажи — клиент или сервер, и почему?"
+
+missionsFile: quiz.yaml

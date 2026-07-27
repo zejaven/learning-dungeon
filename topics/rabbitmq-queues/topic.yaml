@@ -1,0 +1,147 @@
+id: rabbitmq-queues
+title:
+  en: How Message Queues Like RabbitMQ Work
+  ru: Как работают очереди вроде RabbitMQ
+category:
+  en: Messaging
+  ru: Обмен сообщениями
+type: OTHER
+aiProvider: claude
+aiModel: claude-opus-5
+categoryId: messaging
+difficulty: 2
+catalogId: messaging-1
+summary:
+  en: >
+    A producer never writes to a queue directly: it publishes to an exchange,
+    and bindings decide which queues get a copy. A queue is a FIFO buffer that
+    decouples producer speed from consumer speed. The broker pushes messages to
+    subscribed consumers within their prefetch budget and round-robins between
+    competing consumers, and it deletes a message only once it is acknowledged.
+    That last rule is where redelivery, at-least-once delivery, requeues and
+    dead-letter queues come from.
+  ru: >
+    Продюсер никогда не пишет в очередь напрямую: он публикует в exchange, а
+    привязки решают, какие очереди получат копию. Очередь — это FIFO-буфер,
+    который развязывает скорость продюсера и скорость потребителя. Брокер сам
+    проталкивает сообщения подписанным потребителям в пределах их prefetch и
+    раздаёт их по кругу между конкурирующими потребителями, а удаляет сообщение
+    только после подтверждения. Именно из этого последнего правила растут
+    повторная доставка, гарантия at-least-once, requeue и dead-letter очереди.
+
+# Visual primitives this topic's visualizer composes (frontend).
+primitives:
+  - BoxGroup
+  - EventLog
+
+defaultExample: publish-consume
+
+# Examples shown as buttons. `file` is relative to examples/.
+examples:
+  - id: publish-consume
+    title:
+      en: Publish → route → ack
+      ru: Публикация → маршрутизация → ack
+    file: 01-publish-consume.java
+    explanation:
+      en: >
+        The whole path in one run: declare an exchange, a queue and a binding,
+        subscribe a consumer, publish once. The message is stored in the queue,
+        pushed to the consumer as unacked, and deleted only on ack.
+      ru: >
+        Весь путь за один запуск: объявляем exchange, очередь и привязку,
+        подписываем потребителя, публикуем одно сообщение. Оно попадает в
+        очередь, проталкивается потребителю как unacked и удаляется только
+        после ack.
+  - id: exchange-types
+    title:
+      en: direct vs fanout
+      ru: direct против fanout
+    file: 02-exchange-types.java
+    explanation:
+      en: >
+        A direct exchange needs an exact routing-key match — a key nobody binds
+        makes the message unroutable and it is discarded silently. A fanout
+        exchange ignores the key and gives every bound queue its own copy.
+      ru: >
+        direct требует точного совпадения routing key — ключ, на который никто
+        не подписан, делает сообщение недоставляемым, и оно молча выбрасывается.
+        fanout игнорирует ключ и даёт каждой привязанной очереди свою копию.
+  - id: topic-routing
+    title:
+      en: Topic exchange wildcards
+      ru: Шаблоны topic exchange
+    file: 03-topic-routing.java
+    explanation:
+      en: >
+        '*' matches exactly one word and '#' matches zero or more, so one publish
+        can land in three queues, two, or none. This is how RabbitMQ does
+        content-based routing without the producer knowing any consumer.
+      ru: >
+        '*' совпадает ровно с одним словом, '#' — с нулём или более, поэтому одна
+        публикация может попасть в три очереди, в две или ни в одну. Так RabbitMQ
+        делает маршрутизацию по содержимому, а продюсер не знает потребителей.
+  - id: competing-consumers
+    title:
+      en: Competing consumers & prefetch
+      ru: Конкурирующие потребители и prefetch
+    file: 04-competing-consumers.java
+    explanation:
+      en: >
+        Two workers on one queue share the messages round-robin — each message
+        goes to exactly one of them. Once both are at their prefetch limit the
+        next message waits in the queue instead of being pushed.
+      ru: >
+        Два воркера на одной очереди делят сообщения по кругу — каждое достаётся
+        ровно одному. Когда оба исчерпали prefetch, следующее сообщение ждёт в
+        очереди, а не проталкивается.
+  - id: redelivery
+    title:
+      en: Crash before ack → redelivery
+      ru: Падение до ack → повторная доставка
+    file: 05-redelivery.java
+    explanation:
+      en: >
+        A consumer that dies with an unacked message does not lose it: the broker
+        returns it to the head of the queue and delivers it again with
+        redelivered = true. That is at-least-once — the work can repeat.
+      ru: >
+        Потребитель, умерший с неподтверждённым сообщением, его не теряет: брокер
+        возвращает сообщение в голову очереди и доставляет снова с
+        redelivered = true. Это at-least-once — работа может повториться.
+  - id: dead-letter
+    title:
+      en: Requeue loop vs dead-letter
+      ru: Цикл requeue против dead-letter
+    file: 06-dead-letter.java
+    explanation:
+      en: >
+        nack with requeue puts the message straight back and it fails again — a
+        poison message can spin forever. nack without requeue moves it to the
+        dead-letter queue, or destroys it when the queue has no such target.
+      ru: >
+        nack с requeue возвращает сообщение обратно, и оно падает снова —
+        «ядовитое» сообщение может крутиться вечно. nack без requeue переносит
+        его в dead-letter очередь или уничтожает, если такой очереди нет.
+  - id: queue-as-buffer
+    title:
+      en: The queue as a buffer
+      ru: Очередь как буфер
+    file: 07-queue-as-buffer.java
+    explanation:
+      en: >
+        A burst published with no consumer attached simply piles up: the producer
+        returns immediately and a worker drains the backlog later at its own
+        pace. Queue depth is the metric that tells you consumers are too slow.
+      ru: >
+        Всплеск, опубликованный без подключённого потребителя, просто копится:
+        продюсер сразу возвращается, а воркер позже разгребает завал в своём
+        темпе. Глубина очереди — метрика, которая говорит, что потребители не
+        успевают.
+
+# Example question pre-filled as the Ask AI placeholder.
+assistantExample:
+  en: "e.g. Why does a queue give at-least-once delivery instead of exactly-once?"
+  ru: "например: Почему очередь даёт at-least-once, а не exactly-once?"
+
+missionsFile: quiz.yaml

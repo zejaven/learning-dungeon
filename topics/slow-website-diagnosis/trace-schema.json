@@ -1,0 +1,239 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Slow-website latency hunt trace event state",
+  "description": "Shape of the `state` field for slow-website-diagnosis trace events: one latency investigation — the budget split into levels of segments, the load and resource readings, the priced ceilings, and the stopwatch.",
+  "type": "object",
+  "required": ["site", "journey", "complaint", "stage", "minutes", "budgetMs", "endToEndMs", "levels", "hotspot", "facts", "resources", "ceilings", "missingSignals", "cause", "guards", "missteps"],
+  "properties": {
+    "site": {
+      "type": "string",
+      "description": "The site the complaint is about, e.g. shop.example.com."
+    },
+    "journey": {
+      "type": "string",
+      "description": "The page or user journey named in the complaint, e.g. 'the product page'."
+    },
+    "complaint": {
+      "type": "string",
+      "description": "The complaint as it was received, verbatim and unquantified."
+    },
+    "stage": {
+      "enum": ["reported", "scoped", "measuring", "localized", "confirmed", "fixed", "verified", "unchanged"],
+      "description": "Technical lifecycle state of the hunt, translated by the visualizer; 'unchanged' means a fix was re-measured and moved nothing."
+    },
+    "minutes": {
+      "type": "integer",
+      "description": "Minutes charged since the complaint landed; every action has a fixed deterministic cost."
+    },
+    "budgetMs": {
+      "type": "integer",
+      "description": "The agreed 'fast enough' threshold in milliseconds; 0 while no budget has been set."
+    },
+    "budgetLabel": {
+      "type": ["string", "null"],
+      "description": "What the budget applies to, e.g. 'the product page at p95'."
+    },
+    "endToEndMs": {
+      "type": "integer",
+      "description": "The measured end-to-end total: the sum of the root level's segments, falling back to the read p95; 0 while nothing is measured."
+    },
+    "percentiles": {
+      "type": "object",
+      "description": "The shape of the latency distribution; absent until it is read.",
+      "required": ["avg", "p50", "p95", "p99"],
+      "properties": {
+        "avg": { "type": "integer", "description": "The mean, in ms — the number that describes nobody." },
+        "p50": { "type": "integer", "description": "The median, in ms — what a normal visit looks like." },
+        "p95": { "type": "integer", "description": "In ms — what the person complaining is living through." },
+        "p99": { "type": "integer", "description": "In ms — the shape of the tail." }
+      }
+    },
+    "levels": {
+      "type": "array",
+      "description": "The splits, outermost first. The root level is named 'end-to-end'; every later level is named after the segment that was drilled into.",
+      "items": {
+        "type": "object",
+        "required": ["name", "totalMs", "segments"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "'end-to-end' for the root, otherwise the parent segment's name."
+          },
+          "totalMs": {
+            "type": "integer",
+            "description": "The sum of this level's segments; it should equal the parent segment it splits."
+          },
+          "segments": {
+            "type": "array",
+            "description": "The measured slices of this level, in the order they were measured.",
+            "items": {
+              "type": "object",
+              "required": ["name", "millis", "share", "tool", "status", "note"],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "What was measured, e.g. 'waiting for the first byte (TTFB)'."
+                },
+                "millis": {
+                  "type": "integer",
+                  "description": "Milliseconds this slice holds."
+                },
+                "share": {
+                  "type": "integer",
+                  "description": "Percentage of its level's total."
+                },
+                "tool": {
+                  "type": "string",
+                  "description": "What produced the number, e.g. 'the browser network panel' or 'EXPLAIN ANALYZE'."
+                },
+                "status": {
+                  "enum": ["measured", "hotspot", "cleared", "drilled"],
+                  "description": "'hotspot' is the biggest slice not yet cleared; 'drilled' means it was opened into its own level."
+                },
+                "note": {
+                  "type": "string",
+                  "description": "The evidence that cleared the segment; empty otherwise."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "hotspot": {
+      "type": ["string", "null"],
+      "description": "The biggest uncleared segment of the deepest level, or null before anything is measured."
+    },
+    "facts": {
+      "type": "array",
+      "description": "The questions that turned the complaint into a request, in order.",
+      "items": {
+        "type": "object",
+        "required": ["question", "answer"],
+        "properties": {
+          "question": { "type": "string", "description": "The question put to whoever complained." },
+          "answer": { "type": "string", "description": "The answer that narrowed the hunt." }
+        }
+      }
+    },
+    "load": {
+      "type": "object",
+      "description": "The same request timed with the site idle and at peak; absent until compared.",
+      "required": ["idleMs", "peakMs", "queueing"],
+      "properties": {
+        "idleMs": { "type": "integer", "description": "Milliseconds with nobody on the site — the work itself." },
+        "peakMs": { "type": "integer", "description": "Milliseconds at peak — the work plus the wait." },
+        "queueing": {
+          "type": "boolean",
+          "description": "True when peak is at least twice idle: most of the latency is a queue, not work."
+        }
+      }
+    },
+    "resources": {
+      "type": "array",
+      "description": "Resource readings taken while looking for a queue, in the order they were read.",
+      "items": {
+        "type": "object",
+        "required": ["name", "reading", "saturated"],
+        "properties": {
+          "name": { "type": "string", "description": "The resource, e.g. 'the JDBC connection pool'." },
+          "reading": { "type": "string", "description": "The reading itself, including anything waiting in line." },
+          "saturated": { "type": "boolean", "description": "Whether requests are queueing for it." }
+        }
+      }
+    },
+    "ceilings": {
+      "type": "array",
+      "description": "Proposed optimisations priced against the whole request (Amdahl's law), in the order they were priced.",
+      "items": {
+        "type": "object",
+        "required": ["change", "segment", "speedup", "savedMs", "gainPercent", "worthIt"],
+        "properties": {
+          "change": { "type": "string", "description": "The proposed change." },
+          "segment": { "type": "string", "description": "The segment it would touch." },
+          "speedup": { "type": "integer", "description": "How many times faster that segment would become." },
+          "savedMs": { "type": "integer", "description": "Milliseconds it can remove — its ceiling." },
+          "gainPercent": { "type": "integer", "description": "Those milliseconds as a percentage of the end-to-end total." },
+          "worthIt": { "type": "boolean", "description": "Whether the gain clears the 10% noise floor." }
+        }
+      }
+    },
+    "missingSignals": {
+      "type": "array",
+      "description": "Measurements that do not exist, which is why the hunt is guesswork.",
+      "items": { "type": "string" }
+    },
+    "cause": {
+      "type": ["string", "null"],
+      "description": "The confirmed cause, or null while nothing accounts for the time."
+    },
+    "causeEvidence": {
+      "type": ["string", "null"],
+      "description": "The measurement that made the cause more than a story."
+    },
+    "fix": {
+      "type": "object",
+      "description": "The change that was shipped; absent while nothing has been changed.",
+      "required": ["change", "expectedMs", "blind"],
+      "properties": {
+        "change": { "type": "string", "description": "What was shipped." },
+        "expectedMs": { "type": "integer", "description": "The milliseconds it was expected to remove, written down before the deploy." },
+        "blind": { "type": "boolean", "description": "True when it shipped with no confirmed cause." }
+      }
+    },
+    "result": {
+      "type": "object",
+      "description": "The same measurement taken again; absent until it is.",
+      "required": ["beforeMs", "afterMs", "gainPercent", "improved", "metBudget"],
+      "properties": {
+        "beforeMs": { "type": "integer", "description": "The end-to-end total before the change." },
+        "afterMs": { "type": "integer", "description": "The end-to-end total after it." },
+        "gainPercent": { "type": "integer", "description": "The improvement as a percentage." },
+        "improved": { "type": "boolean", "description": "False when the gain is under the 10% noise floor." },
+        "metBudget": { "type": "boolean", "description": "Whether the new number is inside the agreed budget." }
+      }
+    },
+    "guards": {
+      "type": "array",
+      "description": "The monitoring left behind so the next hunt starts from data.",
+      "items": { "type": "string" }
+    },
+    "missteps": {
+      "type": "array",
+      "description": "Hunting errors recorded as consequences of the order actions were taken in.",
+      "items": {
+        "enum": [
+          "optimized-on-a-hunch",
+          "no-measurement",
+          "chased-a-small-slice",
+          "drilled-before-measuring",
+          "changed-without-a-cause",
+          "no-measurable-gain",
+          "never-remeasured"
+        ]
+      }
+    }
+  },
+  "events": [
+    "SLOWNESS_REPORTED",
+    "GUESS_MADE",
+    "SCOPE_NARROWED",
+    "BUDGET_SET",
+    "PERCENTILES_READ",
+    "SIGNAL_MISSING",
+    "SEGMENT_MEASURED",
+    "TIME_SPLIT",
+    "SEGMENT_CLEARED",
+    "DRILL_DOWN",
+    "LOAD_COMPARED",
+    "RESOURCE_CHECKED",
+    "CEILING_COMPUTED",
+    "CAUSE_CONFIRMED",
+    "FIX_APPLIED",
+    "BLIND_OPTIMIZATION",
+    "IMPROVEMENT_VERIFIED",
+    "NO_IMPROVEMENT",
+    "MONITORING_ADDED",
+    "HUNT_REVIEW"
+  ]
+}

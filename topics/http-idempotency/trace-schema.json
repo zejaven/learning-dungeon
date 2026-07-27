@@ -1,0 +1,189 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Idempotency trace event state",
+  "description": "Shape of the `state` field for http-idempotency trace events.",
+  "type": "object",
+  "required": ["base", "resources", "gone", "keys", "sideEffects", "ledger", "counters"],
+  "properties": {
+    "base": {
+      "type": "string",
+      "description": "The collection URL this server exposes, e.g. '/orders'."
+    },
+    "resources": {
+      "type": "array",
+      "description": "Everything stored on the server right now, one entry per resource.",
+      "items": {
+        "type": "object",
+        "required": ["path", "fields", "mark"],
+        "properties": {
+          "path": { "type": "string", "description": "The URL of this resource." },
+          "fields": {
+            "type": "array",
+            "description": "The stored representation, in a stable display order.",
+            "items": {
+              "type": "object",
+              "required": ["field", "value"],
+              "properties": {
+                "field": { "type": "string" },
+                "value": { "type": "string" }
+              }
+            }
+          },
+          "mark": {
+            "enum": ["created", "updated", "kept"],
+            "description": "How the current request touched this resource."
+          }
+        }
+      }
+    },
+    "gone": {
+      "type": "array",
+      "description": "URLs the current request removed.",
+      "items": { "type": "string" }
+    },
+    "keys": {
+      "type": "array",
+      "description": "The idempotency-key record: what the server stored so it can recognize a retry.",
+      "items": {
+        "type": "object",
+        "required": ["key", "path", "status"],
+        "properties": {
+          "key": { "type": "string", "description": "The Idempotency-Key value the client sent." },
+          "path": { "type": "string", "description": "The resource the first call produced." },
+          "status": { "type": "string", "description": "The response stored for a replay." }
+        }
+      }
+    },
+    "sideEffects": {
+      "type": "array",
+      "description": "Effects outside the stored representation (mails, webhooks, downstream calls), in the order they fired.",
+      "items": { "type": "string" }
+    },
+    "request": {
+      "type": "object",
+      "description": "The request being processed (absent before the first one).",
+      "required": ["method", "path", "attempt", "idempotentBySpec", "relative", "body"],
+      "properties": {
+        "method": {
+          "enum": ["GET", "HEAD", "PUT", "POST", "PATCH", "DELETE"],
+          "description": "The HTTP method, untranslated."
+        },
+        "path": { "type": "string", "description": "The request target." },
+        "attempt": {
+          "type": "integer",
+          "description": "How many times this identical request has been sent, starting at 1."
+        },
+        "key": {
+          "type": ["string", "null"],
+          "description": "The Idempotency-Key header, or null when the request carries none."
+        },
+        "idempotentBySpec": {
+          "enum": ["yes", "no", "unspecified"],
+          "description": "What the HTTP spec promises about repeating this method."
+        },
+        "relative": {
+          "type": "boolean",
+          "description": "Whether the body is a relative operation ('+1') instead of a target value."
+        },
+        "body": {
+          "type": "array",
+          "description": "The request body as sent; empty for methods that carry none.",
+          "items": {
+            "type": "object",
+            "required": ["field", "value"],
+            "properties": {
+              "field": { "type": "string" },
+              "value": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "description": "The answer produced for the current request.",
+      "required": ["status", "delivered", "replayed"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "description": "HTTP status line ('200 OK', '404 Not Found'), or 'pending' while the request is still being processed."
+        },
+        "delivered": {
+          "type": "boolean",
+          "description": "Whether the answer actually reached the client, or was lost on the way back."
+        },
+        "replayed": {
+          "type": "boolean",
+          "description": "Whether the answer was replayed from the idempotency-key record instead of executed."
+        }
+      }
+    },
+    "ledger": {
+      "type": "array",
+      "description": "Every attempt in the order it was sent, with what came of it.",
+      "items": {
+        "type": "object",
+        "required": ["seq", "method", "path", "attempt", "status", "delivered", "outcome"],
+        "properties": {
+          "seq": { "type": "integer", "description": "1-based position in the run." },
+          "method": { "type": "string", "description": "The HTTP method of this attempt." },
+          "path": { "type": "string", "description": "The request target." },
+          "attempt": {
+            "type": "integer",
+            "description": "How many times this identical request had been sent by then."
+          },
+          "key": {
+            "type": ["string", "null"],
+            "description": "The Idempotency-Key of this attempt, or null."
+          },
+          "status": { "type": "string", "description": "The status line the server produced." },
+          "delivered": {
+            "type": "boolean",
+            "description": "Whether the client received the answer."
+          },
+          "outcome": {
+            "enum": ["applied", "repeat", "duplicate", "leak", "replayed", "read", "none", "pending"],
+            "description": "What this attempt did: applied a change, repeated one harmlessly, duplicated it, leaked a side effect, was replayed from a key, was a safe read, or did nothing."
+          }
+        }
+      }
+    },
+    "counters": {
+      "type": "object",
+      "description": "Running totals for the whole run.",
+      "required": ["attempts", "lost", "effects", "duplicates", "replays"],
+      "properties": {
+        "attempts": { "type": "integer", "description": "Requests sent so far." },
+        "lost": { "type": "integer", "description": "Answers that never reached the client." },
+        "effects": { "type": "integer", "description": "Requests that actually changed something." },
+        "duplicates": {
+          "type": "integer",
+          "description": "Repeats that changed something again — the ones that should not have."
+        },
+        "replays": {
+          "type": "integer",
+          "description": "Repeats recognized by an idempotency key and answered from the record."
+        }
+      }
+    }
+  },
+  "events": [
+    "SERVER_READY",
+    "NETWORK_UNRELIABLE",
+    "REQUEST_SENT",
+    "RETRY_SENT",
+    "RESPONSE_RECEIVED",
+    "RESPONSE_LOST",
+    "SAFE_READ",
+    "EFFECT_APPLIED",
+    "IDEMPOTENT_REPEAT",
+    "DUPLICATE_EFFECT",
+    "RELATIVE_UPDATE",
+    "KEY_STORED",
+    "KEY_REPLAYED",
+    "SIDE_EFFECT_FIRED",
+    "SIDE_EFFECT_LEAK",
+    "NOT_FOUND",
+    "AUDIT"
+  ]
+}

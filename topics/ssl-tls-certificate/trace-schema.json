@@ -1,0 +1,289 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SSL/TLS certificate trace event state",
+  "description": "Shape of the `state` field for ssl-tls-certificate trace events.",
+  "type": "object",
+  "required": ["host", "clock", "trustStore", "chain", "privateKeyHeld", "handshake", "checks", "crypto", "records", "attacker", "outcome", "stats"],
+  "properties": {
+    "host": {
+      "type": "string",
+      "description": "The hostname the client asked for - what the certificate has to match."
+    },
+    "clock": {
+      "type": "integer",
+      "description": "Model calendar in days; a certificate is valid only inside its own window."
+    },
+    "trustStore": {
+      "type": "array",
+      "description": "Root CAs this client believes. Everything TLS proves about identity ends here.",
+      "items": {
+        "type": "object",
+        "required": ["name", "source"],
+        "properties": {
+          "name": { "type": "string" },
+          "source": {
+            "enum": ["preinstalled", "added"],
+            "description": "Shipped with the browser/OS, or installed on this machine afterwards."
+          }
+        }
+      }
+    },
+    "chain": {
+      "type": "array",
+      "description": "The certificate under examination, leaf first, up to its root.",
+      "items": {
+        "type": "object",
+        "required": ["role", "subject", "names", "issuer", "notBefore", "notAfter", "keyType", "selfSigned", "revoked", "sent", "trusted"],
+        "properties": {
+          "role": {
+            "enum": ["leaf", "intermediate", "root"],
+            "description": "Where this certificate sits in the chain."
+          },
+          "subject": {
+            "type": "string",
+            "description": "The name this certificate is issued to."
+          },
+          "names": {
+            "type": "array",
+            "description": "The SAN list - every hostname the leaf speaks for; empty for CA certificates.",
+            "items": { "type": "string" }
+          },
+          "issuer": {
+            "type": "string",
+            "description": "Who signed it. The signature is the only reason anybody believes the rest."
+          },
+          "notBefore": { "type": "integer" },
+          "notAfter": {
+            "type": "integer",
+            "description": "Last valid day; past it the client refuses regardless of everything else."
+          },
+          "keyType": {
+            "type": "string",
+            "description": "The key pair the certificate binds to the name, e.g. ECDSA-P256."
+          },
+          "selfSigned": {
+            "type": "boolean",
+            "description": "True when subject equals issuer - a root, or a certificate nobody vouches for."
+          },
+          "revoked": {
+            "type": "boolean",
+            "description": "Withdrawn by the CA before its notAfter, normally after a key leak."
+          },
+          "sent": {
+            "type": "boolean",
+            "description": "False for the root: it is never on the wire, it is already on the client."
+          },
+          "trusted": {
+            "type": "boolean",
+            "description": "This subject is itself in the trust store."
+          }
+        }
+      }
+    },
+    "privateKeyHeld": {
+      "type": "boolean",
+      "description": "Whether the presenter also holds the private key. A copied certificate does not."
+    },
+    "handshake": {
+      "type": "array",
+      "description": "The phases of the handshake, in order, with the verdict of each.",
+      "items": {
+        "type": "object",
+        "required": ["id", "status", "detail"],
+        "properties": {
+          "id": {
+            "enum": ["hello", "certificate", "validate", "keys", "finished"],
+            "description": "hello = ClientHello in the clear; certificate = the chain arrives; validate = the five checks; keys = key agreement; finished = symmetric keys active."
+          },
+          "status": { "enum": ["pending", "passed", "failed"] },
+          "detail": { "type": "string" }
+        }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "description": "What a client verifies about a presented certificate, in order.",
+      "items": {
+        "type": "object",
+        "required": ["id", "status", "detail"],
+        "properties": {
+          "id": {
+            "enum": ["chain", "hostname", "validity", "revocation", "possession"],
+            "description": "chain = leads to a trusted root; hostname = matches the SAN; validity = inside its dates; revocation = not withdrawn; possession = the other side signed with the matching private key."
+          },
+          "status": {
+            "enum": ["pending", "passed", "failed"],
+            "description": "pending = never reached, because an earlier check refused."
+          },
+          "detail": {
+            "type": "string",
+            "description": "The bare token behind the verdict: an anchor name, a date, a SAN list."
+          }
+        }
+      }
+    },
+    "crypto": {
+      "type": "object",
+      "description": "What the connection actually uses - authentication, key agreement, record cipher.",
+      "required": ["protocol", "keyExchange", "authentication", "cipher", "sessionKey", "forwardSecrecy", "established"],
+      "properties": {
+        "protocol": { "type": "string" },
+        "keyExchange": {
+          "type": "string",
+          "description": "How the two sides arrive at a shared secret: ephemeral DH, or RSA key transport."
+        },
+        "authentication": {
+          "type": "string",
+          "description": "What the certificate's key does: it signs, proving identity."
+        },
+        "cipher": {
+          "type": "string",
+          "description": "The symmetric AEAD cipher every application record uses."
+        },
+        "sessionKey": {
+          "type": ["string", "null"],
+          "description": "The derived symmetric key; null until the handshake succeeds."
+        },
+        "forwardSecrecy": {
+          "type": "boolean",
+          "description": "Whether a later leak of the server's private key would open recorded traffic."
+        },
+        "established": {
+          "type": "boolean",
+          "description": "Whether a usable encrypted session exists right now."
+        }
+      }
+    },
+    "records": {
+      "type": "array",
+      "description": "Application data records sent so far.",
+      "items": {
+        "type": "object",
+        "required": ["seq", "plaintext", "ciphertext", "tag", "intact", "exposed"],
+        "properties": {
+          "seq": { "type": "integer" },
+          "plaintext": {
+            "type": "string",
+            "description": "The HTTP text handed to TLS - method, path, headers, body."
+          },
+          "ciphertext": {
+            "type": "string",
+            "description": "What an observer sees; equal to the plaintext when there is no TLS."
+          },
+          "tag": {
+            "type": "string",
+            "description": "The AEAD authentication tag; empty without TLS, which is why plain HTTP can be rewritten."
+          },
+          "intact": {
+            "type": "boolean",
+            "description": "False once a byte was flipped in flight and the tag check failed."
+          },
+          "exposed": {
+            "type": "boolean",
+            "description": "True when somebody other than the endpoints can read this record."
+          }
+        }
+      }
+    },
+    "attacker": {
+      "type": "object",
+      "description": "What the party on the path has managed to obtain.",
+      "required": ["recorded", "hasPrivateKey", "canRead", "rootInstalled"],
+      "properties": {
+        "recorded": {
+          "type": "integer",
+          "description": "Ciphertext records stored for later - 'harvest now, decrypt later'."
+        },
+        "hasPrivateKey": {
+          "type": "boolean",
+          "description": "The server's long-lived private key has leaked."
+        },
+        "canRead": {
+          "type": "boolean",
+          "description": "The recording is readable, which only happens without forward secrecy."
+        },
+        "rootInstalled": {
+          "type": "boolean",
+          "description": "A root CA was added to this machine's trust store."
+        }
+      }
+    },
+    "outcome": {
+      "type": "object",
+      "description": "How the current step ended.",
+      "required": ["decision"],
+      "properties": {
+        "decision": {
+          "enum": ["idle", "pending", "secure", "refused", "breach", "exposed"],
+          "description": "breach = the connection looked secure and was not; exposed = readable on the wire."
+        },
+        "reason": {
+          "type": ["string", "null"],
+          "enum": [
+            "incomplete-chain",
+            "untrusted-issuer",
+            "hostname-mismatch",
+            "expired",
+            "revoked",
+            "no-private-key",
+            "rogue-root",
+            "tampered",
+            "plaintext",
+            "no-session",
+            "no-forward-secrecy",
+            null
+          ],
+          "description": "Technical code for the refusal or the breach; null when nothing went wrong."
+        },
+        "detail": {
+          "type": "string",
+          "description": "The offending name, date or record; empty when not applicable."
+        }
+      }
+    },
+    "stats": {
+      "type": "object",
+      "description": "Running totals across the whole run.",
+      "required": ["handshakes", "refused", "records", "bytesEncrypted", "breaches"],
+      "properties": {
+        "handshakes": { "type": "integer" },
+        "refused": { "type": "integer" },
+        "records": { "type": "integer" },
+        "bytesEncrypted": { "type": "integer" },
+        "breaches": {
+          "type": "integer",
+          "description": "Connections that passed every cryptographic check and still reached the wrong party."
+        }
+      }
+    }
+  },
+  "events": [
+    "TLS_CLIENT",
+    "ROOT_INSTALLED",
+    "CIPHER_CONFIGURED",
+    "CERT_INSPECTED",
+    "CLIENT_HELLO",
+    "CERT_PRESENTED",
+    "CHAIN_VERIFIED",
+    "CHAIN_UNTRUSTED",
+    "CHAIN_INCOMPLETE",
+    "HOSTNAME_MISMATCH",
+    "CERT_EXPIRED",
+    "CERT_REVOKED",
+    "POSSESSION_PROVEN",
+    "POSSESSION_FAILED",
+    "KEY_EXCHANGE",
+    "SESSION_KEYS_DERIVED",
+    "HANDSHAKE_DONE",
+    "MITM_ACCEPTED",
+    "RECORD_ENCRYPTED",
+    "RECORD_TAMPERED",
+    "PLAINTEXT_ON_THE_WIRE",
+    "TRAFFIC_RECORDED",
+    "PRIVATE_KEY_STOLEN",
+    "FORWARD_SECRECY_HELD",
+    "RECORDING_DECRYPTED",
+    "TIME_PASSED",
+    "TLS_AUDIT"
+  ]
+}

@@ -1,0 +1,229 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Authentication trace event state",
+  "description": "Shape of the `state` field for authentication-flow trace events.",
+  "type": "object",
+  "required": ["credentialStyle", "passwordStorage", "clock", "accessLifetime", "loginRateLimit", "users", "serverStore", "clientStore", "action", "phases", "identity", "outcome", "stats"],
+  "properties": {
+    "credentialStyle": {
+      "enum": ["session", "token"],
+      "description": "Where the truth lives: a server-side session record, or a signed token held by the client."
+    },
+    "passwordStorage": {
+      "enum": ["hashed", "plaintext"],
+      "description": "How the user store keeps secrets at rest."
+    },
+    "clock": {
+      "type": "integer",
+      "description": "Model time in minutes since the run started."
+    },
+    "accessLifetime": {
+      "type": "integer",
+      "description": "How long an issued credential stays valid, in minutes."
+    },
+    "loginRateLimit": {
+      "type": "integer",
+      "description": "Wrong passwords tolerated per account; 0 when logins are not throttled."
+    },
+    "users": {
+      "type": "array",
+      "description": "The user store — what the server keeps at rest.",
+      "items": {
+        "type": "object",
+        "required": ["name", "stored", "salt", "secondFactor", "failedAttempts"],
+        "properties": {
+          "name": { "type": "string" },
+          "stored": {
+            "type": "string",
+            "description": "The stored value: a hash, or (in the anti-pattern) the password itself."
+          },
+          "salt": {
+            "type": "string",
+            "description": "Per-user salt; empty when passwords are stored in plaintext."
+          },
+          "secondFactor": {
+            "type": "boolean",
+            "description": "Whether this account also requires a second factor."
+          },
+          "failedAttempts": {
+            "type": "integer",
+            "description": "Consecutive wrong passwords, reset by a successful login."
+          }
+        }
+      }
+    },
+    "serverStore": {
+      "type": "array",
+      "description": "Credentials the server remembers. Always empty in token mode — that is the point.",
+      "items": { "$ref": "#/definitions/credential" }
+    },
+    "clientStore": {
+      "type": "array",
+      "description": "Credentials the client is holding.",
+      "items": { "$ref": "#/definitions/credential" }
+    },
+    "action": {
+      "type": "object",
+      "description": "What the current step is doing.",
+      "required": ["kind", "actor", "detail"],
+      "properties": {
+        "kind": {
+          "enum": ["idle", "register", "mfa-setup", "login", "mfa", "request", "refresh", "logout", "leak", "clock"],
+          "description": "Which part of the lifecycle is running."
+        },
+        "actor": {
+          "type": "string",
+          "description": "Who is acting; may differ from the credential's user when one is replayed."
+        },
+        "detail": {
+          "type": "string",
+          "description": "The username, path or amount of time this step is about."
+        }
+      }
+    },
+    "phases": {
+      "type": "array",
+      "description": "The five phases every authentication walks, in order, with the verdict of each for the current step.",
+      "items": {
+        "type": "object",
+        "required": ["id", "status", "detail"],
+        "properties": {
+          "id": {
+            "enum": ["claim", "prove", "mfa", "issue", "identity"],
+            "description": "Which phase this is."
+          },
+          "status": {
+            "enum": ["pending", "passed", "denied", "skipped", "breach"],
+            "description": "pending = never reached; breach = it let through what it should have stopped."
+          },
+          "detail": {
+            "type": "string",
+            "description": "Bare token behind the verdict: a username, a credential id or a reason."
+          }
+        }
+      }
+    },
+    "identity": {
+      "type": ["object", "null"],
+      "description": "Who the server decided the caller is; null while nobody has been identified.",
+      "required": ["user", "source", "credentialId"],
+      "properties": {
+        "user": { "type": "string" },
+        "source": {
+          "enum": ["session", "token"],
+          "description": "What the identity was read from."
+        },
+        "credentialId": { "type": "string" }
+      }
+    },
+    "outcome": {
+      "type": "object",
+      "description": "How the current step ended.",
+      "required": ["decision"],
+      "properties": {
+        "status": {
+          "type": ["integer", "null"],
+          "description": "HTTP status the server answered with; null while the step is still running."
+        },
+        "decision": {
+          "enum": ["idle", "pending", "allowed", "denied", "breach"],
+          "description": "breach = the request was served and should not have been."
+        },
+        "reason": {
+          "type": ["string", "null"],
+          "enum": [
+            "throttled",
+            "unknown-user",
+            "wrong-password",
+            "wrong-code",
+            "no-credential",
+            "mfa-incomplete",
+            "unknown-session",
+            "logged-out",
+            "expired",
+            "refresh-expired",
+            "revoked-token",
+            "stolen-credential",
+            null
+          ],
+          "description": "Technical code for the refusal or the breach; null when nothing went wrong."
+        },
+        "detail": {
+          "type": "string",
+          "description": "The offending user, credential id, code or expiry; empty when not applicable."
+        }
+      }
+    },
+    "stats": {
+      "type": "object",
+      "description": "Running totals across the whole run.",
+      "required": ["loginsGranted", "loginsRefused", "requests", "served", "refused", "breaches"],
+      "properties": {
+        "loginsGranted": { "type": "integer" },
+        "loginsRefused": { "type": "integer" },
+        "requests": { "type": "integer" },
+        "served": {
+          "type": "integer",
+          "description": "Requests the server answered as a known caller."
+        },
+        "refused": {
+          "type": "integer",
+          "description": "Requests refused because nobody could be identified."
+        },
+        "breaches": {
+          "type": "integer",
+          "description": "Requests served that should not have been."
+        }
+      }
+    }
+  },
+  "definitions": {
+    "credential": {
+      "type": "object",
+      "required": ["id", "user", "kind", "issuedAt", "expiresAt", "state"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The value the client sends back: a session id or a token."
+        },
+        "user": { "type": "string" },
+        "kind": {
+          "enum": ["session", "token"],
+          "description": "Which credential style this one is."
+        },
+        "issuedAt": { "type": "integer" },
+        "expiresAt": { "type": "integer" },
+        "state": {
+          "enum": ["valid", "expired", "pending", "dropped"],
+          "description": "pending = the second factor is not done; dropped = the client let go of it."
+        }
+      }
+    }
+  },
+  "events": [
+    "AUTH_SETUP",
+    "USER_REGISTERED",
+    "PLAINTEXT_PASSWORD_STORED",
+    "SECOND_FACTOR_ENABLED",
+    "USER_STORE_LEAKED",
+    "LOGIN_ATTEMPT",
+    "LOGIN_FAILED",
+    "LOGIN_RATE_LIMITED",
+    "PASSWORD_VERIFIED",
+    "MFA_REQUIRED",
+    "MFA_FAILED",
+    "MFA_PASSED",
+    "CREDENTIAL_ISSUED",
+    "REQUEST_SENT",
+    "ANONYMOUS_REQUEST",
+    "CREDENTIAL_REJECTED",
+    "CREDENTIAL_EXPIRED",
+    "IDENTITY_ESTABLISHED",
+    "STOLEN_CREDENTIAL_ACCEPTED",
+    "REVOKED_TOKEN_STILL_VALID",
+    "TIME_PASSED",
+    "CREDENTIAL_REFRESHED",
+    "LOGGED_OUT",
+    "AUTH_AUDIT"
+  ]
+}

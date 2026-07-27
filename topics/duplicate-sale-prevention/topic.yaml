@@ -1,0 +1,172 @@
+id: duplicate-sale-prevention
+title:
+  en: Avoiding Duplicate Sales on Registration
+  ru: Как избежать дублей при регистрации продаж
+category:
+  en: Microservices / Data Consistency
+  ru: Микросервисы / Согласованность данных
+type: OTHER
+mode: trace
+aiProvider: claude
+aiModel: claude-opus-5
+categoryId: microservices
+difficulty: 3
+catalogId: microservices-13
+summary:
+  en: >
+    A sale can arrive twice for reasons you do not control: a retried HTTP call,
+    a redelivered message, a double-tapped button, a re-synced offline queue.
+    Duplicates are prevented on the server, not on the client, by giving every
+    sale an explicit identity and enforcing that identity where it cannot race —
+    a UNIQUE index or an ON CONFLICT upsert, with the dedup row and the sale row
+    written in one transaction. An application-level "check, then insert" is not
+    a guard, deduplicating by a hash of the payload silently deletes real sales,
+    and a retention window shorter than the longest possible retry quietly
+    reopens the hole.
+  ru: >
+    Продажа может прийти дважды по причинам, которые вы не контролируете:
+    повторный HTTP-запрос, повторная доставка сообщения, двойное нажатие кнопки,
+    повторная синхронизация офлайн-очереди. Дубли предотвращаются на сервере, а
+    не на клиенте: каждой продаже дают явную идентичность и проверяют её там, где
+    невозможна гонка — UNIQUE-индексом или upsert с ON CONFLICT, записывая строку
+    дедупликации и строку продажи в одной транзакции. Проверка «сначала SELECT,
+    потом INSERT» на уровне приложения защитой не является, дедупликация по хэшу
+    тела запроса молча удаляет настоящие продажи, а окно хранения короче самого
+    долгого возможного повтора тихо открывает дыру обратно.
+
+# Visual primitives this topic's visualizer composes (frontend).
+primitives:
+  - BoxGroup
+  - EventLog
+
+defaultExample: dedup-by-key
+
+# Examples shown as buttons. `file` is relative to examples/.
+examples:
+  - id: no-guard
+    title:
+      en: No guard at all
+      ru: Совсем без защиты
+    file: 01-no-guard.java
+    explanation:
+      en: >
+        The baseline. The endpoint just inserts, so the second delivery of the
+        same sale becomes a second row. Nothing about the request looks wrong —
+        the table is simply telling the truth about how many times it was
+        called.
+      ru: >
+        Отправная точка. Эндпоинт просто делает INSERT, поэтому вторая доставка
+        той же продажи становится второй строкой. В запросе нет ничего
+        подозрительного — таблица просто честно показывает, сколько раз её
+        вызвали.
+  - id: dedup-by-key
+    title:
+      en: Dedup by the sale's own key
+      ru: Дедупликация по ключу продажи
+    file: 02-dedup-by-key.java
+    explanation:
+      en: >
+        The everyday shape: the sale carries an explicit identity and the write
+        is an upsert. The retry affects zero rows, the stored response is
+        replayed, and the client gets the same receipt it would have got the
+        first time.
+      ru: >
+        Повседневный вариант: продажа несёт явную идентичность, а запись — это
+        upsert. Повтор затрагивает ноль строк, возвращается сохранённый ответ, и
+        клиент получает тот же чек, что получил бы с первого раза.
+  - id: check-then-insert-race
+    title:
+      en: 'SELECT, then INSERT (the race)'
+      ru: 'SELECT, потом INSERT (гонка)'
+    file: 03-check-then-insert-race.java
+    explanation:
+      en: >
+        The guard everyone writes first. It looks correct while requests are
+        serialized, and then two overlapping deliveries both pass the SELECT
+        before either reaches the INSERT. A check that is not the write is not a
+        guard.
+      ru: >
+        Защита, которую пишут первой. Она выглядит правильной, пока запросы идут
+        по очереди, а затем две пересекающиеся доставки обе проходят SELECT
+        раньше, чем хоть одна доходит до INSERT. Проверка, которая не является
+        записью, — не защита.
+  - id: unique-index-arbitrates
+    title:
+      en: Let the UNIQUE index arbitrate
+      ru: Пусть решает UNIQUE-индекс
+    file: 04-unique-index-arbitrates.java
+    explanation:
+      en: >
+        The same overlap, with the constraint moved into the database. Both
+        instances try to insert, exactly one wins, and the loser gets a
+        constraint violation it turns into the stored response. No application
+        code can lose this race.
+      ru: >
+        То же пересечение, но ограничение перенесено в базу. Оба инстанса пробуют
+        вставить, побеждает ровно один, а проигравший получает нарушение
+        ограничения и превращает его в сохранённый ответ. Код приложения эту
+        гонку проиграть не может.
+  - id: content-hash-trap
+    title:
+      en: Dedup by payload hash (trap)
+      ru: Дедупликация по хэшу тела (ловушка)
+    file: 05-content-hash-trap.java
+    explanation:
+      en: >
+        Hashing the body instead of giving the sale an identity looks like it
+        works — until two customers buy the same coffee for the same price. The
+        second real sale is rejected as a duplicate and quietly disappears from
+        the takings.
+      ru: >
+        Хэширование тела вместо явной идентичности продажи выглядит рабочим —
+        пока два покупателя не купят один и тот же кофе по одной цене. Вторая
+        настоящая продажа отклоняется как дубль и тихо исчезает из выручки.
+  - id: split-commit
+    title:
+      en: Two transactions instead of one
+      ru: Две транзакции вместо одной
+    file: 06-split-commit.java
+    explanation:
+      en: >
+        The dedup row is committed on its own and the process dies before the
+        sale is written. Now every retry is answered "already done" against a
+        sale that never existed — the opposite failure, and a much quieter one.
+      ru: >
+        Строка дедупликации зафиксирована отдельно, и процесс падает до записи
+        продажи. Теперь на каждый повтор отвечают «уже сделано», хотя продажи
+        никогда не было — обратный сбой, и куда более тихий.
+  - id: dedup-window
+    title:
+      en: Purging keys too early
+      ru: Слишком ранняя очистка ключей
+    file: 07-dedup-window.java
+    explanation:
+      en: >
+        Dedup keys cannot be kept forever, but a window shorter than the longest
+        possible retry is not a guard either. A till that sat in a drawer for
+        three days syncs into a hole the retention job opened.
+      ru: >
+        Ключи дедупликации нельзя хранить вечно, но окно короче самого долгого
+        возможного повтора — тоже не защита. Касса, пролежавшая в ящике три дня,
+        синхронизируется прямо в дыру, открытую задачей очистки.
+  - id: key-conflict
+    title:
+      en: 'Same key, different body'
+      ru: 'Тот же ключ, другое тело'
+    file: 08-key-conflict.java
+    explanation:
+      en: >
+        A known key arriving with different contents is a client bug, not a
+        retry. Replaying the stored response would hide a real second sale, so
+        the API answers 409 Conflict and makes the bug visible.
+      ru: >
+        Известный ключ с другим содержимым — это баг клиента, а не повтор.
+        Возврат сохранённого ответа скрыл бы настоящую вторую продажу, поэтому
+        API отвечает 409 Conflict и делает баг заметным.
+
+# Example question pre-filled as the Ask AI placeholder.
+assistantExample:
+  en: "e.g. Why is 'SELECT, then INSERT if absent' not enough to prevent duplicate sales?"
+  ru: "например: Почему «SELECT, а потом INSERT, если нет» не защищает от дублей продаж?"
+
+missionsFile: quiz.yaml

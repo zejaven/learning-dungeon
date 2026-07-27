@@ -1,0 +1,245 @@
+id: websocket-shared-state
+title:
+  en: 'Shared State Across WebSocket Connections'
+  ru: 'Общее состояние на все WebSocket-соединения'
+category:
+  en: Networking / Real-Time
+  ru: Сети / Реальное время
+type: CONCURRENCY
+mode: trace
+aiProvider: claude
+aiModel: claude-opus-5
+categoryId: networking
+difficulty: 3
+catalogId: networking-4
+summary:
+  en: >
+    Two questions that fail in different ways. First, where the registry of open
+    connections lives: an instance field on a per-connection endpoint is not
+    shared at all, a static HashMap is shared but loses entries under two
+    threads, Collections.synchronizedMap makes each call atomic but throws while
+    you iterate it, and ConcurrentHashMap on a singleton bean is the answer for
+    one process. Second, where the value that must be unique comes from:
+    nextId++ and sessions.size() + 1 are read-then-write, so two threads hand out
+    the same number, and no thread-safe map fixes that because a thread-safe
+    collection promises one atomic call, never an atomic sequence of calls.
+    AtomicLong and synchronized do fix it — and stop exactly at the edge of the
+    JVM, so a second node behind the load balancer starts counting at 1 again.
+    Past that edge there are only two shapes: generate something wide enough that
+    nobody has to be asked (UUID), or ask the one authority everybody shares (a
+    database sequence, Redis INCR). And a concurrent registry still says nothing
+    about two threads writing into one session, which needs mutual exclusion per
+    session, not concurrency.
+  ru: >
+    Два вопроса, которые ломаются по-разному. Первый — где живёт реестр открытых
+    соединений: поле экземпляра эндпоинта, создаваемого на соединение, не является
+    общим вообще, статический HashMap общий, но под двумя потоками теряет записи,
+    Collections.synchronizedMap делает атомарным каждый вызов, но бросает
+    исключение при обходе, а ConcurrentHashMap в singleton-бине — ответ для одного
+    процесса. Второй — откуда берётся значение, которое обязано быть уникальным:
+    nextId++ и sessions.size() + 1 — это «прочитать, потом записать», поэтому два
+    потока выдают один и тот же номер, и никакая потокобезопасная карта этого не
+    чинит, потому что потокобезопасная коллекция обещает атомарность одного
+    вызова, а не последовательности вызовов. AtomicLong и synchronized это чинят —
+    и заканчиваются ровно на границе JVM, поэтому второй узел за балансировщиком
+    снова начинает счёт с единицы. За этой границей форм всего две: сгенерировать
+    настолько широкое значение, что спрашивать не у кого (UUID), либо спросить у
+    единственного общего авторитета (последовательность в базе, Redis INCR). А
+    конкурентный реестр по-прежнему ничего не говорит про два потока, пишущих в
+    одну сессию: там нужно взаимное исключение на сессию, а не конкурентность.
+
+# Visual primitives this topic's visualizer composes (frontend).
+primitives:
+  - BoxGroup
+  - ArrayGrid
+
+defaultExample: a-field-is-not-shared
+
+# Examples shown as buttons. `file` is relative to examples/.
+examples:
+  - id: a-field-is-not-shared
+    title:
+      en: 'A field is not shared state'
+      ru: 'Поле — это не общее состояние'
+    file: 01-a-field-is-not-shared.java
+    explanation:
+      en: >
+        Start with the answer that looks right and is not. A @ServerEndpoint POJO is
+        instantiated once per connection, so a Map field on it is created three times
+        for three clients, and each copy holds exactly one session. Every registration
+        succeeds, nothing throws, and the broadcast reaches one person out of three.
+        This is the shape of the whole topic: shared state has to live somewhere that
+        outranks the connection — a singleton bean, a static field, an injected
+        service — and "each connection has its own copy" is the opposite of a registry.
+      ru: >
+        Начнём с ответа, который выглядит верным и таковым не является. POJO с
+        @ServerEndpoint создаётся по экземпляру на соединение, поэтому поле-Map на нём
+        создаётся трижды для трёх клиентов, и каждая копия держит ровно одну сессию.
+        Все регистрации проходят, ничего не падает, а рассылка доходит до одного
+        человека из трёх. Такова форма всей темы: общее состояние обязано жить там, где
+        оно старше соединения, — в singleton-бине, в статическом поле, во внедрённом
+        сервисе, — а «у каждого соединения своя копия» — это противоположность реестру.
+  - id: plain-hashmap-two-threads
+    title:
+      en: 'A static HashMap under two threads'
+      ru: 'Статический HashMap под двумя потоками'
+    file: 02-a-plain-hashmap-under-two-threads.java
+    explanation:
+      en: >
+        Now the map is genuinely shared — and protected by nothing. Two @OnOpen
+        callbacks run on two threads and interleave: both read nextId as 0, so both
+        hand out 1, and the second put() drops the first entry out of the map. Read the
+        counter afterwards: two connections registered and it says 1, because the write
+        back overwrote an increment nobody was watching. From here on alice is not in
+        the registry at all, so she misses every broadcast — no exception, no log line,
+        just a user whose screen stopped updating.
+      ru: >
+        Теперь карта действительно общая — и не защищена ничем. Два колбэка @OnOpen
+        выполняются на двух потоках и перемешиваются: оба читают nextId как 0, поэтому
+        оба выдают 1, а второй put() выкидывает из карты первую запись. Посмотрите потом
+        на счётчик: зарегистрировались два соединения, а он равен 1, потому что запись
+        обратно затёрла инкремент, за которым никто не следил. С этого момента alice
+        вообще нет в реестре, поэтому она пропускает все рассылки — без исключения, без
+        строчки в логе, просто у пользователя перестал обновляться экран.
+  - id: safe-map-unsafe-value
+    title:
+      en: 'Safe map, unsafe value'
+      ru: 'Безопасная карта, небезопасное значение'
+    file: 03-a-safe-map-and-an-unsafe-value.java
+    explanation:
+      en: >
+        The map is a Collections.synchronizedMap now, and the value still collides —
+        because sessions.size() + 1 reads, decides and writes as three separate steps.
+        A thread-safe collection promises that one call is atomic, never that your
+        sequence of calls is; `if (!map.containsKey(id)) map.put(id, s)` has the same
+        hole. Then watch two more things: size() goes DOWN when alice disconnects, so
+        the scheme reissues an old number with no race at all — and iterating a
+        synchronizedMap while another thread registers is exactly what its javadoc
+        tells you not to do.
+      ru: >
+        Карта теперь Collections.synchronizedMap, а значение всё равно совпадает: ведь
+        sessions.size() + 1 читает, решает и пишет тремя отдельными шагами.
+        Потокобезопасная коллекция обещает атомарность одного вызова, а не вашей
+        последовательности вызовов; у `if (!map.containsKey(id)) map.put(id, s)` ровно
+        та же дыра. Дальше обратите внимание ещё на две вещи: при отключении alice
+        size() УМЕНЬШАЕТСЯ, поэтому схема переиспользует старый номер вообще без гонки,
+        — а обход synchronizedMap, пока другой поток регистрируется, это ровно то, чего
+        её javadoc делать запрещает.
+  - id: concurrent-map-atomic-counter
+    title:
+      en: 'ConcurrentHashMap + AtomicLong'
+      ru: 'ConcurrentHashMap + AtomicLong'
+    file: 04-concurrent-map-and-atomic-counter.java
+    explanation:
+      en: >
+        The same interleaving, and nothing to interleave with: incrementAndGet() is one
+        atomic read-modify-write, putIfAbsent() decides and writes in one step, and the
+        iterator is weakly consistent so the fan-out never throws. This is the answer
+        for a single process. The end of the run is the other half of the job: one
+        connection is removed on close and one is not, and the entry that stayed behind
+        is a session object the GC cannot collect plus a write into a socket that is
+        already gone.
+      ru: >
+        То же самое перемешивание — и перемешиваться нечему: incrementAndGet() это одна
+        атомарная операция «прочитать-изменить-записать», putIfAbsent() принимает решение
+        и пишет одним шагом, а итератор слабо согласован, поэтому рассылка не бросает
+        исключений. Это ответ для одного процесса. Конец прогона — вторая половина
+        работы: одно соединение при закрытии удалили, другое нет, и оставшаяся запись —
+        это объект сессии, который GC не соберёт, плюс запись в уже исчезнувший сокет.
+  - id: one-session-two-threads
+    title:
+      en: 'One session, two writers'
+      ru: 'Одна сессия, два писателя'
+    file: 05-one-session-two-threads.java
+    explanation:
+      en: >
+        A trap that survives a perfect registry. The map is a ConcurrentHashMap and the
+        counter is an AtomicLong, and the bug is one level down: a scheduled push and a
+        reply to an incoming message write into the SAME session at the same time. A
+        WebSocket message is a sequence of frames, so the two either interleave into a
+        message nobody sent or the container refuses with IllegalStateException:
+        TEXT_PARTIAL_WRITING. The registry needs concurrency; an individual session
+        needs mutual exclusion — a per-session lock, or Spring's
+        ConcurrentWebSocketSessionDecorator.
+      ru: >
+        Ловушка, которая переживает идеальный реестр. Карта — ConcurrentHashMap, счётчик
+        — AtomicLong, а ошибка этажом ниже: запланированная отправка и ответ на входящее
+        сообщение пишут в ОДНУ И ТУ ЖЕ сессию одновременно. Сообщение WebSocket — это
+        последовательность фреймов, поэтому они либо перемешаются в сообщение, которого
+        никто не отправлял, либо контейнер откажет с IllegalStateException:
+        TEXT_PARTIAL_WRITING. Реестру нужна конкурентность, отдельной сессии — взаимное
+        исключение: блокировка на сессию или ConcurrentWebSocketSessionDecorator из
+        Spring.
+  - id: two-nodes-one-counter
+    title:
+      en: 'Two nodes, two counters'
+      ru: 'Два узла, два счётчика'
+    file: 06-two-nodes-one-counter.java
+    explanation:
+      en: >
+        The same faultless code, deployed twice. Nothing races and nothing is broken
+        inside either process — each AtomicLong is perfectly correct and each is
+        counting its own connections from 1, so alice and bob both get value 1. This is
+        the half of the interview question that the word GLOBALLY is doing:
+        thread-safe means "correct among the threads that share this memory", and a
+        second JVM shares none of it. The broadcast shows the twin of the same problem:
+        an in-memory registry cannot reach a socket another process is holding.
+      ru: >
+        Тот же безупречный код, развёрнутый дважды. Никакой гонки нет, и внутри каждого
+        процесса ничего не сломано: каждый AtomicLong абсолютно верен и каждый считает
+        свои соединения с единицы, поэтому и alice, и bob получают значение 1. Это та
+        половина вопроса с собеседования, за которую отвечает слово ГЛОБАЛЬНО:
+        потокобезопасность означает «корректность среди потоков, разделяющих эту
+        память», а вторая JVM не разделяет из неё ничего. Рассылка показывает
+        близнеца той же проблемы: реестр в памяти не дотянется до сокета, который держит
+        другой процесс.
+  - id: unique-everywhere
+    title:
+      en: 'Unique everywhere: UUID or a sequence'
+      ru: 'Уникально везде: UUID или последовательность'
+    file: 07-unique-everywhere.java
+    explanation:
+      en: >
+        Past the edge of the JVM there are only two shapes, and this run does both.
+        UUID.randomUUID() asks nobody: 122 random bits are wide enough that a collision
+        stops being a risk you manage, which buys uniqueness with zero coordination and
+        costs 16 unordered bytes. A database sequence asks the one thing every node
+        shares, which buys uniqueness plus ordering and costs a network round trip and a
+        dependency that can be down. Snowflake ids sit between them: a unique node id per
+        process buys back both order and 8 bytes.
+      ru: >
+        За границей JVM форм всего две, и в этом прогоне есть обе. UUID.randomUUID() не
+        спрашивает никого: 122 случайных бита достаточно широки, чтобы коллизия
+        перестала быть управляемым риском, — так уникальность покупается вообще без
+        координации ценой 16 неупорядоченных байт. Последовательность в базе спрашивает
+        то единственное, что общее у всех узлов: так покупаются уникальность и порядок
+        ценой сетевого похода и зависимости, которая может быть недоступна.
+        Идентификаторы Snowflake стоят между ними: уникальный номер узла у каждого
+        процесса выкупает обратно и порядок, и 8 байт.
+  - id: value-sources-compared
+    title:
+      en: 'Thread-safe vs globally unique'
+      ru: 'Потокобезопасно против глобально уникально'
+    file: 08-value-sources-compared.java
+    explanation:
+      en: >
+        The table to answer from. Read the second column before the first: a counter
+        field and sessions.size() are not unique even inside one process; synchronized
+        and AtomicLong are, and only there; a UUID, a sequence and a Snowflake id are
+        unique for the whole cluster, and they differ in what they charge for it —
+        coordination, ordering, or bytes. "Thread-safe" and "globally unique" are two
+        different guarantees, and the interview question asks for both.
+      ru: >
+        Таблица, по которой можно отвечать. Читайте вторую колонку раньше первой:
+        поле-счётчик и sessions.size() не уникальны даже внутри одного процесса;
+        synchronized и AtomicLong уникальны, и только там; UUID, последовательность и
+        Snowflake-идентификатор уникальны для всего кластера и различаются тем, что за
+        это берут: координацию, порядок или байты. «Потокобезопасно» и «глобально
+        уникально» — две разные гарантии, а вопрос на собеседовании просит обе.
+
+# Example question pre-filled as the Ask AI placeholder.
+assistantExample:
+  en: 'e.g. My WebSocket handler keeps a ConcurrentHashMap of sessions and an AtomicLong for ids. What breaks when I run two instances?'
+  ru: 'например: Мой WebSocket-обработчик держит ConcurrentHashMap с сессиями и AtomicLong для id. Что сломается, когда я запущу два экземпляра?'
+
+missionsFile: quiz.yaml

@@ -1,0 +1,187 @@
+id: postgresql-write-performance
+title:
+  en: Improving PostgreSQL Write Performance
+  ru: Улучшение производительности записи в PostgreSQL
+category:
+  en: Performance / Databases
+  ru: Производительность / Базы данных
+type: SQL
+mode: trace
+aiProvider: claude
+aiModel: claude-opus-5
+categoryId: performance
+difficulty: 3
+catalogId: performance-3
+summary:
+  en: >
+    A write-only service with ~30 MB records is not a tuning problem, it is a
+    modelling problem, and the usual answers are aimed at the wrong term of the
+    sum. Batching, COPY, fewer indexes and a relaxed synchronous_commit all
+    attack the per-statement and per-commit overhead — which on a 30 MB row is
+    around one percent of the write. The other ninety-nine percent is the
+    payload: a value that size is compressed, sliced into thousands of ~2 KB
+    TOAST chunk rows, written to the table and then written again to the WAL,
+    which every replica and archive copies once more. Two ceilings follow from
+    that, and only one of them is the connection pool: at ~60 MB of disk per
+    record a 500 MB/s volume caps the table at single-digit writes per second,
+    so more connections just relocate the queue. The fix is to stop putting the
+    bytes through PostgreSQL — the payload goes to object storage and the row
+    keeps a URL, a checksum and the metadata — and only then do batching, COPY,
+    index pruning and commit tuning become the biggest remaining slice.
+  ru: >
+    Сервис, который только пишет записи по ~30 МБ, — это не задача тюнинга, а
+    задача моделирования, и привычные ответы бьют не по тому слагаемому.
+    Батчинг, COPY, меньше индексов и ослабленный synchronous_commit атакуют
+    накладные расходы на statement и на коммит, а на строке в 30 МБ это около
+    одного процента записи. Остальные девяносто девять процентов — сама
+    нагрузка: значение такого размера сжимается, режется на тысячи строк-кусков
+    TOAST по ~2 КБ, пишется в таблицу и затем пишется ещё раз в WAL, который
+    копируют каждая реплика и архив. Отсюда следуют два потолка, и лишь один из
+    них — пул соединений: при ~60 МБ на диск на запись том с 500 МБ/с
+    ограничивает таблицу единицами записей в секунду, поэтому новые соединения
+    просто переносят очередь. Решение в том, чтобы перестать пропускать байты
+    через PostgreSQL: нагрузка уходит в объектное хранилище, а в строке остаются
+    URL, контрольная сумма и метаданные — и только после этого батчинг, COPY,
+    прополка индексов и настройка коммитов становятся самым большим из
+    оставшихся кусков.
+
+# Visual primitives this topic's visualizer composes (frontend).
+primitives:
+  - BoxGroup
+
+defaultExample: row-by-row
+
+# Examples shown as buttons. `file` is relative to examples/.
+examples:
+  - id: row-by-row
+    title:
+      en: The baseline write
+      ru: Базовая запись
+    file: 01-row-by-row.java
+    explanation:
+      en: >
+        The service as written: one INSERT per record, each in its own
+        transaction, each record a 30 MB payload in a bytea column. Four
+        records, ~600 ms — and the round trips and commits everyone reaches for
+        first are one percent of it.
+      ru: >
+        Сервис как он написан: один INSERT на запись, каждая в своей транзакции,
+        каждая запись — 30 МБ нагрузки в колонке bytea. Четыре записи, ~600 мс —
+        и те round trips и коммиты, за которые хватаются первым делом, дают один
+        процент от этого.
+  - id: where-the-bytes-go
+    title:
+      en: Where the 30 MB goes
+      ru: Куда уходят 30 МБ
+    file: 02-where-the-bytes-go.java
+    explanation:
+      en: >
+        A value that big cannot live in an 8 KB page. PostgreSQL compresses it,
+        slices it into thousands of ~2 KB TOAST chunk rows, and then writes the
+        whole thing again to the WAL. Compressible text behaves differently from
+        an already-compressed blob, and SET STORAGE EXTERNAL stops paying for an
+        attempt that returns nothing.
+      ru: >
+        Значение такого размера не помещается в страницу 8 КБ. PostgreSQL сжимает
+        его, режет на тысячи строк-кусков TOAST по ~2 КБ, а затем пишет всё это
+        ещё раз в WAL. Сжимаемый текст ведёт себя иначе, чем уже сжатый blob, а
+        SET STORAGE EXTERNAL прекращает платить за попытку, которая ничего не
+        даёт.
+  - id: batching-and-commits
+    title:
+      en: 'Batching: the standard advice'
+      ru: 'Батчинг: стандартный совет'
+    file: 03-batching-and-commits.java
+    explanation:
+      en: >
+        The same four records in one transaction and one executeBatch(). Three
+        fewer round trips, three fewer fsyncs, 5.7 ms saved out of 598 — the
+        right technique measured against the wrong bottleneck.
+      ru: >
+        Те же четыре записи в одной транзакции и одном executeBatch(). На три
+        round trip и три fsync меньше, экономия 5,7 мс из 598 — правильный приём,
+        приложенный не к тому узкому месту.
+  - id: index-write-amplification
+    title:
+      en: What indexes really cost
+      ru: Во что реально обходятся индексы
+    file: 04-index-write-amplification.java
+    explanation:
+      en: >
+        Six indexes are 0.2% of a 30 MB write and eight indexes are 21% of a
+        512 B one. The same index maintenance, two completely different verdicts
+        — which is why "drop some indexes" is an answer only after you know what
+        dominates.
+      ru: >
+        Шесть индексов — это 0,2% записи в 30 МБ, а восемь индексов — 21% записи
+        в 512 Б. Одна и та же работа с индексами, два совершенно разных вывода —
+        поэтому «удалите часть индексов» становится ответом только после того,
+        как понятно, что доминирует.
+  - id: move-the-payload-out
+    title:
+      en: Move the payload out
+      ru: Вынести нагрузку наружу
+    file: 05-move-the-payload-out.java
+    explanation:
+      en: >
+        The design change instead of a tuning knob: the payload goes to object
+        storage and PostgreSQL keeps a 512 B row with a URL, a checksum and the
+        metadata. Same code, same indexes, 149.6 ms per write becomes 2.3 ms.
+      ru: >
+        Изменение дизайна вместо ручки тюнинга: нагрузка уходит в объектное
+        хранилище, а PostgreSQL хранит строку 512 Б с URL, контрольной суммой и
+        метаданными. Тот же код, те же индексы, 149,6 мс на запись превращаются
+        в 2,3 мс.
+  - id: batching-after-the-fix
+    title:
+      en: Batching, now that it matters
+      ru: Батчинг, когда он уже важен
+    file: 06-batching-after-the-fix.java
+    explanation:
+      en: >
+        Forty metadata rows one by one, then in batches of ten, then through
+        COPY. The advice that bought 0.9% on the 30 MB table now buys ~80%,
+        because the overhead it removes is finally the biggest slice.
+      ru: >
+        Сорок строк метаданных по одной, затем батчами по десять, затем через
+        COPY. Совет, который на таблице с 30 МБ давал 0,9%, теперь даёт ~80%,
+        потому что убираемые им накладные расходы наконец стали самым большим
+        куском.
+  - id: durability-tradeoff
+    title:
+      en: 'Commits: what you trade'
+      ru: 'Коммиты: чем вы платите'
+    file: 07-durability-tradeoff.java
+    explanation:
+      en: >
+        Forty fsyncs are 70% of forty small writes. synchronous_commit = off
+        removes them and buys a window of committed transactions you can lose in
+        a crash; ten rows per transaction removes most of the same cost and buys
+        nothing away.
+      ru: >
+        Сорок fsync — это 70% сорока маленьких записей. synchronous_commit = off
+        убирает их ценой окна зафиксированных транзакций, которое можно потерять
+        при падении; десять строк на транзакцию убирают почти столько же и не
+        стоят ничего.
+  - id: many-callers
+    title:
+      en: Many services, one pool
+      ru: Много сервисов, один пул
+    file: 08-many-callers.java
+    explanation:
+      en: >
+        300 callers against 20 connections. Raising the pool to 200 changes
+        nothing, because ~60 MB per record makes the disk the ceiling; making the
+        write cheap raises throughput a thousandfold with the original 20
+        connections.
+      ru: >
+        300 вызывающих на 20 соединений. Увеличение пула до 200 не меняет ничего,
+        потому что ~60 МБ на запись делают потолком диск; удешевление записи
+        поднимает пропускную способность в тысячу раз при тех же 20 соединениях.
+
+# Example question pre-filled as the Ask AI placeholder.
+assistantExample:
+  en: "e.g. Why does batching inserts barely help when each row carries 30 MB?"
+  ru: "например: Почему батчинг вставок почти не помогает, когда в каждой строке 30 МБ?"
+
+missionsFile: quiz.yaml

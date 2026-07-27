@@ -1,0 +1,231 @@
+id: kotlin-coroutines
+title:
+  en: 'How Kotlin Coroutines Work'
+  ru: 'Как работают корутины Kotlin'
+category:
+  en: Kotlin / Concurrency
+  ru: Kotlin / Конкурентность
+type: CONCURRENCY
+mode: trace
+aiProvider: claude
+aiModel: claude-opus-5
+categoryId: kotlin
+difficulty: 2
+catalogId: kotlin-1
+summary:
+  en: >
+    A coroutine is not a thread and not a lightweight thread — it is an object.
+    The Kotlin compiler rewrites every suspend fun into a state machine class
+    with an int label, one field per local that must survive a suspension, and a
+    hidden Continuation parameter; a suspension point either returns a value or
+    returns the marker COROUTINE_SUSPENDED, in which case invokeSuspend returns,
+    the JVM stack unwinds, and the thread is free while the coroutine lives on in
+    the heap. Resuming is calling invokeSuspend on that same object again, and
+    when (label) jumps straight back to the statement it stopped at. Everything
+    else follows from that: a dispatcher decides which thread runs a resumed
+    continuation, so suspending is cheap and blocking is not — a JDBC call on
+    Dispatchers.Default holds a core hostage and no exception tells you. Scopes
+    make the Job tree explicit: a scope cannot return before its children, a
+    failing child cancels its siblings unless the scope is a supervisorScope, and
+    cancellation is cooperative — instant at a suspension point, invisible inside
+    a loop that never suspends.
+  ru: >
+    Корутина — не поток и не «лёгкий поток», а объект. Компилятор Kotlin
+    переписывает каждую suspend fun в класс-машину состояний с полем int label,
+    по полю на каждую локальную переменную, которая должна пережить приостановку,
+    и скрытым параметром Continuation; точка приостановки либо возвращает
+    значение, либо возвращает маркер COROUTINE_SUSPENDED — и тогда invokeSuspend
+    возвращается, стек JVM разматывается, поток свободен, а корутина продолжает
+    жить в куче. Возобновление — это повторный вызов invokeSuspend на том же
+    объекте, и when (label) прыгает ровно к тому оператору, на котором
+    остановились. Всё остальное следует отсюда: диспетчер решает, какой поток
+    выполнит возобновлённый continuation, поэтому приостановка дёшева, а
+    блокировка нет — вызов JDBC на Dispatchers.Default забирает ядро в заложники,
+    и ни одно исключение об этом не скажет. Области делают дерево Job явным:
+    область не может вернуться раньше своих детей, упавший ребёнок отменяет
+    соседей (если это не supervisorScope), а отмена кооперативна — мгновенна в
+    точке приостановки и невидима внутри цикла, который никогда не
+    приостанавливается.
+
+# Visual primitives this topic's visualizer composes (frontend).
+primitives:
+  - BoxGroup
+  - ArrayGrid
+
+defaultExample: state-machine
+
+# Examples shown as buttons. `file` is relative to examples/.
+examples:
+  - id: state-machine
+    title:
+      en: 'What the compiler generates'
+      ru: 'Что генерирует компилятор'
+    file: 01-suspend-is-a-state-machine.java
+    explanation:
+      en: >
+        The answer under the answer. Three sequential lines of Kotlin become one class
+        with an int label, a field per surviving local and a when (label) with three
+        branches. Watch the two things that make it work: the label is written down
+        BEFORE the call leaves, and a suspension is a plain return of the marker
+        COROUTINE_SUSPENDED, so the JVM stack unwinds completely and the thread goes
+        back to work. Resuming calls invokeSuspend on the same object again — nothing
+        re-executes, because a coroutine resumes at a statement, not at a function.
+      ru: >
+        Ответ под ответом. Три последовательные строки Kotlin превращаются в один класс
+        с полем int label, полем на каждую выживающую локальную переменную и when (label)
+        из трёх веток. Обратите внимание на две вещи, на которых всё держится: label
+        записывается ДО того, как вызов уходит, а приостановка — это обычный возврат
+        маркера COROUTINE_SUSPENDED, поэтому стек JVM полностью разматывается и поток
+        возвращается к работе. Возобновление снова вызывает invokeSuspend на том же
+        объекте — ничего не выполняется заново, потому что корутина возобновляется с
+        оператора, а не с функции.
+  - id: frees-the-thread
+    title:
+      en: 'Three coroutines, one thread'
+      ru: 'Три корутины, один поток'
+    file: 02-suspending-frees-the-thread.java
+    explanation:
+      en: >
+        Dispatchers.Default has exactly one worker here, so there is nowhere to hide.
+        The first coroutine gets it, the other two queue — and the instant the first one
+        suspends, the thread is handed to the next without an OS context switch. Read the
+        middle of the run carefully: three operations are in flight and zero threads are
+        busy. That state is impossible with a thread per task, and it is the whole
+        argument for coroutines.
+      ru: >
+        У Dispatchers.Default здесь ровно один воркер, поэтому спрятаться негде. Первая
+        корутина получает его, две другие встают в очередь — и в тот же миг, когда первая
+        приостанавливается, поток передаётся следующей без переключения контекста ОС.
+        Внимательно посмотрите на середину прогона: три операции в полёте и ноль занятых
+        потоков. Такое состояние недостижимо при потоке на задачу, и в нём весь аргумент
+        в пользу корутин.
+  - id: blocking-holds-it
+    title:
+      en: 'The bug that has no exception'
+      ru: 'Ошибка, у которой нет исключения'
+    file: 03-blocking-holds-the-thread.java
+    explanation:
+      en: >
+        Being inside a coroutine changes nothing about a call that is not a suspend
+        function. jdbc.executeQuery and Thread.sleep park a Default worker inside the OS,
+        and with one worker per core it takes very few of them to stop the whole
+        dispatcher — no exception, no log line, just latency that grows with load. Then
+        watch the fix: withContext(Dispatchers.IO) is one coroutine changing threads,
+        not a new coroutine, which is why it can return a value like an ordinary call.
+      ru: >
+        Нахождение внутри корутины ничего не меняет для вызова, который не является
+        suspend-функцией. jdbc.executeQuery и Thread.sleep паркуют воркер Default внутри
+        ОС, а при одном воркере на ядро хватает совсем немногих, чтобы остановить весь
+        диспетчер: ни исключения, ни строчки в логе — только задержка, растущая с
+        нагрузкой. Затем посмотрите на решение: withContext(Dispatchers.IO) — это одна
+        корутина, меняющая потоки, а не новая корутина, потому она и умеет возвращать
+        значение, как обычный вызов.
+  - id: structured-concurrency
+    title:
+      en: 'A scope waits for its children'
+      ru: 'Область ждёт своих детей'
+    file: 04-structured-concurrency.java
+    explanation:
+      en: >
+        coroutineScope { } is a parent Job, and the closing brace is a suspension point:
+        the function cannot return until all three children have finished. Notice that
+        waiting costs an object rather than a parked thread — the worker the scope was on
+        went back to the dispatcher. This is why structured concurrency is not merely a
+        discipline: you cannot accidentally read a result early, and you cannot
+        accidentally leave work running after the function that started it returned.
+      ru: >
+        coroutineScope { } — это родительский Job, а закрывающая скобка — точка
+        приостановки: функция не может вернуться, пока не завершатся все три ребёнка.
+        Заметьте, что ожидание стоит объекта, а не запаркованного потока: воркер, на
+        котором была область, вернулся в диспетчер. Поэтому структурная конкурентность —
+        не просто дисциплина: нельзя случайно прочитать результат раньше времени и нельзя
+        случайно оставить работу выполняться после возврата запустившей её функции.
+  - id: the-parent-decides
+    title:
+      en: 'coroutineScope, supervisor, GlobalScope'
+      ru: 'coroutineScope, supervisor, GlobalScope'
+    file: 05-the-parent-decides.java
+    explanation:
+      en: >
+        The same launch call, three parents, three different meanings. In a coroutineScope
+        a failed payment cancels the receipt that was already in flight and fails the
+        scope. In a supervisorScope one dead widget leaves the other four alone — at the
+        price that the exception is now yours to catch or lose. In GlobalScope there is no
+        parent at all, so cancelling the screen stops its own child and does absolutely
+        nothing to the poller that outlives it.
+      ru: >
+        Один и тот же вызов launch, три родителя, три разных смысла. В coroutineScope
+        упавший платёж отменяет уже летящую отправку чека и роняет саму область. В
+        supervisorScope один мёртвый виджет не трогает остальные четыре — ценой того, что
+        исключение теперь надо ловить самому, иначе оно потеряется. В GlobalScope родителя
+        нет вовсе, поэтому отмена экрана останавливает его собственного ребёнка и ровным
+        счётом ничего не делает с опросчиком, который его переживёт.
+  - id: cooperative-cancellation
+    title:
+      en: 'cancel() only sets a flag'
+      ru: 'cancel() лишь ставит флаг'
+    file: 06-cancellation-is-cooperative.java
+    explanation:
+      en: >
+        Three cancellations with three different outcomes. A coroutine sitting at a
+        suspension point stops at once, because it is resumed with a CancellationException
+        instead of a value. A loop that only computes never notices and runs to the end,
+        producing a result nobody will read. The same loop with ensureActive() in it stops
+        on the next round. cancel() is not stop(): it sets isActive to false and returns,
+        and something in your code has to be willing to look.
+      ru: >
+        Три отмены с тремя разными исходами. Корутина, сидящая в точке приостановки,
+        останавливается сразу, потому что её возобновляют не значением, а исключением
+        CancellationException. Цикл, который только считает, ничего не замечает и
+        досчитывает до конца, выдавая результат, который никто не прочитает. Тот же цикл
+        с ensureActive() внутри останавливается на следующем круге. cancel() — это не
+        stop(): он выставляет isActive в false и возвращается, а посмотреть на этот флаг
+        должен ваш код.
+  - id: async-await
+    title:
+      en: 'Where concurrency actually comes from'
+      ru: 'Откуда на самом деле берётся конкурентность'
+    file: 07-async-runs-both-at-once.java
+    explanation:
+      en: >
+        Dispatchers.Default has one thread in this run, so nothing here is parallel — and
+        the two requests still overlap. The concurrency comes from starting both async
+        blocks before awaiting either one; move an await() up a line and you get the same
+        code with the overlap deleted and no compiler warning. Watch the caller suspend
+        in await() and give its thread away, and watch completing the Deferred resume it.
+      ru: >
+        У Dispatchers.Default в этом прогоне один поток, поэтому параллельного здесь нет
+        ничего — а два запроса всё равно перекрываются. Конкурентность берётся из того,
+        что оба блока async запущены до первого await; поднимите await() на строку выше и
+        получите тот же код с вырезанным перекрытием и без единого предупреждения
+        компилятора. Посмотрите, как вызывающая корутина приостанавливается в await() и
+        отдаёт свой поток, и как завершение Deferred её возобновляет.
+  - id: not-a-thread
+    title:
+      en: '100 000 of them'
+      ru: '100 000 штук'
+    file: 08-a-coroutine-is-not-a-thread.java
+    explanation:
+      en: >
+        The number that ends the argument. A hundred thousand platform threads means a
+        hundred thousand OS threads and about 100 GB of reserved stack, which no JVM will
+        give you; the same work as coroutines is a few tens of megabytes of small objects
+        on four threads, because a suspended coroutine is a continuation object and
+        nothing else. The third row is the comparison you should have ready: Java 21
+        virtual threads reach the same place through the runtime instead of the compiler,
+        so there is no suspend keyword and no coloured functions.
+      ru: >
+        Число, которым спор заканчивается. Сто тысяч платформенных потоков — это сто тысяч
+        потоков ОС и около 100 ГБ зарезервированного стека, которых не даст ни одна JVM;
+        та же работа в виде корутин — несколько десятков мегабайт мелких объектов на
+        четырёх потоках, потому что приостановленная корутина есть объект continuation и
+        больше ничего. Третья строка — то сравнение, которое стоит держать наготове:
+        виртуальные потоки Java 21 приходят туда же через рантайм, а не через компилятор,
+        поэтому у них нет ни ключевого слова suspend, ни «окрашенных» функций.
+
+# Example question pre-filled as the Ask AI placeholder.
+assistantExample:
+  en: 'e.g. What does the Kotlin compiler actually generate for a suspend fun, and why does suspending free the thread when blocking does not?'
+  ru: 'например: Что на самом деле генерирует компилятор Kotlin для suspend fun и почему приостановка освобождает поток, а блокировка — нет?'
+
+missionsFile: quiz.yaml

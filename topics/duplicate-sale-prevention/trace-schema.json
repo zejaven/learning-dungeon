@@ -1,0 +1,125 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Duplicate-sale prevention trace event state",
+  "description": "Shape of the `state` field for duplicate-sale-prevention trace events.",
+  "type": "object",
+  "required": ["guard", "dedupBy", "day", "dedupIndex", "sales", "total"],
+  "properties": {
+    "guard": {
+      "enum": ["none", "check-then-insert", "unique-index", "upsert"],
+      "description": "Which mechanism, if any, stops a repeated request from inserting a row."
+    },
+    "dedupBy": {
+      "enum": ["idempotency-key", "content-hash"],
+      "description": "What the dedup key is derived from: the sale's explicit identity or a hash of the payload."
+    },
+    "day": {
+      "type": "integer",
+      "description": "Server clock, in days since the first request."
+    },
+    "retentionDays": {
+      "type": "integer",
+      "description": "Dedup key retention window; 0 while no retention job has run."
+    },
+    "request": {
+      "type": "object",
+      "description": "The request being processed (absent before the first one).",
+      "required": ["key", "item", "amount", "outcome"],
+      "properties": {
+        "key": { "type": "string" },
+        "item": { "type": "string" },
+        "amount": { "type": "integer" },
+        "outcome": {
+          "enum": ["pending", "registered", "duplicated", "blocked", "conflict", "lost", "crashed"]
+        }
+      }
+    },
+    "inFlight": {
+      "type": "array",
+      "description": "Requests being processed side by side; empty while requests are serialized.",
+      "items": {
+        "type": "object",
+        "required": ["id", "key", "phase"],
+        "properties": {
+          "id": { "type": "string" },
+          "key": { "type": "string" },
+          "phase": {
+            "type": "string",
+            "description": "Where this request got to: in flight, check passed, inserted, duplicate, deduplicated, rejected, conflict."
+          }
+        }
+      }
+    },
+    "dedupIndex": {
+      "type": "array",
+      "description": "The server's dedup index, in insertion order.",
+      "items": {
+        "type": "object",
+        "required": ["dedupKey", "sourceKey", "response", "day"],
+        "properties": {
+          "dedupKey": {
+            "type": "string",
+            "description": "The indexed value: the sale's key, or a hash of its payload."
+          },
+          "sourceKey": {
+            "type": "string",
+            "description": "The request key that first created this entry."
+          },
+          "response": {
+            "type": "string",
+            "description": "The stored response replayed for every later request with this dedup key."
+          },
+          "day": { "type": "integer" }
+        }
+      }
+    },
+    "sales": {
+      "type": "array",
+      "description": "The sales table: one row per registered sale, duplicates included.",
+      "items": {
+        "type": "object",
+        "required": ["row", "key", "item", "amount"],
+        "properties": {
+          "row": { "type": "integer" },
+          "key": { "type": "string" },
+          "item": { "type": "string" },
+          "amount": { "type": "integer" }
+        }
+      }
+    },
+    "total": {
+      "type": "integer",
+      "description": "Sum of every row in the sales table — what the books say."
+    },
+    "registered": { "type": "integer" },
+    "blocked": {
+      "type": "integer",
+      "description": "Repeated requests the guard recognised and applied nothing for."
+    },
+    "duplicates": {
+      "type": "integer",
+      "description": "Sale rows written for a business action that was already registered."
+    },
+    "lost": {
+      "type": "integer",
+      "description": "Real sales that can never be registered — dropped by the guard or swallowed by a stale dedup row."
+    }
+  },
+  "events": [
+    "LEDGER_READY",
+    "REQUEST_RECEIVED",
+    "CONCURRENT_ARRIVAL",
+    "DEDUP_CHECK",
+    "SALE_REGISTERED",
+    "DUPLICATE_BLOCKED",
+    "DUPLICATE_REGISTERED",
+    "CONSTRAINT_VIOLATION",
+    "KEY_CONFLICT",
+    "GENUINE_SALE_LOST",
+    "CRASH_BETWEEN_WRITES",
+    "SALE_SILENTLY_LOST",
+    "TIME_PASSED",
+    "KEYS_PURGED",
+    "LEDGER_AUDIT"
+  ]
+}

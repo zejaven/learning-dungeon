@@ -1,0 +1,267 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Symmetric vs asymmetric encryption trace event state",
+  "description": "Shape of the `state` field for symmetric-vs-asymmetric-encryption trace events.",
+  "type": "object",
+  "required": ["keys", "operation", "channel", "attacker", "keyManagement", "cost", "outcome", "stats"],
+  "properties": {
+    "keys": {
+      "type": "array",
+      "description": "Every key in the lab. The whole topic is readable from this list: how many keys an algorithm needs, and which of them may be published.",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "algorithm", "bits", "owner", "holders", "published", "compromised"],
+        "properties": {
+          "id": { "type": "string" },
+          "kind": {
+            "enum": ["secret", "public", "private"],
+            "description": "secret = one shared symmetric key; public/private = the two halves of a pair."
+          },
+          "algorithm": { "type": "string" },
+          "bits": {
+            "type": "integer",
+            "description": "Key length. Not comparable across families - 256 symmetric bits are far stronger than 2048 asymmetric ones."
+          },
+          "owner": {
+            "type": "string",
+            "description": "Who a key pair belongs to; empty for a shared secret, which has no single owner."
+          },
+          "holders": {
+            "type": "array",
+            "description": "Who has these bytes. A symmetric key needs at least two holders to be useful; a private key must have exactly one.",
+            "items": { "type": "string" }
+          },
+          "published": {
+            "type": "boolean",
+            "description": "True only for a public half, where being published is the purpose rather than a leak."
+          },
+          "compromised": {
+            "type": "boolean",
+            "description": "The key reached somebody it should not have."
+          }
+        }
+      }
+    },
+    "operation": {
+      "type": "object",
+      "description": "The step just performed: what went in, which key was used, what came out.",
+      "required": ["name", "family", "algorithm", "keyId", "keyKind", "input", "output", "micros", "verdict"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "generate, publish, encrypt, decrypt, sign, verify, wrap key, unwrap key, share, intercept, leak, compare, count keys, tamper, report."
+        },
+        "family": {
+          "enum": ["symmetric", "asymmetric", "hybrid", "signature", "key-material", "none"],
+          "description": "Which kind of cryptography this step used."
+        },
+        "algorithm": { "type": "string" },
+        "keyId": {
+          "type": "string",
+          "description": "The key this step was performed with."
+        },
+        "keyKind": {
+          "type": "string",
+          "description": "secret, public or private - which half was used, since that is what selects the guarantee."
+        },
+        "input": { "type": "string" },
+        "output": { "type": "string" },
+        "micros": {
+          "type": "integer",
+          "description": "Model cost of this operation in microseconds: proportional to data for symmetric, flat and large for asymmetric."
+        },
+        "verdict": {
+          "enum": ["idle", "pending", "ok", "failed", "blocked"],
+          "description": "blocked = the attacker could not proceed, which is a success for the system."
+        }
+      }
+    },
+    "channel": {
+      "type": "array",
+      "description": "Everything that has travelled over the wire so far.",
+      "items": {
+        "type": "object",
+        "required": ["seq", "family", "label", "onTheWire", "algorithm", "keyId", "wrappedKey", "bytes", "intact", "readableBy"],
+        "properties": {
+          "seq": { "type": "integer" },
+          "family": {
+            "enum": ["symmetric", "asymmetric", "hybrid", "signature", "key-material"],
+            "description": "key-material = a key itself sent in the clear; signature = a readable message plus a proof of authorship."
+          },
+          "label": {
+            "type": "string",
+            "description": "What the payload is - the plaintext, or a file name for a sized blob."
+          },
+          "onTheWire": {
+            "type": "string",
+            "description": "What an observer actually sees. Equal to the label when nothing was encrypted."
+          },
+          "algorithm": { "type": "string" },
+          "keyId": {
+            "type": "string",
+            "description": "The key that opens or verifies this entry."
+          },
+          "wrappedKey": {
+            "type": ["string", "null"],
+            "description": "The session key encrypted to the recipient's public key; set only for hybrid envelopes."
+          },
+          "bytes": { "type": "integer" },
+          "intact": {
+            "type": "boolean",
+            "description": "False once the payload was changed in flight."
+          },
+          "readableBy": {
+            "type": "array",
+            "description": "Who can turn this back into plaintext right now - recomputed after every key event, so a leak retroactively widens it.",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "attacker": {
+      "type": "object",
+      "description": "What the party on the path has collected.",
+      "required": ["holds", "seen"],
+      "properties": {
+        "holds": {
+          "type": "array",
+          "description": "Key ids the attacker has. Published public keys are always here, which is the point: having them helps nothing.",
+          "items": { "type": "string" }
+        },
+        "seen": {
+          "type": "integer",
+          "description": "Messages observed on the wire, readable or not."
+        }
+      }
+    },
+    "keyManagement": {
+      "type": "object",
+      "description": "How many keys a group of this size needs under each scheme.",
+      "required": ["parties", "secretKeys", "keyPairs"],
+      "properties": {
+        "parties": {
+          "type": "integer",
+          "description": "Zero until a comparison has been requested."
+        },
+        "secretKeys": {
+          "type": "integer",
+          "description": "n(n-1)/2 - one shared secret per pair, growing quadratically."
+        },
+        "keyPairs": {
+          "type": "integer",
+          "description": "n - one pair per party, growing linearly, with every public half publishable."
+        }
+      }
+    },
+    "cost": {
+      "type": "object",
+      "description": "What the run has spent, plus the most recent hypothetical comparison.",
+      "required": ["symmetricOps", "asymmetricOps", "symmetricMicros", "asymmetricMicros", "comparison"],
+      "properties": {
+        "symmetricOps": { "type": "integer" },
+        "asymmetricOps": { "type": "integer" },
+        "symmetricMicros": { "type": "integer" },
+        "asymmetricMicros": { "type": "integer" },
+        "comparison": {
+          "type": "object",
+          "description": "A what-if for one payload: symmetric in one pass versus asymmetric block by block.",
+          "required": ["label", "bytes", "symmetricMicros", "asymmetricMicros", "asymmetricBlocks", "ratio"],
+          "properties": {
+            "label": {
+              "type": "string",
+              "description": "Empty until a comparison has been made."
+            },
+            "bytes": { "type": "integer" },
+            "symmetricMicros": { "type": "integer" },
+            "asymmetricMicros": { "type": "integer" },
+            "asymmetricBlocks": {
+              "type": "integer",
+              "description": "How many separate public-key operations the payload would need."
+            },
+            "ratio": {
+              "type": "integer",
+              "description": "How many times slower the asymmetric route would be."
+            }
+          }
+        }
+      }
+    },
+    "outcome": {
+      "type": "object",
+      "description": "How the current step ended.",
+      "required": ["decision"],
+      "properties": {
+        "decision": {
+          "enum": ["idle", "pending", "ok", "failed", "blocked", "exposed"],
+          "description": "blocked = an attack was stopped; exposed = somebody who should not read this can."
+        },
+        "reason": {
+          "type": ["string", "null"],
+          "enum": [
+            "wrong-key",
+            "payload-too-large",
+            "signature-mismatch",
+            "tampered",
+            "key-in-the-open",
+            "attacker-has-the-key",
+            "not-encrypted",
+            "public-key-cannot-decrypt",
+            "no-key",
+            "private-key-leaked",
+            null
+          ],
+          "description": "Technical code for the refusal or the exposure; null when nothing went wrong."
+        },
+        "detail": {
+          "type": "string",
+          "description": "The offending key, payload or size; empty when not applicable."
+        }
+      }
+    },
+    "stats": {
+      "type": "object",
+      "description": "Running totals across the whole run.",
+      "required": ["encrypted", "decrypted", "failed", "signed", "verified", "exposed"],
+      "properties": {
+        "encrypted": { "type": "integer" },
+        "decrypted": { "type": "integer" },
+        "failed": {
+          "type": "integer",
+          "description": "Operations refused - a wrong key, an oversized payload, a broken signature."
+        },
+        "signed": { "type": "integer" },
+        "verified": { "type": "integer" },
+        "exposed": {
+          "type": "integer",
+          "description": "Messages a third party could read. Every one of them is a key-management failure, not a cipher failure."
+        }
+      }
+    }
+  },
+  "events": [
+    "CRYPTO_LAB",
+    "SECRET_KEY_GENERATED",
+    "KEY_PAIR_GENERATED",
+    "PUBLIC_KEY_PUBLISHED",
+    "SYMMETRIC_ENCRYPT",
+    "SYMMETRIC_DECRYPT",
+    "WRONG_KEY",
+    "KEY_SHARED_IN_THE_OPEN",
+    "KEY_DISTRIBUTION_COST",
+    "ASYMMETRIC_ENCRYPT",
+    "ASYMMETRIC_DECRYPT",
+    "PAYLOAD_TOO_LARGE",
+    "PERFORMANCE_COMPARED",
+    "MESSAGE_SIGNED",
+    "SIGNATURE_VERIFIED",
+    "SIGNATURE_INVALID",
+    "MESSAGE_TAMPERED",
+    "SESSION_KEY_WRAPPED",
+    "HYBRID_SENT",
+    "SESSION_KEY_UNWRAPPED",
+    "ATTACKER_READS",
+    "ATTACKER_STUCK",
+    "PRIVATE_KEY_LEAKED",
+    "CRYPTO_AUDIT"
+  ]
+}

@@ -1,0 +1,172 @@
+id: event-carried-state-transfer
+title:
+  en: Async Data at a Synchronous Decision Point
+  ru: Асинхронные данные в точке синхронного решения
+category:
+  en: Microservices / Data Distribution
+  ru: Микросервисы / Распределение данных
+type: OTHER
+mode: trace
+aiProvider: claude
+aiModel: claude-opus-5
+categoryId: microservices
+difficulty: 3
+catalogId: microservices-14
+summary:
+  en: >
+    A checkout has to be priced now, but the exchange rate belongs to another
+    service that publishes it asynchronously. Calling that service inside the
+    decision is the honest baseline and it multiplies latency and availability;
+    a local copy — a read-through cache with a TTL, or a replica kept up to date
+    by the owner's events (event-carried state transfer) — turns the decision
+    into a local read. What you buy is availability, what you pay is staleness,
+    and the design is only finished when you say out loud how old the data may
+    be and what happens beyond that. The rest is the machinery that makes a local
+    copy trustworthy: versioned, idempotent event application, a rebuildable
+    replica for cold starts, monitoring of feed lag rather than errors, and
+    pinning the value that was used onto the decision it produced.
+  ru: >
+    Заказ нужно рассчитать сейчас, но курс принадлежит другому сервису, который
+    публикует его асинхронно. Вызвать этот сервис прямо внутри решения — честная
+    отправная точка, которая перемножает задержки и доступности; локальная копия
+    — read-through кэш с TTL или реплика, которую поддерживают события владельца
+    (event-carried state transfer), — превращает решение в локальное чтение.
+    Покупаете вы доступность, платите устареванием данных, и проект не закончен,
+    пока не сказано вслух, насколько старыми данные быть могут и что происходит
+    за этой границей. Остальное — механика, которая делает локальную копию
+    надёжной: применение событий по версии и идемпотентно, восстановимая реплика
+    для холодного старта, мониторинг отставания потока вместо ошибок и фиксация
+    использованного значения в самом решении.
+
+# Visual primitives this topic's visualizer composes (frontend).
+primitives:
+  - BoxGroup
+  - EventLog
+
+defaultExample: event-carried-state
+
+# Examples shown as buttons. `file` is relative to examples/.
+examples:
+  - id: call-at-decision
+    title:
+      en: Call the owner every time
+      ru: Вызывать владельца каждый раз
+    file: 01-call-at-decision.java
+    explanation:
+      en: >
+        The honest baseline: the decision blocks on the service that owns the
+        rate. The answer is always current, and every checkout now waits for a
+        second service and a second network hop.
+      ru: >
+        Честная отправная точка: решение блокируется на сервисе, которому
+        принадлежит курс. Ответ всегда актуален, и теперь каждое оформление ждёт
+        второй сервис и второй сетевой переход.
+  - id: owner-outage
+    title:
+      en: The owner goes down
+      ru: Владелец недоступен
+    file: 02-owner-outage.java
+    explanation:
+      en: >
+        The same design during an outage. The pricing service is healthy, the
+        database is healthy, and checkout is down — because availability
+        multiplies along a synchronous call chain.
+      ru: >
+        Тот же дизайн во время аварии. Сервис расчёта жив, база жива, а
+        оформление лежит — потому что вдоль синхронной цепочки вызовов
+        доступности перемножаются.
+  - id: cache-with-ttl
+    title:
+      en: A local cache with a TTL
+      ru: Локальный кэш с TTL
+    file: 03-cache-with-ttl.java
+    explanation:
+      en: >
+        Most decisions become local reads and only the miss and the expiry pay
+        for a call. Watch what the TTL really is: not a freshness guarantee, but
+        a bound on how wrong the copy is allowed to be.
+      ru: >
+        Большинство решений становятся локальными чтениями, а за вызов платят
+        только промах и истечение TTL. Посмотрите, что такое TTL на самом деле:
+        не гарантия свежести, а ограничение на то, насколько копии позволено
+        ошибаться.
+  - id: cache-during-outage
+    title:
+      en: An expired cache during an outage
+      ru: Просроченный кэш во время аварии
+    file: 04-cache-during-outage.java
+    explanation:
+      en: >
+        The refresh fails and the expired copy becomes the source of truth —
+        stale-if-error, with nothing bounding how stale. Declaring how old the
+        data may be leaves the same read acceptable inside the limit and turns it
+        into an honest refusal past it.
+      ru: >
+        Обновление не удаётся, и просроченная копия становится источником истины —
+        stale-if-error, ничем не ограниченный. Объявленный предел устаревания
+        оставляет то же чтение допустимым внутри предела и превращает его в
+        честный отказ за его границей.
+  - id: event-carried-state
+    title:
+      en: Event-carried state transfer
+      ru: Event-carried state transfer
+    file: 05-event-carried-state.java
+    explanation:
+      en: >
+        The owner publishes every change, the consumer keeps its own replica, and
+        the decision never leaves the process. Zero calls at the decision point,
+        and the data is already there when it is needed.
+      ru: >
+        Владелец публикует каждое изменение, потребитель держит свою реплику, а
+        решение не выходит за пределы процесса. Ноль вызовов в точке решения, и
+        данные уже на месте, когда они нужны.
+  - id: out-of-order-events
+    title:
+      en: Duplicate and out-of-order events
+      ru: Дубли и события не по порядку
+    file: 06-out-of-order-events.java
+    explanation:
+      en: >
+        At-least-once delivery means the same event arrives twice and an older
+        one can arrive after a newer one. A version on every event makes applying
+        it idempotent and makes an overwrite with old data impossible.
+      ru: >
+        Доставка at-least-once означает, что одно и то же событие приходит
+        дважды, а более старое может прийти после более нового. Версия в каждом
+        событии делает применение идемпотентным и исключает перезапись новых
+        данных старыми.
+  - id: silent-staleness
+    title:
+      en: 'The feed stops, nothing fails'
+      ru: 'Поток встал, ничего не упало'
+    file: 07-silent-staleness.java
+    explanation:
+      en: >
+        The worst failure in this topic: the stream stops reaching the consumer
+        and every decision keeps succeeding on a half-hour-old rate. Nothing
+        throws until someone declares what "fresh enough" means.
+      ru: >
+        Худший сбой этой темы: поток перестаёт доходить до потребителя, а решения
+        продолжают успешно приниматься по получасовому курсу. Ничего не падает,
+        пока кто-нибудь не объявит, что значит «достаточно свежо».
+  - id: cold-start
+    title:
+      en: Cold start and rebuild
+      ru: Холодный старт и восстановление
+    file: 08-cold-start.java
+    explanation:
+      en: >
+        An in-memory replica does not survive a deploy, so a fresh instance knows
+        nothing. Replaying a compacted log refills it — and that replay reads the
+        log, so it works while the owning service is still down.
+      ru: >
+        Реплика в памяти не переживает деплой, поэтому свежий инстанс не знает
+        ничего. Перечитывание компактифицированного лога наполняет её заново — и
+        это чтение лога, поэтому работает даже пока сервис-владелец лежит.
+
+# Example question pre-filled as the Ask AI placeholder.
+assistantExample:
+  en: "e.g. How stale may a locally cached exchange rate be, and who decides?"
+  ru: "например: Насколько устаревшим может быть локально закэшированный курс и кто это решает?"
+
+missionsFile: quiz.yaml

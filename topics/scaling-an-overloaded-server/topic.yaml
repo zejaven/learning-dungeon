@@ -1,0 +1,228 @@
+id: scaling-an-overloaded-server
+title:
+  en: 'A Single Server Is Overwhelmed: How Do You Scale It?'
+  ru: 'Один сервер не справляется: как его масштабировать?'
+category:
+  en: Networking / Scaling
+  ru: Сети / Масштабирование
+type: HTTP
+mode: trace
+aiProvider: claude
+aiModel: claude-opus-5
+categoryId: networking
+difficulty: 2
+catalogId: networking-6
+summary:
+  en: >
+    "Overwhelmed" is not a mood, it is arithmetic: an instance has a fixed number
+    of concurrent slots and every request holds one for a fixed time, so its
+    throughput is a number you can write down. Below that number the queue is
+    empty and latency is just the work; above it the surplus has to go somewhere,
+    and there are only three somewheres — a queue, a 503, or a dropped
+    connection. Everything people call "the server is slow" follows from that:
+    the code did not get slower, the wait got longer, and past the client''s
+    timeout the server starts spending 100% of its capacity on answers nobody is
+    reading. Vertical scaling multiplies the single number and changes nothing
+    else, including the fact that one machine dying is the whole service dying.
+    Horizontal scaling multiplies it too and adds a survivor, but hands you a
+    load balancer that must know which replicas are alive, a routing algorithm
+    that only matters once the replicas stop being identical, and one hard
+    requirement: replicas that keep nothing of their own in memory. And when all
+    that is done, the bottleneck does not disappear — it moves to the one
+    database everybody shares.
+  ru: >
+    «Не справляется» — это не ощущение, а арифметика: у экземпляра фиксированное
+    число одновременных слотов, и каждый запрос держит слот фиксированное время,
+    поэтому его пропускную способность можно просто выписать числом. Ниже этого
+    числа очередь пуста, а задержка равна самой работе; выше — излишку надо куда-то
+    деться, а деться можно только в три места: в очередь, в 503 или в разорванное
+    соединение. Всё, что называют «сервер тормозит», следует отсюда: код не стал
+    медленнее, стало длиннее ожидание, а за клиентским таймаутом сервер начинает
+    тратить 100% мощности на ответы, которых никто не читает. Вертикальное
+    масштабирование умножает это единственное число и не меняет больше ничего —
+    включая то, что смерть одной машины остаётся смертью всего сервиса.
+    Горизонтальное умножает его тоже и добавляет выжившего, но выдаёт вам
+    балансировщик, который обязан знать, какие реплики живы, алгоритм
+    маршрутизации, который важен ровно тогда, когда реплики перестают быть
+    одинаковыми, и одно жёсткое требование: реплики не должны хранить в памяти
+    ничего своего. А когда всё это сделано, узкое место не исчезает — оно
+    переезжает в одну базу данных, общую для всех.
+
+# Visual primitives this topic's visualizer composes (frontend).
+primitives:
+  - BoxGroup
+  - ArrayGrid
+
+defaultExample: capacity-is-arithmetic
+
+# Examples shown as buttons. `file` is relative to examples/.
+examples:
+  - id: capacity-is-arithmetic
+    title:
+      en: 'Capacity is a number, not an opinion'
+      ru: 'Мощность — это число, а не мнение'
+    file: 01-capacity-is-arithmetic.java
+    explanation:
+      en: >
+        The baseline, so "overwhelmed" has something to be measured against. Four
+        concurrent slots, two ticks of work per request: throughput is 4 / 2 = 2
+        requests per tick and no amount of clever code moves it. Traffic stays
+        under that, and every other number in the run is forced to zero — no
+        queue, no rejections, latency exactly equal to the work. Learn to compute
+        this number first; almost every scaling conversation is really an
+        argument about it.
+      ru: >
+        Точка отсчёта, чтобы «не справляется» было с чем сравнивать. Четыре
+        одновременных слота, два тика работы на запрос: пропускная способность
+        равна 4 / 2 = 2 запроса в тик, и никакой умный код её не сдвинет. Трафик
+        держится ниже — и все остальные числа прогона обязаны быть нулевыми: ни
+        очереди, ни отказов, задержка ровно равна работе. Учитесь считать это
+        число первым; почти любой разговор о масштабировании на самом деле спор
+        именно о нём.
+  - id: the-queue-is-the-symptom
+    title:
+      en: 'Where the latency actually comes from'
+      ru: 'Откуда на самом деле берётся задержка'
+    file: 02-the-queue-is-the-symptom.java
+    explanation:
+      en: >
+        The same server, three times the traffic, and the whole failure cascade in
+        order: the surplus accumulates in a queue, the queue becomes latency, the
+        queue fills and requests start being refused, clients hit their timeout
+        and leave — and the server finishes their requests anyway, writing
+        responses into closed connections. That last number is the one to
+        remember: a server can be 100% busy and 0% useful.
+      ru: >
+        Тот же сервер, втрое больше трафика — и весь каскад отказа по порядку:
+        излишек копится в очереди, очередь превращается в задержку, очередь
+        заполняется и запросы начинают отвергаться, клиенты упираются в таймаут и
+        уходят — а сервер всё равно доделывает их запросы, записывая ответы в
+        закрытые соединения. Запомните именно последнее число: сервер может быть
+        на 100% занят и на 0% полезен.
+  - id: a-bigger-box
+    title:
+      en: 'Vertical: the same box, more of it'
+      ru: 'Вертикально: та же коробка, но больше'
+    file: 03-a-bigger-box.java
+    explanation:
+      en: >
+        The cheapest fix that exists, and a legitimate first answer: triple the
+        slots, triple the throughput, drain the backlog, no new code and no
+        distributed anything. Then the machine dies and the run ends with an
+        outage, because nothing about the topology changed — the failure domain
+        is still exactly one box. That is the honest trade, and stating it is what
+        an interviewer is listening for.
+      ru: >
+        Самое дешёвое из существующих решений и вполне законный первый ответ:
+        втрое больше слотов, втрое больше пропускной способности, накопившееся
+        разобрано, ни строчки нового кода и никакой распределённости. А потом
+        машина умирает, и прогон заканчивается простоем, потому что в топологии
+        не изменилось ничего: домен отказа по-прежнему ровно одна коробка. Это и
+        есть честный размен, и интервьюер слушает, произнесёте ли вы его вслух.
+  - id: more-boxes
+    title:
+      en: 'Horizontal: replicas behind a balancer'
+      ru: 'Горизонтально: реплики за балансировщиком'
+    file: 04-more-boxes.java
+    explanation:
+      en: >
+        The same overloaded server, scaled the other way: a load balancer moves in
+        front, two more replicas join the rotation, capacity goes 2 → 4 → 6 per
+        tick while the service keeps running, and the backlog drains. Notice what
+        arrived with it — the balancer now owns the address, it needs health
+        checks to know who is alive, and a request may land on any replica, which
+        makes anything a replica remembers a bug waiting to happen.
+      ru: >
+        Тот же перегруженный сервер, масштабированный в другую сторону: перед ним
+        встаёт балансировщик, в ротацию входят ещё две реплики, мощность растёт
+        2 → 4 → 6 в тик прямо на ходу, и накопившееся разбирается. Обратите
+        внимание, что пришло вместе с этим: адресом теперь владеет балансировщик,
+        ему нужны health-check'и, чтобы знать, кто жив, и запрос может попасть на
+        любую реплику — а значит всё, что реплика помнит, это баг, который ждёт
+        своего часа.
+  - id: which-replica-gets-it
+    title:
+      en: 'Round robin vs least-busy'
+      ru: 'Round robin против least-busy'
+    file: 05-which-replica-gets-it.java
+    explanation:
+      en: >
+        The balancing algorithm is a boring choice right up until the replicas
+        stop being identical — and in a real fleet they never are for long. One
+        node goes four times slower (a GC pause, a cold cache, a noisy neighbour)
+        and round robin keeps handing it a full third of the traffic, so it queues
+        and then refuses while its neighbours sit half-idle. The same run routed
+        by observed load has no rejections at all.
+      ru: >
+        Выбор алгоритма балансировки — скучное решение ровно до момента, когда
+        реплики перестают быть одинаковыми, а в реальном парке машин они
+        одинаковы недолго. Один узел становится вчетверо медленнее (пауза GC,
+        холодный кэш, шумный сосед), а round robin продолжает отдавать ему полную
+        треть трафика — он копит очередь и начинает отказывать, пока соседи стоят
+        полупустые. Тот же прогон с маршрутизацией по наблюдаемой загрузке не даёт
+        ни одного отказа.
+  - id: a-replica-dies
+    title:
+      en: 'A replica dies, twice'
+      ru: 'Реплика умирает, дважды'
+    file: 06-a-replica-dies.java
+    explanation:
+      en: >
+        Adding replicas only buys availability if the balancer finds out about a
+        dead one. Without health checks the backend list is a config file rather
+        than a fact, so a clean fraction of requests keeps being routed into a
+        hole — normal latency, normal CPU, a third of traffic failing. With them,
+        the corpse leaves the rotation and the survivors inherit its share, which
+        is the moment to check that N-1 replicas still fit the load.
+      ru: >
+        Добавленные реплики покупают доступность, только если балансировщик
+        узнаёт о мёртвой. Без health-check'ов список бэкендов — это конфиг, а не
+        факт, поэтому ровная доля запросов продолжает уходить в яму: нормальная
+        задержка, нормальный CPU, треть трафика падает. С ними труп покидает
+        ротацию, а выжившие наследуют его долю — и вот тут пора проверить, что
+        N-1 реплик всё ещё вмещают нагрузку.
+  - id: state-blocks-scaling
+    title:
+      en: 'The real reason you cannot just add servers'
+      ru: 'Настоящая причина, почему нельзя просто добавить серверов'
+    file: 07-state-blocks-scaling.java
+    explanation:
+      en: >
+        Sessions in a replica's heap are the fastest storage there is and the
+        thing that makes a second replica wrong rather than helpful: a request
+        that lands elsewhere sees an unauthenticated user with an empty cart, and
+        nothing appears in any error log. Sticky sessions stop the misses and are
+        a legitimate stopgap — then the pinned node dies and takes its users'
+        state with it.
+      ru: >
+        Сессии в куче реплики — самое быстрое хранилище, какое бывает, и ровно то,
+        что делает вторую реплику не полезной, а неправильной: запрос, попавший не
+        туда, видит неаутентифицированного пользователя с пустой корзиной, и ни в
+        одном журнале ошибок ничего не появляется. Sticky-сессии прекращают
+        промахи и как временная мера законны — а потом прикреплённый узел умирает
+        и уносит состояние своих пользователей с собой.
+  - id: the-bottleneck-moves
+    title:
+      en: 'Scaling the part that was not the limit'
+      ru: 'Масштабирование того, что не было ограничением'
+    file: 08-the-bottleneck-moves.java
+    explanation:
+      en: >
+        Three replicas, four replicas, and identical numbers — every instance has
+        free slots and all of them are queueing on the one database behind them.
+        Scaling out moved the bottleneck, it did not remove it. The run closes
+        with the same traffic priced across four topologies, which is the table
+        the interview question is really asking you to draw.
+      ru: >
+        Три реплики, четыре реплики — и одинаковые числа: у каждого экземпляра
+        есть свободные слоты, и все они стоят в очереди к одной базе за ними.
+        Масштабирование вширь переместило узкое место, а не убрало его. Прогон
+        завершается таблицей: один и тот же трафик, оценённый на четырёх
+        топологиях, — это и есть то, что вопрос на собеседовании просит нарисовать.
+
+# Example question pre-filled as the Ask AI placeholder.
+assistantExample:
+  en: 'e.g. Our single API server is at 100% CPU and latency is climbing — how would you decide between a bigger instance and more instances?'
+  ru: 'например: Наш единственный API-сервер на 100% CPU, задержка растёт — как выбрать между машиной побольше и несколькими машинами?'
+
+missionsFile: quiz.yaml

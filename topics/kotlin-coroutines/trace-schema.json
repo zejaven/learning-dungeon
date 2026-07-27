@@ -1,0 +1,225 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Kotlin coroutines trace event state",
+  "description": "Shape of the `state` field for coroutine trace events: the dispatchers and their worker threads, the coroutines and the Job tree they live in, the state machine the compiler generated for a suspend fun, what the run cost, and the scale comparison.",
+  "type": "object",
+  "required": ["dispatchers", "coroutines", "scopes", "stats"],
+  "properties": {
+    "dispatchers": {
+      "type": "array",
+      "description": "The CoroutineDispatchers: Default (sized to cores), IO (sized for blocking calls) and Main.",
+      "items": {
+        "type": "object",
+        "required": ["name", "threads", "queue"],
+        "properties": {
+          "name": { "type": "string", "description": "Default, IO or Main." },
+          "threads": {
+            "type": "array",
+            "description": "The real worker threads this dispatcher owns.",
+            "items": {
+              "type": "object",
+              "required": ["name", "coroutine", "blocked"],
+              "properties": {
+                "name": { "type": "string", "description": "e.g. 'Default-worker-1'." },
+                "coroutine": {
+                  "type": ["string", "null"],
+                  "description": "The coroutine currently borrowing this thread, or null when it is idle."
+                },
+                "blocked": {
+                  "type": "boolean",
+                  "description": "True when a non-suspending call is holding the thread inside the OS."
+                }
+              }
+            }
+          },
+          "queue": {
+            "type": "array",
+            "description": "Coroutines that are ready to run but have no free thread yet.",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "coroutines": {
+      "type": "array",
+      "description": "Every coroutine started in this run, in creation order.",
+      "items": {
+        "type": "object",
+        "required": ["name", "scope", "kind", "dispatcher", "state", "cancelRequested"],
+        "properties": {
+          "name": { "type": "string", "description": "The name the example gave it." },
+          "scope": { "type": "string", "description": "The scope whose Job is its parent." },
+          "kind": {
+            "type": "string",
+            "enum": ["LAUNCH", "ASYNC"],
+            "description": "LAUNCH returns a Job; ASYNC returns a Deferred that carries a result."
+          },
+          "dispatcher": { "type": "string", "description": "Where its continuations are dispatched." },
+          "state": {
+            "type": "string",
+            "enum": ["NEW", "QUEUED", "RUNNING", "SUSPENDED", "COMPLETED", "CANCELLED", "FAILED"],
+            "description": "SUSPENDED means alive on the heap and holding no thread at all."
+          },
+          "thread": {
+            "type": ["string", "null"],
+            "description": "The worker it is executing on, or null whenever it is not executing."
+          },
+          "doing": {
+            "type": ["string", "null"],
+            "description": "The suspension point, blocking call or computation it is at."
+          },
+          "cancelRequested": {
+            "type": "boolean",
+            "description": "cancel() has set isActive to false, which by itself stops nothing."
+          },
+          "awaiting": {
+            "type": ["string", "null"],
+            "description": "The Deferred it is suspended in await() on."
+          }
+        }
+      }
+    },
+    "scopes": {
+      "type": "array",
+      "description": "The Job tree: which scope owns which coroutines.",
+      "items": {
+        "type": "object",
+        "required": ["name", "kind", "state", "children"],
+        "properties": {
+          "name": { "type": "string" },
+          "kind": {
+            "type": "string",
+            "enum": ["ROOT", "COROUTINE_SCOPE", "SUPERVISOR", "GLOBAL"],
+            "description": "SUPERVISOR does not let a child's failure reach its siblings; GLOBAL has no parent."
+          },
+          "state": {
+            "type": "string",
+            "enum": ["ACTIVE", "COMPLETED", "CANCELLED", "FAILED"],
+            "description": "A scope completes only after every child has."
+          },
+          "children": {
+            "type": "array",
+            "description": "Coroutines whose parent Job this is.",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "machine": {
+      "type": ["object", "null"],
+      "description": "Only on the compiler events: the state machine a suspend fun was rewritten into.",
+      "required": ["function", "className", "label", "cases", "saved", "suspended"],
+      "properties": {
+        "function": { "type": "string", "description": "The suspend fun as it was written." },
+        "className": { "type": "string", "description": "The generated continuation class, e.g. 'loadProfile$1'." },
+        "label": {
+          "type": "integer",
+          "description": "The when(label) branch being executed; -1 before the function has ever run."
+        },
+        "cases": {
+          "type": "array",
+          "description": "The branches of the generated when(label), one per suspension point plus the tail.",
+          "items": {
+            "type": "object",
+            "required": ["label", "code", "current"],
+            "properties": {
+              "label": { "type": "integer" },
+              "code": { "type": "string", "description": "A sketch of the generated body of that branch." },
+              "current": { "type": "boolean", "description": "True for the branch being executed now." }
+            }
+          }
+        },
+        "saved": {
+          "type": "array",
+          "description": "The fields of the continuation object: locals and results that must survive a suspension.",
+          "items": {
+            "type": "object",
+            "required": ["name", "value"],
+            "properties": {
+              "name": { "type": "string" },
+              "value": { "type": "string" }
+            }
+          }
+        },
+        "suspended": {
+          "type": "boolean",
+          "description": "True while invokeSuspend has returned COROUTINE_SUSPENDED and no thread holds this work."
+        },
+        "returned": {
+          "type": ["string", "null"],
+          "description": "The value the function finally returned, once it has."
+        }
+      }
+    },
+    "stats": {
+      "type": "object",
+      "description": "Running totals for the whole run.",
+      "required": ["launched", "alive", "peakAlive", "threads", "suspensions", "resumes", "dispatches", "queued", "contextSwitches", "blockingCalls", "completed", "cancelled", "failed", "leaked"],
+      "properties": {
+        "launched": { "type": "integer", "description": "Coroutines created." },
+        "alive": { "type": "integer", "description": "Coroutines not yet completed, cancelled or failed." },
+        "peakAlive": { "type": "integer", "description": "The most that existed at once — compare it with `threads`." },
+        "threads": { "type": "integer", "description": "Real worker threads across all dispatchers." },
+        "suspensions": { "type": "integer", "description": "Times a coroutine returned COROUTINE_SUSPENDED." },
+        "resumes": { "type": "integer", "description": "Times a continuation was resumed with a value." },
+        "dispatches": { "type": "integer", "description": "Times a thread picked a continuation up." },
+        "queued": { "type": "integer", "description": "Times a ready coroutine had to wait for a thread." },
+        "contextSwitches": { "type": "integer", "description": "withContext moves between dispatchers." },
+        "blockingCalls": { "type": "integer", "description": "Non-suspending calls that held a worker thread." },
+        "completed": { "type": "integer" },
+        "cancelled": { "type": "integer", "description": "Cancellations that were actually delivered." },
+        "failed": { "type": "integer" },
+        "leaked": { "type": "integer", "description": "GlobalScope coroutines left running with no owner." }
+      }
+    },
+    "scale": {
+      "type": "array",
+      "description": "Only on SCALE_COMPARED: the same number of concurrent tasks priced three ways.",
+      "items": {
+        "type": "object",
+        "required": ["model", "count", "memoryMb", "osThreads", "keyword", "feasible"],
+        "properties": {
+          "model": {
+            "enum": ["PLATFORM_THREADS", "COROUTINES", "VIRTUAL_THREADS"],
+            "description": "How the concurrent tasks are represented."
+          },
+          "count": { "type": "integer", "description": "Concurrent tasks being priced." },
+          "memoryMb": { "type": "integer", "description": "Stacks reserved, or continuation objects allocated." },
+          "osThreads": { "type": "integer", "description": "Threads the OS scheduler has to know about." },
+          "keyword": {
+            "enum": ["suspend", "none"],
+            "description": "Whether the model colours functions: coroutines need `suspend`, threads do not."
+          },
+          "feasible": { "type": "boolean", "description": "Whether a normal JVM can actually run that many." }
+        }
+      }
+    }
+  },
+  "events": [
+    "RUNTIME_READY",
+    "SUSPEND_FUN_COMPILED",
+    "STATE_MACHINE_STEP",
+    "SCOPE_OPENED",
+    "COROUTINE_LAUNCHED",
+    "ASYNC_STARTED",
+    "DISPATCHED",
+    "QUEUED",
+    "SUSPENDED",
+    "RESUMED",
+    "CONTEXT_SWITCHED",
+    "CPU_WORK",
+    "THREAD_BLOCKED",
+    "POOL_STARVED",
+    "COROUTINE_COMPLETED",
+    "COROUTINE_FAILED",
+    "CANCELLATION_REQUESTED",
+    "CANCELLED_AT_SUSPENSION_POINT",
+    "CANCELLATION_IGNORED",
+    "CHILDREN_CANCELLED",
+    "SUPERVISOR_ISOLATED",
+    "SCOPE_JOINED",
+    "GLOBAL_SCOPE_LEAK",
+    "SCALE_COMPARED",
+    "COROUTINE_AUDIT"
+  ]
+}

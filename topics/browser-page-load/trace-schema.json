@@ -1,0 +1,234 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Browser page load trace event state",
+  "description": "Shape of the `state` field for page-load trace events: the URL the typed string became, the pipeline of layers and what each cost, the DNS walk, the one connection everything runs on, the messages on the wire, the resources the page is made of and the round-trip bill for the navigation.",
+  "type": "object",
+  "required": ["typed", "visit", "url", "stages", "dns", "connection", "wire", "page", "stats"],
+  "properties": {
+    "typed": {
+      "type": "string",
+      "description": "Exactly what was typed into the address bar, before any normalisation."
+    },
+    "visit": {
+      "type": "integer",
+      "description": "Which navigation of this browser session this is — 1 is the cold one."
+    },
+    "url": {
+      "type": "object",
+      "description": "The typed string after the browser filled in every default.",
+      "required": ["scheme", "host", "port", "path", "hsts"],
+      "properties": {
+        "scheme": { "type": "string", "description": "http or https — chosen by the browser when not typed." },
+        "host": { "type": "string", "description": "The host name, which is all DNS ever sees." },
+        "port": { "type": "integer", "description": "80 or 443 unless one was typed explicitly." },
+        "path": { "type": "string", "description": "Always present; '/' when nothing was typed." },
+        "hsts": {
+          "type": "boolean",
+          "description": "True when this host is known to be HTTPS-only, so http:// is rewritten locally."
+        }
+      }
+    },
+    "stages": {
+      "type": "array",
+      "description": "The pipeline in order, and what each layer cost this navigation.",
+      "items": {
+        "type": "object",
+        "required": ["name", "status", "ms", "detail"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["URL", "DNS", "TCP", "TLS", "HTTP", "CONTENT", "RENDER"],
+            "description": "Technical code for the layer."
+          },
+          "status": {
+            "type": "string",
+            "enum": ["PENDING", "DONE", "CACHED", "REUSED", "SKIPPED"],
+            "description": "DONE means it was actually performed; CACHED and REUSED mean it was skipped for free."
+          },
+          "ms": { "type": "integer", "description": "Milliseconds this layer added to the navigation." },
+          "detail": { "type": "string", "description": "The layer's outcome in its own technical terms." }
+        }
+      }
+    },
+    "dns": {
+      "type": "object",
+      "description": "How the host name became an address.",
+      "required": ["cached", "steps"],
+      "properties": {
+        "ip": { "type": ["string", "null"], "description": "The resolved A record, or null before it is known." },
+        "ttl": { "type": ["integer", "null"], "description": "Seconds every cache on the way back may keep the answer." },
+        "cached": { "type": "boolean", "description": "True when the answer came from a cache and cost nothing." },
+        "steps": {
+          "type": "array",
+          "description": "Every place the question was asked, in order.",
+          "items": {
+            "type": "object",
+            "required": ["from", "question", "result", "detail", "ms"],
+            "properties": {
+              "from": {
+                "type": "string",
+                "enum": ["BROWSER_CACHE", "OS_CACHE", "HOSTS_FILE", "RESOLVER", "ROOT", "TLD", "AUTHORITATIVE"],
+                "description": "Who was asked: three local lookups, then the resolver walking the tree."
+              },
+              "question": { "type": "string", "description": "The query, e.g. 'www.google.com A → a.root-servers.net'." },
+              "result": {
+                "type": "string",
+                "enum": ["MISS", "HIT", "REFERRAL", "ANSWER"],
+                "description": "A referral points at the next server down; only ANSWER carries the address."
+              },
+              "detail": { "type": "string", "description": "What came back, in DNS terms." },
+              "ms": { "type": "integer", "description": "Milliseconds this hop cost." }
+            }
+          }
+        }
+      }
+    },
+    "connection": {
+      "type": "object",
+      "description": "The single TCP connection everything after DNS happens on.",
+      "required": ["state", "requests"],
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": ["NONE", "ESTABLISHED", "SECURE", "CLOSED"],
+          "description": "NONE before the handshake, SECURE once TLS finished, CLOSED after a redirect drops it."
+        },
+        "peer": { "type": ["string", "null"], "description": "The address and port TCP actually connected to." },
+        "tls": { "type": ["string", "null"], "description": "The negotiated TLS version, or null on plain http." },
+        "alpn": { "type": ["string", "null"], "description": "The HTTP version ALPN chose — h2 or http/1.1." },
+        "requests": { "type": "integer", "description": "HTTP requests sent on this connection so far." }
+      }
+    },
+    "wire": {
+      "type": "array",
+      "description": "Every message on that connection this navigation, in order.",
+      "items": {
+        "type": "object",
+        "required": ["seq", "dir", "layer", "label", "detail", "bytes"],
+        "properties": {
+          "seq": { "type": "integer", "description": "Position on the wire." },
+          "dir": {
+            "type": "string",
+            "enum": ["OUT", "IN"],
+            "description": "OUT is browser to server, IN is server to browser."
+          },
+          "layer": {
+            "type": "string",
+            "enum": ["TCP", "TLS", "HTTP"],
+            "description": "Which layer produced this message."
+          },
+          "label": { "type": "string", "description": "The message itself, e.g. 'SYN' or '200 OK'." },
+          "detail": { "type": "string", "description": "The interesting fields of that message." },
+          "bytes": { "type": "integer", "description": "Approximate size on the wire." }
+        }
+      }
+    },
+    "page": {
+      "type": "object",
+      "description": "What the page is made of and when it became visible.",
+      "required": ["resources", "pending", "milestones"],
+      "properties": {
+        "resources": {
+          "type": "array",
+          "description": "Everything fetched for this navigation, document first.",
+          "items": {
+            "type": "object",
+            "required": ["name", "kind", "source", "ms", "bytes"],
+            "properties": {
+              "name": { "type": "string", "description": "The path that was requested." },
+              "kind": {
+                "type": "string",
+                "enum": ["DOCUMENT", "STYLESHEET", "SCRIPT", "IMAGE", "OTHER"],
+                "description": "What it is; stylesheets and synchronous scripts block rendering."
+              },
+              "source": {
+                "type": "string",
+                "enum": ["NETWORK", "DISK_CACHE"],
+                "description": "NETWORK cost a round trip; DISK_CACHE cost nothing at all."
+              },
+              "ms": { "type": "integer", "description": "Milliseconds this resource added." },
+              "bytes": { "type": "integer", "description": "Its size." }
+            }
+          }
+        },
+        "pending": {
+          "type": "array",
+          "description": "Subresources the parser has discovered but not fetched yet.",
+          "items": { "type": "string" }
+        },
+        "milestones": {
+          "type": "array",
+          "description": "The moments a performance tool would show you.",
+          "items": {
+            "type": "object",
+            "required": ["name", "ms"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "enum": ["TTFB", "DOM_INTERACTIVE", "FIRST_PAINT"],
+                "description": "Time to first byte, DOM built, first paint."
+              },
+              "ms": { "type": "integer", "description": "Milliseconds after Enter." }
+            }
+          }
+        }
+      }
+    },
+    "stats": {
+      "type": "object",
+      "description": "The bill for this navigation.",
+      "required": ["ms", "roundTrips", "dnsQueries", "connections", "requests", "cacheHits", "redirects", "bytes"],
+      "properties": {
+        "ms": { "type": "integer", "description": "Elapsed milliseconds since Enter." },
+        "roundTrips": { "type": "integer", "description": "The number that actually sets the floor on latency." },
+        "dnsQueries": { "type": "integer", "description": "Queries the resolver had to send." },
+        "connections": { "type": "integer", "description": "TCP connections opened this navigation." },
+        "requests": { "type": "integer", "description": "HTTP requests sent." },
+        "cacheHits": { "type": "integer", "description": "Resources served without asking the server." },
+        "redirects": { "type": "integer", "description": "3xx responses that restarted the pipeline." },
+        "bytes": { "type": "integer", "description": "Bytes transferred, headers and handshakes included." }
+      }
+    },
+    "comparison": {
+      "type": "array",
+      "description": "Only on ROUND_TRIPS_COMPARED: the same document under five starting conditions.",
+      "items": {
+        "type": "object",
+        "required": ["scenario", "dnsRtt", "tcpRtt", "tlsRtt", "httpRtt", "totalRtt", "ms"],
+        "properties": {
+          "scenario": {
+            "enum": ["COLD_TLS12", "COLD_TLS13", "WARM_DNS", "REUSED_CONNECTION", "FROM_CACHE"],
+            "description": "Technical code for the starting condition."
+          },
+          "dnsRtt": { "type": "integer", "description": "Round trips spent resolving the name." },
+          "tcpRtt": { "type": "integer", "description": "Round trips spent on the TCP handshake." },
+          "tlsRtt": { "type": "integer", "description": "Round trips spent on the TLS handshake." },
+          "httpRtt": { "type": "integer", "description": "Round trips spent on the request itself." },
+          "totalRtt": { "type": "integer", "description": "The sum — what distance actually multiplies." },
+          "ms": { "type": "integer", "description": "Milliseconds to the first byte at this model's fixed latencies." }
+        }
+      }
+    }
+  },
+  "events": [
+    "URL_TYPED",
+    "HSTS_UPGRADED",
+    "DNS_CACHE_MISS",
+    "DNS_QUERY",
+    "DNS_RESOLVED",
+    "DNS_CACHE_HIT",
+    "TCP_HANDSHAKE",
+    "TCP_REUSED",
+    "TLS_HANDSHAKE",
+    "TLS_ESTABLISHED",
+    "HTTP_REQUEST",
+    "HTTP_RESPONSE",
+    "HTTP_REDIRECT",
+    "HTML_PARSED",
+    "RESOURCE_FETCHED",
+    "RESOURCE_FROM_CACHE",
+    "PAGE_RENDERED",
+    "PAGE_LOAD_AUDIT",
+    "ROUND_TRIPS_COMPARED"
+  ]
+}

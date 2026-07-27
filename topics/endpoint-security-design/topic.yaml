@@ -1,0 +1,211 @@
+id: endpoint-security-design
+title:
+  en: 'Designing a Security Scheme for Your Endpoints'
+  ru: 'Проектирование схемы безопасности эндпоинтов'
+category:
+  en: REST / API Design
+  ru: REST / Проектирование API
+type: HTTP
+mode: trace
+aiProvider: claude
+aiModel: claude-opus-5
+categoryId: rest
+difficulty: 2
+catalogId: rest-7
+summary:
+  en: >
+    A security scheme for endpoints is two things: an ordered rule list that says
+    what each endpoint requires, and a chain of checks every request walks before
+    a handler runs. The chain has a fixed order — TLS, rate limiting, rule
+    matching, authentication ('who are you', answered only by a verified
+    credential), authorization ('may this caller and this token use this
+    endpoint', roles plus scopes), object-level authorization ('may they touch
+    THIS record'), then the handler, with every decision written to an audit log.
+    The design decisions that matter are the default stance (deny, so a forgotten
+    endpoint fails closed), where identity comes from (a verified token, never a
+    header the client can type), and the difference between 401 and 403. The
+    classic failures are an endpoint nobody wrote a rule for, a strict rule
+    shadowed by a broader one above it, a token decoded but never verified, and a
+    role check with no ownership check behind it — the most common API
+    vulnerability there is.
+  ru: >
+    Схема безопасности эндпоинтов — это две вещи: упорядоченный список правил,
+    который говорит, что требуется на каждом эндпоинте, и цепочка проверок,
+    через которую проходит каждый запрос до обработчика. Порядок в цепочке
+    фиксирован: TLS, ограничение частоты, подбор правила, аутентификация («кто
+    ты» — отвечает только проверенный токен), авторизация («можно ли этому
+    вызывающему и этому токену пользоваться эндпоинтом» — роли плюс scope),
+    авторизация на уровне объекта («можно ли ему трогать ЭТУ запись»), затем
+    обработчик, и каждое решение попадает в журнал аудита. Значимые проектные
+    решения — позиция по умолчанию (запрет, чтобы забытый эндпоинт ломался
+    безопасно), источник личности (проверенный токен, а не заголовок, который
+    клиент впишет сам) и разница между 401 и 403. Классические провалы: эндпоинт,
+    про который не написали правила; строгое правило, перекрытое более широким
+    выше; токен, который декодировали, но не проверили; и проверка роли без
+    проверки владельца — самая частая уязвимость API.
+
+# Visual primitives this topic's visualizer composes (frontend).
+primitives:
+  - BoxGroup
+
+defaultExample: authenticate-then-authorize
+
+# Examples shown as buttons. `file` is relative to examples/.
+examples:
+  - id: deny-by-default
+    title:
+      en: 'The endpoint nobody protected'
+      ru: 'Эндпоинт, который никто не защитил'
+    file: 01-deny-by-default.java
+    explanation:
+      en: >
+        The first design decision is what happens to a request no rule mentions.
+        Permit-by-default means the rule list has to enumerate everything that
+        must be protected, including the endpoint that will be added next
+        sprint — so the omission ships silently. Deny-by-default turns the same
+        omission into a broken feature somebody reports the same day.
+      ru: >
+        Первое проектное решение — что происходит с запросом, о котором не
+        сказано ни в одном правиле. «Разрешать по умолчанию» означает, что
+        список правил обязан перечислить всё, что нужно защитить, включая
+        эндпоинт, который добавят в следующем спринте, — и упущение уезжает в
+        прод молча. «Запрещать по умолчанию» превращает то же самое упущение в
+        сломанную функцию, о которой сообщат в тот же день.
+  - id: rules-are-ordered
+    title:
+      en: 'A rule that never fires'
+      ru: 'Правило, которое не срабатывает'
+    file: 02-rules-are-ordered.java
+    explanation:
+      en: >
+        The rule list is read top to bottom and the first match decides, so its
+        order is part of the policy. A broad '/api/**' line placed above
+        '/api/admin/**' makes the stricter rule unreachable: it is still in the
+        file, it still passed review, and it is dead code. Specific patterns
+        first, broad fallbacks last.
+      ru: >
+        Список правил читается сверху вниз, и решает первое совпадение, поэтому
+        его порядок — часть политики. Широкая строка «/api/**» выше
+        «/api/admin/**» делает более строгое правило недостижимым: оно всё ещё в
+        файле, оно прошло ревью — и оно мёртвый код. Сначала конкретные шаблоны,
+        общие запасные варианты — в конце.
+  - id: authenticate-then-authorize
+    title:
+      en: '401 or 403'
+      ru: '401 или 403'
+    file: 03-authenticate-then-authorize.java
+    explanation:
+      en: >
+        Two questions in a fixed order. Authentication answers "who is calling"
+        and can only fail with 401 — the API does not know yet, so the client
+        should come back with a credential. Authorization answers "may this
+        caller do this" and fails with 403 — the API knows exactly who it is and
+        the answer is still no, so retrying is pointless.
+      ru: >
+        Два вопроса в жёстком порядке. Аутентификация отвечает на «кто вызывает»
+        и может провалиться только с кодом 401: API пока не знает, поэтому
+        клиенту стоит вернуться с учётными данными. Авторизация отвечает на
+        «можно ли этому вызывающему это делать» и проваливается с 403: API
+        прекрасно знает, кто это, и всё равно отвечает «нет», поэтому повторять
+        бессмысленно.
+  - id: verify-the-token
+    title:
+      en: 'The token you did not verify'
+      ru: 'Токен, который не проверили'
+    file: 04-verify-the-token.java
+    explanation:
+      en: >
+        A JWT is base64, not encryption: the claims are readable and editable by
+        anyone holding it. Four separate checks make those claims evidence —
+        signature, issuer, audience and expiry — and each of them rejects a token
+        that looks entirely normal. Skip the signature check and the "user id
+        from the token" is just a field the client filled in.
+      ru: >
+        JWT — это base64, а не шифрование: поля читаемы и изменяемы любым, у кого
+        токен в руках. Доказательством эти поля делают четыре отдельные проверки
+        — подпись, издатель, аудитория и срок действия, — и каждая отклоняет
+        токен, который выглядит совершенно обычным. Пропустите проверку подписи —
+        и «идентификатор пользователя из токена» станет просто полем, которое
+        заполнил клиент.
+  - id: scopes-are-not-roles
+    title:
+      en: 'Roles, scopes and methods'
+      ru: 'Роли, scope и методы'
+    file: 05-scopes-are-not-roles.java
+    explanation:
+      en: >
+        A role says what the user may do; a scope says what the bearer of this
+        particular token may do on their behalf. That is how you give a reporting
+        integration read access without giving it the account. Note also that
+        reads and writes on the same path deserve different rules — the method is
+        part of the endpoint.
+      ru: >
+        Роль говорит, что может пользователь; scope говорит, что может
+        предъявитель конкретно этого токена от его имени. Именно так интеграции
+        для отчётов выдают доступ на чтение, не отдавая ей аккаунт. Обратите
+        внимание и на другое: чтение и запись по одному пути заслуживают разных
+        правил — метод является частью эндпоинта.
+  - id: object-level-authorization
+    title:
+      en: 'Whose record is it'
+      ru: 'Чья это запись'
+    file: 06-object-level-authorization.java
+    explanation:
+      en: >
+        "You must be logged in to read an order" protects the endpoint and says
+        nothing about which order. A legitimate user with a legitimate token
+        changes one digit in the URL and reads somebody else's data — no error,
+        no anomaly in the logs, a perfectly successful 200. This is the most
+        common API vulnerability there is, and the fix is a check against the
+        record's owner.
+      ru: >
+        «Чтобы прочитать заказ, нужно войти» защищает эндпоинт и ничего не
+        говорит о том, какой именно заказ. Настоящий пользователь с настоящим
+        токеном меняет одну цифру в URL и читает чужие данные — ни ошибки, ни
+        аномалии в логах, совершенно успешный 200. Это самая частая уязвимость
+        API, и лечится она проверкой владельца записи.
+  - id: never-trust-the-client
+    title:
+      en: 'Headers are not identity'
+      ru: 'Заголовки — не личность'
+    file: 07-never-trust-the-client.java
+    explanation:
+      en: >
+        Anyone can send any header; curl does it in one flag. A service that
+        reads the caller from 'X-User-Id' is safe only while nothing but a
+        trusted gateway can reach it and that gateway strips the header from
+        client requests — two conditions one network change away from being
+        false. Identity has to come from something the caller cannot forge.
+      ru: >
+        Любой может отправить любой заголовок; в curl это один флаг. Сервис,
+        который берёт вызывающего из «X-User-Id», безопасен ровно до тех пор,
+        пока до него не дотянуться никому, кроме доверенного шлюза, и пока шлюз
+        вырезает этот заголовок из клиентских запросов, — два условия, до
+        нарушения которых одно изменение в сети. Личность должна браться из
+        того, что вызывающий подделать не может.
+  - id: transport-limits-and-audit
+    title:
+      en: 'What auth cannot see'
+      ru: 'Чего не видит аутентификация'
+    file: 08-transport-limits-and-audit.java
+    explanation:
+      en: >
+        Three layers that do not care who is calling. TLS comes first, because a
+        credential sent over plain HTTP is compromised whether or not the request
+        is refused. A rate limit bounds password guessing and scraping, where
+        every individual request is valid and only the rate is the attack. And
+        the audit log is how anyone ever finds out.
+      ru: >
+        Три уровня, которым безразлично, кто вызывает. TLS идёт первым, потому
+        что учётные данные, отправленные по обычному HTTP, скомпрометированы вне
+        зависимости от того, отклонили запрос или нет. Ограничение частоты
+        сдерживает подбор паролей и выкачивание данных, где каждый отдельный
+        запрос корректен, а атака — это частота. А журнал аудита — это то, по
+        чему всё вышеперечисленное вообще обнаруживают.
+
+# Example question pre-filled as the Ask AI placeholder.
+assistantExample:
+  en: 'e.g. When do you return 401 and when 403, and why does it matter to the client?'
+  ru: 'например: Когда возвращать 401, а когда 403, и почему это важно клиенту?'
+
+missionsFile: quiz.yaml

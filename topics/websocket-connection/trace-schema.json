@@ -1,0 +1,221 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WebSocket connection trace event state",
+  "description": "Shape of the `state` field for WebSocket trace events: the endpoint and its transport, the handshake header lines, the open connections, the endpoint objects serving them, the frames on the wire and what the run cost.",
+  "type": "object",
+  "required": ["url", "endpointClass", "transport", "handshake", "connections", "instances", "frames", "stats"],
+  "properties": {
+    "url": {
+      "type": "string",
+      "description": "The endpoint URL, ws:// or wss:// (e.g. 'ws://chat.example.com/ws/chat')."
+    },
+    "model": {
+      "type": ["string", "null"],
+      "enum": ["PER_CONNECTION", "SHARED", null],
+      "description": "Technical code for how the container decides which object handles a connection; null on the comparison event."
+    },
+    "endpointClass": {
+      "type": "string",
+      "description": "The endpoint / handler class name, as the example named it."
+    },
+    "allowedOrigin": {
+      "type": ["string", "null"],
+      "description": "The Origin the handshake is restricted to, or null when the server checks nothing."
+    },
+    "transport": {
+      "type": "object",
+      "description": "What the frames actually travel on.",
+      "required": ["protocol", "port", "tls", "sockets"],
+      "properties": {
+        "protocol": { "type": "string", "description": "Always TCP — a WebSocket has no UDP mode." },
+        "port": { "type": "integer", "description": "80 for ws://, 443 for wss://." },
+        "tls": { "type": "boolean", "description": "True when TLS sits between TCP and the frames." },
+        "sockets": { "type": "integer", "description": "TCP connections currently open." }
+      }
+    },
+    "handshake": {
+      "type": "object",
+      "description": "The last upgrade attempt, as header lines.",
+      "required": ["request", "response"],
+      "properties": {
+        "client": { "type": ["string", "null"], "description": "Which tab attempted it." },
+        "request": {
+          "type": "array",
+          "description": "The HTTP GET the browser sent, line by line.",
+          "items": { "type": "string" }
+        },
+        "response": {
+          "type": "array",
+          "description": "What the server answered: 101 Switching Protocols, or an ordinary error.",
+          "items": { "type": "string" }
+        },
+        "accepted": {
+          "type": ["boolean", "null"],
+          "description": "True after a 101, false after a refusal, null while the request is in flight."
+        }
+      }
+    },
+    "connections": {
+      "type": "array",
+      "description": "One entry per browser tab that has attempted a handshake.",
+      "items": {
+        "type": "object",
+        "required": ["id", "phase", "sent", "received", "session"],
+        "properties": {
+          "id": { "type": "string", "description": "The tab's name." },
+          "phase": {
+            "type": "string",
+            "enum": ["HTTP", "OPEN", "CLOSED"],
+            "description": "HTTP while still handshaking, OPEN once upgraded, CLOSED afterwards."
+          },
+          "instance": {
+            "type": ["string", "null"],
+            "description": "The endpoint object serving this connection."
+          },
+          "sent": { "type": "integer", "description": "Frames this client wrote." },
+          "received": { "type": "integer", "description": "Frames written to this client." },
+          "closeCode": {
+            "type": ["integer", "null"],
+            "description": "The close status: 1000 normal, 1001 going away, 1006 abnormal (never on the wire)."
+          },
+          "session": {
+            "type": "array",
+            "description": "Session-scoped state — getUserProperties() / getAttributes().",
+            "items": {
+              "type": "object",
+              "required": ["key", "value"],
+              "properties": {
+                "key": { "type": "string" },
+                "value": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "instances": {
+      "type": "array",
+      "description": "The endpoint objects the container created: one per connection, or one for all of them.",
+      "items": {
+        "type": "object",
+        "required": ["name", "alive", "serves", "fields"],
+        "properties": {
+          "name": { "type": "string", "description": "e.g. 'ChatEndpoint#1' or 'ChatHandler@singleton'." },
+          "alive": { "type": "boolean", "description": "False once its connection closed and it became garbage." },
+          "serves": {
+            "type": "array",
+            "description": "The connections currently handled by this object.",
+            "items": { "type": "string" }
+          },
+          "fields": {
+            "type": "array",
+            "description": "Instance fields written by handler code, and who wrote each one.",
+            "items": {
+              "type": "object",
+              "required": ["name", "value", "owner"],
+              "properties": {
+                "name": { "type": "string" },
+                "value": { "type": "string" },
+                "owner": {
+                  "type": "string",
+                  "description": "The connection whose message wrote this value — the tell for a shared object."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "frames": {
+      "type": "array",
+      "description": "Every frame written since the upgrade, in order.",
+      "items": {
+        "type": "object",
+        "required": ["seq", "dir", "opcode", "client", "payload", "masked", "bytes"],
+        "properties": {
+          "seq": { "type": "integer", "description": "Position on the wire." },
+          "dir": {
+            "type": "string",
+            "enum": ["IN", "OUT"],
+            "description": "IN is client to server, OUT is server to client."
+          },
+          "opcode": {
+            "type": "string",
+            "enum": ["TEXT", "BINARY", "PING", "PONG", "CLOSE"],
+            "description": "The frame opcode: TEXT 0x1, BINARY 0x2, CLOSE 0x8, PING 0x9, PONG 0xA."
+          },
+          "client": { "type": "string", "description": "Which connection it belongs to." },
+          "payload": { "type": "string", "description": "What it carried, in the example's own words." },
+          "masked": {
+            "type": "boolean",
+            "description": "True on client-to-server frames, which RFC 6455 requires to be masked."
+          },
+          "bytes": { "type": "integer", "description": "Header plus masking key plus payload." }
+        }
+      }
+    },
+    "stats": {
+      "type": "object",
+      "description": "Running totals for the whole run.",
+      "required": ["handshakes", "rejected", "open", "instances", "framesIn", "framesOut", "bytes", "clashes", "leaks", "lost", "closed", "dropped"],
+      "properties": {
+        "handshakes": { "type": "integer", "description": "Upgrades that reached 101." },
+        "rejected": { "type": "integer", "description": "Handshakes refused with an ordinary HTTP error." },
+        "open": { "type": "integer", "description": "Sockets still open." },
+        "instances": { "type": "integer", "description": "Endpoint objects the container created." },
+        "framesIn": { "type": "integer", "description": "Frames written by clients." },
+        "framesOut": { "type": "integer", "description": "Frames written by the server." },
+        "bytes": { "type": "integer", "description": "Total framed bytes in both directions." },
+        "clashes": { "type": "integer", "description": "Writes that overwrote another connection's value on a shared object." },
+        "leaks": { "type": "integer", "description": "Reads that returned another connection's value." },
+        "lost": { "type": "integer", "description": "Frames written into a socket that was no longer open." },
+        "closed": { "type": "integer", "description": "Connections ended by a close handshake." },
+        "dropped": { "type": "integer", "description": "Connections that died without a CLOSE frame (1006)." }
+      }
+    },
+    "comparison": {
+      "type": "array",
+      "description": "Only on INSTANCING_COMPARED: three connections priced through each instancing choice.",
+      "items": {
+        "type": "object",
+        "required": ["model", "instances", "fieldPerConnection", "needsSync", "injection", "stateLives"],
+        "properties": {
+          "model": { "enum": ["JSR356_ENDPOINT", "JSR356_SINGLETON", "SPRING_HANDLER"] },
+          "instances": { "type": "integer", "description": "Endpoint objects created for three connections." },
+          "fieldPerConnection": { "type": "boolean", "description": "Whether an instance field belongs to one client." },
+          "needsSync": { "type": "boolean", "description": "Whether mutable state inside the object must be thread-safe." },
+          "injection": { "type": "boolean", "description": "Whether container-managed dependencies are injected." },
+          "stateLives": {
+            "enum": ["FIELD", "SESSION"],
+            "description": "Where per-connection state may safely be kept in this model."
+          }
+        }
+      }
+    }
+  },
+  "events": [
+    "SERVER_READY",
+    "TLS_ENABLED",
+    "ORIGIN_CHECK_ON",
+    "HANDSHAKE_REQUEST",
+    "HANDSHAKE_ACCEPTED",
+    "HANDSHAKE_REJECTED",
+    "ENDPOINT_INSTANTIATED",
+    "ENDPOINT_SHARED",
+    "FRAME_FROM_CLIENT",
+    "FRAME_FROM_SERVER",
+    "BROADCAST",
+    "PING_PONG",
+    "FRAME_LOST",
+    "FIELD_WRITTEN",
+    "STATE_CLASHED",
+    "FIELD_READ",
+    "STATE_LEAKED",
+    "SESSION_STATE_STORED",
+    "CLOSE_HANDSHAKE",
+    "CONNECTION_DROPPED",
+    "TRANSPORT_EXPLAINED",
+    "WEBSOCKET_AUDIT",
+    "INSTANCING_COMPARED"
+  ]
+}

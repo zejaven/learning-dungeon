@@ -1,0 +1,165 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Long polling trace event state",
+  "description": "Shape of the `state` field for long-polling trace events: one endpoint, the requests it has not answered yet, the server's event log and what the run cost.",
+  "type": "object",
+  "required": ["endpoint", "now", "pool", "inflight", "log", "clients", "timeline", "stats"],
+  "properties": {
+    "endpoint": {
+      "type": "string",
+      "description": "The endpoint being served, as the example named it (e.g. 'GET /api/messages')."
+    },
+    "style": {
+      "type": ["string", "null"],
+      "enum": ["IMMEDIATE", "HELD_BLOCKING", "HELD_ASYNC", null],
+      "description": "Technical code for how the handler decides when to write the response; null on the comparison event."
+    },
+    "now": {
+      "type": "integer",
+      "description": "The current tick. Time is discrete so a run is fully deterministic."
+    },
+    "holdTicks": {
+      "type": ["integer", "null"],
+      "description": "Held styles only: how many ticks a request may stay parked before the server answers empty."
+    },
+    "cursor": {
+      "type": "boolean",
+      "description": "Whether the client sends a `since` cursor, i.e. whether it can ask for what it missed."
+    },
+    "pool": {
+      "type": "object",
+      "description": "The container's worker threads for this endpoint.",
+      "required": ["size", "busy", "parked"],
+      "properties": {
+        "size": { "type": "integer", "description": "How many worker threads exist." },
+        "busy": { "type": "integer", "description": "Workers currently held inside a blocking handler." },
+        "parked": { "type": "integer", "description": "Requests accepted and not answered yet." }
+      }
+    },
+    "inflight": {
+      "type": "array",
+      "description": "Requests the server has accepted and deliberately not answered.",
+      "items": {
+        "type": "object",
+        "required": ["client", "openedAt", "waited", "since", "holdsWorker"],
+        "properties": {
+          "client": { "type": "string", "description": "Which tab sent it." },
+          "openedAt": { "type": "integer", "description": "The tick it arrived at." },
+          "waited": { "type": "integer", "description": "Ticks it has been parked so far." },
+          "since": { "type": "integer", "description": "The cursor it was opened with." },
+          "holdsWorker": {
+            "type": "boolean",
+            "description": "True when a worker thread is still blocked inside the handler."
+          }
+        }
+      }
+    },
+    "log": {
+      "type": "array",
+      "description": "The server's append-only event log: what happened, and whether it reached anyone.",
+      "items": {
+        "type": "object",
+        "required": ["seq", "label", "createdAt", "deliveries", "missed"],
+        "properties": {
+          "seq": { "type": "integer", "description": "Sequence number — what a cursor points at." },
+          "label": { "type": "string", "description": "What happened, in the example's own words." },
+          "createdAt": { "type": "integer", "description": "The tick it happened at." },
+          "deliveries": { "type": "integer", "description": "How many clients it has been written to." },
+          "missed": {
+            "type": "boolean",
+            "description": "True when it fell into the gap between two polls and can never be asked for."
+          }
+        }
+      }
+    },
+    "clients": {
+      "type": "array",
+      "description": "The tabs talking to this endpoint and how far each one has read.",
+      "items": {
+        "type": "object",
+        "required": ["name", "cursor", "received"],
+        "properties": {
+          "name": { "type": "string" },
+          "cursor": { "type": "integer", "description": "The highest seq this client has been given." },
+          "received": { "type": "integer", "description": "How many events reached it." },
+          "lastLatency": {
+            "type": ["integer", "null"],
+            "description": "Ticks between an event and its delivery, for the last response."
+          }
+        }
+      }
+    },
+    "timeline": {
+      "type": "array",
+      "description": "One cell per elapsed tick, so the cost of a style is visible at a glance.",
+      "items": {
+        "type": "object",
+        "required": ["tick", "request", "empty", "delivery", "serverEvent", "parked", "busy"],
+        "properties": {
+          "tick": { "type": "integer" },
+          "request": { "type": "boolean", "description": "A request arrived in this tick." },
+          "empty": { "type": "boolean", "description": "A response came back with nothing." },
+          "delivery": { "type": "boolean", "description": "Something reached a client in this tick." },
+          "serverEvent": { "type": "boolean", "description": "Something happened on the server." },
+          "parked": { "type": "boolean", "description": "A request was being held open during this tick." },
+          "busy": { "type": "integer", "description": "Worker threads blocked inside a handler in this tick." }
+        }
+      }
+    },
+    "stats": {
+      "type": "object",
+      "description": "Running totals for the whole run — the bill for this style.",
+      "required": ["requests", "empty", "delivered", "missed", "refused", "avgLatency", "maxLatency", "peakParked", "workerTicks"],
+      "properties": {
+        "requests": { "type": "integer", "description": "Requests the clients sent." },
+        "empty": { "type": "integer", "description": "Responses that carried no events." },
+        "delivered": { "type": "integer", "description": "Events that reached a client." },
+        "missed": { "type": "integer", "description": "Events that fell into a gap and never will." },
+        "refused": { "type": "integer", "description": "Requests that found no free worker thread." },
+        "avgLatency": { "type": "number", "description": "Average ticks between an event and its delivery." },
+        "maxLatency": { "type": "integer", "description": "Worst delay observed." },
+        "peakParked": { "type": "integer", "description": "Most requests held open at the same time." },
+        "workerTicks": {
+          "type": "integer",
+          "description": "Worker-ticks spent: one per handler invocation plus one per tick a handler stayed blocked."
+        }
+      }
+    },
+    "comparison": {
+      "type": "array",
+      "description": "Only on STYLES_COMPARED: the same timeline priced by each style.",
+      "items": {
+        "type": "object",
+        "required": ["style", "requests", "empty", "delivered", "avgLatency", "maxLatency", "workerTicks", "parkedPeak"],
+        "properties": {
+          "style": { "enum": ["IMMEDIATE", "HELD_BLOCKING", "HELD_ASYNC"] },
+          "requests": { "type": "integer" },
+          "empty": { "type": "integer" },
+          "delivered": { "type": "integer" },
+          "avgLatency": { "type": "number" },
+          "maxLatency": { "type": "integer" },
+          "workerTicks": { "type": "integer" },
+          "parkedPeak": { "type": "integer" }
+        }
+      }
+    }
+  },
+  "events": [
+    "ENDPOINT_OPENED",
+    "CURSOR_DROPPED",
+    "REQUEST_ARRIVED",
+    "ANSWERED_EMPTY",
+    "ANSWERED_NOW",
+    "REQUEST_PARKED",
+    "WORKER_RELEASED",
+    "POOL_EXHAUSTED",
+    "POLL_CATCHES_UP",
+    "PARKED_COMPLETED",
+    "HOLD_EXPIRED",
+    "SERVER_EVENT",
+    "NO_ONE_LISTENING",
+    "EVENT_MISSED",
+    "ENDPOINT_AUDIT",
+    "STYLES_COMPARED"
+  ]
+}

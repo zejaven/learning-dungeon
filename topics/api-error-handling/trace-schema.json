@@ -1,0 +1,179 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "API error contract trace event state",
+  "description": "Shape of the `state` field for api-error-handling trace events: the error-code catalog of one API plus the failing request currently going through it.",
+  "type": "object",
+  "required": ["api", "namespace", "codes", "codeCount", "issues", "unmapped"],
+  "properties": {
+    "api": {
+      "type": "string",
+      "description": "Name of the API whose error contract is being designed, e.g. employee-api."
+    },
+    "namespace": {
+      "type": "string",
+      "description": "The domain prefix every code of this API is expected to carry, e.g. employee."
+    },
+    "codes": {
+      "type": "array",
+      "description": "The declared error catalog, one entry per code, in declaration order.",
+      "items": {
+        "type": "object",
+        "required": ["code", "exception", "status", "statusLine", "retryable", "issues", "current"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "The stable machine-readable identifier clients branch on; also used in highlight tokens."
+          },
+          "exception": {
+            "type": "string",
+            "description": "Name of the domain exception the advice maps onto this code."
+          },
+          "status": {
+            "type": "integer",
+            "description": "The HTTP status code that carries this error."
+          },
+          "statusLine": {
+            "type": "string",
+            "description": "The same code as an HTTP status line, e.g. '404 Not Found'."
+          },
+          "retryable": {
+            "type": "boolean",
+            "description": "Whether repeating the identical request can succeed later."
+          },
+          "issues": {
+            "type": "array",
+            "description": "Contract findings for this code; the technical code only, the reason is in the event description.",
+            "items": {
+              "enum": [
+                "prose-code",
+                "unnamespaced-code",
+                "success-status",
+                "retry-mismatch"
+              ]
+            }
+          },
+          "current": {
+            "type": "boolean",
+            "description": "Whether the request being processed was answered with this code."
+          }
+        }
+      }
+    },
+    "request": {
+      "type": "object",
+      "description": "The request going through the API (absent while the catalog is only being declared).",
+      "required": ["method", "path", "status", "stages", "body"],
+      "properties": {
+        "method": {
+          "type": "string",
+          "description": "The HTTP method the client sent, untranslated."
+        },
+        "path": {
+          "type": "string",
+          "description": "The path the client asked for."
+        },
+        "status": {
+          "type": "string",
+          "description": "HTTP status line ('404 Not Found'), or 'pending' while the request is still running."
+        },
+        "code": {
+          "type": ["string", "null"],
+          "description": "The error code this request was answered with, or null when it did not fail."
+        },
+        "traceId": {
+          "type": ["string", "null"],
+          "description": "Correlation id put in both the response body and the log line; derived deterministically."
+        },
+        "stages": {
+          "type": "array",
+          "description": "The five stages of a failing request, always in order: call, throw, map, respond, log.",
+          "items": {
+            "type": "object",
+            "required": ["name", "state", "detail"],
+            "properties": {
+              "name": {
+                "enum": ["call", "throw", "map", "respond", "log"],
+                "description": "Technical stage code, translated by the visualizer."
+              },
+              "state": {
+                "enum": ["pending", "active", "done", "failed", "skipped"],
+                "description": "How far this stage got for the current request."
+              },
+              "detail": {
+                "type": "string",
+                "description": "What happened in the stage: the exception, the mapping, the body shape, the log level."
+              }
+            }
+          }
+        },
+        "body": {
+          "type": "array",
+          "description": "The response body as ordered field/value pairs, exactly as the client receives it.",
+          "items": {
+            "type": "object",
+            "required": ["name", "value", "leaked"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Body field name, e.g. code, traceId, errors[0]."
+              },
+              "value": {
+                "type": "string",
+                "description": "The value the client receives for that field."
+              },
+              "leaked": {
+                "type": "boolean",
+                "description": "Whether this field ships an internal detail that must not cross the boundary."
+              }
+            }
+          }
+        },
+        "log": {
+          "type": "object",
+          "description": "The log line written for this failure; absent when nothing was logged.",
+          "required": ["level", "line"],
+          "properties": {
+            "level": {
+              "enum": ["ERROR", "DEBUG"],
+              "description": "Log level: ERROR for a 5xx (with the stack), DEBUG for a 4xx."
+            },
+            "line": {
+              "type": "string",
+              "description": "The line itself, carrying the same traceId the client was given."
+            }
+          }
+        }
+      }
+    },
+    "codeCount": {
+      "type": "integer",
+      "description": "How many error codes the catalog declares."
+    },
+    "issues": {
+      "type": "integer",
+      "description": "Total number of contract findings across all codes."
+    },
+    "unmapped": {
+      "type": "array",
+      "description": "Exception types that reached the catch-all because no code claims them.",
+      "items": { "type": "string" }
+    }
+  },
+  "events": [
+    "CONTRACT_READY",
+    "CODE_DEFINED",
+    "CODE_UNSTABLE",
+    "STATUS_MISUSED",
+    "RETRY_ADVICE_WRONG",
+    "REQUEST_OK",
+    "EXCEPTION_THROWN",
+    "EXCEPTION_MAPPED",
+    "UNMAPPED_EXCEPTION",
+    "VALIDATION_REJECTED",
+    "ERROR_RESPONSE",
+    "ERROR_LOGGED",
+    "INTERNALS_LEAKED",
+    "ERROR_SWALLOWED",
+    "CONTRACT_REVIEW"
+  ]
+}

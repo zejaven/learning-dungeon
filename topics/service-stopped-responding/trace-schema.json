@@ -1,0 +1,226 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Unresponsive-service triage trace event state",
+  "description": "Shape of the `state` field for service-stopped-responding trace events: one outage where a live service stops answering — the outside-in probes and the failure mode they classify, the evidence a restart would have destroyed, the thread dump grouped by top frame, the bounded pools, the saturation arithmetic, and the stopwatch.",
+  "type": "object",
+  "required": ["service", "symptom", "stage", "failureMode", "minutes", "processRestarted", "probes", "evidence", "threads", "threadTotal", "pools", "resources", "rootCause", "causeEvidence", "verified", "guards", "missteps"],
+  "properties": {
+    "service": {
+      "type": "string",
+      "description": "The service that stopped responding, e.g. payments-api."
+    },
+    "symptom": {
+      "type": "string",
+      "description": "The symptom as it was reported or alerted, before any of it is a measurement."
+    },
+    "stage": {
+      "enum": ["alarm", "probing", "classified", "evidence", "diagnosing", "diagnosed", "restored", "fixed", "recovered", "still-down"],
+      "description": "Technical lifecycle state of the triage, translated by the visualizer."
+    },
+    "failureMode": {
+      "enum": ["unknown", "not-listening", "accepting-but-silent", "healthy-but-hanging", "slow-not-hung", "partly-down", "answers-for-me", "unclear"],
+      "description": "Which kind of 'not responding' this is; derived from the probes by classify(). 'unknown' until classified."
+    },
+    "minutes": {
+      "type": "integer",
+      "description": "Minutes charged since the alarm; every action has a fixed deterministic cost."
+    },
+    "processRestarted": {
+      "type": "boolean",
+      "description": "True once the hung process has been replaced; after that no artifact can be captured from it."
+    },
+    "probes": {
+      "type": "array",
+      "description": "The outside-in probes, ordered by layer rather than by when they were run.",
+      "items": {
+        "type": "object",
+        "required": ["layer", "command", "outcome", "detail"],
+        "properties": {
+          "layer": {
+            "enum": ["instances", "dns", "tcp", "health", "endpoint", "inside"],
+            "description": "Which layer was probed, outermost first; 'inside' is the same call from inside the container against localhost."
+          },
+          "command": {
+            "type": "string",
+            "description": "The exact command that was run, e.g. 'nc -vz payments-api.internal 8080'."
+          },
+          "outcome": {
+            "enum": ["ok", "refused", "timeout", "slow", "error", "partial"],
+            "description": "What the layer answered; 'partial' means some instances answer and some do not."
+          },
+          "detail": {
+            "type": "string",
+            "description": "The exact answer, e.g. 'Connection refused' or '200 UP in 4ms'."
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "description": "Artifacts that only exist while the process is still hung, in the order they were taken.",
+      "items": {
+        "type": "object",
+        "required": ["artifact", "how", "lost"],
+        "properties": {
+          "artifact": { "type": "string", "description": "What was captured, e.g. '3 thread dumps, 5 seconds apart'." },
+          "how": { "type": "string", "description": "The command that produced it." },
+          "lost": { "type": "boolean", "description": "True when the capture was attempted after the process had already been replaced." }
+        }
+      }
+    },
+    "threads": {
+      "type": "array",
+      "description": "The thread dump collapsed into groups by top frame — the way a dump is actually read.",
+      "items": {
+        "type": "object",
+        "required": ["group", "count", "state", "frame", "share"],
+        "properties": {
+          "group": { "type": "string", "description": "The thread-name prefix, e.g. 'http-nio-8080-exec'." },
+          "count": { "type": "integer", "description": "How many threads share this top frame." },
+          "state": {
+            "enum": ["RUNNABLE", "BLOCKED", "WAITING", "TIMED_WAITING", "NEW", "TERMINATED"],
+            "description": "The java.lang.Thread.State reported for the group."
+          },
+          "frame": { "type": "string", "description": "The top frame the group is parked at, plus what it is waiting for." },
+          "share": { "type": "integer", "description": "Percentage of all dumped threads recorded so far; the biggest share is the outage." }
+        }
+      }
+    },
+    "threadTotal": {
+      "type": "integer",
+      "description": "Total threads across all recorded groups."
+    },
+    "pools": {
+      "type": "array",
+      "description": "Bounded things a request queues for, in the order they were read.",
+      "items": {
+        "type": "object",
+        "required": ["name", "inUse", "max", "queued", "saturated"],
+        "properties": {
+          "name": { "type": "string", "description": "The pool, e.g. 'the Tomcat worker pool'." },
+          "inUse": { "type": "integer", "description": "Slots currently borrowed." },
+          "max": { "type": "integer", "description": "The ceiling." },
+          "queued": { "type": "integer", "description": "Requests waiting for a slot; 100% used with nobody waiting is a well-sized pool." },
+          "saturated": { "type": "boolean", "description": "True when inUse has reached max." }
+        }
+      }
+    },
+    "gc": {
+      "type": "object",
+      "description": "The garbage collector reading; absent until it is read.",
+      "required": ["pausePercent", "heapAfterGcPercent", "thrashing"],
+      "properties": {
+        "pausePercent": { "type": "integer", "description": "Share of wall clock spent in GC pauses." },
+        "heapAfterGcPercent": { "type": "integer", "description": "How full the heap still is immediately after a full collection — the number that matters." },
+        "thrashing": { "type": "boolean", "description": "True when pauses dominate and the heap stays full: alive, busy, answering nobody." }
+      }
+    },
+    "resources": {
+      "type": "array",
+      "description": "Readings below the application — CPU quota, descriptors, disk, node — which never appear in a stack trace.",
+      "items": {
+        "type": "object",
+        "required": ["name", "value", "alarming"],
+        "properties": {
+          "name": { "type": "string", "description": "What was read, e.g. 'open file descriptors'." },
+          "value": { "type": "string", "description": "The reading itself." },
+          "alarming": { "type": "boolean", "description": "Whether the reading is a suspect." }
+        }
+      }
+    },
+    "deadlock": {
+      "type": "object",
+      "description": "The JVM's own deadlock verdict; absent unless the dump printed one.",
+      "required": ["threadA", "threadB", "monitors"],
+      "properties": {
+        "threadA": { "type": "string", "description": "One side of the cycle." },
+        "threadB": { "type": "string", "description": "The other side." },
+        "monitors": { "type": "string", "description": "The monitors each holds and needs." }
+      }
+    },
+    "capacity": {
+      "type": "object",
+      "description": "Little's law applied to the worker pool; absent until computed.",
+      "required": ["threads", "serviceMillis", "arrivalPerSecond", "capacityPerSecond", "deficitPerSecond", "exhaustMillis", "overloaded"],
+      "properties": {
+        "threads": { "type": "integer", "description": "Workers in the pool." },
+        "serviceMillis": { "type": "integer", "description": "How long one request occupies a worker." },
+        "arrivalPerSecond": { "type": "integer", "description": "Requests arriving per second." },
+        "capacityPerSecond": { "type": "integer", "description": "threads / service time — what the pool can actually complete per second." },
+        "deficitPerSecond": { "type": "integer", "description": "Arrival minus capacity: how fast the queue grows." },
+        "exhaustMillis": { "type": "integer", "description": "How long it takes arriving traffic to occupy every worker." },
+        "overloaded": { "type": "boolean", "description": "True when arrivals exceed capacity, so the queue grows without bound." }
+      }
+    },
+    "mitigation": {
+      "type": "object",
+      "description": "The action that restored service; absent while users are still down.",
+      "required": ["action", "effect"],
+      "properties": {
+        "action": { "type": "string", "description": "The reversible action taken, e.g. a rollback or a feature flag." },
+        "effect": { "type": "string", "description": "What it did for traffic — and what it cost in evidence." }
+      }
+    },
+    "rootCause": {
+      "type": ["string", "null"],
+      "description": "The confirmed cause, or null while nothing explains both the symptom and the timing."
+    },
+    "causeEvidence": {
+      "type": ["string", "null"],
+      "description": "The reading that made the cause more than a story."
+    },
+    "fix": {
+      "type": "object",
+      "description": "The change that was shipped; absent while nothing has been changed.",
+      "required": ["change", "blind"],
+      "properties": {
+        "change": { "type": "string", "description": "What was shipped." },
+        "blind": { "type": "boolean", "description": "True when it shipped with no confirmed cause — usually disguised as raising a limit." }
+      }
+    },
+    "verified": {
+      "type": ["boolean", "null"],
+      "description": "Whether the re-run of the failing check passed; null until it is run."
+    },
+    "guards": {
+      "type": "array",
+      "description": "The alerts, timeouts, probes and scripts left behind — the only permanent output of an outage.",
+      "items": { "type": "string" }
+    },
+    "missteps": {
+      "type": "array",
+      "description": "Triage errors recorded as consequences of the order actions were taken in.",
+      "items": {
+        "enum": [
+          "restarted-blind",
+          "evidence-lost",
+          "left-users-down",
+          "fixed-without-a-cause",
+          "fix-did-not-work"
+        ]
+      }
+    }
+  },
+  "events": [
+    "SERVICE_UNRESPONSIVE",
+    "LAYER_PROBED",
+    "FAILURE_CLASSIFIED",
+    "RESTARTED_BLIND",
+    "EVIDENCE_CAPTURED",
+    "EVIDENCE_LOST",
+    "THREADS_READ",
+    "DEADLOCK_FOUND",
+    "POOL_READ",
+    "GC_READ",
+    "RESOURCE_READ",
+    "SATURATION_COMPUTED",
+    "SERVICE_RESTORED",
+    "ROOT_CAUSE_CONFIRMED",
+    "BLIND_FIX",
+    "FIX_APPLIED",
+    "STILL_DOWN",
+    "RECOVERY_VERIFIED",
+    "GUARD_ADDED",
+    "INCIDENT_REVIEW"
+  ]
+}

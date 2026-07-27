@@ -1,0 +1,256 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "OAuth 2.0 / OpenID Connect trace event state",
+  "description": "Shape of the `state` field for oauth-openid-connect trace events.",
+  "type": "object",
+  "required": ["protocol", "clientType", "pkce", "stateCheck", "clock", "accessLifetime", "parties", "message", "steps", "scopes", "identity", "outcome", "stats"],
+  "properties": {
+    "protocol": {
+      "enum": ["oauth2", "oidc"],
+      "description": "Plain OAuth 2.0 (delegated authorization) or OpenID Connect (identity on top)."
+    },
+    "clientType": {
+      "enum": ["confidential", "public"],
+      "description": "Whether the client has a server to keep a client_secret on."
+    },
+    "pkce": {
+      "type": "boolean",
+      "description": "Whether the code is bound to its requester with a code_verifier / code_challenge pair."
+    },
+    "stateCheck": {
+      "type": "boolean",
+      "description": "Whether the client sends and verifies a `state` parameter."
+    },
+    "clock": {
+      "type": "integer",
+      "description": "Model time in minutes since the run started."
+    },
+    "accessLifetime": {
+      "type": "integer",
+      "description": "How long an issued access token stays valid, in minutes."
+    },
+    "parties": {
+      "type": "array",
+      "description": "The parties of the protocol and what each of them is holding right now.",
+      "items": {
+        "type": "object",
+        "required": ["id", "role", "label", "holdings"],
+        "properties": {
+          "id": {
+            "enum": ["user", "client", "provider", "api", "attacker"],
+            "description": "Party id, used by highlight tokens as party:<id>."
+          },
+          "role": {
+            "enum": ["resource-owner", "client", "authorization-server", "resource-server", "attacker"],
+            "description": "The role this party plays in the protocol."
+          },
+          "label": {
+            "type": "string",
+            "description": "Human-readable name: a user, a client_id or a host."
+          },
+          "holdings": {
+            "type": "array",
+            "description": "What this party currently knows or holds.",
+            "items": {
+              "type": "object",
+              "required": ["name", "value", "kind"],
+              "properties": {
+                "name": { "type": "string" },
+                "value": { "type": "string" },
+                "kind": {
+                  "enum": ["secret", "token", "code", "param", "key", "identity"],
+                  "description": "What sort of artifact it is; secrets must never reach the front channel."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "message": {
+      "type": "object",
+      "description": "The message the current step sends, and the channel it travels on.",
+      "required": ["from", "to", "channel", "label", "params"],
+      "properties": {
+        "from": {
+          "type": "string",
+          "description": "Party id the message leaves; empty when nothing is being sent."
+        },
+        "to": {
+          "type": "string",
+          "description": "Party id the message arrives at; empty when nothing is being sent."
+        },
+        "channel": {
+          "enum": ["front", "back", "none"],
+          "description": "front = a browser redirect anyone can read; back = direct server-to-server; none = local work."
+        },
+        "label": {
+          "type": "string",
+          "description": "The request line or the action, e.g. 'POST https://accounts.provider.com/token'."
+        },
+        "params": {
+          "type": "array",
+          "description": "The parameters carried by this message.",
+          "items": {
+            "type": "object",
+            "required": ["name", "value"],
+            "properties": {
+              "name": { "type": "string" },
+              "value": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "description": "The stages of the authorization code flow, in order, with how far this run has got.",
+      "items": {
+        "type": "object",
+        "required": ["id", "status", "detail"],
+        "properties": {
+          "id": {
+            "enum": ["authorize", "authenticate", "consent", "code", "exchange", "call"],
+            "description": "Which stage this is."
+          },
+          "status": {
+            "enum": ["pending", "passed", "partial", "denied", "skipped", "breach"],
+            "description": "pending = not reached; skipped = this grant does not have it; breach = it let through what it should have stopped."
+          },
+          "detail": {
+            "type": "string",
+            "description": "Bare token behind the verdict: a scope list, a code, a token id or a reason."
+          }
+        }
+      }
+    },
+    "scopes": {
+      "type": "array",
+      "description": "The scopes this flow asked for, and whether the user granted each.",
+      "items": {
+        "type": "object",
+        "required": ["name", "granted"],
+        "properties": {
+          "name": { "type": "string" },
+          "granted": { "type": "boolean" }
+        }
+      }
+    },
+    "identity": {
+      "type": ["object", "null"],
+      "description": "Who the client believes the user is; null while it has no basis for an opinion.",
+      "required": ["subject", "source", "verified"],
+      "properties": {
+        "subject": { "type": "string" },
+        "source": {
+          "enum": ["id_token", "access_token"],
+          "description": "What the client read the identity from; access_token is always the mistake."
+        },
+        "verified": {
+          "type": "boolean",
+          "description": "Whether signature, issuer, audience, expiry and nonce were actually checked."
+        }
+      }
+    },
+    "outcome": {
+      "type": "object",
+      "description": "How the current step ended.",
+      "required": ["decision"],
+      "properties": {
+        "status": {
+          "type": ["integer", "null"],
+          "description": "HTTP status of this step; null while it is local or still running."
+        },
+        "decision": {
+          "enum": ["idle", "pending", "allowed", "denied", "risky", "breach"],
+          "description": "risky = it worked and you should not build it; breach = it worked and should not have."
+        },
+        "reason": {
+          "type": ["string", "null"],
+          "enum": [
+            "consent-denied",
+            "state-mismatch",
+            "code-injected",
+            "code-reused",
+            "code-expired",
+            "code-stolen",
+            "pkce-blocked",
+            "client-auth-blocked",
+            "stolen-code-redeemed",
+            "no-id-token",
+            "token-not-identity",
+            "no-token",
+            "expired",
+            "insufficient-scope",
+            "no-refresh-token",
+            "refresh-expired",
+            "password-seen-by-client",
+            "token-in-url",
+            null
+          ],
+          "description": "Technical code for the refusal, the risk or the breach; null when nothing went wrong."
+        },
+        "detail": {
+          "type": "string",
+          "description": "The offending code, token, scope or user; empty when not applicable."
+        }
+      }
+    },
+    "stats": {
+      "type": "object",
+      "description": "Running totals across the whole run.",
+      "required": ["tokensIssued", "apiServed", "apiRefused", "warnings", "breaches"],
+      "properties": {
+        "tokensIssued": { "type": "integer" },
+        "apiServed": {
+          "type": "integer",
+          "description": "API calls the resource server answered."
+        },
+        "apiRefused": {
+          "type": "integer",
+          "description": "API calls refused for a missing, expired or under-scoped token."
+        },
+        "warnings": {
+          "type": "integer",
+          "description": "Moves that worked and should not be built that way."
+        },
+        "breaches": {
+          "type": "integer",
+          "description": "Things that worked and should not have."
+        }
+      }
+    }
+  },
+  "events": [
+    "OAUTH_SETUP",
+    "AUTHORIZATION_REQUEST",
+    "USER_AUTHENTICATED_AT_PROVIDER",
+    "CONSENT_GRANTED",
+    "CONSENT_DENIED",
+    "AUTHORIZATION_CODE_RETURNED",
+    "STATE_VERIFIED",
+    "STATE_MISMATCH_BLOCKED",
+    "CODE_INJECTION_ATTEMPT",
+    "CODE_INJECTION_ACCEPTED",
+    "TOKEN_REQUEST",
+    "TOKENS_ISSUED",
+    "AUTHORIZATION_CODE_REJECTED",
+    "ID_TOKEN_VERIFIED",
+    "ID_TOKEN_MISSING",
+    "API_CALL_SERVED",
+    "API_CALL_REFUSED",
+    "SCOPE_INSUFFICIENT",
+    "ACCESS_TOKEN_EXPIRED",
+    "TOKENS_REFRESHED",
+    "REFRESH_UNAVAILABLE",
+    "AUTHORIZATION_CODE_STOLEN",
+    "STOLEN_CODE_BLOCKED",
+    "STOLEN_CODE_REDEEMED",
+    "ACCESS_TOKEN_MISUSED_AS_IDENTITY",
+    "PASSWORD_GRANT_USED",
+    "CLIENT_CREDENTIALS_ISSUED",
+    "IMPLICIT_TOKEN_IN_URL",
+    "TIME_PASSED",
+    "OAUTH_AUDIT"
+  ]
+}

@@ -1,0 +1,183 @@
+id: api-error-handling
+title:
+  en: 'Managing Errors and Error Codes'
+  ru: 'Управление ошибками и коды ошибок'
+category:
+  en: REST / API Design
+  ru: REST / Проектирование API
+type: HTTP
+mode: trace
+aiProvider: claude
+aiModel: claude-opus-5
+categoryId: rest
+difficulty: 2
+catalogId: rest-8
+summary:
+  en: >
+    An API answers failures the same way it answers successes: with a documented
+    shape. That shape is two decisions per failure — which HTTP status carries it,
+    because gateways, caches and retry policies read only the status line, and
+    which stable code names it, because a client's `switch` needs the exact
+    reason and `409` alone does not say which conflict. The codes live in a
+    published catalog (namespaced, lowercase, never reworded, only ever added
+    to); the mapping from domain exception to code lives in one
+    `@RestControllerAdvice`, not in a try/catch per method; and every failure
+    answers with the same body — `code`, `traceId`, a link to the code's docs, and
+    a per-field list for validation, in `application/problem+json`. Logs are the
+    other half: `5xx` at ERROR with the stack because it is your bug, `4xx` at
+    DEBUG because it is not, and the same `traceId` in both so a support ticket
+    becomes one grep. The traps are a message used as an identifier, `200` with
+    `{"success": false}`, a stack trace in the response body, retry advice that
+    contradicts the status, and everything answering `500` because nothing was
+    ever mapped.
+  ru: >
+    API отвечает на сбои так же, как на успехи, — документированной формой. Эта
+    форма — два решения на каждый сбой: какой HTTP-статус его несёт, потому что
+    шлюзы, кэши и политики повторов читают только строку статуса, и какой
+    стабильный код его называет, потому что `switch` в клиенте нужна точная
+    причина, а `409` сам по себе не говорит, какой это конфликт. Коды живут в
+    опубликованном каталоге (с пространством имён, строчными буквами, без
+    переформулировок, только пополняется); отображение доменного исключения в код
+    живёт в одном `@RestControllerAdvice`, а не в try/catch в каждом методе; и все
+    сбои отвечают одним телом — `code`, `traceId`, ссылка на документацию кода и
+    список по полям для валидации, в `application/problem+json`. Логи — вторая
+    половина: `5xx` на уровне ERROR со стеком, потому что это ваша ошибка, `4xx`
+    на уровне DEBUG, потому что не ваша, и один и тот же `traceId` в обоих, чтобы
+    обращение в поддержку превращалось в один grep. Ловушки: сообщение в роли
+    идентификатора, `200` с `{"success": false}`, стек в теле ответа, совет о
+    повторе, противоречащий статусу, и всё подряд, отвечающее `500`, потому что
+    ничего так и не было отображено.
+
+# Visual primitives this topic's visualizer composes (frontend).
+primitives:
+  - BoxGroup
+
+defaultExample: error-catalog
+
+# Examples shown as buttons. `file` is relative to examples/.
+examples:
+  - id: error-catalog
+    title:
+      en: The catalog is the contract
+      ru: Каталог и есть контракт
+    file: 01-error-catalog.java
+    explanation:
+      en: >
+        Four failures, written down as four rows: the exception that raises it,
+        the status that carries it, the code that names it, and whether retrying
+        can help. This table is the only thing a client can write code against —
+        everything else in this topic is about keeping it honest.
+      ru: >
+        Четыре сбоя, записанные четырьмя строками: исключение, которое его
+        вызывает, статус, который его несёт, код, который его называет, и
+        помогает ли повтор. Только под эту таблицу клиент может написать код —
+        всё остальное в этой теме про то, как сохранить её честной.
+  - id: codes-that-last
+    title:
+      en: 'A code is an identifier, not a sentence'
+      ru: 'Код — идентификатор, а не фраза'
+    file: 02-codes-that-last.java
+    explanation:
+      en: >
+        Two codes that will not survive: a human message used as an id, which
+        breaks every client the day someone fixes its typo, and a bare
+        `not_found` that three services in one client will all claim. Then the
+        same two failures named so they can outlive the code that throws them.
+      ru: >
+        Два кода, которые не выживут: человеческая фраза в роли идентификатора,
+        которая ломает всех клиентов в день исправления опечатки, и голый
+        `not_found`, на который в одном клиенте будут претендовать три сервиса.
+        Затем те же два сбоя, названные так, чтобы пережить бросающий их код.
+  - id: status-is-the-channel
+    title:
+      en: 'The status is read by machines'
+      ru: 'Статус читают машины'
+    file: 03-status-is-the-channel.java
+    explanation:
+      en: >
+        An error announced with `200`, a `409` that calls itself retryable, and a
+        `503` that says retrying will not help. All three compile, ship, and lie
+        to the infrastructure between you and the client. Watch the model name
+        what each one costs, then fix the three rows in place.
+      ru: >
+        Ошибка, объявленная с `200`, `409`, называющий себя повторяемым, и `503`,
+        который говорит, что повтор не поможет. Все три компилируются, попадают в
+        прод и врут инфраструктуре между вами и клиентом. Смотрите, что модель
+        называет ценой каждого, и как три строки исправляются на месте.
+  - id: one-place-not-per-method
+    title:
+      en: 'One advice, not one try/catch per method'
+      ru: 'Один advice, а не try/catch в каждом методе'
+    file: 04-one-place-not-per-method.java
+    explanation:
+      en: >
+        A request that works, then the same request failing: the service throws a
+        word from the domain, the handler catches nothing, and one advice turns it
+        into a status and a code. Then the alternative — the handler catches it
+        itself and answers `200 {"success": false}`, which every layer built to
+        notice failures now reads as a success.
+      ru: >
+        Успешный запрос, затем тот же запрос со сбоем: сервис бросает слово из
+        домена, обработчик ничего не ловит, и один advice превращает это в статус
+        и код. Затем альтернатива — обработчик ловит сам и отвечает
+        `200 {"success": false}`, что каждый слой, построенный замечать сбои,
+        теперь читает как успех.
+  - id: the-error-body
+    title:
+      en: 'What the client actually receives'
+      ru: 'Что на самом деле получает клиент'
+    file: 05-the-error-body.java
+    explanation:
+      en: >
+        The body, field by field: `code` to branch on, `type` linking to its
+        documentation, `instance` saying what was asked, `traceId` to quote to
+        support, and a per-field array for validation — because a single code
+        cannot tell a form which input to paint red. Two different failures, the
+        identical shape.
+      ru: >
+        Тело по полям: `code`, по которому ветвятся, `type` со ссылкой на
+        документацию, `instance` с тем, что запрашивали, `traceId`, который
+        называют поддержке, и массив по полям для валидации — потому что один код
+        не скажет форме, какое поле подсветить красным. Два разных сбоя —
+        одинаковая форма.
+  - id: nothing-leaks-outward
+    title:
+      en: 'Nothing internal crosses the boundary'
+      ru: 'Внутреннее не пересекает границу'
+    file: 06-nothing-leaks-outward.java
+    explanation:
+      en: >
+        The default error attributes hand the caller a constraint name, a package
+        path and a stack frame — a free map of the inside, and a contract that
+        breaks on the next library upgrade. The same collision caught in the
+        service becomes a code the client can actually handle.
+      ru: >
+        Стандартные атрибуты ошибки отдают вызывающему имя ограничения, путь
+        пакета и кадр стека — бесплатную карту внутренностей и контракт, который
+        сломается на следующем обновлении библиотеки. Та же коллизия, перехваченная
+        в сервисе, превращается в код, который клиент действительно может
+        обработать.
+  - id: unmapped-and-retryable
+    title:
+      en: 'Unmapped means 500'
+      ru: 'Неотображённое — это 500'
+    file: 07-unmapped-and-retryable.java
+    explanation:
+      en: >
+        A timeout nobody classified falls into the catch-all and becomes a `500`
+        that wakes somebody up. Adding one catalog row turns the same failure into
+        a `503` with `retryable: true` — an instruction the client can follow
+        instead of an incident someone has to read about.
+      ru: >
+        Таймаут, который никто не классифицировал, проваливается в общий
+        перехватчик и становится `500`, поднимающим кого-то по тревоге. Одна
+        строка каталога превращает тот же сбой в `503` с `retryable: true` —
+        инструкцию, которой клиент может следовать, вместо инцидента, о котором
+        кому-то придётся читать.
+
+# Example question pre-filled as the Ask AI placeholder.
+assistantExample:
+  en: 'e.g. How would you manage errors in your API and what would an error code look like?'
+  ru: 'например: Как ты организуешь работу с ошибками в своём API и как выглядит код ошибки?'
+
+missionsFile: quiz.yaml

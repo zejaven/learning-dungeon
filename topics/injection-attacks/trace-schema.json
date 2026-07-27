@@ -1,0 +1,206 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Injection trace event state",
+  "description": "Shape of the `state` field for injection-attacks trace events.",
+  "type": "object",
+  "required": ["config", "tokens", "stats"],
+  "properties": {
+    "config": {
+      "type": "object",
+      "description": "Global switches the application has flipped so far.",
+      "required": ["escapeQuotes", "xmlDoctype"],
+      "properties": {
+        "escapeQuotes": {
+          "type": "boolean",
+          "description": "Whether concatenated SQL doubles every quote in the value first."
+        },
+        "xmlDoctype": {
+          "enum": ["allowed", "disallowed"],
+          "description": "Whether the XML parser still accepts DOCTYPE declarations."
+        }
+      }
+    },
+    "statement": {
+      "type": ["object", "null"],
+      "description": "The statement or document being traced (null before the first one).",
+      "required": ["language", "binding", "template", "text", "input", "channel"],
+      "properties": {
+        "language": {
+          "enum": ["SQL", "XML"],
+          "description": "Which grammar is about to parse the text; untranslated."
+        },
+        "binding": {
+          "enum": [
+            "concatenation",
+            "escaping",
+            "bind-parameter",
+            "prepared-but-concatenated",
+            "allowlist",
+            "dynamic-sql",
+            "external-entities",
+            "secure-parser"
+          ],
+          "description": "How the untrusted value was combined with the statement; untranslated."
+        },
+        "template": {
+          "type": "string",
+          "description": "The expression as it appears in the application source."
+        },
+        "text": {
+          "type": ["string", "null"],
+          "description": "The finished text handed to the parser."
+        },
+        "input": {
+          "type": "string",
+          "description": "The untrusted value exactly as it arrived."
+        },
+        "channel": {
+          "enum": ["in-band", "out-of-band", "rejected"],
+          "description": "Whether the value travelled inside the statement text, beside it, or never reached it."
+        }
+      }
+    },
+    "tokens": {
+      "type": "array",
+      "description": "What the parser made of the text: one entry per SQL token or XML line.",
+      "items": {
+        "type": "object",
+        "required": ["text", "kind", "fromInput", "danger"],
+        "properties": {
+          "text": { "type": "string" },
+          "kind": {
+            "enum": [
+              "keyword",
+              "identifier",
+              "literal",
+              "operator",
+              "comment",
+              "parameter",
+              "markup",
+              "dtd",
+              "entity",
+              "reference"
+            ],
+            "description": "The role the parser assigned to this fragment; untranslated."
+          },
+          "fromInput": {
+            "type": "boolean",
+            "description": "Whether any of these characters came from the untrusted value."
+          },
+          "danger": {
+            "type": "boolean",
+            "description": "Whether untrusted characters became grammar here instead of staying a value."
+          }
+        }
+      }
+    },
+    "result": {
+      "type": ["object", "null"],
+      "description": "What running the statement produced (null before it runs).",
+      "required": ["kind", "columns", "rows", "text"],
+      "properties": {
+        "kind": {
+          "enum": ["rows", "text"],
+          "description": "A result set, or a single message (an error, a file's contents)."
+        },
+        "columns": {
+          "type": "array",
+          "description": "Column headers, in order.",
+          "items": { "type": "string" }
+        },
+        "rows": {
+          "type": "array",
+          "description": "Result rows, each a list of values matching `columns` by position.",
+          "items": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "text": {
+          "type": ["string", "null"],
+          "description": "The message when `kind` is text; null otherwise."
+        }
+      }
+    },
+    "outcome": {
+      "type": ["object", "null"],
+      "description": "How far the current statement got and what it ended up meaning.",
+      "required": ["stage", "injected", "impact", "blockedBy"],
+      "properties": {
+        "stage": {
+          "enum": ["idle", "built", "parsed", "settled"],
+          "description": "Progress: text built, text parsed, verdict final."
+        },
+        "injected": {
+          "type": "boolean",
+          "description": "Whether the untrusted value left its slot and became part of the grammar."
+        },
+        "impact": {
+          "enum": [
+            "none",
+            "extra-rows",
+            "auth-bypass",
+            "data-theft",
+            "schema-change",
+            "file-read",
+            "ssrf",
+            "dos"
+          ],
+          "description": "What the rewritten statement achieved; untranslated."
+        },
+        "blockedBy": {
+          "type": ["string", "null"],
+          "enum": ["binding", "escaping", "allowlist", "parser-config", null],
+          "description": "Which mechanism kept the value data; null when nothing did or nothing had to."
+        }
+      }
+    },
+    "stats": {
+      "type": "object",
+      "description": "Running totals across the whole run.",
+      "required": ["statements", "injections", "leaked", "stayedData"],
+      "properties": {
+        "statements": { "type": "integer" },
+        "injections": {
+          "type": "integer",
+          "description": "Statements where untrusted characters became grammar."
+        },
+        "leaked": {
+          "type": "integer",
+          "description": "Statements that returned data the caller had no right to."
+        },
+        "stayedData": {
+          "type": "integer",
+          "description": "Statements where a defence kept the value a value."
+        }
+      }
+    }
+  },
+  "events": [
+    "INJECTION_SETUP",
+    "DEFENCE_ENABLED",
+    "SQL_BUILT",
+    "SQL_PARSED",
+    "SQL_INJECTED",
+    "STATEMENT_EXECUTED",
+    "STATEMENT_PREPARED",
+    "PARAMETER_BOUND",
+    "VALUE_STAYED_DATA",
+    "ESCAPING_ATTEMPTED",
+    "ESCAPING_BYPASSED",
+    "PREPARED_IN_NAME_ONLY",
+    "IDENTIFIER_INTERPOLATED",
+    "ALLOWLIST_CHECKED",
+    "SECOND_ORDER_INJECTION",
+    "DYNAMIC_SQL_IN_DATABASE",
+    "XML_RECEIVED",
+    "DTD_DECLARED",
+    "ENTITY_RESOLVED",
+    "XXE_FILE_DISCLOSED",
+    "XXE_SSRF",
+    "ENTITY_EXPANSION",
+    "XXE_BLOCKED",
+    "XML_PARSED",
+    "INJECTION_AUDIT"
+  ]
+}

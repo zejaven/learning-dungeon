@@ -1,0 +1,165 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Scaling an overloaded server trace event state",
+  "description": "Shape of the `state` field for scaling trace events: the replicas serving one endpoint, what each is holding, the traffic tick by tick, and what the run cost.",
+  "type": "object",
+  "required": ["service", "topology", "strategy", "now", "capacityPerTick", "nodes", "timeline", "stats"],
+  "properties": {
+    "service": {
+      "type": "string",
+      "description": "The endpoint being served, as the example named it (e.g. 'POST /checkout')."
+    },
+    "topology": {
+      "type": "string",
+      "enum": ["SINGLE", "BALANCED"],
+      "description": "SINGLE = one server answering directly; BALANCED = replicas behind a load balancer."
+    },
+    "strategy": {
+      "type": "string",
+      "enum": ["NONE", "ROUND_ROBIN", "LEAST_BUSY", "STICKY"],
+      "description": "How the balancer picks the replica a request is sent to; NONE when there is no balancer."
+    },
+    "now": {
+      "type": "integer",
+      "description": "The current tick. Time is discrete so a run is fully deterministic."
+    },
+    "clientTimeout": {
+      "type": "integer",
+      "description": "How many ticks a client waits before giving up on its request."
+    },
+    "healthChecks": {
+      "type": ["integer", "null"],
+      "description": "How many ticks the balancer needs to notice a dead replica; null when it never checks."
+    },
+    "localSessions": {
+      "type": "boolean",
+      "description": "True when replicas keep per-client state in their own heap, which is what blocks scaling out."
+    },
+    "capacityPerTick": {
+      "type": "number",
+      "description": "Requests per tick the whole topology can start — slots divided by service time, capped by any shared dependency."
+    },
+    "bottleneck": {
+      "type": ["object", "null"],
+      "description": "A resource every replica shares (a primary database, a gateway) that caps the whole fleet.",
+      "required": ["name", "capacity", "used"],
+      "properties": {
+        "name": { "type": "string", "description": "What the shared thing is, in the example's own words." },
+        "capacity": { "type": "integer", "description": "Requests per tick it will start, no matter how many replicas ask." },
+        "used": { "type": "integer", "description": "How much of that budget this tick has spent." }
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "description": "One entry per application instance, dead ones included.",
+      "items": {
+        "type": "object",
+        "required": ["name", "alive", "inRotation", "degraded", "concurrency", "serviceTicks", "serving", "queue", "queueLimit", "capacity", "served", "rejected", "sessions"],
+        "properties": {
+          "name": { "type": "string", "description": "Instance name, e.g. 'app-2'." },
+          "alive": { "type": "boolean", "description": "False once the process is gone." },
+          "inRotation": {
+            "type": "boolean",
+            "description": "Whether the balancer still sends traffic here — a dead node stays in until a health check removes it."
+          },
+          "degraded": { "type": "boolean", "description": "True when this node answers, but slower than its peers." },
+          "concurrency": { "type": "integer", "description": "How many requests it can work on at once." },
+          "serviceTicks": { "type": "integer", "description": "Ticks one request holds a slot." },
+          "serving": { "type": "integer", "description": "Slots currently occupied." },
+          "queue": { "type": "integer", "description": "Requests waiting for a slot." },
+          "queueLimit": { "type": "integer", "description": "How many it accepts before refusing outright." },
+          "capacity": { "type": "number", "description": "This node's throughput in requests per tick." },
+          "served": { "type": "integer", "description": "Requests it has completed." },
+          "rejected": { "type": "integer", "description": "Requests it refused because the queue was full." },
+          "sessions": { "type": "integer", "description": "Client sessions living in this node's heap." }
+        }
+      }
+    },
+    "timeline": {
+      "type": "array",
+      "description": "One cell per elapsed tick, so demand and capacity can be compared at a glance.",
+      "items": {
+        "type": "object",
+        "required": ["tick", "arrived", "served", "rejected", "failed", "queued", "nodes"],
+        "properties": {
+          "tick": { "type": "integer" },
+          "arrived": { "type": "integer", "description": "Requests that reached the service in this tick." },
+          "served": { "type": "integer", "description": "Requests completed in this tick." },
+          "rejected": { "type": "integer", "description": "Requests refused by a full queue." },
+          "failed": { "type": "integer", "description": "Requests that never reached a working replica." },
+          "queued": { "type": "integer", "description": "Queue depth across the fleet at the end of the tick." },
+          "nodes": { "type": "integer", "description": "Live replicas during the tick." }
+        }
+      }
+    },
+    "stats": {
+      "type": "object",
+      "description": "Running totals for the whole run — the bill for this topology.",
+      "required": ["arrived", "served", "rejected", "failed", "timedOut", "wasted", "sessionMisses", "blackholed", "avgLatency", "maxLatency", "peakQueue"],
+      "properties": {
+        "arrived": { "type": "integer", "description": "Requests clients sent." },
+        "served": { "type": "integer", "description": "Requests answered." },
+        "rejected": { "type": "integer", "description": "Requests refused because a queue was full." },
+        "failed": { "type": "integer", "description": "Requests that reached no working replica, or the wrong one." },
+        "timedOut": { "type": "integer", "description": "Clients that stopped waiting." },
+        "wasted": { "type": "integer", "description": "Requests finished for clients that had already left." },
+        "sessionMisses": { "type": "integer", "description": "Requests routed to a replica that did not hold their session." },
+        "blackholed": { "type": "integer", "description": "Requests the balancer sent to a replica that was not there." },
+        "avgLatency": { "type": "number", "description": "Average ticks between arrival and response." },
+        "maxLatency": { "type": "integer", "description": "Worst latency observed." },
+        "peakQueue": { "type": "integer", "description": "Deepest the queue got across the fleet." }
+      }
+    },
+    "comparison": {
+      "type": "array",
+      "description": "Only on TOPOLOGIES_COMPARED: the same traffic priced by each topology.",
+      "items": {
+        "type": "object",
+        "required": ["topology", "nodes", "capacityPerTick", "arrived", "served", "rejected", "avgLatency", "maxLatency", "survivesLoss"],
+        "properties": {
+          "topology": { "enum": ["SINGLE", "BIGGER_BOX", "THREE_NODES", "THREE_NODES_ONE_DB"] },
+          "nodes": { "type": "integer" },
+          "capacityPerTick": { "type": "number" },
+          "arrived": { "type": "integer" },
+          "served": { "type": "integer" },
+          "rejected": { "type": "integer" },
+          "avgLatency": { "type": "number" },
+          "maxLatency": { "type": "integer" },
+          "survivesLoss": {
+            "type": "boolean",
+            "description": "Whether the topology still serves anything after losing one machine."
+          }
+        }
+      }
+    }
+  },
+  "events": [
+    "SERVER_STARTED",
+    "BALANCER_STARTED",
+    "STRATEGY_CHANGED",
+    "STATE_IS_LOCAL",
+    "TRAFFIC_ARRIVED",
+    "QUEUE_GROWING",
+    "LATENCY_CLIMBING",
+    "REQUESTS_REJECTED",
+    "CLIENT_TIMEOUT",
+    "WASTED_WORK",
+    "QUEUE_DRAINED",
+    "SCALED_UP",
+    "NODE_ADDED",
+    "NODE_DEGRADED",
+    "HOTSPOT",
+    "NODE_FAILED",
+    "OUTAGE",
+    "BLACKHOLED",
+    "HEALTH_CHECK_FAILED",
+    "NODE_EVICTED",
+    "LOAD_REDISTRIBUTED",
+    "SESSION_MISS",
+    "STICKY_ROUTED",
+    "SESSIONS_LOST",
+    "BOTTLENECK_SATURATED",
+    "RUN_AUDIT",
+    "TOPOLOGIES_COMPARED"
+  ]
+}

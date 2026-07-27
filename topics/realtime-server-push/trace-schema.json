@@ -1,0 +1,174 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Real-time server push trace event state",
+  "description": "Shape of the `state` field for realtime-server-push trace events.",
+  "type": "object",
+  "required": ["app", "now", "online", "connection", "queue", "delivered", "timeline", "stats"],
+  "properties": {
+    "transport": {
+      "type": ["string", "null"],
+      "enum": ["SHORT_POLL", "LONG_POLL", "SSE", "WEBSOCKET", null],
+      "description": "Technical code for the transport this run uses; null on the comparison event."
+    },
+    "app": {
+      "type": "string",
+      "description": "The client this channel belongs to, as the example named it."
+    },
+    "now": {
+      "type": "integer",
+      "description": "The current tick. Time is discrete so a run is fully deterministic."
+    },
+    "online": {
+      "type": "boolean",
+      "description": "Whether the browser can currently reach the server at all."
+    },
+    "duplex": {
+      "type": ["string", "null"],
+      "enum": ["client-pull", "server-push", "full-duplex", null],
+      "description": "Technical code for which side may send; the visualizer localizes it."
+    },
+    "interval": {
+      "type": ["integer", "null"],
+      "description": "Short polling only: ticks between two requests."
+    },
+    "hold": {
+      "type": ["integer", "null"],
+      "description": "Long polling only: ticks the server may park a request before answering empty."
+    },
+    "connection": {
+      "type": "object",
+      "description": "What, if anything, is currently held open between the two sides.",
+      "required": ["open", "kind"],
+      "properties": {
+        "open": {
+          "type": "boolean",
+          "description": "True when the server could write to the client right now."
+        },
+        "kind": {
+          "enum": ["none", "held-request", "stream", "socket"],
+          "description": "Technical code for what is open: nothing, a parked request, an SSE stream, a WebSocket."
+        },
+        "openedAt": {
+          "type": ["integer", "null"],
+          "description": "Long polling: the tick the parked request was opened at; null when nothing is parked."
+        },
+        "lastEventId": {
+          "type": ["string", "null"],
+          "description": "The id of the last event the client saw — what SSE resends as Last-Event-ID."
+        }
+      }
+    },
+    "sharedBus": {
+      "type": "boolean",
+      "description": "Whether instances publish events to a shared bus so any of them can reach a connection."
+    },
+    "instances": {
+      "type": "integer",
+      "description": "How many server instances are running behind the load balancer."
+    },
+    "queue": {
+      "type": "array",
+      "description": "News that exists on the server and has not reached the browser yet.",
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "createdAt", "waited"],
+        "properties": {
+          "id": { "type": "string", "description": "Event id, as SSE would send it." },
+          "label": { "type": "string", "description": "What happened, in the example's own words." },
+          "createdAt": { "type": "integer", "description": "The tick it happened at." },
+          "waited": { "type": "integer", "description": "Ticks it has been waiting so far." }
+        }
+      }
+    },
+    "delivered": {
+      "type": "array",
+      "description": "News that reached the screen, with the delay it took.",
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "createdAt", "deliveredAt", "latency"],
+        "properties": {
+          "id": { "type": "string" },
+          "label": { "type": "string" },
+          "createdAt": { "type": "integer" },
+          "deliveredAt": { "type": "integer" },
+          "latency": { "type": "integer", "description": "deliveredAt - createdAt, in ticks." }
+        }
+      }
+    },
+    "timeline": {
+      "type": "array",
+      "description": "One cell per elapsed tick, so the cost of a transport is visible at a glance.",
+      "items": {
+        "type": "object",
+        "required": ["tick", "serverEvent", "request", "empty", "delivery", "held"],
+        "properties": {
+          "tick": { "type": "integer" },
+          "serverEvent": { "type": "boolean", "description": "Something happened on the server in this tick." },
+          "request": { "type": "boolean", "description": "The client started an HTTP request in this tick." },
+          "empty": { "type": "boolean", "description": "A request came back with nothing." },
+          "delivery": { "type": "boolean", "description": "Something reached the browser in this tick." },
+          "held": { "type": "boolean", "description": "A connection or parked request was open during this tick." }
+        }
+      }
+    },
+    "stats": {
+      "type": "object",
+      "description": "Running totals for the whole run — the bill for this transport.",
+      "required": ["requests", "empty", "frames", "delivered", "lost", "avgLatency", "maxLatency"],
+      "properties": {
+        "requests": { "type": "integer", "description": "HTTP requests the client started, handshakes included." },
+        "empty": { "type": "integer", "description": "Requests that came back with no news." },
+        "frames": { "type": "integer", "description": "Messages written into an already-open connection." },
+        "delivered": { "type": "integer", "description": "Events that reached the browser." },
+        "lost": { "type": "integer", "description": "Events that never reached it and never will." },
+        "avgLatency": { "type": "number", "description": "Average ticks between an event and its delivery." },
+        "maxLatency": { "type": "integer", "description": "Worst delay observed." }
+      }
+    },
+    "comparison": {
+      "type": "array",
+      "description": "Only on TRANSPORT_COMPARED: the same timeline priced by each transport.",
+      "items": {
+        "type": "object",
+        "required": ["transport", "requests", "empty", "frames", "delivered", "avgLatency", "maxLatency", "duplex", "held"],
+        "properties": {
+          "transport": { "enum": ["SHORT_POLL", "LONG_POLL", "SSE", "WEBSOCKET"] },
+          "requests": { "type": "integer" },
+          "empty": { "type": "integer" },
+          "frames": { "type": "integer" },
+          "delivered": { "type": "integer" },
+          "avgLatency": { "type": "number" },
+          "maxLatency": { "type": "integer" },
+          "duplex": { "enum": ["client-pull", "server-push", "full-duplex"] },
+          "held": { "type": "boolean", "description": "Whether this transport keeps something open per client." }
+        }
+      }
+    }
+  },
+  "events": [
+    "CHANNEL_OPENED",
+    "SERVER_EVENT",
+    "EVENT_WAITING",
+    "POLL_EMPTY",
+    "POLL_DELIVERED",
+    "LONGPOLL_HELD",
+    "LONGPOLL_DELIVERED",
+    "LONGPOLL_TIMEOUT",
+    "LONGPOLL_REOPENED",
+    "SSE_STREAM_OPENED",
+    "SSE_MESSAGE",
+    "SSE_REPLAYED",
+    "WS_HANDSHAKE",
+    "WS_FRAME_DOWN",
+    "WS_FRAME_UP",
+    "CLIENT_MESSAGE_POSTED",
+    "CONNECTION_LOST",
+    "CONNECTION_RESTORED",
+    "MESSAGES_MISSED",
+    "FANOUT_MISS",
+    "BUS_ATTACHED",
+    "FANOUT_ROUTED",
+    "TRANSPORT_COMPARED",
+    "CHANNEL_AUDIT"
+  ]
+}

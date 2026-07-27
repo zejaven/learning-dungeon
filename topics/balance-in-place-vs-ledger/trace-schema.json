@@ -1,0 +1,146 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Balance storage trace event state",
+  "description": "Shape of the `state` field for balance-in-place-vs-ledger trace events.",
+  "type": "object",
+  "required": ["storage", "cachedBalance", "balance", "entries", "read", "inFlight"],
+  "properties": {
+    "storage": {
+      "enum": ["in-place", "ledger"],
+      "description": "Whether the balance is one mutable number or a fold over immutable entries."
+    },
+    "cachedBalance": {
+      "type": "boolean",
+      "description": "Ledger only: a denormalized balance column is kept beside the entries."
+    },
+    "balance": {
+      "type": "integer",
+      "description": "What a GET /balance would answer right now."
+    },
+    "stored": {
+      "type": "integer",
+      "description": "The number physically kept in a column; absent for a pure ledger."
+    },
+    "computed": {
+      "type": "integer",
+      "description": "The balance derived from the entries (from the snapshot, if any); ledger only."
+    },
+    "drift": {
+      "type": "integer",
+      "description": "stored - computed. Non-zero means the two copies of the truth disagree."
+    },
+    "entries": {
+      "type": "array",
+      "description": "The append-only operation records, in order. Always empty for in-place storage.",
+      "items": {
+        "type": "object",
+        "required": ["seq", "amount", "reason", "kind", "running"],
+        "properties": {
+          "seq": { "type": "integer" },
+          "amount": {
+            "type": "integer",
+            "description": "Signed: positive credits the account, negative debits it."
+          },
+          "reason": { "type": "string" },
+          "kind": {
+            "enum": ["operation", "reversal", "correction"],
+            "description": "A normal posting, the reversal of a wrong one, or its replacement."
+          },
+          "running": {
+            "type": "integer",
+            "description": "Balance after this entry, folded from the start of the kept history."
+          }
+        }
+      }
+    },
+    "snapshot": {
+      "type": "object",
+      "description": "The cached fold, when one has been taken.",
+      "required": ["atSeq", "balance"],
+      "properties": {
+        "atSeq": { "type": "integer" },
+        "balance": { "type": "integer" }
+      }
+    },
+    "read": {
+      "type": "object",
+      "description": "What the last balance read cost and where it came from.",
+      "required": ["rows", "source"],
+      "properties": {
+        "rows": {
+          "type": "integer",
+          "description": "Rows the last read had to touch."
+        },
+        "source": {
+          "enum": ["none", "column", "cached-column", "fold", "snapshot-fold"],
+          "description": "Which storage the last read used; 'none' before the first read."
+        }
+      }
+    },
+    "inFlight": {
+      "type": "array",
+      "description": "Operations being processed side by side; empty while they are serialized.",
+      "items": {
+        "type": "object",
+        "required": ["id", "action", "sawBalance", "phase"],
+        "properties": {
+          "id": { "type": "string" },
+          "action": {
+            "type": "string",
+            "description": "The signed amount this transaction wants to apply."
+          },
+          "sawBalance": {
+            "type": "integer",
+            "description": "The balance this transaction read before deciding."
+          },
+          "phase": {
+            "enum": ["read", "wrote", "appended", "discarded"],
+            "description": "Where this transaction got to; 'discarded' means its write was overwritten."
+          }
+        }
+      }
+    },
+    "operations": { "type": "integer" },
+    "corrections": {
+      "type": "integer",
+      "description": "Wrong postings repaired by appending a reversal plus the right entry."
+    },
+    "lostUpdates": {
+      "type": "integer",
+      "description": "Operations destroyed by a concurrent read-modify-write of the balance."
+    },
+    "rewrites": {
+      "type": "integer",
+      "description": "Balances silently retyped, leaving no evidence that anything was wrong."
+    },
+    "mutations": {
+      "type": "integer",
+      "description": "Entries deleted from an append-only book — holes in the audit trail."
+    },
+    "violations": {
+      "type": "integer",
+      "description": "Business invariants (e.g. a floor) broken by concurrent appends."
+    }
+  },
+  "events": [
+    "ACCOUNT_OPENED",
+    "OPERATION_APPLIED",
+    "ENTRY_APPENDED",
+    "CONCURRENT_OPERATIONS",
+    "LOST_UPDATE",
+    "BALANCE_READ",
+    "HISTORY_EXPLAINED",
+    "HISTORY_UNAVAILABLE",
+    "HISTORY_OVERWRITTEN",
+    "CORRECTION_APPENDED",
+    "LEDGER_MUTATED",
+    "SNAPSHOT_TAKEN",
+    "BALANCE_REBUILT",
+    "REBUILD_IMPOSSIBLE",
+    "CACHE_DRIFT",
+    "DRIFT_DETECTED",
+    "WITHDRAWAL_REJECTED",
+    "INVARIANT_VIOLATED",
+    "BOOK_AUDIT"
+  ]
+}

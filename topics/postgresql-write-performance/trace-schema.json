@@ -1,0 +1,192 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PostgreSQL write path trace event state",
+  "description": "Shape of the `state` field for postgresql-write-performance trace events. Every duration is in microseconds of modelled time, produced by a fixed cost model rather than measured on a real server.",
+  "type": "object",
+  "required": ["table", "config", "row", "totals"],
+  "properties": {
+    "table": {
+      "type": "string",
+      "description": "Name of the write-only table this scene models."
+    },
+    "config": {
+      "type": "object",
+      "description": "The decisions currently in force. Every one of them re-prices a row.",
+      "required": [
+        "payloadBytes",
+        "payloadPlacement",
+        "rowBytes",
+        "compressible",
+        "columnCompression",
+        "secondaryIndexes",
+        "commitMode",
+        "poolSize"
+      ],
+      "properties": {
+        "payloadBytes": {
+          "type": "integer",
+          "description": "Size of one record's business payload, wherever it ends up living."
+        },
+        "payloadPlacement": {
+          "enum": ["inline", "object-storage"],
+          "description": "Whether the payload is a column in this table or a reference to an external store."
+        },
+        "rowBytes": {
+          "type": "integer",
+          "description": "Size of the row PostgreSQL actually has to write."
+        },
+        "compressible": {
+          "type": "boolean",
+          "description": "True for text/JSON/XML; false for already-compressed binary data."
+        },
+        "columnCompression": {
+          "type": "boolean",
+          "description": "False once the column is SET STORAGE EXTERNAL, which skips the compression attempt."
+        },
+        "secondaryIndexes": { "type": "integer" },
+        "commitMode": {
+          "enum": ["flush", "async"],
+          "description": "Whether a commit waits for the WAL flush (synchronous_commit on/off)."
+        },
+        "poolSize": {
+          "type": "integer",
+          "description": "Connections the service shares between every caller of its API."
+        }
+      }
+    },
+    "row": {
+      "type": "object",
+      "description": "What writing ONE row costs under the current configuration.",
+      "required": ["storedBytes", "walBytes", "toastChunks", "indexEntries", "requestUs", "parts"],
+      "properties": {
+        "storedBytes": {
+          "type": "integer",
+          "description": "Bytes written to the heap and TOAST pages, after any compression."
+        },
+        "walBytes": {
+          "type": "integer",
+          "description": "Bytes written to the write-ahead log for the same row."
+        },
+        "toastChunks": {
+          "type": "integer",
+          "description": "Chunk rows the value is sliced into; 0 when the value stays inline."
+        },
+        "indexEntries": {
+          "type": "integer",
+          "description": "Index entries written per row: the primary key plus every secondary index."
+        },
+        "requestUs": {
+          "type": "integer",
+          "description": "End-to-end cost of one row-by-row INSERT: the sum of every part below."
+        },
+        "parts": {
+          "type": "array",
+          "description": "The write split into its cost components, in execution order. Parts costing nothing are omitted.",
+          "items": {
+            "type": "object",
+            "required": ["name", "us"],
+            "properties": {
+              "name": {
+                "enum": ["network", "parse", "compress", "table", "toast", "wal", "index", "commit"],
+                "description": "Which stage of the write this slice belongs to."
+              },
+              "us": { "type": "integer" }
+            }
+          }
+        }
+      }
+    },
+    "lastWrite": {
+      "type": ["object", "null"],
+      "description": "The most recent write call; null before anything has been written.",
+      "required": ["strategy", "rows", "batches", "roundTrips", "commits", "flushes", "walBytes", "us", "usPerRow"],
+      "properties": {
+        "strategy": {
+          "enum": ["row-by-row", "batch", "copy"],
+          "description": "How the rows were sent to the server."
+        },
+        "rows": { "type": "integer" },
+        "batches": {
+          "type": "integer",
+          "description": "Statements sent: 1 per batch, 1 for a COPY, 1 per row otherwise."
+        },
+        "roundTrips": { "type": "integer" },
+        "commits": { "type": "integer" },
+        "flushes": {
+          "type": "integer",
+          "description": "Commits that waited for an fsync; 0 with synchronous_commit = off."
+        },
+        "walBytes": { "type": "integer" },
+        "us": { "type": "integer" },
+        "usPerRow": { "type": "integer" }
+      }
+    },
+    "pool": {
+      "type": ["object", "null"],
+      "description": "The last burst of API callers measured against the pool; null until serveApi is called.",
+      "required": ["size", "clients", "inUse", "queued", "drainUs", "requestUs", "capacityPerSec", "poolCeilingPerSec", "diskCeilingPerSec", "boundBy"],
+      "properties": {
+        "size": { "type": "integer" },
+        "clients": {
+          "type": "integer",
+          "description": "Callers submitting a record at the same moment."
+        },
+        "inUse": { "type": "integer" },
+        "queued": { "type": "integer" },
+        "drainUs": {
+          "type": "integer",
+          "description": "How long the whole burst takes to clear at the effective capacity."
+        },
+        "requestUs": { "type": "integer" },
+        "capacityPerSec": {
+          "type": "integer",
+          "description": "Writes per second the service actually absorbs: the lower of the two ceilings."
+        },
+        "poolCeilingPerSec": {
+          "type": "integer",
+          "description": "Ceiling imposed by connections times per-write cost."
+        },
+        "diskCeilingPerSec": {
+          "type": "integer",
+          "description": "Ceiling imposed by table + WAL bytes against the volume's write bandwidth."
+        },
+        "boundBy": {
+          "enum": ["pool", "disk"],
+          "description": "Which ceiling is binding. Adding connections only helps when this is 'pool'."
+        }
+      }
+    },
+    "totals": {
+      "type": "object",
+      "description": "Everything this scene has written so far.",
+      "required": ["rows", "roundTrips", "commits", "flushes", "walBytes", "toastChunks", "indexEntries", "us"],
+      "properties": {
+        "rows": { "type": "integer" },
+        "roundTrips": { "type": "integer" },
+        "commits": { "type": "integer" },
+        "flushes": { "type": "integer" },
+        "walBytes": { "type": "integer" },
+        "toastChunks": { "type": "integer" },
+        "indexEntries": { "type": "integer" },
+        "us": { "type": "integer" }
+      }
+    }
+  },
+  "events": [
+    "WRITER_CONFIGURED",
+    "PAYLOAD_OFFLOADED",
+    "TOAST_SPILL",
+    "INLINE_PAYLOAD",
+    "WAL_AMPLIFIED",
+    "INDEX_MAINTENANCE",
+    "ROW_INSERTED",
+    "ROWS_INSERTED",
+    "BATCH_EXECUTED",
+    "COPY_STREAMED",
+    "COMMIT_FLUSHED",
+    "COMMIT_UNFLUSHED",
+    "POOL_SATURATED",
+    "POOL_HEADROOM",
+    "WRITE_REPORT"
+  ]
+}

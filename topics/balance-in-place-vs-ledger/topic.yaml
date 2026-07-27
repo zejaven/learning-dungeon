@@ -1,0 +1,170 @@
+id: balance-in-place-vs-ledger
+title:
+  en: Mutable Balance vs Append-Only Ledger
+  ru: Изменяемый баланс против журнала операций
+category:
+  en: Microservices / Data Modelling
+  ru: Микросервисы / Моделирование данных
+type: OTHER
+mode: trace
+aiProvider: claude
+aiModel: claude-opus-5
+categoryId: microservices
+difficulty: 3
+catalogId: microservices-15
+summary:
+  en: >
+    Storing a balance as one mutable number is cheap to read and destroys the
+    only evidence of how the number was reached: a wrong value cannot be
+    explained, a repair leaves no trace, and two concurrent operations overwrite
+    each other. Appending immutable operation records and folding them into the
+    balance keeps every "why", turns repairs into reversing entries and makes
+    concurrent writes non-conflicting — at the cost of a read that grows with the
+    history, a schema you can no longer freely change, and invariants that
+    nothing enforces for you. The production answer is almost always the hybrid:
+    entries as the source of truth, a denormalized balance written in the SAME
+    transaction, and snapshots to bound the fold.
+  ru: >
+    Хранение баланса одним изменяемым числом даёт дешёвое чтение и уничтожает
+    единственное свидетельство того, как это число получилось: неверное значение
+    невозможно объяснить, исправление не оставляет следа, а две одновременные
+    операции перезаписывают друг друга. Добавление неизменяемых записей об
+    операциях и свёртка их в баланс сохраняет каждое «почему», превращает
+    исправления в сторнирующие проводки и делает параллельные записи
+    неконфликтующими — ценой чтения, растущего вместе с историей, схемы, которую
+    уже нельзя свободно менять, и инвариантов, которые никто за вас не
+    обеспечивает. В продакшене почти всегда выбирают гибрид: записи как источник
+    истины, денормализованный баланс в ТОЙ ЖЕ транзакции и снимки, чтобы
+    ограничить свёртку.
+
+# Visual primitives this topic's visualizer composes (frontend).
+primitives:
+  - BoxGroup
+  - EventLog
+
+defaultExample: append-only-ledger
+
+# Examples shown as buttons. `file` is relative to examples/.
+examples:
+  - id: balance-in-place
+    title:
+      en: One mutable balance
+      ru: Один изменяемый баланс
+    file: 01-balance-in-place.java
+    explanation:
+      en: >
+        The design everyone writes first. Two operations, one UPDATE each, a
+        read that touches exactly one row — and then the accountant asks why the
+        balance is 750 and the database has nothing to say.
+      ru: >
+        Решение, которое пишут первым. Две операции, по одному UPDATE на каждую,
+        чтение ровно одной строки — а затем бухгалтер спрашивает, почему баланс
+        750, и базе ответить нечем.
+  - id: append-only-ledger
+    title:
+      en: Append-only entries
+      ru: Только добавление записей
+    file: 02-append-only-ledger.java
+    explanation:
+      en: >
+        The same two operations stored as immutable entries. The balance is not
+        stored at all — it is a fold over the history, so the read costs one row
+        per operation and the "why" comes for free.
+      ru: >
+        Те же две операции, сохранённые как неизменяемые записи. Баланс не
+        хранится вовсе — это свёртка по истории, поэтому чтение стоит по строке
+        на операцию, а «почему» получается бесплатно.
+  - id: lost-update
+    title:
+      en: Two operations at once
+      ru: Две операции одновременно
+    file: 03-lost-update.java
+    explanation:
+      en: >
+        The same overlap against both designs. A read-modify-write of one row
+        loses whichever operation committed first; two INSERTs into two rows
+        cannot overwrite each other and both survive.
+      ru: >
+        То же пересечение в обоих вариантах. Read-modify-write одной строки
+        теряет ту операцию, что зафиксировалась первой; два INSERT в две строки
+        не могут перезаписать друг друга, и обе сохраняются.
+  - id: explain-the-balance
+    title:
+      en: 'Prove the balance'
+      ru: 'Докажи баланс'
+    file: 04-explain-the-balance.java
+    explanation:
+      en: >
+        A customer disputes their balance. Both services ran the same operations
+        and both answer 855; only the one that kept the entries can show which
+        855 it is.
+      ru: >
+        Клиент оспаривает свой баланс. Оба сервиса выполнили одни и те же
+        операции и оба отвечают 855; но показать, из чего именно состоит эта
+        сумма, может только тот, что сохранил записи.
+  - id: correcting-a-mistake
+    title:
+      en: Fixing a wrong posting
+      ru: Исправление ошибочной проводки
+    file: 05-correcting-a-mistake.java
+    explanation:
+      en: >
+        An invoice posted as 2500 instead of 250. In place, the repair is to
+        retype the total and the error disappears; a ledger appends a reversal
+        and the right entry. Then someone runs a DELETE and shows what
+        append-only really guarantees.
+      ru: >
+        Счёт проведён на 2500 вместо 250. «На месте» исправление — просто
+        перепечатать итог, и ошибка исчезает; журнал добавляет сторно и
+        правильную запись. А потом кто-то выполняет DELETE и показывает, что на
+        самом деле гарантирует append-only.
+  - id: snapshots-and-read-cost
+    title:
+      en: When the fold gets slow
+      ru: Когда свёртка становится медленной
+    file: 06-snapshots-and-read-cost.java
+    explanation:
+      en: >
+        Nine operations, and every balance read walks all of them. A snapshot
+        stores the fold up to a point so later reads only touch what came after
+        — without deleting a single entry.
+      ru: >
+        Девять операций, и каждое чтение баланса проходит по всем. Снимок
+        сохраняет свёртку до определённой точки, чтобы последующие чтения
+        касались только того, что было позже, — и при этом не удаляет ни одной
+        записи.
+  - id: cached-balance-drift
+    title:
+      en: 'Entries plus a cached balance'
+      ru: 'Записи плюс кэшированный баланс'
+    file: 07-cached-balance-drift.java
+    explanation:
+      en: >
+        The hybrid nearly every production system converges on, and its one
+        failure mode: split the entry and the balance column into two
+        transactions and the cached number quietly stops being true.
+      ru: >
+        Гибрид, к которому приходит почти любая продакшен-система, и его
+        единственный сбой: разнеси запись и колонку баланса по двум транзакциям,
+        и кэшированное число тихо перестаёт быть правдой.
+  - id: invariant-check
+    title:
+      en: 'Overdrawing an append-only account'
+      ru: 'Уход в минус в append-only'
+    file: 08-invariant-check.java
+    explanation:
+      en: >
+        "Never below zero" is a rule about the fold, and appending knows nothing
+        about the fold. Two concurrent withdrawals both read 200, both pass the
+        check, and both append.
+      ru: >
+        «Никогда ниже нуля» — это правило о свёртке, а вставка о свёртке ничего
+        не знает. Два одновременных списания читают 200, оба проходят проверку и
+        оба добавляют запись.
+
+# Example question pre-filled as the Ask AI placeholder.
+assistantExample:
+  en: "e.g. Why doesn't an append-only ledger prevent an overdraft by itself?"
+  ru: "например: Почему append-only-журнал сам по себе не предотвращает уход в минус?"
+
+missionsFile: quiz.yaml

@@ -1,0 +1,165 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Shared WebSocket state trace event state",
+  "description": "Shape of the `state` field for shared-state trace events: the two decisions (where the registry lives, where the unique value comes from), the nodes holding the sockets, the connections and their threads, the registry entries, every value handed out, and what the run lost.",
+  "type": "object",
+  "required": ["store", "valueSource", "serializedWrites", "nodes", "connections", "registry", "issued", "stats"],
+  "properties": {
+    "store": {
+      "type": "string",
+      "enum": ["INSTANCE_FIELD", "PLAIN_MAP", "SYNCHRONIZED_MAP", "CONCURRENT_MAP"],
+      "description": "Where the map of open connections lives: a per-connection field, a static HashMap, a Collections.synchronizedMap, or a ConcurrentHashMap on a singleton."
+    },
+    "valueSource": {
+      "type": "string",
+      "enum": ["PLAIN_COUNTER", "REGISTRY_SIZE", "SYNCHRONIZED_COUNTER", "ATOMIC_COUNTER", "RANDOM_UUID", "DB_SEQUENCE"],
+      "description": "Where the value that must be unique comes from."
+    },
+    "serializedWrites": {
+      "type": "boolean",
+      "description": "True when each session is wrapped so two threads cannot write into it at once."
+    },
+    "nodes": {
+      "type": "array",
+      "description": "One entry per JVM behind the load balancer — each with its own heap and its own counter.",
+      "items": {
+        "type": "object",
+        "required": ["id", "counter", "entries"],
+        "properties": {
+          "id": { "type": "string", "description": "e.g. 'app-1'." },
+          "counter": {
+            "type": "integer",
+            "description": "This process's counter field. Two nodes counting from 1 is the cross-node duplicate."
+          },
+          "entries": { "type": "integer", "description": "Live registry entries held by this node." }
+        }
+      }
+    },
+    "connections": {
+      "type": "array",
+      "description": "One entry per open socket, with the container thread serving it.",
+      "items": {
+        "type": "object",
+        "required": ["id", "node", "thread", "holder", "phase", "duplicate"],
+        "properties": {
+          "id": { "type": "string", "description": "The client's name." },
+          "node": { "type": "string", "description": "The node whose process holds this socket." },
+          "thread": { "type": "string", "description": "The container thread running this connection's callbacks." },
+          "holder": {
+            "type": "string",
+            "description": "The object whose map this connection publishes into: a shared registry or its own endpoint object."
+          },
+          "phase": {
+            "type": "string",
+            "enum": ["OPEN", "JOINING", "REGISTERED", "CLOSED"],
+            "description": "JOINING is the window between reading the value and publishing it — where the race lives."
+          },
+          "candidate": {
+            "type": ["string", "null"],
+            "description": "The value this connection intends to use; nothing reserves it until it is published."
+          },
+          "value": { "type": ["string", "null"], "description": "The value it was actually registered with." },
+          "duplicate": { "type": "boolean", "description": "True when another connection holds the same value." }
+        }
+      }
+    },
+    "registry": {
+      "type": "array",
+      "description": "The rows of the session registry, in the order they were published.",
+      "items": {
+        "type": "object",
+        "required": ["node", "holder", "client", "value", "live", "stale", "duplicate"],
+        "properties": {
+          "node": { "type": "string", "description": "The node whose registry this row is in." },
+          "holder": { "type": "string", "description": "The object holding the map." },
+          "client": { "type": "string", "description": "The map key — the connection." },
+          "value": { "type": "string", "description": "The value stored with it." },
+          "live": {
+            "type": "boolean",
+            "description": "False once removed on close — or dropped by an unsynchronized concurrent put."
+          },
+          "stale": {
+            "type": "boolean",
+            "description": "True when the socket is closed but nobody removed the entry — the leak."
+          },
+          "duplicate": { "type": "boolean", "description": "True when its value is not unique." }
+        }
+      }
+    },
+    "issued": {
+      "type": "array",
+      "description": "Every value handed out, in order, so a collision is visible as two rows.",
+      "items": {
+        "type": "object",
+        "required": ["seq", "client", "node", "value", "unique"],
+        "properties": {
+          "seq": { "type": "integer", "description": "Position in the run." },
+          "client": { "type": "string", "description": "Who was given it." },
+          "node": { "type": "string", "description": "Which process produced it." },
+          "value": { "type": "string", "description": "The value itself." },
+          "unique": { "type": "boolean", "description": "False on every row of a colliding value." }
+        }
+      }
+    },
+    "stats": {
+      "type": "object",
+      "description": "Running totals for the whole run.",
+      "required": ["opened", "registered", "issued", "distinct", "duplicates", "lost", "leaked", "delivered", "missed", "stale", "writeErrors"],
+      "properties": {
+        "opened": { "type": "integer", "description": "Sockets opened." },
+        "registered": { "type": "integer", "description": "Registrations published into a registry." },
+        "issued": { "type": "integer", "description": "Values handed out." },
+        "distinct": { "type": "integer", "description": "How many of them were different." },
+        "duplicates": { "type": "integer", "description": "Values handed out more than once." },
+        "lost": { "type": "integer", "description": "Entries dropped by a concurrent write into an unsafe map." },
+        "leaked": { "type": "integer", "description": "Entries left behind after their socket closed." },
+        "delivered": { "type": "integer", "description": "Broadcast writes that reached a live socket." },
+        "missed": { "type": "integer", "description": "Connected clients a broadcast did not reach." },
+        "stale": { "type": "integer", "description": "Broadcast writes into an entry whose socket was gone." },
+        "writeErrors": { "type": "integer", "description": "Two threads writing into one session at once." }
+      }
+    },
+    "comparison": {
+      "type": "array",
+      "description": "Only on VALUE_SOURCES_COMPARED: each value source against the two guarantees.",
+      "items": {
+        "type": "object",
+        "required": ["source", "uniqueInJvm", "uniqueInCluster", "ordered", "coordination"],
+        "properties": {
+          "source": {
+            "enum": ["PLAIN_COUNTER", "REGISTRY_SIZE", "SYNCHRONIZED_COUNTER", "ATOMIC_COUNTER", "RANDOM_UUID", "DB_SEQUENCE", "SNOWFLAKE_ID"]
+          },
+          "uniqueInJvm": { "type": "boolean", "description": "Unique among the threads of one process." },
+          "uniqueInCluster": { "type": "boolean", "description": "Still unique once the app runs twice." },
+          "ordered": { "type": "boolean", "description": "Whether the values sort in the order they were created." },
+          "coordination": {
+            "enum": ["NONE", "JVM_LOCK", "JVM_CAS", "DATABASE", "UNIQUE_NODE_ID"],
+            "description": "What has to agree for the guarantee to hold."
+          }
+        }
+      }
+    }
+  },
+  "events": [
+    "REGISTRY_READY",
+    "WRITES_SERIALIZED",
+    "CONNECTION_OPENED",
+    "VALUE_READ",
+    "VALUE_ISSUED",
+    "REGISTERED",
+    "ENTRY_LOST",
+    "DUPLICATE_VALUE",
+    "CROSS_NODE_DUPLICATE",
+    "CHECK_THEN_ACT",
+    "REGISTRY_PRIVATE",
+    "BROADCAST_FANOUT",
+    "ITERATION_RACE",
+    "BROADCAST_MISSED",
+    "CONCURRENT_WRITE_FAILED",
+    "WRITE_SERIALIZED",
+    "UNREGISTERED",
+    "REGISTRY_LEAK",
+    "UNIQUENESS_AUDIT",
+    "VALUE_SOURCES_COMPARED"
+  ]
+}

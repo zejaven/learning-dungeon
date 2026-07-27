@@ -1,0 +1,258 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "JWT vs session token trace event state",
+  "description": "Shape of the `state` field for jwt-vs-session-token trace events.",
+  "type": "object",
+  "required": ["scheme", "clock", "accessTtl", "checkAudience", "denyListEnabled", "trustAlgHeader", "services", "credential", "sessionStore", "denied", "truth", "action", "checks", "outcome", "stats"],
+  "properties": {
+    "scheme": {
+      "enum": ["jwt", "session"],
+      "description": "Where the truth lives: signed claims carried by the client, or a record behind an opaque id."
+    },
+    "clock": {
+      "type": "integer",
+      "description": "Model time in minutes since the run started."
+    },
+    "accessTtl": {
+      "type": "integer",
+      "description": "How long an issued credential stays valid, in minutes."
+    },
+    "checkAudience": {
+      "type": "boolean",
+      "description": "Whether services refuse a token whose `aud` names somebody else."
+    },
+    "denyListEnabled": {
+      "type": "boolean",
+      "description": "Whether the issuer keeps a revocation list — the state a stateless token needs to be revocable."
+    },
+    "trustAlgHeader": {
+      "type": "boolean",
+      "description": "The bug: the verifier uses the algorithm named by the token it is verifying."
+    },
+    "services": {
+      "type": "array",
+      "description": "The services that verify credentials, and how often each has done so.",
+      "items": {
+        "type": "object",
+        "required": ["name", "verifications"],
+        "properties": {
+          "name": { "type": "string" },
+          "verifications": { "type": "integer" }
+        }
+      }
+    },
+    "credential": {
+      "type": ["object", "null"],
+      "description": "The credential currently under the microscope; null before anything is issued.",
+      "required": ["kind", "raw", "size", "revealed", "tampered", "signature", "header", "payload"],
+      "properties": {
+        "kind": {
+          "enum": ["jwt", "opaque"],
+          "description": "A compact JWT, or a meaningless session id."
+        },
+        "raw": {
+          "type": "string",
+          "description": "The exact bytes the client puts on the wire."
+        },
+        "size": {
+          "type": "integer",
+          "description": "Length of `raw` — what every request has to carry."
+        },
+        "revealed": {
+          "type": "boolean",
+          "description": "True for a JWT, whose segments are always readable; false for an opaque id."
+        },
+        "tampered": {
+          "type": "boolean",
+          "description": "Whether the client edited the payload or the header after it was signed."
+        },
+        "signature": {
+          "type": "string",
+          "description": "The third segment; empty when the header claims `alg: none`."
+        },
+        "header": {
+          "type": "array",
+          "description": "Decoded header fields, in order.",
+          "items": { "$ref": "#/definitions/claim" }
+        },
+        "payload": {
+          "type": "array",
+          "description": "Decoded payload claims, in order.",
+          "items": { "$ref": "#/definitions/claim" }
+        }
+      }
+    },
+    "sessionStore": {
+      "type": "array",
+      "description": "Records the server remembers. Always empty in JWT mode — that is the point.",
+      "items": {
+        "type": "object",
+        "required": ["id", "user", "expiresAt"],
+        "properties": {
+          "id": { "type": "string" },
+          "user": { "type": "string" },
+          "expiresAt": { "type": "integer" }
+        }
+      }
+    },
+    "denied": {
+      "type": "array",
+      "description": "Revoked token ids the issuer still has to remember.",
+      "items": { "type": "string" }
+    },
+    "truth": {
+      "type": "array",
+      "description": "What the database says about each user right now — the only current truth.",
+      "items": {
+        "type": "object",
+        "required": ["user", "role", "active"],
+        "properties": {
+          "user": { "type": "string" },
+          "role": { "type": "string" },
+          "active": {
+            "type": "boolean",
+            "description": "False once the account has been switched off."
+          }
+        }
+      }
+    },
+    "action": {
+      "type": "object",
+      "description": "What the current step is doing.",
+      "required": ["kind", "actor", "detail"],
+      "properties": {
+        "kind": {
+          "enum": ["idle", "issue", "decode", "tamper", "verify", "truth", "logout", "clock", "audit"],
+          "description": "Which part of the credential's life is running."
+        },
+        "actor": {
+          "type": "string",
+          "description": "Who is acting: the issuer, a service, an admin or whoever holds the value."
+        },
+        "detail": {
+          "type": "string",
+          "description": "The user, token id or claim edit this step is about."
+        }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "description": "The five checks every verification walks, in order, with the verdict of each.",
+      "items": {
+        "type": "object",
+        "required": ["id", "status", "detail"],
+        "properties": {
+          "id": {
+            "enum": ["parse", "source", "trust", "claims", "revoked"],
+            "description": "parse = well-formed; source = decoded locally or looked up; trust = signature or our own record; claims = exp and aud; revoked = still supposed to work."
+          },
+          "status": {
+            "enum": ["pending", "passed", "failed", "skipped", "breach"],
+            "description": "pending = never reached; breach = it let through what it should have stopped."
+          },
+          "detail": {
+            "type": "string",
+            "description": "Bare token behind the verdict: a claim value, a signature or a reason."
+          }
+        }
+      }
+    },
+    "outcome": {
+      "type": "object",
+      "description": "How the current step ended.",
+      "required": ["decision"],
+      "properties": {
+        "status": {
+          "type": ["integer", "null"],
+          "description": "HTTP status the service answered with; null when the step is not a request."
+        },
+        "decision": {
+          "enum": ["idle", "pending", "allowed", "denied", "breach"],
+          "description": "breach = the request was served and should not have been."
+        },
+        "reason": {
+          "type": ["string", "null"],
+          "enum": [
+            "no-credential",
+            "unknown-session",
+            "bad-signature",
+            "expired",
+            "wrong-audience",
+            "revoked",
+            "account-disabled",
+            "alg-none",
+            "revoked-token",
+            "stale-claim",
+            null
+          ],
+          "description": "Technical code for the refusal or the breach; null when nothing went wrong."
+        },
+        "detail": {
+          "type": "string",
+          "description": "The offending id, claim or service; empty when not applicable."
+        }
+      }
+    },
+    "stats": {
+      "type": "object",
+      "description": "Running totals across the whole run — the trade expressed in numbers.",
+      "required": ["issued", "verifications", "accepted", "refused", "storeLookups", "bytesOnTheWire", "breaches"],
+      "properties": {
+        "issued": { "type": "integer" },
+        "verifications": { "type": "integer" },
+        "accepted": {
+          "type": "integer",
+          "description": "Requests served as a known caller."
+        },
+        "refused": { "type": "integer" },
+        "storeLookups": {
+          "type": "integer",
+          "description": "Times a verification had to ask a shared store; always 0 for plain JWTs."
+        },
+        "bytesOnTheWire": {
+          "type": "integer",
+          "description": "Credential bytes carried across every verified request."
+        },
+        "breaches": {
+          "type": "integer",
+          "description": "Requests served that should not have been."
+        }
+      }
+    }
+  },
+  "definitions": {
+    "claim": {
+      "type": "object",
+      "required": ["k", "v"],
+      "properties": {
+        "k": { "type": "string" },
+        "v": { "type": "string" }
+      }
+    }
+  },
+  "events": [
+    "JWT_SETUP",
+    "SERVICE_ADDED",
+    "TOKEN_ISSUED",
+    "SESSION_ISSUED",
+    "TOKEN_DECODED",
+    "NOTHING_TO_READ",
+    "TOKEN_TAMPERED",
+    "SIGNATURE_VERIFIED",
+    "SIGNATURE_INVALID",
+    "ALG_NONE_REJECTED",
+    "ALG_NONE_ACCEPTED",
+    "STORE_LOOKUP",
+    "TOKEN_EXPIRED",
+    "AUDIENCE_MISMATCH",
+    "DENYLIST_HIT",
+    "REVOKED_TOKEN_ACCEPTED",
+    "STALE_CLAIM_ACCEPTED",
+    "ACCESS_GRANTED",
+    "ACCESS_DENIED",
+    "ROLE_CHANGED",
+    "LOGGED_OUT",
+    "TIME_PASSED",
+    "JWT_AUDIT"
+  ]
+}

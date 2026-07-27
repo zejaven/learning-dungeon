@@ -1,0 +1,239 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Production incident triage trace event state",
+  "description": "Shape of the `state` field for endpoint-broken-in-prod trace events: one production incident being triaged — the worksheet (phases, facts, signals, suspects) plus the stopwatch.",
+  "type": "object",
+  "required": ["service", "endpoint", "report", "stage", "severity", "minutes", "phases", "facts", "signals", "suspects", "guards", "missteps", "openQuestions"],
+  "properties": {
+    "service": {
+      "type": "string",
+      "description": "The service the incident is about, e.g. employee-api."
+    },
+    "endpoint": {
+      "type": "string",
+      "description": "The endpoint named in the report, e.g. 'GET /employees'."
+    },
+    "report": {
+      "type": "string",
+      "description": "The report as it was received, verbatim and unverified."
+    },
+    "stage": {
+      "enum": ["reported", "confirmed", "not-reproduced", "mitigated", "diagnosed", "fixed", "reopened", "closed"],
+      "description": "Technical lifecycle state of the incident, translated by the visualizer."
+    },
+    "severity": {
+      "enum": ["unknown", "none", "low", "high", "critical"],
+      "description": "Derived from the measured blast radius, never asserted; 'unknown' until the radius is measured."
+    },
+    "minutes": {
+      "type": "integer",
+      "description": "Minutes charged since the report landed; every action has a fixed deterministic cost."
+    },
+    "phases": {
+      "type": "array",
+      "description": "The eight triage phases, always in order: clarify, reproduce, measure, mitigate, diagnose, fix, verify, prevent.",
+      "items": {
+        "type": "object",
+        "required": ["name", "state", "detail"],
+        "properties": {
+          "name": {
+            "enum": ["clarify", "reproduce", "measure", "mitigate", "diagnose", "fix", "verify", "prevent"],
+            "description": "Technical phase code, translated by the visualizer."
+          },
+          "state": {
+            "enum": ["pending", "done", "skipped"],
+            "description": "'skipped' means a later phase was reached while this one was never touched."
+          },
+          "detail": {
+            "type": "string",
+            "description": "What was done in this phase, e.g. the mitigation action or the fix."
+          }
+        }
+      }
+    },
+    "facts": {
+      "type": "array",
+      "description": "The questions asked of the reporter, in order, with the answer when there is one.",
+      "items": {
+        "type": "object",
+        "required": ["question", "answer", "known"],
+        "properties": {
+          "question": {
+            "type": "string",
+            "description": "The question put to whoever reported the incident."
+          },
+          "answer": {
+            "type": ["string", "null"],
+            "description": "The answer, or null while the question is still open."
+          },
+          "known": {
+            "type": "boolean",
+            "description": "Whether this question has an answer yet."
+          }
+        }
+      }
+    },
+    "reproduction": {
+      "type": "object",
+      "description": "The attempt to send the failing request yourself; absent until one is made.",
+      "required": ["request", "failed", "observed"],
+      "properties": {
+        "request": {
+          "type": "string",
+          "description": "The request as it was sent, including whose parameters and token it used."
+        },
+        "failed": {
+          "type": "boolean",
+          "description": "Whether it reproduced the failure; false narrows the search rather than closing it."
+        },
+        "observed": {
+          "type": "string",
+          "description": "What actually came back, e.g. '500 employee.internal_error'."
+        }
+      }
+    },
+    "signals": {
+      "type": "array",
+      "description": "Metrics and logs read during triage, in the order they were read.",
+      "items": {
+        "type": "object",
+        "required": ["name", "value", "verdict"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "What was read, e.g. '5xx rate on GET /employees'."
+          },
+          "value": {
+            "type": "string",
+            "description": "The reading itself, or '-' when the signal does not exist."
+          },
+          "verdict": {
+            "enum": ["normal", "anomalous", "missing"],
+            "description": "'missing' is a finding about observability, not about the bug."
+          }
+        }
+      }
+    },
+    "blastRadius": {
+      "type": "object",
+      "description": "The measured scope of the incident; absent until it is measured.",
+      "required": ["affected", "share", "clients"],
+      "properties": {
+        "affected": {
+          "type": "string",
+          "description": "What is affected, e.g. 'GET /employees for 6 of 41 departments'."
+        },
+        "share": {
+          "type": "integer",
+          "description": "Percentage of traffic affected; the severity is derived from this number."
+        },
+        "clients": {
+          "type": "string",
+          "description": "Which callers are hit, e.g. 'the HR web client and the payroll sync job'."
+        }
+      }
+    },
+    "mitigation": {
+      "type": "object",
+      "description": "What restored service; absent while nothing has been mitigated.",
+      "required": ["action", "effect"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "description": "The reversible action taken, e.g. 'roll back to the previous release'."
+        },
+        "effect": {
+          "type": "string",
+          "description": "What it did to the signals, e.g. '5xx rate back to 0.1%'."
+        }
+      }
+    },
+    "suspects": {
+      "type": "array",
+      "description": "The hypotheses about what is different, in the order they were raised.",
+      "items": {
+        "type": "object",
+        "required": ["name", "why", "status", "evidence"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The suspected difference, e.g. 'the nightly HR import'."
+          },
+          "why": {
+            "type": "string",
+            "description": "Why it is on the list at all."
+          },
+          "status": {
+            "enum": ["open", "ruled-out", "confirmed"],
+            "description": "Where the hypothesis stands; it never leaves 'open' without evidence."
+          },
+          "evidence": {
+            "type": "string",
+            "description": "What closed it, in either direction; empty while it is still open."
+          }
+        }
+      }
+    },
+    "rootCause": {
+      "type": ["string", "null"],
+      "description": "The confirmed cause, or null while nothing is confirmed."
+    },
+    "testGap": {
+      "type": ["string", "null"],
+      "description": "Why the test suite was green, or null while nobody has answered that."
+    },
+    "fixApplied": {
+      "type": ["string", "null"],
+      "description": "The change shipped against the cause, or null while nothing has been changed."
+    },
+    "verified": {
+      "type": ["boolean", "null"],
+      "description": "Whether re-running the failing request succeeded; null while nothing has been verified."
+    },
+    "guards": {
+      "type": "array",
+      "description": "Follow-ups that would make the next incident of this class shorter.",
+      "items": { "type": "string" }
+    },
+    "missteps": {
+      "type": "array",
+      "description": "Triage errors recorded as consequences of the order actions were taken in.",
+      "items": {
+        "enum": [
+          "dismissed-report",
+          "flying-blind",
+          "diagnosed-while-down",
+          "blind-fix",
+          "fix-did-not-fix-it",
+          "nothing-to-verify-against"
+        ]
+      }
+    },
+    "openQuestions": {
+      "type": "integer",
+      "description": "How many asked questions still have no answer."
+    }
+  },
+  "events": [
+    "INCIDENT_REPORTED",
+    "REPORT_DISMISSED",
+    "CLAIM_CLARIFIED",
+    "QUESTION_UNANSWERED",
+    "REPRODUCED",
+    "NOT_REPRODUCED",
+    "SIGNAL_READ",
+    "SIGNAL_MISSING",
+    "BLAST_RADIUS_SET",
+    "MITIGATED",
+    "SUSPECT_RAISED",
+    "SUSPECT_RULED_OUT",
+    "ROOT_CAUSE_CONFIRMED",
+    "TEST_GAP_NAMED",
+    "FIX_APPLIED",
+    "BLIND_FIX",
+    "FIX_VERIFIED",
+    "FIX_UNVERIFIED",
+    "GUARD_ADDED",
+    "TRIAGE_REVIEW"
+  ]
+}

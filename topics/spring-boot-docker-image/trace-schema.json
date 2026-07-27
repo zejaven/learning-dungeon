@@ -1,0 +1,200 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Spring Boot Docker image trace event state",
+  "description": "Shape of the `state` field for spring-boot-docker-image trace events.",
+  "type": "object",
+  "required": ["tag", "context", "stages", "layers", "push", "stats"],
+  "properties": {
+    "tag": {
+      "type": "string",
+      "description": "Tag of the image currently being built, pushed or run; empty before the first build."
+    },
+    "context": {
+      "type": "object",
+      "description": "The build context: the folder `docker build .` sends to the daemon.",
+      "required": ["totalMb", "sentMb", "entries"],
+      "properties": {
+        "totalMb": {
+          "type": "integer",
+          "description": "Size of the whole project folder in MB."
+        },
+        "sentMb": {
+          "type": "integer",
+          "description": "Size actually transferred, i.e. minus what .dockerignore excludes."
+        },
+        "entries": {
+          "type": "array",
+          "description": "Top-level entries of the project folder.",
+          "items": {
+            "type": "object",
+            "required": ["path", "sizeMb", "ignored"],
+            "properties": {
+              "path": { "type": "string" },
+              "sizeMb": { "type": "integer" },
+              "ignored": {
+                "type": "boolean",
+                "description": "Whether .dockerignore keeps this entry out of the context."
+              }
+            }
+          }
+        }
+      }
+    },
+    "stages": {
+      "type": "array",
+      "description": "Names of the Dockerfile's stages, in order; the last one becomes the image.",
+      "items": { "type": "string" }
+    },
+    "layers": {
+      "type": "array",
+      "description": "Layers of the most recent build (or of the image being pushed/run), bottom first.",
+      "items": {
+        "type": "object",
+        "required": ["id", "instruction", "sizeMb", "status", "metadata", "stage", "inFinalImage"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Layer id within this build, e.g. L3 — used by `highlight`."
+          },
+          "instruction": {
+            "type": "string",
+            "description": "The Dockerfile line that produced this layer, untranslated."
+          },
+          "sizeMb": {
+            "type": "integer",
+            "description": "Bytes the layer adds to the image, in MB; 0 for metadata instructions."
+          },
+          "status": {
+            "enum": ["built", "cached"],
+            "description": "Whether the daemon wrote this layer or reused it from the build cache."
+          },
+          "metadata": {
+            "type": "boolean",
+            "description": "True for WORKDIR/ENV/EXPOSE/USER/ENTRYPOINT, which add no bytes."
+          },
+          "stage": {
+            "type": "string",
+            "description": "Name of the build stage this layer belongs to."
+          },
+          "inFinalImage": {
+            "type": "boolean",
+            "description": "False for layers of a discarded stage of a multi-stage build."
+          }
+        }
+      }
+    },
+    "image": {
+      "type": ["object", "null"],
+      "description": "The image the last build produced; null before the first build finishes.",
+      "required": ["tag", "sizeMb", "user", "entrypoint"],
+      "properties": {
+        "tag": { "type": "string" },
+        "sizeMb": {
+          "type": "integer",
+          "description": "Total size of the final stage's layers in MB."
+        },
+        "user": {
+          "type": "string",
+          "description": "Account PID 1 runs as; 'root' when the Dockerfile has no USER."
+        },
+        "entrypoint": {
+          "type": "string",
+          "description": "The command the container starts, untranslated."
+        }
+      }
+    },
+    "push": {
+      "type": "object",
+      "description": "Result of the most recent `docker push`.",
+      "required": ["pushed", "uploadedMb", "skippedMb"],
+      "properties": {
+        "pushed": {
+          "type": "boolean",
+          "description": "Whether a push has happened for the current image."
+        },
+        "uploadedMb": {
+          "type": "integer",
+          "description": "MB of layers the registry did not have yet."
+        },
+        "skippedMb": {
+          "type": "integer",
+          "description": "MB of layers the registry already stored."
+        }
+      }
+    },
+    "container": {
+      "type": ["object", "null"],
+      "description": "The running container, or null while nothing has been run.",
+      "required": ["tag", "user", "memoryLimitMb", "heapMb", "heapPercent"],
+      "properties": {
+        "tag": { "type": "string" },
+        "user": {
+          "type": "string",
+          "description": "Account PID 1 runs as inside the container."
+        },
+        "memoryLimitMb": {
+          "type": "integer",
+          "description": "The container memory limit passed to `docker run -m`."
+        },
+        "heapMb": {
+          "type": "integer",
+          "description": "Max heap the JVM takes from that limit."
+        },
+        "heapPercent": {
+          "type": "integer",
+          "description": "MaxRAMPercentage in effect: 25 by default, or what the image sets."
+        }
+      }
+    },
+    "stats": {
+      "type": "object",
+      "description": "Running totals across the whole session.",
+      "required": ["builds", "layersBuilt", "layersCached", "contextSentMb", "contextSavedMb", "uploadedMb", "skippedMb"],
+      "properties": {
+        "builds": { "type": "integer" },
+        "layersBuilt": {
+          "type": "integer",
+          "description": "Layers the daemon had to write."
+        },
+        "layersCached": {
+          "type": "integer",
+          "description": "Layers taken from the build cache."
+        },
+        "contextSentMb": {
+          "type": "integer",
+          "description": "MB of build context transferred across all builds."
+        },
+        "contextSavedMb": {
+          "type": "integer",
+          "description": "MB .dockerignore kept out across all builds."
+        },
+        "uploadedMb": {
+          "type": "integer",
+          "description": "MB pushed to the registry across all pushes."
+        },
+        "skippedMb": {
+          "type": "integer",
+          "description": "MB skipped on push because the registry already had those layers."
+        }
+      }
+    }
+  },
+  "events": [
+    "DAEMON_READY",
+    "DOCKERIGNORE_ADDED",
+    "BUILD_STARTED",
+    "CONTEXT_IGNORED",
+    "BASE_IMAGE",
+    "LAYER_BUILT",
+    "LAYER_CACHED",
+    "CACHE_INVALIDATED",
+    "STAGE_DISCARDED",
+    "IMAGE_BUILT",
+    "IMAGE_PUSHED",
+    "CONTAINER_STARTED",
+    "RUNS_AS_ROOT",
+    "CODE_CHANGED",
+    "DEPENDENCY_ADDED",
+    "BUILD_AUDIT"
+  ]
+}

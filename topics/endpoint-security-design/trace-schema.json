@@ -1,0 +1,242 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Endpoint security trace event state",
+  "description": "Shape of the `state` field for endpoint-security-design trace events.",
+  "type": "object",
+  "required": ["defaultStance", "trustsIdentityHeaders", "trustsUnverifiedTokens", "rateLimit", "rules", "principal", "gates", "stats"],
+  "properties": {
+    "defaultStance": {
+      "enum": ["deny", "permit"],
+      "description": "What happens to a request no rule matches."
+    },
+    "trustsIdentityHeaders": {
+      "type": "boolean",
+      "description": "Whether the API takes the caller's identity from X-User-* headers."
+    },
+    "trustsUnverifiedTokens": {
+      "type": "boolean",
+      "description": "Whether the API decodes tokens without verifying the signature."
+    },
+    "rateLimit": {
+      "type": "integer",
+      "description": "Requests allowed per client; 0 when no limit is installed."
+    },
+    "rules": {
+      "type": "array",
+      "description": "The ordered rule list; the first entry that matches decides.",
+      "items": {
+        "type": "object",
+        "required": ["method", "pattern", "requirement", "scopes", "ownerOnly", "shadowed", "matched"],
+        "properties": {
+          "method": {
+            "type": "string",
+            "description": "HTTP method the rule is limited to, or 'ANY'."
+          },
+          "pattern": {
+            "type": "string",
+            "description": "Path pattern: an exact path or a prefix ending in /**."
+          },
+          "requirement": {
+            "enum": ["permitAll", "authenticated", "hasRole"],
+            "description": "The base requirement of the rule."
+          },
+          "role": {
+            "type": ["string", "null"],
+            "description": "Role demanded by a hasRole rule; null otherwise."
+          },
+          "scopes": {
+            "type": "array",
+            "description": "Token scopes the rule additionally demands.",
+            "items": { "type": "string" }
+          },
+          "ownerOnly": {
+            "type": "boolean",
+            "description": "Whether the rule also demands an object-level ownership check."
+          },
+          "shadowed": {
+            "type": "boolean",
+            "description": "Whether an earlier rule already matches these paths, making this one unreachable."
+          },
+          "matched": {
+            "type": "boolean",
+            "description": "Whether this rule is the one that matched the current request."
+          }
+        }
+      }
+    },
+    "request": {
+      "type": "object",
+      "description": "The request being processed (absent before the first one).",
+      "required": ["method", "path", "scheme", "credential", "headers"],
+      "properties": {
+        "method": { "type": "string" },
+        "path": { "type": "string" },
+        "scheme": {
+          "enum": ["https", "http"],
+          "description": "Whether the connection is encrypted."
+        },
+        "credential": {
+          "type": "string",
+          "description": "The credential presented, e.g. 'Bearer alice' or 'none'."
+        },
+        "headers": {
+          "type": "array",
+          "description": "Request headers as the caller set them.",
+          "items": {
+            "type": "object",
+            "required": ["name", "value", "clientControlled"],
+            "properties": {
+              "name": { "type": "string" },
+              "value": { "type": "string" },
+              "clientControlled": {
+                "type": "boolean",
+                "description": "Whether this is an identity header any client could have typed."
+              }
+            }
+          }
+        }
+      }
+    },
+    "principal": {
+      "type": ["object", "null"],
+      "description": "Who the API decided the caller is; null while nobody has been identified.",
+      "required": ["subject", "roles", "scopes", "source"],
+      "properties": {
+        "subject": { "type": "string" },
+        "roles": {
+          "type": "array",
+          "description": "Roles claimed for the caller — what the user may do.",
+          "items": { "type": "string" }
+        },
+        "scopes": {
+          "type": "array",
+          "description": "Scopes of the presented token — what this token may do.",
+          "items": { "type": "string" }
+        },
+        "source": {
+          "enum": ["token", "header"],
+          "description": "Where the identity came from; 'header' is never trustworthy."
+        }
+      }
+    },
+    "gates": {
+      "type": "array",
+      "description": "The chain, in execution order, with the verdict of each gate for the current request.",
+      "items": {
+        "type": "object",
+        "required": ["id", "status", "detail"],
+        "properties": {
+          "id": {
+            "enum": ["transport", "rateLimit", "routing", "authentication", "authorization", "ownership", "handler"],
+            "description": "Which gate this is."
+          },
+          "status": {
+            "enum": ["pending", "passed", "denied", "skipped", "breach"],
+            "description": "pending = never reached; breach = it let through what it should have stopped."
+          },
+          "detail": {
+            "type": "string",
+            "description": "Bare token behind the verdict: the matched pattern, the subject, a role, a scope or a counter."
+          }
+        }
+      }
+    },
+    "outcome": {
+      "type": "object",
+      "description": "How the current request ended (absent before the first one).",
+      "required": ["decision"],
+      "properties": {
+        "status": {
+          "type": ["integer", "null"],
+          "description": "HTTP status the API answered with; null while the request is still in the chain."
+        },
+        "decision": {
+          "enum": ["idle", "pending", "allowed", "denied", "breach"],
+          "description": "breach = the handler ran and should not have."
+        },
+        "reason": {
+          "type": ["string", "null"],
+          "enum": [
+            "insecure-transport",
+            "rate-limited",
+            "no-rule",
+            "no-credential",
+            "bad-signature",
+            "wrong-issuer",
+            "wrong-audience",
+            "expired",
+            "role",
+            "scope",
+            "not-owner",
+            null
+          ],
+          "description": "Technical code for the refusal; null when nothing was refused."
+        },
+        "detail": {
+          "type": "string",
+          "description": "The offending role, scope, issuer, audience or owner; empty when not applicable."
+        }
+      }
+    },
+    "stats": {
+      "type": "object",
+      "description": "Running totals across the whole run.",
+      "required": ["requests", "allowed", "unauthenticated", "forbidden", "rateLimited", "insecure", "leakedCredentials", "breaches"],
+      "properties": {
+        "requests": { "type": "integer" },
+        "allowed": {
+          "type": "integer",
+          "description": "Requests whose handler ran."
+        },
+        "unauthenticated": {
+          "type": "integer",
+          "description": "Requests refused with 401."
+        },
+        "forbidden": {
+          "type": "integer",
+          "description": "Requests refused with 403 or 404."
+        },
+        "rateLimited": {
+          "type": "integer",
+          "description": "Requests refused with 429."
+        },
+        "insecure": {
+          "type": "integer",
+          "description": "Requests refused for arriving over plain http."
+        },
+        "leakedCredentials": {
+          "type": "integer",
+          "description": "Credentials that were readable on the wire before being refused."
+        },
+        "breaches": {
+          "type": "integer",
+          "description": "Requests served that should not have been."
+        }
+      }
+    }
+  },
+  "events": [
+    "SECURITY_SETUP",
+    "RULE_ADDED",
+    "RULE_SHADOWED",
+    "RATE_LIMIT_SET",
+    "REQUEST_RECEIVED",
+    "TRANSPORT_INSECURE",
+    "RATE_LIMITED",
+    "EXPOSED_BY_DEFAULT",
+    "DENIED_BY_DEFAULT",
+    "SPOOFED_IDENTITY_HEADER",
+    "IDENTITY_HEADER_TRUSTED",
+    "AUTHENTICATION_MISSING",
+    "TOKEN_REJECTED",
+    "TOKEN_NOT_VERIFIED",
+    "AUTHENTICATED",
+    "ROLE_DENIED",
+    "SCOPE_DENIED",
+    "AUTHORIZED",
+    "OWNERSHIP_DENIED",
+    "OWNERSHIP_CHECK_MISSING",
+    "HANDLER_RAN",
+    "SECURITY_AUDIT"
+  ]
+}

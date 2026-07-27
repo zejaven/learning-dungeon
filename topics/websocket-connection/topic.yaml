@@ -1,0 +1,236 @@
+id: websocket-connection
+title:
+  en: 'How a WebSocket Connection Works'
+  ru: 'Как работает WebSocket-соединение'
+category:
+  en: Networking / Real-Time
+  ru: Сети / Реальное время
+type: HTTP
+mode: trace
+aiProvider: claude
+aiModel: claude-opus-5
+categoryId: networking
+difficulty: 2
+catalogId: networking-3
+summary:
+  en: >
+    A WebSocket does not start as a WebSocket. It starts as one ordinary HTTP GET
+    with Upgrade: websocket and a Sec-WebSocket-Key, answered with 101 Switching
+    Protocols and a Sec-WebSocket-Accept computed from that key — and 101 means
+    not "here is your response" but "this connection stops being HTTP". The same
+    TCP connection stays open and both ends write frames into it whenever they
+    like: that is what bidirectional means, and it is the reason there are no more
+    status codes, no cookies per message and no request/response pairing. The
+    transport is TCP and only TCP — never UDP, so you inherit ordered, reliable,
+    exactly-once delivery and head-of-line blocking with it. The third question is
+    the one that bites in production: who serves the connection. A Jakarta
+    @ServerEndpoint POJO is instantiated once per connection, so a field is
+    private per client; a Spring WebSocketHandler is a singleton bean shared by
+    every connection, so the same field is global mutable state written from every
+    client's thread. That is why every callback takes the Session — per-connection
+    state belongs there, where the answer is the same in both models.
+  ru: >
+    WebSocket начинается не как WebSocket. Он начинается как один обычный
+    HTTP-запрос GET с Upgrade: websocket и Sec-WebSocket-Key, на который отвечают
+    101 Switching Protocols и Sec-WebSocket-Accept, вычисленным из этого ключа, —
+    и 101 означает не «вот твой ответ», а «это соединение перестаёт быть HTTP».
+    То же самое TCP-соединение остаётся открытым, и оба конца пишут в него фреймы
+    когда захотят: это и есть двусторонность, и именно поэтому дальше нет ни кодов
+    состояния, ни кук на каждое сообщение, ни привязки ответа к запросу. Транспорт
+    — TCP и только TCP, никогда не UDP, поэтому вместе с ним наследуются
+    упорядоченная надёжная доставка ровно один раз и head-of-line blocking. Третий
+    вопрос — тот, что бьёт в продакшене: кто обслуживает соединение. POJO с
+    @ServerEndpoint из Jakarta создаётся по экземпляру на соединение, поэтому поле
+    приватно для клиента; Spring WebSocketHandler — singleton-бин, общий для всех
+    соединений, поэтому то же самое поле становится глобальным изменяемым
+    состоянием, в которое пишут потоки всех клиентов. Поэтому каждый колбэк
+    принимает Session: состояние соединения место именно там, где ответ одинаков в
+    обеих моделях.
+
+# Visual primitives this topic's visualizer composes (frontend).
+primitives:
+  - BoxGroup
+  - ArrayGrid
+
+defaultExample: the-handshake
+
+# Examples shown as buttons. `file` is relative to examples/.
+examples:
+  - id: the-handshake
+    title:
+      en: 'GET, then 101'
+      ru: 'Сначала GET, потом 101'
+    file: 01-the-handshake.java
+    explanation:
+      en: >
+        Where a socket comes from. Read the request lines: an ordinary GET, ordinary
+        headers, ordinary cookies — plus Upgrade, Connection and a Sec-WebSocket-Key,
+        which is 16 random bytes and not a secret. The reply is 101 with an accept
+        value derived from that key by a fixed recipe, and this run uses the nonce from
+        RFC 6455 so you can check the arithmetic yourself. The second connection shows
+        the part that matters for security: a foreign Origin is refused with a plain
+        403, because the handshake is the last moment where a status code exists.
+      ru: >
+        Откуда берётся сокет. Прочитайте строки запроса: обычный GET, обычные
+        заголовки, обычные куки — плюс Upgrade, Connection и Sec-WebSocket-Key, то есть
+        16 случайных байт, а вовсе не секрет. В ответ приходит 101 со значением accept,
+        выведенным из этого ключа по фиксированному рецепту, причём в этом прогоне взят
+        nonce из RFC 6455, так что арифметику можно проверить самому. Второе соединение
+        показывает важную для безопасности часть: чужой Origin отклоняется обычным 403,
+        потому что рукопожатие — последний момент, когда код состояния вообще
+        существует.
+  - id: both-sides-may-speak
+    title:
+      en: 'Both ends write when they like'
+      ru: 'Оба конца пишут когда хотят'
+    file: 02-both-sides-may-speak.java
+    explanation:
+      en: >
+        What "bidirectional" actually buys. The server writes three frames nobody
+        requested, which is impossible over plain HTTP no matter how you arrange the
+        requests. Look at the byte counts: a two-character message costs eight bytes
+        going up and four coming down, because the request line, the headers and the
+        cookies were spent once on the handshake and never repeat. And notice what is
+        missing — no status code, no correlation id: if a frame is an answer to
+        something, that is your convention, not the protocol's.
+      ru: >
+        Что на самом деле даёт «двусторонность». Сервер пишет три фрейма, которых никто
+        не просил, — по обычному HTTP это невозможно, как ни расставляй запросы.
+        Посмотрите на байты: сообщение из двух символов стоит восемь байт наверх и
+        четыре вниз, потому что строка запроса, заголовки и куки были потрачены один раз
+        на рукопожатии и больше не повторяются. И обратите внимание, чего нет: ни кода
+        состояния, ни идентификатора корреляции — если фрейм является ответом на что-то,
+        это ваше соглашение, а не свойство протокола.
+  - id: what-it-runs-on
+    title:
+      en: 'TCP, and only TCP'
+      ru: 'TCP, и только TCP'
+    file: 03-what-it-runs-on.java
+    explanation:
+      en: >
+        The transport answer, stated precisely. One TCP connection — the same one the
+        GET arrived on — so frames are ordered, reliable and delivered once, and
+        head-of-line blocking comes along with that. There is no UDP option and no API
+        to ask for one; WebRTC is where you go when a late packet is worse than a lost
+        one. wss:// only inserts TLS between TCP and the frames. The ping/pong pair is
+        not decoration: a silent TCP connection can be dead for minutes, and every
+        proxy in the path kills idle ones on its own schedule.
+      ru: >
+        Точный ответ про транспорт. Одно TCP-соединение — то же самое, по которому
+        пришёл GET, — поэтому фреймы упорядочены, надёжны и доставляются один раз, а
+        вместе с этим приходит и head-of-line blocking. Варианта с UDP нет, и попросить
+        его через API нельзя; туда, где опоздавший пакет хуже потерянного, идут с
+        WebRTC. wss:// лишь вставляет TLS между TCP и фреймами. Пара ping/pong здесь не
+        украшение: молчащее TCP-соединение может быть мёртвым минутами, а каждый прокси
+        по пути рвёт простаивающие по своему расписанию.
+  - id: an-object-per-connection
+    title:
+      en: 'An endpoint object per connection'
+      ru: 'Объект эндпоинта на каждое соединение'
+    file: 04-an-object-per-connection.java
+    explanation:
+      en: >
+        The Jakarta WebSocket default. Two connections produce two ChatEndpoint objects,
+        so `this.user = ...` is per-connection state and reads back correctly for each
+        client — the shape where "just put it in a field" is genuinely right. Two things
+        travel with it: the container built those objects, so nothing Spring manages was
+        injected into them, and "per connection" covers instance fields only — a static
+        field is still shared by every connection there is.
+      ru: >
+        Поведение Jakarta WebSocket по умолчанию. Два соединения дают два объекта
+        ChatEndpoint, поэтому `this.user = ...` — это состояние соединения, и у каждого
+        клиента оно читается правильно: та самая форма, где «просто положи в поле»
+        действительно верно. Вместе с этим приходят две вещи: объекты создал контейнер,
+        поэтому ничего управляемого Spring в них не внедрено, и «на соединение»
+        распространяется только на поля экземпляра — статическое поле по-прежнему общее
+        для всех соединений.
+  - id: one-handler-for-everyone
+    title:
+      en: 'One shared handler, two users'
+      ru: 'Один общий обработчик, два пользователя'
+    file: 05-one-handler-for-everyone.java
+    explanation:
+      en: >
+        The same code, one object. A Spring WebSocketHandler is a singleton bean, so the
+        second connection's write lands on the field the first one was using, and the
+        next message from tab-1 is handled as omar. Nothing threw, nothing was logged,
+        and with one user on your laptop the bug does not exist — it appears when a
+        second person connects and looks exactly like a chat where names swap. This
+        single difference is what the third part of the interview question is testing.
+      ru: >
+        Тот же код, один объект. Spring WebSocketHandler — singleton-бин, поэтому запись
+        второго соединения попадает в поле, которым пользовалось первое, и следующее
+        сообщение от tab-1 обрабатывается как omar. Ничего не упало, ничего не
+        залогировано, и на ноутбуке с одним пользователем этой ошибки не существует: она
+        появляется, когда подключается второй, и выглядит ровно как чат, в котором
+        путаются имена. Именно эту разницу и проверяет третья часть вопроса на
+        собеседовании.
+  - id: state-that-belongs-to-the-connection
+    title:
+      en: 'Put the state on the session'
+      ru: 'Положи состояние в сессию'
+    file: 06-state-that-belongs-to-the-connection.java
+    explanation:
+      en: >
+        The fix, and why it is the portable one. The Session is created per connection
+        in both models, so keying state by the session makes the answer independent of
+        how your endpoint happens to be instantiated — while the handler stays stateless
+        and injectable. The broadcast at the end shows the other half of the story: the
+        protocol has no rooms or topics, so fan-out is you iterating a concurrent
+        collection of sessions that lives inside exactly one process.
+      ru: >
+        Решение — и почему именно оно переносимо. Session создаётся на каждое соединение
+        в обеих моделях, поэтому состояние, привязанное к сессии, не зависит от того,
+        как именно создан ваш эндпоинт, а обработчик остаётся без состояния и пригодным
+        для внедрения зависимостей. Широковещание в конце показывает вторую половину
+        истории: у протокола нет ни комнат, ни тем, поэтому фан-аут — это ваш обход
+        конкурентной коллекции сессий, которая живёт внутри ровно одного процесса.
+  - id: how-a-socket-ends
+    title:
+      en: '1000 vs 1006'
+      ru: '1000 против 1006'
+    file: 07-how-a-socket-ends.java
+    explanation:
+      en: >
+        Closing is a handshake too — a CLOSE frame each way and then the TCP FIN, so
+        both sides know it ended on purpose. Compare that with the drop: no frame at
+        all, and code 1006, the one status code that is never on the wire because it
+        means "it ended and nobody said why". Then watch the frame written into the dead
+        socket disappear — no exception, no queue, no redelivery. That is the honest
+        difference between a socket and a broker.
+      ru: >
+        Закрытие — тоже рукопожатие: CLOSE-фрейм в каждую сторону, затем TCP FIN, чтобы
+        обе стороны знали, что всё завершилось намеренно. Сравните с обрывом: фрейма нет
+        вообще, а код 1006 — единственный код, которого не бывает на проводе, потому что
+        он означает «кончилось, и никто не сказал почему». Затем посмотрите, как фрейм,
+        записанный в мёртвый сокет, исчезает: ни исключения, ни очереди, ни передоставки.
+        В этом честная разница между сокетом и брокером.
+  - id: instancing-compared
+    title:
+      en: 'Per connection or shared?'
+      ru: 'На соединение или общий?'
+    file: 08-instancing-compared.java
+    explanation:
+      en: >
+        Three connections priced through the three real choices: a plain @ServerEndpoint
+        POJO (three objects, a field is per-client, no injection), the same annotation
+        with a Configurator returning a bean (one object, injection works, every field
+        now shared), and a Spring WebSocketHandler (the singleton shape by default,
+        with PerConnectionWebSocketHandler as the opt-out). The last column is the point:
+        wherever the object count is one, per-connection state has to live on the
+        session.
+      ru: >
+        Три соединения, прогнанные через три реальных варианта: обычный POJO с
+        @ServerEndpoint (три объекта, поле принадлежит клиенту, внедрения нет), та же
+        аннотация с Configurator, возвращающим бин (один объект, внедрение работает,
+        каждое поле теперь общее), и Spring WebSocketHandler (по умолчанию синглтонная
+        форма, а PerConnectionWebSocketHandler — способ от неё отказаться). Смысл в
+        последней колонке: везде, где объект один, состояние соединения обязано жить в
+        сессии.
+
+# Example question pre-filled as the Ask AI placeholder.
+assistantExample:
+  en: 'e.g. Walk me through a WebSocket handshake, and tell me whether my endpoint class is instantiated per connection or shared.'
+  ru: 'например: Проведи меня по рукопожатию WebSocket и скажи, создаётся ли мой класс эндпоинта на каждое соединение или он общий.'
+
+missionsFile: quiz.yaml

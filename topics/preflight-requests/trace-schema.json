@@ -1,0 +1,239 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Preflight request trace event state",
+  "description": "Shape of the `state` field for preflight-requests trace events.",
+  "type": "object",
+  "required": ["pageOrigin", "apiOrigin", "clock", "api", "cache", "stats"],
+  "properties": {
+    "pageOrigin": {
+      "type": "string",
+      "description": "Origin of the page whose JavaScript makes the call (scheme + host + port)."
+    },
+    "apiOrigin": {
+      "type": "string",
+      "description": "Origin of the API being called."
+    },
+    "clock": {
+      "type": "integer",
+      "description": "Seconds since the page loaded; only advanceSeconds moves it, and cached preflights expire against it."
+    },
+    "api": {
+      "type": "object",
+      "description": "How the API answers an OPTIONS preflight.",
+      "required": ["corsEnabled", "authFilterFirst", "allowOrigin", "allowMethods", "allowHeaders", "allowCredentials", "maxAge"],
+      "properties": {
+        "corsEnabled": {
+          "type": "boolean",
+          "description": "Whether the API has a CORS handler at all."
+        },
+        "authFilterFirst": {
+          "type": "boolean",
+          "description": "Whether a security filter authenticates OPTIONS before the CORS handler runs."
+        },
+        "allowOrigin": {
+          "type": ["string", "null"],
+          "description": "Access-Control-Allow-Origin: an origin, '*', or null when the header is not sent."
+        },
+        "allowMethods": {
+          "type": "array",
+          "description": "Access-Control-Allow-Methods, as configured.",
+          "items": { "type": "string" }
+        },
+        "allowHeaders": {
+          "type": "array",
+          "description": "Access-Control-Allow-Headers, as configured.",
+          "items": { "type": "string" }
+        },
+        "allowCredentials": {
+          "type": "boolean",
+          "description": "Whether Access-Control-Allow-Credentials: true is sent."
+        },
+        "maxAge": {
+          "type": "integer",
+          "description": "Access-Control-Max-Age in seconds as configured; 0 when the header is not sent."
+        }
+      }
+    },
+    "call": {
+      "type": "object",
+      "description": "The fetch() being made (absent before the first one).",
+      "required": ["method", "path", "headers", "credentials", "needsPreflight", "trigger", "triggerDetail"],
+      "properties": {
+        "method": {
+          "type": "string",
+          "description": "The HTTP method, untranslated."
+        },
+        "path": { "type": "string" },
+        "headers": {
+          "type": "array",
+          "description": "Request headers as the fetch call set them.",
+          "items": {
+            "type": "object",
+            "required": ["name", "value", "safelisted"],
+            "properties": {
+              "name": { "type": "string" },
+              "value": { "type": "string" },
+              "safelisted": {
+                "type": "boolean",
+                "description": "Whether this header is on the CORS request safelist, i.e. does not trigger a preflight."
+              }
+            }
+          }
+        },
+        "credentials": {
+          "type": "boolean",
+          "description": "Whether the call was made with credentials: 'include' (cookies on the real request)."
+        },
+        "needsPreflight": {
+          "type": "boolean",
+          "description": "Whether this call has to be preflighted."
+        },
+        "trigger": {
+          "enum": ["none", "method", "header", "content-type"],
+          "description": "What forced the preflight: the method, a non-safelisted header, or the Content-Type value."
+        },
+        "triggerDetail": {
+          "type": "string",
+          "description": "The offending method or header name; empty when no preflight is needed."
+        }
+      }
+    },
+    "preflight": {
+      "type": "object",
+      "description": "The OPTIONS handshake for the current call.",
+      "required": ["status", "requestMethod", "requestHeaders", "responseStatus", "effectiveMaxAge"],
+      "properties": {
+        "status": {
+          "enum": ["none", "cached", "sent", "approved", "denied"],
+          "description": "How far the handshake got: not needed, served from the cache, sent, granted or refused."
+        },
+        "requestMethod": {
+          "type": "string",
+          "description": "Access-Control-Request-Method: the method the browser asks about."
+        },
+        "requestHeaders": {
+          "type": "array",
+          "description": "Access-Control-Request-Headers: non-safelisted header NAMES, lowercased and sorted.",
+          "items": { "type": "string" }
+        },
+        "responseStatus": {
+          "type": "integer",
+          "description": "Status of the OPTIONS answer; 0 when no preflight was sent."
+        },
+        "effectiveMaxAge": {
+          "type": "integer",
+          "description": "Seconds the browser actually remembers the answer for, after its own cap."
+        },
+        "reason": {
+          "type": ["string", "null"],
+          "enum": [
+            "bad-status",
+            "no-allow-origin",
+            "origin-mismatch",
+            "method-not-allowed",
+            "header-not-allowed",
+            "authorization-not-listed",
+            "credentials-wildcard",
+            "credentials-not-allowed",
+            "wildcard-literal-with-credentials",
+            null
+          ],
+          "description": "Technical code for why the preflight was refused; null when nothing was refused."
+        },
+        "detail": {
+          "type": "string",
+          "description": "The offending status, origin, method or header name behind `reason`; empty when not applicable."
+        }
+      }
+    },
+    "outcome": {
+      "type": "object",
+      "description": "What happened to the current call.",
+      "required": ["stage", "realRequestSent"],
+      "properties": {
+        "stage": {
+          "enum": ["idle", "classified", "settled"],
+          "description": "How far the call has progressed."
+        },
+        "realRequestSent": {
+          "type": "boolean",
+          "description": "Whether the real request left the browser at all."
+        }
+      }
+    },
+    "cache": {
+      "type": "array",
+      "description": "Preflight answers the browser is still allowed to reuse.",
+      "items": {
+        "type": "object",
+        "required": ["path", "method", "headers", "credentials", "expiresAt", "remaining"],
+        "properties": {
+          "path": { "type": "string" },
+          "method": { "type": "string" },
+          "headers": {
+            "type": "array",
+            "description": "The header names this entry was granted for.",
+            "items": { "type": "string" }
+          },
+          "credentials": {
+            "type": "boolean",
+            "description": "The credentials mode this entry was granted for — a different mode is a different entry."
+          },
+          "expiresAt": {
+            "type": "integer",
+            "description": "Clock value at which this entry stops being usable."
+          },
+          "remaining": {
+            "type": "integer",
+            "description": "Seconds left before it expires."
+          }
+        }
+      }
+    },
+    "stats": {
+      "type": "object",
+      "description": "Running totals across the whole run.",
+      "required": ["calls", "preflightsSent", "cacheHits", "denied", "realRequests", "roundTrips"],
+      "properties": {
+        "calls": { "type": "integer" },
+        "preflightsSent": {
+          "type": "integer",
+          "description": "OPTIONS round trips actually sent."
+        },
+        "cacheHits": {
+          "type": "integer",
+          "description": "Preflights skipped because a remembered answer was still valid."
+        },
+        "denied": {
+          "type": "integer",
+          "description": "Calls whose preflight was refused, so the real request never left."
+        },
+        "realRequests": {
+          "type": "integer",
+          "description": "Real requests that reached the API."
+        },
+        "roundTrips": {
+          "type": "integer",
+          "description": "Total network round trips: preflights plus real requests."
+        }
+      }
+    }
+  },
+  "events": [
+    "PREFLIGHT_SETUP",
+    "CALL_ISSUED",
+    "SIMPLE_CALL",
+    "PREFLIGHT_REQUIRED",
+    "CACHE_HIT",
+    "CACHE_EXPIRED",
+    "OPTIONS_SENT",
+    "OPTIONS_ANSWERED",
+    "OPTIONS_UNAUTHORIZED",
+    "PREFLIGHT_APPROVED",
+    "PREFLIGHT_DENIED",
+    "REQUEST_NEVER_SENT",
+    "REAL_REQUEST_SENT",
+    "CLOCK_ADVANCED",
+    "PREFLIGHT_AUDIT"
+  ]
+}

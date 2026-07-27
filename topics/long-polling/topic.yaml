@@ -1,0 +1,190 @@
+id: long-polling
+title:
+  en: 'Long Polling vs a Regular HTTP Request'
+  ru: 'Длинный опрос против обычного HTTP-запроса'
+category:
+  en: Networking / Real-Time
+  ru: Сети / Реальное время
+type: HTTP
+mode: trace
+aiProvider: claude
+aiModel: claude-opus-5
+categoryId: networking
+difficulty: 2
+catalogId: networking-2
+summary:
+  en: >
+    A regular HTTP request is a closed loop: the client asks, the handler runs,
+    the response is written, the request is over — and "nothing new" is an answer
+    too, paid for with a full round trip. Long polling changes exactly one thing
+    about that loop: when the response is written. Same method, same URL, same
+    headers, same status codes, same proxies; the handler just does not return
+    while it has nothing to say. It parks the request and completes it the instant
+    news exists, or answers empty on purpose before its hold window outlives
+    somebody else''s idle timeout. Nothing new appears on the wire — the waiting
+    moves from the client''s timer to the server, and that is where the bill
+    arrives: a parked request is server-side state, so written with a blocking
+    handler it costs a thread per idle client, and written with a DeferredResult
+    it costs a socket. The subtler half is the gap: a response ends its request,
+    so anything happening before the next one is opened is only recoverable if the
+    client sends a cursor.
+  ru: >
+    Обычный HTTP-запрос — замкнутый цикл: клиент спросил, обработчик отработал,
+    ответ записан, запрос завершён, — и «ничего нового» тоже ответ, оплаченный
+    полным обменом. Длинный опрос меняет в этом цикле ровно одно: момент, когда
+    записывается ответ. Тот же метод, тот же URL, те же заголовки, те же коды
+    состояния, те же прокси; обработчик просто не возвращает управление, пока ему
+    нечего сказать. Он паркует запрос и завершает его в момент появления новости —
+    или намеренно отвечает пустым, чтобы его окно удержания не пережило чей-то
+    таймаут простоя. На проводе не появляется ничего нового: ожидание переезжает с
+    таймера клиента на сервер, и именно там приходит счёт. Припаркованный запрос —
+    это состояние на сервере: с блокирующим обработчиком он стоит потока на каждого
+    простаивающего клиента, а с DeferredResult — сокета. Более тонкая половина
+    темы — промежуток: ответ завершает свой запрос, поэтому всё, что произошло до
+    открытия следующего, восстановимо только если клиент присылает курсор.
+
+# Visual primitives this topic's visualizer composes (frontend).
+primitives:
+  - BoxGroup
+  - ArrayGrid
+
+defaultExample: a-regular-request
+
+# Examples shown as buttons. `file` is relative to examples/.
+examples:
+  - id: a-regular-request
+    title:
+      en: 'The loop you already know'
+      ru: 'Цикл, который вы уже знаете'
+    file: 01-a-regular-request.java
+    explanation:
+      en: >
+        The baseline, so the difference has something to be a difference from. The
+        handler answers inside the same tick every time, so an empty answer costs
+        exactly as much as a real one, and news that appears between two requests
+        waits for the next one. The delay you see is not slowness anywhere — it is
+        the polling interval, and the server has no way to shorten it.
+      ru: >
+        Точка отсчёта, чтобы разнице было от чего отличаться. Обработчик каждый раз
+        отвечает в том же тике, поэтому пустой ответ стоит ровно столько же, сколько
+        настоящий, а новость, появившаяся между двумя запросами, ждёт следующего.
+        Видимая задержка — это не чья-то медлительность, а интервал опроса, и
+        сервер не может его сократить.
+  - id: the-server-does-not-answer
+    title:
+      en: 'The handler that does not return'
+      ru: 'Обработчик, который не возвращает управление'
+    file: 02-the-server-does-not-answer.java
+    explanation:
+      en: >
+        The same request, held. No status line, no body, no bytes at all until
+        there is something to put in them — and then an utterly ordinary 200. This
+        is the whole mechanism: the client is not asking more often, and the server
+        is not pushing anything; one request is being kept open on purpose. Notice
+        that the response ends the request, so the client immediately opens the
+        next one.
+      ru: >
+        Тот же запрос, но придержанный. Ни строки статуса, ни тела, ни единого
+        байта, пока не появится, что в них положить, — а затем совершенно обычный
+        200. В этом весь механизм: клиент не спрашивает чаще, и сервер ничего не
+        пушит; один запрос намеренно держат открытым. Обратите внимание, что ответ
+        завершает запрос, поэтому клиент сразу открывает следующий.
+  - id: the-hold-must-expire
+    title:
+      en: 'Answer empty before someone else hangs up'
+      ru: 'Ответь пустым, пока не оборвали'
+    file: 03-the-hold-must-expire.java
+    explanation:
+      en: >
+        A hold is a deliberate, bounded wait, not an open-ended one. A browser, a
+        reverse proxy, a load balancer and a NAT box all kill connections that stay
+        silent too long, so the server has to answer first — a clean empty response
+        instead of a network error at the client. That is also the floor on the
+        cost of an idle client: one request per hold window, forever.
+      ru: >
+        Удержание — это намеренное и ограниченное ожидание, а не бессрочное.
+        Браузер, обратный прокси, балансировщик и NAT рвут соединения, которые
+        слишком долго молчат, поэтому сервер обязан ответить первым: аккуратный
+        пустой ответ вместо сетевой ошибки у клиента. Это же и нижняя граница цены
+        простаивающего клиента: один запрос на окно удержания, всегда.
+  - id: one-thread-per-parked-request
+    title:
+      en: 'A thread per idle client'
+      ru: 'Поток на каждого простаивающего клиента'
+    file: 04-one-thread-per-parked-request.java
+    explanation:
+      en: >
+        Where the naive implementation dies. A blocking handler that waits is still
+        sitting on its worker thread, so three waiting clients occupy the whole
+        pool while doing nothing, and the fourth request has no thread to run on.
+        Look at who that hurts: not the notification endpoint, but every other
+        endpoint sharing the pool.
+      ru: >
+        Место, где наивная реализация умирает. Блокирующий обработчик, который
+        ждёт, продолжает занимать свой рабочий поток, поэтому три ожидающих клиента
+        забирают весь пул, ничего при этом не делая, а четвёртому запросу уже не на
+        чем выполняться. Посмотрите, по кому это бьёт: не по эндпоинту уведомлений,
+        а по всем остальным, которые делят тот же пул.
+  - id: park-without-a-thread
+    title:
+      en: 'Held request, released thread'
+      ru: 'Запрос придержан, поток отпущен'
+    file: 05-park-without-a-thread.java
+    explanation:
+      en: >
+        The same hold, done properly. The handler returns something that will be
+        completed later — a DeferredResult, a CompletableFuture, a Servlet async
+        context — so the worker goes back to the pool while the response stays
+        unfinished. Three workers now hold five waiting clients, and the limit
+        moves from threads to sockets and memory.
+      ru: >
+        То же удержание, но сделанное правильно. Обработчик возвращает то, что
+        будет завершено позже — DeferredResult, CompletableFuture, асинхронный
+        контекст сервлета, — поэтому воркер возвращается в пул, а ответ остаётся
+        незавершённым. Три воркера теперь держат пять ждущих клиентов, и предел
+        смещается с потоков на сокеты и память.
+  - id: mind-the-gap
+    title:
+      en: 'The gap between two polls'
+      ru: 'Промежуток между двумя опросами'
+    file: 06-mind-the-gap.java
+    explanation:
+      en: >
+        The bug that survives every code review. A response ends its request, so
+        between one answer and the next request nothing is listening — and an event
+        landing there is only recoverable if the client says where it stopped. The
+        same code twice: with a cursor the next request returns the missed event
+        immediately; without one it is gone, silently, with no error anywhere.
+      ru: >
+        Ошибка, которая проходит любое ревью. Ответ завершает свой запрос, поэтому
+        между ответом и следующим запросом никто не слушает, — и событие, попавшее
+        туда, восстановимо только если клиент сообщает, где остановился. Один и тот
+        же код дважды: с курсором следующий запрос сразу возвращает пропущенное;
+        без курсора оно исчезает молча, без единой ошибки.
+  - id: regular-vs-long-poll
+    title:
+      en: 'The same events, priced three ways'
+      ru: 'Одни события, три ценника'
+    file: 07-regular-vs-long-poll.java
+    explanation:
+      en: >
+        24 ticks, 3 events, one table. The regular endpoint polled every 6 ticks
+        pays 4 requests, 2 of them for nothing, and is up to a whole interval late.
+        Both long polls deliver with zero delay for 5 requests and differ only in
+        the last column — the blocking one burns a worker for every tick it waits,
+        the async one only while a handler actually runs. That column is the answer
+        to "what does long polling cost?".
+      ru: >
+        24 тика, 3 события, одна таблица. Обычный эндпоинт при опросе раз в 6 тиков
+        платит 4 запроса, 2 из них впустую, и опаздывает вплоть до целого интервала.
+        Оба длинных опроса доставляют с нулевой задержкой за 5 запросов и различаются
+        только последней колонкой: блокирующий сжигает воркер на каждом тике
+        ожидания, асинхронный — только пока реально работает обработчик. Эта колонка
+        и есть ответ на вопрос «во что обходится длинный опрос?».
+
+# Example question pre-filled as the Ask AI placeholder.
+assistantExample:
+  en: 'e.g. What exactly does long polling change about a normal HTTP request, and what does the server pay for it?'
+  ru: 'например: Что именно длинный опрос меняет в обычном HTTP-запросе и чем сервер за это платит?'
+
+missionsFile: quiz.yaml

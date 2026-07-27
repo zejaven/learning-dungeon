@@ -1,0 +1,213 @@
+id: spring-boot-docker-image
+title:
+  en: 'Building a Docker Image from a Spring Boot Application'
+  ru: 'Сборка Docker-образа из приложения на Spring Boot'
+category:
+  en: DevOps / Packaging and Deployment
+  ru: DevOps / Упаковка и деплой
+type: OTHER
+mode: trace
+aiProvider: claude
+aiModel: claude-opus-5
+categoryId: devops
+difficulty: 2
+catalogId: devops-1
+summary:
+  en: >
+    You package the app with Maven or Gradle, then write a Dockerfile that
+    starts from a JRE base image, copies the jar in and declares the command
+    that launches it — four or five instructions and you have a runnable image.
+    Everything after that is about the fact that each instruction becomes a
+    cached layer: copying the fat jar as one blob means a one-line change
+    rewrites and re-uploads all 45 MB of it, while extracting Spring Boot's
+    layered jar puts dependencies and your own classes in separate layers so a
+    deploy moves about a megabyte. A multi-stage build keeps Maven, the JDK and
+    your sources out of the shipped image; a '.dockerignore' keeps the build
+    context small; and the image itself still needs a non-root 'USER', config
+    from the environment rather than baked in, and a JVM told what share of the
+    container's memory limit it may use. If you would rather not maintain a
+    Dockerfile at all, 'mvn spring-boot:build-image' and Jib produce a
+    layered image without one.
+  ru: >
+    Приложение упаковывается Maven или Gradle, затем пишется Dockerfile:
+    берём базовый образ с JRE, копируем jar внутрь и объявляем команду
+    запуска — четыре-пять инструкций, и рабочий образ готов. Всё остальное
+    вытекает из того, что каждая инструкция становится кешируемым слоем:
+    если копировать fat jar одним куском, то правка одной строки переписывает
+    и заново заливает все 45 МБ, а если распаковать слоистый jar от Spring
+    Boot, зависимости и ваши классы окажутся в разных слоях и деплой сдвинет
+    около мегабайта. Многоэтапная сборка оставляет Maven, JDK и исходники за
+    бортом итогового образа, '.dockerignore' держит контекст сборки маленьким,
+    а самому образу нужны ещё пользователь не root в 'USER', конфигурация из
+    окружения, а не зашитая внутрь, и JVM, которой сказали, какую долю лимита
+    памяти контейнера она может занять. Если не хочется поддерживать Dockerfile
+    вообще, 'mvn spring-boot:build-image' и Jib собирают слоистый образ без него.
+
+# Visual primitives this topic's visualizer composes (frontend).
+primitives:
+  - BoxGroup
+
+defaultExample: first-image
+
+# Examples shown as buttons. `file` is relative to examples/.
+examples:
+  - id: first-image
+    title:
+      en: 'The five-line Dockerfile'
+      ru: 'Dockerfile из пяти строк'
+    file: 01-first-image.java
+    explanation:
+      en: >
+        The direct answer to the question. Take a base image that already has a
+        Java runtime, copy the jar Maven produced, say how to start it — that is
+        a working image. Two decisions are already made here and both are worth
+        defending in an interview: the JRE rather than the JDK, because a
+        compiler is a build-time tool; and EXPOSE, which documents the port
+        without publishing it.
+      ru: >
+        Прямой ответ на вопрос. Берём базовый образ, где уже есть среда
+        выполнения Java, копируем собранный Maven jar, указываем, чем его
+        запускать, — рабочий образ готов. Два решения приняты уже здесь, и оба
+        стоит уметь обосновать на собеседовании: JRE, а не JDK, потому что
+        компилятор нужен во время сборки, а не работы; и EXPOSE, который
+        документирует порт, но не публикует его.
+  - id: layer-cache
+    title:
+      en: 'Why a second build is instant'
+      ru: 'Почему вторая сборка мгновенна'
+    file: 02-layer-cache.java
+    explanation:
+      en: >
+        Each instruction becomes a layer, and a layer is reused only when its
+        own cache key AND every layer below it are unchanged. Rebuild without
+        touching anything and the whole file is cache hits. That "and everything
+        below it" is the rule the rest of this topic is built on: the cache is a
+        chain, not a set of independent entries.
+      ru: >
+        Каждая инструкция становится слоем, и слой переиспользуется, только если
+        не изменились его собственный ключ кеша И все слои под ним. Пересоберите,
+        ничего не трогая, — весь файл попадёт в кеш. Эта оговорка «и всё, что
+        ниже» — правило, на котором держится вся остальная тема: кеш здесь
+        цепочка, а не набор независимых записей.
+  - id: fat-jar-rebuild
+    title:
+      en: 'One line changed, 45 MB moved'
+      ru: 'Изменена строка — переехало 45 МБ'
+    file: 03-fat-jar-rebuild.java
+    explanation:
+      en: >
+        The fat jar contains your classes and every dependency in one file, so
+        Docker sees one layer that can only change as a unit. Edit one
+        controller and that whole layer is rebuilt and pushed again. The image
+        still works — this is a cost problem, not a correctness problem, which
+        is exactly why it survives so long in real projects.
+      ru: >
+        В fat jar лежат и ваши классы, и все зависимости одним файлом, поэтому
+        Docker видит один слой, который может измениться только целиком.
+        Поправьте один контроллер — и весь этот слой пересобирается и заливается
+        заново. Образ при этом рабочий: это проблема стоимости, а не
+        корректности, потому она и живёт в реальных проектах так долго.
+  - id: layered-jar
+    title:
+      en: 'The layered jar fixes it'
+      ru: 'Слоистый jar это чинит'
+    file: 04-layered-jar.java
+    explanation:
+      en: >
+        Spring Boot can extract its jar into four layers — dependencies,
+        spring-boot-loader, snapshot-dependencies, application — and you copy
+        them in that order, rarest change first. Same jar, same total size, but
+        now the code change touches only the last small layer. Compare the push
+        with the previous example: 45 MB against about 1 MB.
+      ru: >
+        Spring Boot умеет распаковывать свой jar на четыре слоя — dependencies,
+        spring-boot-loader, snapshot-dependencies, application, — и вы копируете
+        их именно в этом порядке, начиная с того, что меняется реже всего. Тот же
+        jar, тот же общий размер, но теперь правка кода задевает только
+        последний маленький слой. Сравните push с предыдущим примером: 45 МБ
+        против примерно 1 МБ.
+  - id: dependency-change
+    title:
+      en: 'When layering does not help'
+      ru: 'Когда слои не спасают'
+    file: 05-dependency-change.java
+    explanation:
+      en: >
+        Add a starter to pom.xml and the dependency layer moves too, taking
+        everything copied after it with it. Layering is not magic compression:
+        it is a bet that code changes are frequent and dependency changes are
+        rare. The bet holds, which is why the ordering rule is "by change
+        frequency", not "by size".
+      ru: >
+        Добавьте стартер в pom.xml — и слой зависимостей тоже сдвинется, утащив
+        за собой всё, что скопировано после него. Слои — не волшебное сжатие, а
+        ставка на то, что код меняется часто, а зависимости редко. Ставка
+        оправдывается, поэтому правило порядка звучит как «по частоте
+        изменений», а не «по размеру».
+  - id: multi-stage
+    title:
+      en: 'Build inside, ship only the jar'
+      ru: 'Собрать внутри, отдать только jar'
+    file: 06-multi-stage.java
+    explanation:
+      en: >
+        Two FROM blocks: the first has Maven and a full JDK and produces the
+        jar, the second has only a JRE and receives it. The builder stage is
+        discarded, so ~600 MB of tooling and your source code never reach
+        production. Watch the instruction order inside the builder too — pom.xml
+        is copied before src/ precisely so that a code change does not re-run
+        the dependency download.
+      ru: >
+        Два блока FROM: в первом есть Maven и полный JDK, он собирает jar; во
+        втором только JRE, он этот jar принимает. Этап сборки выбрасывается,
+        поэтому ~600 МБ инструментов и ваш исходный код не попадают в продакшен.
+        Обратите внимание и на порядок инструкций внутри builder: pom.xml
+        копируется до src/ именно для того, чтобы правка кода не запускала
+        скачивание зависимостей заново.
+  - id: build-context
+    title:
+      en: 'What the dot in docker build . costs'
+      ru: 'Во что обходится точка в docker build .'
+    file: 07-build-context.java
+    explanation:
+      en: >
+        Before a single instruction runs, the CLI packs the folder and sends it
+        to the daemon. Without a .dockerignore that is your local target/, your
+        .git history and node_modules — half a gigabyte per build, and a COPY of
+        the folder that is invalidated by files the image never needed. The
+        caveat: only ignore what no COPY reads, or the build fails on a missing
+        file.
+      ru: >
+        Ещё до первой инструкции CLI упаковывает папку и отправляет её демону.
+        Без .dockerignore туда попадают локальный target/, история .git и
+        node_modules — полгигабайта на каждую сборку, а COPY всей папки
+        сбрасывается из-за файлов, которые образу никогда не были нужны.
+        Оговорка: исключать можно только то, что не читает ни один COPY, иначе
+        сборка упадёт на отсутствующем файле.
+  - id: production-image
+    title:
+      en: 'The image you would page yourself for'
+      ru: 'Образ, за который не стыдно в проде'
+    file: 08-production-image.java
+    explanation:
+      en: >
+        The naive image runs as root and gives the JVM a quarter of its memory
+        limit by default. The hardened one adds a dedicated account and a USER
+        line, keeps the layered copies, and sets MaxRAMPercentage so the
+        container's 512 MB are actually used. Nothing here changes what the
+        application does — it changes what happens to it under a cluster and
+        under load.
+      ru: >
+        Наивный образ работает от root и по умолчанию отдаёт JVM четверть лимита
+        памяти. Укреплённый добавляет отдельную учётную запись и строку USER,
+        сохраняет послойное копирование и задаёт MaxRAMPercentage, чтобы 512 МБ
+        контейнера действительно использовались. Ничто из этого не меняет
+        поведение приложения — меняется то, что с ним произойдёт в кластере и
+        под нагрузкой.
+
+# Example question pre-filled as the Ask AI placeholder.
+assistantExample:
+  en: 'e.g. Why does my Docker build re-download every Maven dependency after a one-line code change?'
+  ru: 'например: Почему сборка Docker заново скачивает все зависимости Maven после правки одной строки?'
+
+missionsFile: quiz.yaml

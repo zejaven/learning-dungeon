@@ -1,0 +1,188 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Async data at a synchronous decision point — trace event state",
+  "description": "Shape of the `state` field for event-carried-state-transfer trace events.",
+  "type": "object",
+  "required": ["strategy", "clock", "rateService", "replica", "quotes", "counters"],
+  "properties": {
+    "strategy": {
+      "enum": ["sync-call", "ttl-cache", "event-carried"],
+      "description": "How the synchronous decision gets a value the owning service publishes asynchronously."
+    },
+    "clock": {
+      "type": "integer",
+      "description": "Seconds since the run started; the only thing that makes data stale."
+    },
+    "ttlSeconds": {
+      "type": "integer",
+      "description": "Cache TTL; 0 for the strategies that have no cache."
+    },
+    "budgetSeconds": {
+      "type": "integer",
+      "description": "Declared freshness limit in seconds; 0 while no limit has been declared."
+    },
+    "policy": {
+      "enum": ["serve", "refuse"],
+      "description": "What a decision does with a value past the declared limit: serve it flagged (fail open) or refuse (fail closed)."
+    },
+    "rateService": {
+      "type": "object",
+      "description": "The service that owns the data.",
+      "required": ["up", "delivering", "rates"],
+      "properties": {
+        "up": { "type": "boolean", "description": "Whether a synchronous call to it would succeed." },
+        "delivering": {
+          "type": "boolean",
+          "description": "Whether its events currently reach this consumer."
+        },
+        "rates": {
+          "type": "array",
+          "description": "What the owner knows right now — its version of the truth.",
+          "items": {
+            "type": "object",
+            "required": ["pair", "rate", "rateText", "version", "publishedAt"],
+            "properties": {
+              "pair": { "type": "string" },
+              "rate": { "type": "integer", "description": "Scaled by 10000: 10800 means 1.0800." },
+              "rateText": { "type": "string" },
+              "version": { "type": "integer" },
+              "publishedAt": { "type": "integer", "description": "Clock value when the owner produced it." }
+            }
+          }
+        }
+      }
+    },
+    "feed": {
+      "type": "array",
+      "description": "Events published by the owner, in publication order, with their fate at this consumer. Empty unless the strategy is event-carried.",
+      "items": {
+        "type": "object",
+        "required": ["pair", "version", "rate", "rateText", "publishedAt", "status"],
+        "properties": {
+          "pair": { "type": "string" },
+          "version": { "type": "integer" },
+          "rate": { "type": "integer" },
+          "rateText": { "type": "string" },
+          "publishedAt": { "type": "integer" },
+          "status": {
+            "enum": ["applied", "ignored", "pending"],
+            "description": "applied = changed the replica, ignored = duplicate or older version, pending = published but not delivered yet."
+          }
+        }
+      }
+    },
+    "replica": {
+      "type": "array",
+      "description": "The consumer's own copy — what a synchronous decision actually reads.",
+      "items": {
+        "type": "object",
+        "required": ["pair", "rate", "rateText", "version", "asOf", "ageSeconds", "state"],
+        "properties": {
+          "pair": { "type": "string" },
+          "rate": { "type": "integer" },
+          "rateText": { "type": "string" },
+          "version": { "type": "integer" },
+          "asOf": {
+            "type": "integer",
+            "description": "When the value was produced by the owner — not when it was received."
+          },
+          "ageSeconds": { "type": "integer" },
+          "state": {
+            "enum": ["fresh", "stale", "expired"],
+            "description": "expired = past the cache TTL; stale = past the declared freshness limit."
+          }
+        }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "description": "The decision being made (absent before the first one).",
+      "required": ["pair", "amount", "amountText", "source", "outcome"],
+      "properties": {
+        "pair": { "type": "string" },
+        "amount": { "type": "integer", "description": "Amount in cents of the pair's base currency." },
+        "amountText": { "type": "string" },
+        "source": {
+          "enum": ["none", "sync-call", "cache", "replica"],
+          "description": "Where the value backing this decision came from."
+        },
+        "rateText": { "type": "string" },
+        "version": { "type": "integer" },
+        "ageSeconds": { "type": "integer" },
+        "totalText": { "type": "string" },
+        "outcome": {
+          "enum": ["pending", "quoted", "stale", "blocked"]
+        },
+        "reason": {
+          "enum": ["", "cold", "unreachable", "too-stale", "unknown-pair"],
+          "description": "Why a blocked decision was refused."
+        }
+      }
+    },
+    "quotes": {
+      "type": "array",
+      "description": "Decisions already made, each pinned to the exact value that produced it.",
+      "items": {
+        "type": "object",
+        "required": ["id", "pair", "amountText", "rateText", "version", "asOf", "totalText", "stale"],
+        "properties": {
+          "id": { "type": "integer" },
+          "pair": { "type": "string" },
+          "amountText": { "type": "string" },
+          "rateText": { "type": "string" },
+          "version": { "type": "integer" },
+          "asOf": { "type": "integer" },
+          "totalText": { "type": "string" },
+          "stale": { "type": "boolean" }
+        }
+      }
+    },
+    "counters": {
+      "type": "object",
+      "required": ["quoted", "staleQuoted", "refused", "remoteCalls"],
+      "properties": {
+        "quoted": { "type": "integer" },
+        "staleQuoted": {
+          "type": "integer",
+          "description": "Decisions made on data known to be past its limit."
+        },
+        "refused": { "type": "integer" },
+        "remoteCalls": {
+          "type": "integer",
+          "description": "Blocking calls made inside a decision — the coupling this topic is about."
+        },
+        "cacheHits": { "type": "integer" },
+        "eventsApplied": { "type": "integer" },
+        "eventsIgnored": { "type": "integer" },
+        "oldestRateUsed": {
+          "type": "integer",
+          "description": "Age in seconds of the oldest value any decision was based on."
+        }
+      }
+    }
+  },
+  "events": [
+    "FEED_READY",
+    "FRESHNESS_POLICY_SET",
+    "RATE_PUBLISHED",
+    "EVENT_REDELIVERED",
+    "RATE_APPLIED",
+    "STALE_EVENT_IGNORED",
+    "RATE_SERVICE_DOWN",
+    "RATE_SERVICE_UP",
+    "FEED_STOPPED",
+    "FEED_RESUMED",
+    "SYNC_CALL",
+    "SYNC_CALL_FAILED",
+    "CACHE_HIT",
+    "CACHE_MISS",
+    "CACHE_EXPIRED",
+    "PRICE_QUOTED",
+    "STALE_RATE_USED",
+    "DECISION_BLOCKED",
+    "COLD_START",
+    "REPLICA_REBUILT",
+    "TIME_PASSED",
+    "RATE_AUDIT"
+  ]
+}

@@ -208,14 +208,20 @@ class BulkPlannerTest {
 
     @Test
     void consumedDeltaIsSimpleDifference() {
-        assertEquals(12.5, BulkPlanner.consumedDelta(30, 42.5, false));
+        assertEquals(12.5, BulkPlanner.consumedDelta(30, 42.5));
     }
 
     @Test
     void consumedDeltaAfterMidItemResetIsUtilizationSinceReset() {
-        assertEquals(8, BulkPlanner.consumedDelta(90, 8, true));
-        // Utilization dropped without a reported reset change: same conservative bound.
-        assertEquals(8, BulkPlanner.consumedDelta(90, 8, false));
+        // A dropping reading is the only reliable sign that the window rolled over.
+        assertEquals(8, BulkPlanner.consumedDelta(90, 8));
+    }
+
+    @Test
+    void consumedDeltaIgnoresJitteringResetTimestamps() {
+        // The endpoint re-derives resets_at on every fetch; that must not be read
+        // as a rollover, or one item would be charged the whole window's usage.
+        assertEquals(5, BulkPlanner.consumedDelta(21, 26));
     }
 
     // --- parseInstant -------------------------------------------------------

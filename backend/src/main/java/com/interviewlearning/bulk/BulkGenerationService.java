@@ -30,7 +30,6 @@ import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.List;
-import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -300,8 +299,7 @@ public class BulkGenerationService {
     }
 
     /** Both usage windows as read just before an item started. */
-    private record UsageBefore(double utilization, Instant resetsAt,
-                               Double weeklyUtilization, Instant weeklyResetsAt) {
+    private record UsageBefore(double utilization, Double weeklyUtilization) {
     }
 
     /**
@@ -341,8 +339,7 @@ public class BulkGenerationService {
                             run.weeklyCapPercent);
             Decision decision = BulkPlanner.decide(Instant.now(), run.endTime, session, weekly);
             if (decision instanceof Proceed) {
-                return new UsageBefore(run.utilization, run.resetsAt,
-                        run.weeklyUtilization, run.weeklyResetsAt);
+                return new UsageBefore(run.utilization, run.weeklyUtilization);
             }
             if (decision instanceof WaitUntil wait) {
                 long until = run.endTime == null
@@ -392,13 +389,11 @@ public class BulkGenerationService {
             return; // no reading; the next gate() will fetch again
         }
         record(run, snapshot);
-        double delta = BulkPlanner.consumedDelta(before.utilization(), run.utilization,
-                !Objects.equals(before.resetsAt(), run.resetsAt));
+        double delta = BulkPlanner.consumedDelta(before.utilization(), run.utilization);
         run.maxDelta = run.maxDelta == null ? delta : Math.max(run.maxDelta, delta);
         if (before.weeklyUtilization() != null && run.weeklyUtilization != null) {
             double weeklyDelta = BulkPlanner.consumedDelta(before.weeklyUtilization(),
-                    run.weeklyUtilization,
-                    !Objects.equals(before.weeklyResetsAt(), run.weeklyResetsAt));
+                    run.weeklyUtilization);
             run.maxWeeklyDelta = run.maxWeeklyDelta == null
                     ? weeklyDelta : Math.max(run.maxWeeklyDelta, weeklyDelta);
         }

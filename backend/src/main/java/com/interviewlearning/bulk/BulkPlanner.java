@@ -152,15 +152,19 @@ public final class BulkPlanner {
     }
 
     /**
-     * Usage consumed by one generation. When the window reset mid-item (the
-     * reset timestamp changed, or utilization dropped), the utilization since
-     * the reset is the best conservative lower bound.
+     * Usage consumed by one generation.
+     *
+     * <p>A window rollover is detected by utilization <em>dropping</em>, never by
+     * the reported reset timestamp changing: the endpoint derives {@code resets_at}
+     * from the request time, so it jitters on every single fetch. Treating that
+     * jitter as a rollover would record the whole window's utilization as one
+     * item's cost and stall the run far below its cap.
+     *
+     * <p>After a real rollover only the tail of the item lives in the fresh
+     * window, so its utilization is the best available lower bound.
      */
-    public static double consumedDelta(double utilBefore, double utilAfter, boolean resetChanged) {
-        if (!resetChanged && utilAfter >= utilBefore) {
-            return utilAfter - utilBefore;
-        }
-        return utilAfter;
+    public static double consumedDelta(double utilBefore, double utilAfter) {
+        return utilAfter >= utilBefore ? utilAfter - utilBefore : utilAfter;
     }
 
     /** Lenient ISO-8601 parse of the usage endpoint's resets_at; null when absent/bad. */

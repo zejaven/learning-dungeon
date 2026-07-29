@@ -330,6 +330,38 @@ const UI: Record<string, Localized> = {
     ru: 'Пока 5-часовое окно лимитов сбрасывается до времени остановки, можно тратить до 100%; '
       + 'после последнего сброса цикл держит расход ниже этого порога, чтобы не заблокировать вас.',
   },
+  bulkMaxWeeklyPercent: {
+    en: 'Max usage of the weekly limit',
+    ru: 'Максимум расхода недельного лимита',
+  },
+  bulkMaxWeeklyPercentHint: {
+    en: 'The weekly window resets in days, so hitting this cap ends the run instead of '
+      + 'pausing it — raise it and start again if you want to keep going.',
+    ru: 'Недельное окно сбрасывается через несколько дней, поэтому при достижении этого '
+      + 'порога цикл завершается, а не ждёт — поднимите порог и запустите заново, если нужно продолжить.',
+  },
+  bulkNoDeadline: {
+    en: 'No stop time — run until the topics run out or I stop it',
+    ru: 'Без времени остановки — работать, пока не закончатся темы или я не остановлю',
+  },
+  bulkNoDeadlineHint: {
+    en: 'For daytime runs: the loop keeps every 5-hour window under the cap below, '
+      + 'so the rest stays available for your own work. When the cap is hit it pauses '
+      + 'until the window resets and then continues.',
+    ru: 'Для запуска днём: цикл держит каждое 5-часовое окно ниже указанного порога, '
+      + 'так что остальное остаётся для вашей работы. При достижении порога он ждёт '
+      + 'сброса окна и продолжает.',
+  },
+  bulkMaxPercentWindow: {
+    en: 'Max usage per 5-hour window',
+    ru: 'Максимум расхода за 5-часовое окно',
+  },
+  bulkMaxPercentWindowHint: {
+    en: 'The reading covers all Claude usage, including your own parallel work, '
+      + 'so the loop backs off on its own while you are busy.',
+    ru: 'Показатель учитывает весь расход Claude, включая вашу параллельную работу, '
+      + 'так что цикл сам притормаживает, пока вы заняты.',
+  },
   bulkStart: { en: 'Start', ru: 'Начать' },
   bulkStop: { en: 'Stop', ru: 'Остановить' },
   bulkStopping: { en: 'Stopping…', ru: 'Останавливается…' },
@@ -343,6 +375,11 @@ const UI: Record<string, Localized> = {
   bulkPhaseStopped: { en: 'Stopped', ru: 'Остановлено' },
   bulkPhaseEndReached: { en: 'Stop time reached', ru: 'Достигнуто время остановки' },
   bulkPhaseCapReached: { en: 'Usage cap reached', ru: 'Достигнут порог расхода' },
+  bulkPhaseWeeklyCapReached: {
+    en: 'Weekly usage cap reached',
+    ru: 'Достигнут недельный порог расхода',
+  },
+  bulkWeekly: { en: 'week', ru: 'нед.' },
   bulkPhaseNoResetInfo: {
     en: 'Stopped: no limit-reset info',
     ru: 'Остановлено: нет данных о сбросе лимитов',

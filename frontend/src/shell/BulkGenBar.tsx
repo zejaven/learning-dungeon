@@ -12,6 +12,7 @@ const PHASE_KEYS: Record<string, string> = {
   stopped: 'bulkPhaseStopped',
   endReached: 'bulkPhaseEndReached',
   capReached: 'bulkPhaseCapReached',
+  weeklyCapReached: 'bulkPhaseWeeklyCapReached',
   noResetInfo: 'bulkPhaseNoResetInfo',
 };
 
@@ -55,7 +56,10 @@ export function BulkGenBar() {
         {run.kind === 'theory' ? '📖' : '✨'} {phaseKey ? ui(phaseKey, lang) : run.phase}{' '}
         {doneCount}/{run.items.length}
         {run.waitUntil && ` · ${ui('bulkUntil', lang)} ${fmtTime(run.waitUntil)}`}
-        {run.utilization != null && ` · ${Math.round(run.utilization)}%`}
+        {run.utilization != null && ` · ${Math.round(run.utilization)}% / ${run.maxPercent}%`}
+        {run.weeklyUtilization != null
+          && ` · ${ui('bulkWeekly', lang)} ${Math.round(run.weeklyUtilization)}% / ${run.maxWeeklyPercent}%`}
+        {!run.endTime && ' · ∞'}
       </span>
       <div className="bulk-track">
         {run.items.map((item) => (

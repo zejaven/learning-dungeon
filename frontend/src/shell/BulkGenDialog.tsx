@@ -22,7 +22,7 @@ export function BulkGenDialog({
 }: {
   kind: BulkKind;
   count: number;
-  onConfirm: (endTime: string, maxPercent: number) => void;
+  onConfirm: (endTime: string, maxPercent: number, maxWeeklyPercent: number) => void;
   onClose: () => void;
 }) {
   const lang = useLang((s) => s.lang);
@@ -30,8 +30,13 @@ export function BulkGenDialog({
   const error = useBulk((s) => s.error);
   const [endTime, setEndTime] = useState(() => defaultEndTime(6));
   const [maxPercent, setMaxPercent] = useState(80);
+  // Half a 5-hour window and half a week's quota are very different decisions,
+  // so each limit gets its own cap.
+  const [maxWeeklyPercent, setMaxWeeklyPercent] = useState(90);
+  // Continuous mode: no deadline, the caps simply hold in every window.
+  const [noDeadline, setNoDeadline] = useState(false);
 
-  const canConfirm = !starting && /^\d{2}:\d{2}$/.test(endTime);
+  const canConfirm = !starting && (noDeadline || /^\d{2}:\d{2}$/.test(endTime));
 
   return (
     <div className="dialog-backdrop" onClick={onClose}>
@@ -45,16 +50,33 @@ export function BulkGenDialog({
             {ui('bulkDialogCount', lang)} <strong>{count}</strong>
           </p>
 
-          <label style={{ display: 'block', fontSize: 13, marginBottom: 4 }}>
-            {ui('bulkEndTime', lang)}
+          <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={noDeadline}
+              onChange={(e) => setNoDeadline(e.target.checked)}
+            />
+            <span>{ui('bulkNoDeadline', lang)}</span>
           </label>
-          <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
-          <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 4 }}>
-            {ui('bulkEndTimeHint', lang)}
-          </p>
+
+          {noDeadline ? (
+            <p style={{ color: 'var(--muted)', fontSize: 12, margin: '4px 0 0' }}>
+              {ui('bulkNoDeadlineHint', lang)}
+            </p>
+          ) : (
+            <>
+              <label style={{ display: 'block', fontSize: 13, margin: '12px 0 4px' }}>
+                {ui('bulkEndTime', lang)}
+              </label>
+              <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+              <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 4 }}>
+                {ui('bulkEndTimeHint', lang)}
+              </p>
+            </>
+          )}
 
           <label style={{ display: 'block', fontSize: 13, margin: '12px 0 4px' }}>
-            {ui('bulkMaxPercent', lang)}
+            {ui(noDeadline ? 'bulkMaxPercentWindow' : 'bulkMaxPercent', lang)}
           </label>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <input
@@ -69,7 +91,26 @@ export function BulkGenDialog({
             <span className="bulk-slider-value">{maxPercent}%</span>
           </div>
           <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 4 }}>
-            {ui('bulkMaxPercentHint', lang)}
+            {ui(noDeadline ? 'bulkMaxPercentWindowHint' : 'bulkMaxPercentHint', lang)}
+          </p>
+
+          <label style={{ display: 'block', fontSize: 13, margin: '12px 0 4px' }}>
+            {ui('bulkMaxWeeklyPercent', lang)}
+          </label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={5}
+              value={maxWeeklyPercent}
+              onChange={(e) => setMaxWeeklyPercent(Number(e.target.value))}
+              style={{ flex: 1 }}
+            />
+            <span className="bulk-slider-value">{maxWeeklyPercent}%</span>
+          </div>
+          <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 4 }}>
+            {ui('bulkMaxWeeklyPercentHint', lang)}
           </p>
 
           {error && (
@@ -81,7 +122,7 @@ export function BulkGenDialog({
           <button
             className="primary"
             disabled={!canConfirm}
-            onClick={() => onConfirm(endTime, maxPercent)}
+            onClick={() => onConfirm(noDeadline ? '' : endTime, maxPercent, maxWeeklyPercent)}
           >
             {ui('bulkStart', lang)}
           </button>

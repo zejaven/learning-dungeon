@@ -499,8 +499,10 @@ export interface BulkRunView {
   kind: BulkKind;
   domainId: string;
   provider: string;
-  endTime: string;
+  /** Null in continuous mode (no deadline). */
+  endTime: string | null;
   maxPercent: number;
+  maxWeeklyPercent: number;
   items: BulkItemView[];
   currentIndex: number;
   phase: string;
@@ -511,6 +513,8 @@ export interface BulkRunView {
   utilization: number | null;
   resetsAt: string | null;
   maxDeltaObserved: number | null;
+  weeklyUtilization: number | null;
+  weeklyResetsAt: string | null;
 }
 
 export interface BulkStatus {
@@ -522,9 +526,16 @@ export interface StartBulkBody {
   kind: BulkKind;
   provider: string;
   domainId: string;
-  /** Time-of-day "HH:mm"; already past today means tomorrow. */
+  /**
+   * Time-of-day "HH:mm"; already past today means tomorrow. Empty = continuous
+   * mode: run until the items run out or the user stops, keeping every 5-hour
+   * window under maxPercent.
+   */
   endTime: string;
+  /** Cap for the 5-hour window. */
   maxPercent: number;
+  /** Cap for the 7-day window; reaching it ends the run instead of pausing. */
+  maxWeeklyPercent: number;
   items: BulkItemInput[];
 }
 

@@ -104,7 +104,12 @@ export function HomeScreen() {
     return { theory, atoms };
   }, [topics, manualQuestions, domainId]);
 
-  async function confirmBulk(kind: BulkKind, endTime: string, maxPercent: number) {
+  async function confirmBulk(
+    kind: BulkKind,
+    endTime: string,
+    maxPercent: number,
+    maxWeeklyPercent: number,
+  ) {
     const items =
       kind === 'theory'
         ? bulkMissing.theory.map(({ categoryId: catId, entry: e }) => ({
@@ -118,7 +123,15 @@ export function HomeScreen() {
             styleName: useStyle.getState().currentName(),
           }))
         : bulkMissing.atoms.map((t) => ({ id: t.id, label: t.title }));
-    const ok = await startBulkRun({ kind, provider: 'claude', domainId, endTime, maxPercent, items });
+    const ok = await startBulkRun({
+      kind,
+      provider: 'claude',
+      domainId,
+      endTime,
+      maxPercent,
+      maxWeeklyPercent,
+      items,
+    });
     if (ok) setBulkKind(null);
   }
   // Resolve the route against every domain's catalog so deep links and
@@ -407,7 +420,9 @@ export function HomeScreen() {
         <BulkGenDialog
           kind={bulkKind}
           count={bulkKind === 'theory' ? bulkMissing.theory.length : bulkMissing.atoms.length}
-          onConfirm={(endTime, maxPercent) => void confirmBulk(bulkKind, endTime, maxPercent)}
+          onConfirm={(endTime, maxPercent, maxWeeklyPercent) =>
+            void confirmBulk(bulkKind, endTime, maxPercent, maxWeeklyPercent)
+          }
           onClose={() => setBulkKind(null)}
         />
       )}

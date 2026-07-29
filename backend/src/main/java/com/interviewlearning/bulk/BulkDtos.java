@@ -16,8 +16,9 @@ public final class BulkDtos {
     public record StartRequest(String kind,       // "theory" | "atoms"
                                String provider,   // must be "claude"
                                String domainId,   // informational, shown in the strip
-                               String endTime,    // "HH:mm" local time-of-day
-                               Integer maxPercent, // 0..100
+                               String endTime,    // "HH:mm" local time-of-day; blank = continuous
+                               Integer maxPercent,       // 5-hour window cap, 0..100
+                               Integer maxWeeklyPercent, // 7-day window cap, 0..100
                                List<BulkItem> items) {
     }
 
@@ -40,19 +41,22 @@ public final class BulkDtos {
     }
 
     public record RunView(String kind, String domainId, String provider,
-                          String endTime,          // resolved ISO instant
+                          String endTime,          // resolved ISO instant; null = continuous
                           int maxPercent,
+                          int maxWeeklyPercent,
                           List<ItemView> items,
                           int currentIndex,        // -1 before the first item starts
-                          String phase,            // generating|waitingPace|waitingUsage|waitingReset
-                                                   // |finished|stopped|endReached|capReached|noResetInfo
+                          String phase,            // generating|waitingPace|waitingUsage|waitingReset|finished
+                                                   // |stopped|endReached|capReached|weeklyCapReached|noResetInfo
                           String waitUntil,        // ISO instant while waiting, else null
                           boolean stopRequested,
                           String startedAt,
                           String finishedAt,       // null while active
                           Double utilization,      // last 5-hour-window reading, null before the first
                           String resetsAt,
-                          Double maxDeltaObserved) {
+                          Double maxDeltaObserved,
+                          Double weeklyUtilization, // last 7-day-window reading
+                          String weeklyResetsAt) {
     }
 
     public record ItemView(String id, LocalizedLabel label,

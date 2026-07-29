@@ -10,6 +10,7 @@ import com.interviewlearning.bulk.BulkPlanner.Decision;
 import com.interviewlearning.bulk.BulkPlanner.Proceed;
 import com.interviewlearning.bulk.BulkPlanner.Stop;
 import com.interviewlearning.bulk.BulkPlanner.WaitUntil;
+import com.interviewlearning.bulk.BulkPlanner.Window;
 import com.interviewlearning.generation.AtomsPromptBuilder;
 import com.interviewlearning.generation.GenerationService;
 import com.interviewlearning.generation.GenerationTask;
@@ -106,8 +107,10 @@ public class BulkGenerationService {
         final String kind;      // "theory" | "atoms"
         final String provider;
         final String domainId;
+        /** Null in continuous mode (no deadline). */
         final Instant endTime;
         final double capPercent;
+        final double weeklyCapPercent;
         final List<Item> items;
         final Instant startedAt = Instant.now();
 
@@ -119,14 +122,18 @@ public class BulkGenerationService {
         volatile Double maxDelta;
         volatile Double utilization;
         volatile Instant resetsAt;
+        volatile Double maxWeeklyDelta;
+        volatile Double weeklyUtilization;
+        volatile Instant weeklyResetsAt;
 
         BulkRun(String kind, String provider, String domainId, Instant endTime,
-                double capPercent, List<Item> items) {
+                double capPercent, double weeklyCapPercent, List<Item> items) {
             this.kind = kind;
             this.provider = provider;
             this.domainId = domainId;
             this.endTime = endTime;
             this.capPercent = capPercent;
+            this.weeklyCapPercent = weeklyCapPercent;
             this.items = items;
         }
 
@@ -158,15 +165,23 @@ public class BulkGenerationService {
         if (maxPercent < 0 || maxPercent > 100) {
             throw new IllegalArgumentException("maxPercent must be between 0 and 100.");
         }
-        Instant endTime;
-        try {
-            endTime = BulkPlanner.resolveEndTime(request.endTime(), ZonedDateTime.now());
-        } catch (DateTimeParseException | NullPointerException e) {
-            throw new IllegalArgumentException("endTime must be \"HH:mm\".");
+        int maxWeeklyPercent = request.maxWeeklyPercent() == null ? 100 : request.maxWeeklyPercent();
+        if (maxWeeklyPercent < 0 || maxWeeklyPercent > 100) {
+            throw new IllegalArgumentException("maxWeeklyPercent must be between 0 and 100.");
+        }
+        // A blank end time means continuous mode: run until the items run out or
+        // the user stops, keeping every 5-hour window under the cap.
+        Instant endTime = null;
+        if (request.endTime() != null && !request.endTime().isBlank()) {
+            try {
+                endTime = BulkPlanner.resolveEndTime(request.endTime(), ZonedDateTime.now());
+            } catch (DateTimeParseException e) {
+                throw new IllegalArgumentException("endTime must be \"HH:mm\" or empty.");
+            }
         }
         BulkRun run = new BulkRun(kind, provider,
                 request.domainId() == null ? "" : request.domainId(),
-                endTime, maxPercent,
+                endTime, maxPercent, maxWeeklyPercent,
                 request.items().stream().map(Item::new).toList());
         current = run;
         executor.submit(() -> runLoop(run));
@@ -199,7 +214,8 @@ public class BulkGenerationService {
                 .map(i -> new ItemView(i.spec.id(), i.spec.label(), i.status, i.taskKey))
                 .toList();
         RunView view = new RunView(run.kind, run.domainId, run.provider,
-                run.endTime.toString(), (int) run.capPercent, items,
+                run.endTime == null ? null : run.endTime.toString(),
+                (int) run.capPercent, (int) run.weeklyCapPercent, items,
                 run.currentIndex, run.phase,
                 run.waitUntil == null ? null : run.waitUntil.toString(),
                 run.stopRequested,
@@ -207,7 +223,9 @@ public class BulkGenerationService {
                 run.finishedAt == null ? null : run.finishedAt.toString(),
                 run.utilization,
                 run.resetsAt == null ? null : run.resetsAt.toString(),
-                run.maxDelta);
+                run.maxDelta,
+                run.weeklyUtilization,
+                run.weeklyResetsAt == null ? null : run.weeklyResetsAt.toString());
         return new StatusResponse(!run.isFinished(), view);
     }
 
@@ -281,7 +299,9 @@ public class BulkGenerationService {
         }
     }
 
-    private record UsageBefore(double utilization, Instant resetsAt) {
+    /** Both usage windows as read just before an item started. */
+    private record UsageBefore(double utilization, Instant resetsAt,
+                               Double weeklyUtilization, Instant weeklyResetsAt) {
     }
 
     /**
@@ -294,7 +314,7 @@ public class BulkGenerationService {
                 finish(run, "stopped");
                 return null;
             }
-            if (!Instant.now().isBefore(run.endTime)) {
+            if (endTimePassed(run)) {
                 finish(run, "endReached");
                 return null;
             }
@@ -313,17 +333,21 @@ public class BulkGenerationService {
                 waitUntilMillis(run, System.currentTimeMillis() + USAGE_RETRY_MILLIS, "waitingUsage");
                 continue;
             }
-            double utilization = snapshot.session().utilization();
-            Instant resetsAt = BulkPlanner.parseInstant(snapshot.session().resetsAt());
-            run.utilization = utilization;
-            run.resetsAt = resetsAt;
-            Decision decision = BulkPlanner.decide(Instant.now(), run.endTime, run.capPercent,
-                    run.maxDelta, utilization, resetsAt);
+            record(run, snapshot);
+            Window session = new Window(run.utilization, run.resetsAt, run.maxDelta, run.capPercent);
+            Window weekly = run.weeklyUtilization == null
+                    ? null
+                    : new Window(run.weeklyUtilization, run.weeklyResetsAt, run.maxWeeklyDelta,
+                            run.weeklyCapPercent);
+            Decision decision = BulkPlanner.decide(Instant.now(), run.endTime, session, weekly);
             if (decision instanceof Proceed) {
-                return new UsageBefore(utilization, resetsAt);
+                return new UsageBefore(run.utilization, run.resetsAt,
+                        run.weeklyUtilization, run.weeklyResetsAt);
             }
             if (decision instanceof WaitUntil wait) {
-                long until = Math.min(wait.until().toEpochMilli(), run.endTime.toEpochMilli());
+                long until = run.endTime == null
+                        ? wait.until().toEpochMilli()
+                        : Math.min(wait.until().toEpochMilli(), run.endTime.toEpochMilli());
                 waitUntilMillis(run, until, "waitingReset");
                 continue;
             }
@@ -357,7 +381,7 @@ public class BulkGenerationService {
         }
     }
 
-    /** Refreshes usage after an item and records its consumed delta. */
+    /** Refreshes usage after an item and records its consumed delta per window. */
     private void measureDelta(BulkRun run, UsageBefore before) {
         if (!waitUntilMillis(run, usage.nextAllowedFetchAt(run.provider), "waitingPace")) {
             return; // stop/end requested — the loop top handles it
@@ -367,13 +391,27 @@ public class BulkGenerationService {
         if (!refresh.fresh() || snapshot == null || !snapshot.available() || snapshot.session() == null) {
             return; // no reading; the next gate() will fetch again
         }
-        double after = snapshot.session().utilization();
-        Instant resetsAfter = BulkPlanner.parseInstant(snapshot.session().resetsAt());
-        run.utilization = after;
-        run.resetsAt = resetsAfter;
-        double delta = BulkPlanner.consumedDelta(before.utilization(), after,
-                !Objects.equals(before.resetsAt(), resetsAfter));
+        record(run, snapshot);
+        double delta = BulkPlanner.consumedDelta(before.utilization(), run.utilization,
+                !Objects.equals(before.resetsAt(), run.resetsAt));
         run.maxDelta = run.maxDelta == null ? delta : Math.max(run.maxDelta, delta);
+        if (before.weeklyUtilization() != null && run.weeklyUtilization != null) {
+            double weeklyDelta = BulkPlanner.consumedDelta(before.weeklyUtilization(),
+                    run.weeklyUtilization,
+                    !Objects.equals(before.weeklyResetsAt(), run.weeklyResetsAt));
+            run.maxWeeklyDelta = run.maxWeeklyDelta == null
+                    ? weeklyDelta : Math.max(run.maxWeeklyDelta, weeklyDelta);
+        }
+    }
+
+    /** Copies both usage windows of a fresh reading into the run's status. */
+    private void record(BulkRun run, UsageSnapshot snapshot) {
+        run.utilization = snapshot.session().utilization();
+        run.resetsAt = BulkPlanner.parseInstant(snapshot.session().resetsAt());
+        if (snapshot.weekly() != null) {
+            run.weeklyUtilization = snapshot.weekly().utilization();
+            run.weeklyResetsAt = BulkPlanner.parseInstant(snapshot.weekly().resetsAt());
+        }
     }
 
     /**
@@ -389,7 +427,7 @@ public class BulkGenerationService {
                 run.waitUntil = null;
                 return true;
             }
-            if (run.stopRequested || !Instant.now().isBefore(run.endTime)) {
+            if (run.stopRequested || endTimePassed(run)) {
                 run.waitUntil = null;
                 return false;
             }
@@ -403,6 +441,11 @@ public class BulkGenerationService {
                 return false;
             }
         }
+    }
+
+    /** False in continuous mode, where there is no deadline to pass. */
+    private boolean endTimePassed(BulkRun run) {
+        return run.endTime != null && !Instant.now().isBefore(run.endTime);
     }
 
     private void setPhase(BulkRun run, String phase, Instant waitUntil) {

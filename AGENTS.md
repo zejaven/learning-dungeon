@@ -92,8 +92,9 @@ Use the Windows wrapper in this workspace:
 .\dev.ps1
 ```
 
-Starts a fresh backend on `http://localhost:8080` and frontend on
-`http://localhost:5173`, after building `visual-runtime`.
+Starts a fresh backend on `http://localhost:18080` and frontend on
+`http://localhost:15173`, after building `visual-runtime`. These non-default
+ports keep 8080/5173 free for the user's other local projects.
 
 Manual startup:
 
@@ -108,7 +109,7 @@ npm install
 npm run dev
 ```
 
-Packaged (tray) run — a single JVM on `http://localhost:8080` serving the API and
+Packaged (tray) run — a single JVM on `http://localhost:18080` serving the API and
 the built frontend (bundled into the jar under `static/`), with no Vite. Build
 once, then launch from the tray:
 

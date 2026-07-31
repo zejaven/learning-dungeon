@@ -15,17 +15,21 @@ export default defineConfig({
   },
   server: {
     // Listen on 0.0.0.0 so other devices on the LAN (e.g. a VR headset browser)
-    // can reach the dev server at http://<pc-ip>:5173. The /api proxy below still
-    // targets localhost:8080, so the backend stays bound to the PC only.
+    // can reach the dev server at http://<pc-ip>:15173. The /api proxy below still
+    // targets localhost:18080, so the backend stays bound to the PC only.
     host: true,
-    port: 5173,
+    // Non-default ports so other local projects on 8080/5173 don't collide.
+    // strictPort: fail loudly instead of drifting to the next free port, which
+    // would silently fall outside the backend's CORS allowlist (WebConfig).
+    port: 15173,
+    strictPort: true,
     fs: {
       // Allow importing topic files that live outside the frontend root.
       allow: [repoRoot],
     },
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: 'http://localhost:18080',
         changeOrigin: true,
       },
     },

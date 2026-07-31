@@ -1,9 +1,11 @@
 # Starts the backend (Spring Boot) and the frontend (Vite) for local development.
-# Backend: http://localhost:8080   Frontend (open this): http://localhost:5173
+# Backend: http://localhost:18080   Frontend (open this): http://localhost:15173
 #
 # Usage:  ./dev.ps1
 # On each run it first stops the backend/frontend started by a previous run —
-# closing their windows AND freeing ports 8080/5173 — then starts fresh.
+# closing their windows AND freeing ports 18080/15173 — then starts fresh.
+# The ports are deliberately not the 8080/5173 defaults, so other local projects
+# can keep those (and so this script never kills them).
 
 $root = $PSScriptRoot
 $pidFile = Join-Path $root '.dev-pids'
@@ -54,8 +56,8 @@ function Stop-PortOwners([int]$port) {
 
 Write-Host "Stopping any previous dev processes..." -ForegroundColor Cyan
 Stop-PreviousWindows
-Stop-PortOwners 8080
-Stop-PortOwners 5173
+Stop-PortOwners 18080
+Stop-PortOwners 15173
 
 # --- Build & start --------------------------------------------------------
 
@@ -79,4 +81,4 @@ $frontend = Start-Process powershell -PassThru -ArgumentList @(
 Set-Content -Path $pidFile -Value @($backend.Id, $frontend.Id) -Encoding ascii
 
 Write-Host ""
-Write-Host "Open http://localhost:5173 once both windows finish starting." -ForegroundColor Green
+Write-Host "Open http://localhost:15173 once both windows finish starting." -ForegroundColor Green

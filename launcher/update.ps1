@@ -23,7 +23,7 @@ if (Test-Path $flag) {
 
 Set-Content -Path $log -Value "[update] $(Get-Date -Format o) pull=$pull" -Encoding utf8
 
-# Let the exited JVM release port 8080 and its jar file handle before rebuilding.
+# Let the exited JVM release port 18080 and its jar file handle before rebuilding.
 Start-Sleep -Seconds 2
 
 $ok = $true

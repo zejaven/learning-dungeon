@@ -68,9 +68,12 @@ with wrong-answer requeueing.
 ./dev.ps1
 ```
 
-This builds the `visual-runtime` jar, then starts the backend (`:8080`) and the
-Vite frontend (`:5173`) in their own windows, freeing those ports from a previous
-run first. Open **http://localhost:5173**.
+This builds the `visual-runtime` jar, then starts the backend (`:18080`) and the
+Vite frontend (`:15173`) in their own windows, freeing those ports from a previous
+run first. Open **http://localhost:15173**.
+
+The ports are intentionally not the 8080/5173 defaults, so other local projects
+can keep those.
 
 Or manually, in two terminals:
 
@@ -84,7 +87,7 @@ cd frontend; npm install; npm run dev
 
 ## Run (packaged, single process)
 
-For everyday use there is a windowless tray build: one JVM on `:8080` that serves
+For everyday use there is a windowless tray build: one JVM on `:18080` that serves
 both the API and the built frontend (bundled into the jar), with no Vite.
 
 ```powershell
@@ -100,7 +103,7 @@ from GitHub first (see "Self-update" below).
 
 Both servers listen on all interfaces, so another device on the same Wi-Fi (a
 laptop, phone, or VR-headset browser) can open the app by the host PC's IP:
-`http://<pc-ip>:8080` for the packaged run, or `http://<pc-ip>:5173` for the dev
+`http://<pc-ip>:18080` for the packaged run, or `http://<pc-ip>:15173` for the dev
 server. Allow the port through the firewall on the host.
 
 ## How it works

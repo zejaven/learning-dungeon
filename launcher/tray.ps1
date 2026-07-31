@@ -13,7 +13,7 @@ Add-Type -AssemblyName System.Drawing
 $ErrorActionPreference = 'Stop'
 
 $root       = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$port       = 8080
+$port       = 18080
 $url        = "http://localhost:$port"
 $iconPath   = Join-Path $PSScriptRoot 'icon.ico'
 $logPath    = Join-Path $PSScriptRoot 'app.log'

@@ -5,7 +5,7 @@ in the background, and lives in the system tray instead of a console window.
 There is no app window: the UI is the browser, the tray icon is the process.
 
 It runs a **single process** — the backend `bootJar`, which also serves the
-built frontend (bundled inside the jar) on `http://localhost:8080`. So there is
+built frontend (bundled inside the jar) on `http://localhost:18080`. So there is
 one port and one process to manage, not the two dev servers `dev.ps1` starts.
 
 ## One-time setup
@@ -16,7 +16,7 @@ launcher\install-shortcut.ps1 # create Desktop + Start-menu shortcuts
 ```
 
 Then launch from the **Java Interview Dungeon** icon (Desktop or Start menu).
-A tray icon appears, the browser opens at `http://localhost:8080`, and:
+A tray icon appears, the browser opens at `http://localhost:18080`, and:
 
 - **Open** / double-click — open the app in the browser again.
 - **Open log** — open `launcher\app.log` (backend output).
@@ -38,7 +38,7 @@ The shortcuts and icon do not need reinstalling.
 
 - `build-app.ps1` — builds `visual-runtime` jar, `frontend\dist`, `backend` jar.
 - `tray.ps1` — starts `javaw -jar` (working dir = repo root, logs to
-  `app.log`), waits for `:8080`, opens the browser, shows the tray icon, and
+  `app.log`), waits for `:18080`, opens the browser, shows the tray icon, and
   tree-kills the JVM on Exit.
 - `launch.vbs` — runs `tray.ps1` with no console flash.
 - `install-shortcut.ps1` — shortcuts.

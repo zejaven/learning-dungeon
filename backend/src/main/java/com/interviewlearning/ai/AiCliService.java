@@ -685,9 +685,12 @@ public class AiCliService {
 
     private String statusJson(String status, String message) {
         try {
-            return mapper.writeValueAsString(Map.of("status", status, "message", message));
+            return mapper.writeValueAsString(
+                    Map.of("status", status, "message", String.valueOf(message)));
         } catch (IOException e) {
-            return "{\"status\":\"" + status + "\",\"message\":\"" + message.replace("\"", "'") + "\"}";
+            // Never hand-build JSON with the message inside: a Windows path or
+            // control characters in it would produce invalid JSON.
+            return "{\"status\":\"" + status + "\"}";
         }
     }
 

@@ -58,6 +58,11 @@ const UI: Record<string, Localized> = {
     en: 'Run the code to see what happens, step by step.',
     ru: 'Запустите код, чтобы увидеть, что происходит, шаг за шагом.',
   },
+  errorBoundary: {
+    en: 'Something went wrong while rendering this panel.',
+    ru: 'Что-то пошло не так при отрисовке этой панели.',
+  },
+  errorRetry: { en: 'Try again', ru: 'Повторить' },
   noVisualizer: {
     en: 'No visualizer for this topic; showing the event log only.',
     ru: 'Для этой темы нет визуализатора; показан только журнал событий.',

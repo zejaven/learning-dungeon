@@ -339,6 +339,10 @@ public class AiCliService {
         ProcessBuilder pb = new ProcessBuilder(invocation.command())
                 .directory(repoPaths.repoRoot().toFile())
                 .redirectErrorStream(false);
+        // The legacy kimi-cli is Python: without UTF-8 mode it falls back to the
+        // Windows ANSI codepage (cp1251) and mangles both the UTF-8 prompt file
+        // it reads and its own stdout. Harmless for the non-Python providers.
+        pb.environment().put("PYTHONUTF8", "1");
         Process process;
         try {
             sink.status("running", "Starting " + cfg.label() + "...");
@@ -419,6 +423,11 @@ public class AiCliService {
                 };
             } catch (RuntimeException | IOException e) {
                 log.debug("Could not normalize AI stream line: {}", e.getMessage());
+                // Legacy kimi-cli prints non-JSON trailer lines after the stream
+                // (e.g. "To resume this session: ..."); don't leak them to the UI.
+                if (invocation.format() == StreamFormat.KIMI_JSON) {
+                    return List.of();
+                }
                 return asList(event("activity", line));
             }
         }
@@ -509,6 +518,38 @@ public class AiCliService {
 
     private Optional<String> normalizeKimi(String line) throws IOException {
         JsonNode root = mapper.readTree(line);
+        // Legacy kimi-cli v1.x emits Anthropic-style turns, one NDJSON line per
+        // message: {"role":"assistant","content":[{"type":"think",...},
+        // {"type":"text","text":"..."}]}. The reply text lives in the "text"
+        // blocks of that array; tool calls appear as "tool_use" blocks.
+        JsonNode content = root.path("content");
+        if (content.isArray()) {
+            // Only assistant turns carry the reply text. Other roles (user,
+            // tool results) also arrive as content arrays — e.g. the CLI echoing
+            // the prompt file it read — and must not leak into the chat.
+            if (!"assistant".equals(root.path("role").asText("assistant"))) {
+                return Optional.empty();
+            }
+            List<String> textParts = new ArrayList<>();
+            List<String> activityParts = new ArrayList<>();
+            for (JsonNode block : content) {
+                String blockType = block.path("type").asText("");
+                if ("text".equals(blockType) && !block.path("text").asText("").isBlank()) {
+                    textParts.add(block.path("text").asText(""));
+                } else if ("tool_use".equals(blockType)) {
+                    String name = block.path("name").asText("tool");
+                    String target = firstText(block.path("input"), "file_path", "path", "command");
+                    activityParts.add((name + " " + target).trim());
+                }
+            }
+            if (!textParts.isEmpty()) {
+                return event("text_delta", String.join("\n", textParts));
+            }
+            if (!activityParts.isEmpty()) {
+                return event("activity", String.join("\n", activityParts));
+            }
+            return Optional.empty();
+        }
         String text = firstText(root, "delta", "text", "content", "message");
         if (!text.isBlank()) {
             String type = root.path("type").asText("").toLowerCase(Locale.ROOT);

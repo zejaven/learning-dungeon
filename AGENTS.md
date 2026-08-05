@@ -32,8 +32,10 @@ is not a production-grade sandbox.
 
 The app is multi-domain: a "domain" is a subject area above categories, and the
 home screen shows one domain at a time. Current domains: `java` (the original
-interview prep, with the static question catalog) and `ndm` (the IT8516
-"Network Design and Management" university course, imported as theory topics).
+interview prep, with the static question catalog), `ndm` (the IT8516
+"Network Design and Management" university course, imported as theory topics),
+and `qa` (QA interview prep, theory topics parsed from the user's question
+base; ids prefixed `qa-`).
 
 - A topic declares its domain via `domainId` in `topic.yaml`. An absent
   `domainId` means `java`, so all legacy topics are unaffected.

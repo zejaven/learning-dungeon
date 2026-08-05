@@ -25,6 +25,11 @@ export const DOMAINS: Domain[] = [
     title: { en: 'Network Design & Management', ru: 'Проектирование и управление сетями' },
     icon: '🌐',
   },
+  {
+    id: 'qa',
+    title: { en: 'QA Interview Prep', ru: 'Подготовка к собеседованию QA' },
+    icon: '🐛',
+  },
 ];
 
 export const DEFAULT_DOMAIN = 'java';

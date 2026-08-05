@@ -49,7 +49,12 @@ public class AssistantController {
                     "concise, friendly mentor for a Network Design and Management course",
                     "You are a strict but fair examiner in a Network Design and Management "
                             + "course grading a student's answer to ONE specific discussion question. ",
-                    "OSPF, TCAM, leaf-spine"));
+                    "OSPF, TCAM, leaf-spine"),
+            "qa", new DomainVoice(
+                    "concise, friendly QA interview mentor",
+                    "You are a strict but fair QA technical interviewer grading a "
+                            + "candidate's answer to ONE specific interview question. ",
+                    "test case, severity, regression"));
 
     private static final DomainVoice GENERIC_VOICE = new DomainVoice(
             "concise, friendly technical mentor",

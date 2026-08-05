@@ -2,7 +2,7 @@
 
 Дата: 2026-08-05. Проверены: backend (все пакеты), frontend (все src), gradle, dev.ps1, launcher/*.ps1, конфиги, все 254 темы в topics/ (скриптом), prompts/, plans/.
 
-> Статус: пункты из раздела «Сделать сегодня» (quick wins 1–4, 6, 13 + destroyForcibly/synchronizedList) **исправлены в тот же день**; backend-тесты и production-сборка фронта зелёные. По ходу исправлений добавлены `frontend/tsconfig.build.json` и `frontend/src/vite-env.d.ts`.
+> Статус: все пункты из раздела «Сделать сегодня» **выполнены** (коммит `025eed4`, ветка `qa-domain`; backend-тесты и production-сборка фронта зелёные). Выполненное отмечено ✅ по тексту с примечаниями.
 
 ## 0. Если данных не хватает
 
@@ -20,23 +20,25 @@
 
 | # | Проблема | Где | Почему плохо | Минимальный фикс | Severity | Effort | Confidence |
 |---|----------|-----|--------------|------------------|----------|--------|------------|
-| 1 | Backend биндится на 0.0.0.0 + есть `POST /api/run` с произвольным кодом | `application.yml:1` | RCE с любой машины в LAN (CORS не спасает от curl) | `server.address: 127.0.0.1` | High | S | High |
-| 2 | Вывод дочерней JVM копится в память без лимита | `JavaCodeRunner.java:262-268` | `while(true) println` за 5 с таймаута качает сотни МБ в heap → OOM backend'а | cap на N строк + флаг `truncated` | High | S | High |
-| 3 | JSON в SSE-статусе собирается конкатенацией, экранируются только кавычки | `GenerationTask.java:65-66`, `AiCliService.java:690` | Windows-путь `C:\new\...` в сообщении об ошибке ломает JSON → фронт теряет статус | `mapper.writeValueAsString(Map.of(...))` | High | S | High |
-| 4 | Нет ни одного Error Boundary | `main.tsx`, `VisualizationCanvas.tsx:24` | Один кривой trace-event = белый экран всего приложения | class ErrorBoundary (~15 строк) вокруг корня и визуализатора | High | S | High |
+| ✅ 1 | Backend биндится на 0.0.0.0 + есть `POST /api/run` с произвольным кодом | `application.yml:1` | RCE с любой машины в LAN (CORS не спасает от curl) | `server.address: 127.0.0.1` | High | S | High |
+| ✅ 2 | Вывод дочерней JVM копится в память без лимита | `JavaCodeRunner.java:262-268` | `while(true) println` за 5 с таймаута качает сотни МБ в heap → OOM backend'а | cap на N строк + флаг `truncated` | High | S | High |
+| ✅ 3 | JSON в SSE-статусе собирается конкатенацией, экранируются только кавычки | `GenerationTask.java:65-66`, `AiCliService.java:690` | Windows-путь `C:\new\...` в сообщении об ошибке ломает JSON → фронт теряет статус | `mapper.writeValueAsString(Map.of(...))` | High | S | High |
+| ✅ 4 | Нет ни одного Error Boundary | `main.tsx`, `VisualizationCanvas.tsx:24` | Один кривой trace-event = белый экран всего приложения | class ErrorBoundary (~15 строк) вокруг корня и визуализатора | High | S | High |
 | 5 | Чтение stdout AI-CLI без общего дедлайна | `AiCliService.java:371-386` | Зависший CLI вешает HTTP-поток Tomcat навсегда | `waitFor(overallTimeout)` + `destroyForcibly` | High | M | High |
-| 6 | Сборка фронта не гоняет typecheck | `frontend/package.json:7` | TS-ошибки не ломают build, уезжают в прод-jar | `"build": "tsc --noEmit && vite build"` | Medium | S | High |
+| ✅ 6 | Сборка фронта не гоняет typecheck | `frontend/package.json:7` | TS-ошибки не ломают build, уезжают в прод-jar | `"build": "tsc --noEmit && vite build"` | Medium | S | High |
 | 7 | Процесс CLI не убивается при обрыве SSE-клиента | `AiCliService.java:744-749` | CLI с bypassPermissions доживает до конца, жгя токены | `finally { if (process.isAlive()) process.destroyForcibly(); }` | Medium | S | High |
 | 8 | Гонки stale state: результат `run`/`runSql`/`analyze` применяется к уже другой теме | `engine/store.ts:355,465,503,533` | Чужие события/галочки миссий в текущей теме | после await: `if (get().topic?.id !== id) return;` | Medium | S | High |
 | 9 | `selectTopic` не защищён от stale-ответа `fetchTopic` | `engine/store.ts:271-306` | URL — тема B, контент — тема A | монотонный счётчик запроса | Medium | S | High |
 | 10 | `topicsError` пишется, но нигде не показывается | `store.ts:31`, `HomeScreen.tsx:336` | При недоступном backend выглядит как «все мои темы удалились» | вывести `topicsError`/`runError` в HomeScreen | Medium | S | High |
 | 11 | Нет `statement.setQueryTimeout` в SQL-песочнице | `SqlService.java:87-100` | Тяжёлый запрос вешает HTTP-поток надолго | `st.setQueryTimeout(5)` | Medium | S | High |
 | 12 | Кэш резолва CLI бессрочный, включая negative result | `AiCliService.java:604-616` | Установил CLI после старта — «unavailable» до рестарта | кэшировать только успех или TTL 60 с | Medium | S | High |
-| 13 | `bootJar` молча собирает jar без UI без `frontend/dist` | `backend/build.gradle:55-59` | Валидный jar, который отдаёт 404 на `/` | `doFirst { if (!file('.../dist/index.html').exists()) throw ... }` | Medium | S | High |
+| ✅ 13 | `bootJar` молча собирает jar без UI без `frontend/dist` | `backend/build.gradle:55-59` | Валидный jar, который отдаёт 404 на `/` | `doFirst { if (!file('.../dist/index.html').exists()) throw ... }` | Medium | S | High |
 | 14 | SSE-стримы не отменяются (signal поддержан, но не передаётся) | `AssistantDialog.tsx:112`, `BossQuestionForm.tsx:97` | Размонтирование посреди стрима жжёт токены до конца | AbortController + abort в cleanup | Medium | S | High |
 | 15 | Monaco без `path` — общая модель и undo-стек между файлами | `EditorPanel.tsx:16-29` | Undo протекает между файлами structural-режима | `path={activePath ?? 'main'}` | Low | S | Medium |
 
-Не вошли в топ-15, но тоже дешёвые: `destroyForcibly` в catch `InterruptedException` раннера, `synchronizedList` для `lines`, `compute()` в `GenerationService.startOrGet`, path-проверка в `TopicRepository` для `examples`/`missionsFile`, добавить `difficulty`/`categoryId` в 3 темы, убрать NUL-байт из `explanation.en.md`.
+Легенда: ✅ — исправлено (коммит `025eed4`), см. примечания в разделах 3 и 7. Остальные пункты — в работе/отложено.
+
+Не вошли в топ-15, но тоже дешёвые: `compute()` в `GenerationService.startOrGet`, path-проверка в `TopicRepository` для `examples`/`missionsFile`, добавить `difficulty`/`categoryId` в 3 темы, убрать NUL-байт из `explanation.en.md`. (Из первоначального списка ✅ `destroyForcibly` в catch `InterruptedException` и ✅ `synchronizedList` для `lines` — сделаны вместе с пунктом 2.)
 
 ## 3. Детальные находки
 
@@ -53,6 +55,7 @@
   ```
 - Что не нужно делать: не нужна авторизация/API-токены — после бинда на localhost атаковать некому.
 - Severity: High (для desktop; Windows Firewall может частично смягчить) / Effort: S / Confidence: High.
+- ✅ **Исправлено** (`025eed4`): добавлен `server.address: 127.0.0.1` в `application.yml`.
 
 ### [P0] Неограниченное накопление вывода дочерней JVM → OOM backend'а
 - Где: `runner/JavaCodeRunner.java:262-268`, `runner/TraceCollector.java:22-23`.
@@ -67,6 +70,7 @@
   и `truncated` в `RunResult`, чтобы UI показал «вывод обрезан».
 - Что не нужно делать: не нужен стриминг вывода на фронт.
 - Severity: High / Effort: S / Confidence: High.
+- ✅ **Исправлено** (`025eed4`): кап 10 000 строк (`MAX_OUTPUT_LINES`), при обрезке в вывод добавляется маркер `[output truncated after 10000 lines]` — UI показывает его автоматически, отдельный флаг в `RunResult` не понадобился. Заодно: `synchronizedList` + снимок при чтении и `destroyForcibly()` в catch `InterruptedException`.
 
 ### [P1] Ручная сборка JSON в SSE-статусе ломается на Windows-путях
 - Где: `generation/GenerationTask.java:65-66`, `ai/AiCliService.java:690`. Проверено лично.
@@ -78,12 +82,14 @@
   ```
   (ObjectMapper сделать статическим полем). Заодно закрывает NPE при `message == null`.
 - Severity: High / Effort: S / Confidence: High.
+- ✅ **Исправлено** (`025eed4`): `GenerationTask` и `AiCliService.statusJson` сериализуют статус через Jackson, `String.valueOf(message)` против NPE; ручной fallback больше не содержит message — битый JSON невозможен.
 
 ### [P1] Нет Error Boundary — один кривой trace-event кладёт всё приложение
 - Где: `frontend/src/main.tsx:6-10`, `shell/VisualizationCanvas.tsx:24`, визуализаторы `topics/*/visualizer.tsx`.
 - Что не так: визуализаторы делают `event?.state as XState` и дереальны поля без проверки формы. Есть проверка `if (!state)`, но `state.slots === null` или неполный JSON — и рендер бросает. В React 18 необработанная ошибка рендера размонтирует всё дерево: белый экран до перезагрузки. Grep по `ErrorBoundary|componentDidCatch` — 0 совпадений.
 - Фикс: один class-компонент ErrorBoundary (15 строк) в двух местах: корень `main.tsx` и обёртка вокруг `<Visualizer>` — тогда кривой event ломает только панель визуализации, а не приложение.
 - Severity: High / Effort: S / Confidence: High.
+- ✅ **Исправлено** (`025eed4`): новый `frontend/src/shell/ErrorBoundary.tsx`; обёрнуты корень `<App/>` и `<Visualizer>` (с `key={stepIndex}` — переход на другой шаг сбрасывает границу). Добавлены i18n-ключи `errorBoundary`/`errorRetry`.
 
 ### [P1] Чтение stdout AI-CLI без общего дедлайна — вечное зависание
 - Где: `ai/AiCliService.java:371-386`; синхронные вызовы из HTTP-потока: `QuestionController.java:92`, `VersionController.java:96`.
@@ -139,10 +145,11 @@
 - Что не так: `"build": "vite build"` — esbuild выкидывает типы, TS-ошибки не ломают сборку и уезжают в прод-jar.
 - Фикс: `"build": "tsc --noEmit && vite build"`.
 - Severity: Medium / Effort: S / Confidence: High.
+- ✅ **Исправлено** (`025eed4`), с оговоркой: в лоб typecheck не взлетел — корневой `tsconfig.json` включает `../topics`, где visualizer'ы не резолвят `frontend/node_modules` (потому tsc и не гоняли раньше). Сделано через `tsconfig.build.json` (только `src`) + добавлен отсутствовавший `src/vite-env.d.ts` (типы `import.meta.glob`).
 
 ### [P3] Мелочи (по одной строке каждая)
-- **Гонка на `lines` при таймауте `reader.join()`** — `JavaCodeRunner.java:280-287`: несинхронизированный ArrayList читается, пока reader ещё может писать → `Collections.synchronizedList(...)` + копия. S/High.
-- **Нет `destroyForcibly` в catch InterruptedException** — `JavaCodeRunner.java:297-300`: дочерний JVM переживает прерывание. S/High.
+- ✅ **Гонка на `lines` при таймауте `reader.join()`** — `JavaCodeRunner.java:280-287`: несинхронизированный ArrayList читается, пока reader ещё может писать → `Collections.synchronizedList(...)` + копия. S/High. **Исправлено** (`025eed4`): `synchronizedList` + снимок в `drain()`.
+- ✅ **Нет `destroyForcibly` в catch InterruptedException** — `JavaCodeRunner.java:297-300`: дочерний JVM переживает прерывание. S/High. **Исправлено** (`025eed4`).
 - **Temp-директории `ilrun-*`/`ilproj-*` копятся** при kill/OOM — очистка только в happy-path finally; фикс — startup-sweep `%TEMP%/il*`. S/High.
 - **Postgres недоступен = приложение падает на старте** (`DbInitializer.java:26`) — пользователь трея увидит только стектрейс; фикс — try/catch с понятным сообщением. S/High.
 - **Нет глобального `@RestControllerAdvice`** — RuntimeException даёт дефолтный пустой 500 (stack trace не утекает — дефолты Boot 3 это закрывают). S/High.
@@ -259,14 +266,14 @@ export class ErrorBoundary extends Component<
 
 ## 7. Итоговый план действий
 
-**Сделать сегодня (все фиксы S, суммарно ~2 часа):**
-1. `server.address: 127.0.0.1` в application.yml.
-2. Кап на вывод в JavaCodeRunner + `truncated` в RunResult.
-3. JSON через ObjectMapper в GenerationTask/AiCliService.
-4. Error Boundary на корень и визуализатор.
-5. `tsc --noEmit` в build фронта.
-6. `destroyForcibly` в InterruptedException раннера + synchronizedList.
-7. bootJar: fail-fast без `frontend/dist`.
+**Сделать сегодня (все фиксы S, суммарно ~2 часа):** — ✅ все выполнены, коммит `025eed4`; backend-тесты и `npm run build` зелёные.
+1. ✅ `server.address: 127.0.0.1` в application.yml.
+2. ✅ Кап на вывод в JavaCodeRunner — 10k строк + маркер `[output truncated…]` в выводе (отдельный флаг `truncated` в RunResult не понадобился).
+3. ✅ JSON через ObjectMapper в GenerationTask/AiCliService — заодно null-safe message и безопасный fallback.
+4. ✅ Error Boundary на корень и визуализатор (+ i18n-ключи `errorBoundary`/`errorRetry`).
+5. ✅ `tsc --noEmit` в build фронта — через `tsconfig.build.json` (только `src`) и новый `src/vite-env.d.ts`.
+6. ✅ `destroyForcibly` в InterruptedException раннера + synchronizedList.
+7. ✅ bootJar: fail-fast без `frontend/dist`.
 
 **Сделать на этой неделе:**
 1. Общий дедлайн на AI-CLI процессы (waitFor + destroyForcibly) и kill при обрыве SSE.

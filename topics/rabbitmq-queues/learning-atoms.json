@@ -1,0 +1,2691 @@
+{
+  "schemaVersion": 1,
+  "topicId": "rabbitmq-queues",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "producer-to-exchange",
+      "title": {
+        "en": "The producer publishes to an exchange",
+        "ru": "Продюсер публикует в exchange"
+      },
+      "summary": {
+        "en": "A producer publishes to an exchange with a routing key; it never names a queue and never knows a consumer exists.",
+        "ru": "Продюсер публикует в exchange с routing key; он никогда не называет очередь и не знает, что потребитель существует."
+      },
+      "discovery": [
+        {
+          "id": "pte-d1-where-to-send",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A service must send an \"order created\" message through RabbitMQ. What does it address the message to?",
+            "ru": "Сервис должен отправить сообщение «заказ создан» через RabbitMQ. Куда он адресует сообщение?"
+          },
+          "reveal": {
+            "en": "RabbitMQ is a **broker**: a router placed in front of a set of ordered buffers. Four words cover its whole topology:\n\n- **producer** — the code that sends a message.\n- **exchange** — the router the producer publishes to. It stores nothing.\n- **queue** — the ordered buffer that actually stores messages.\n- **consumer** — the code that receives messages from a queue.\n\nThe producer publishes to an **exchange** together with a **routing key** (a short label such as `created`). A **binding** — a rule connecting an exchange to a queue — decides which queues get a copy. The broker then delivers to a consumer, and deletes the message only when the consumer confirms it with an **ack**.\n\n```mermaid\nflowchart LR\n  P[\"producer\"] -->|\"publish + routing key\"| X[\"exchange\"]\n  X -->|\"binding\"| Q[\"queue\"]\n  Q -->|\"deliver\"| C[\"consumer\"]\n  C -.->|\"ack\"| Q\n```\n\nWhy this indirection? Because the producer names no queue and knows of no consumer, adding a second reader later — an audit log, a search indexer — is a change to the **bindings**, not to the producer. That decoupling is the reason to put a broker in between at all.",
+            "ru": "RabbitMQ — это **брокер**: маршрутизатор, поставленный перед набором упорядоченных буферов. Всю его топологию описывают четыре слова:\n\n- **продюсер (producer)** — код, который отправляет сообщение.\n- **exchange** — маршрутизатор, в который публикует продюсер. Он ничего не хранит.\n- **очередь (queue)** — упорядоченный буфер, который и хранит сообщения.\n- **потребитель (consumer)** — код, который получает сообщения из очереди.\n\nПродюсер публикует в **exchange** вместе с **routing key** (короткой меткой вроде `created`). **Привязка (binding)** — правило, соединяющее exchange с очередью, — решает, какие очереди получат копию. Дальше брокер доставляет сообщение потребителю и удаляет его только тогда, когда потребитель подтвердит обработку через **ack**.\n\n```mermaid\nflowchart LR\n  P[\"продюсер\"] -->|\"publish + routing key\"| X[\"exchange\"]\n  X -->|\"привязка\"| Q[\"очередь\"]\n  Q -->|\"доставка\"| C[\"потребитель\"]\n  C -.->|\"ack\"| Q\n```\n\nЗачем эта косвенность? Продюсер не называет очередь и не знает ни одного потребителя, поэтому добавить нового читателя — журнал аудита, поисковый индексатор — это изменение **привязок**, а не продюсера. Ради этой развязки брокер и ставят между сервисами."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — an exchange plus a routing key; queues are chosen by bindings.",
+              "ru": "Верно — exchange плюс routing key; очереди выбирают привязки."
+            },
+            "incorrect": {
+              "en": "The producer publishes to an exchange with a routing key, never to a queue.",
+              "ru": "Продюсер публикует в exchange с routing key, а не в очередь."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": { "en": "An exchange, together with a routing key", "ru": "В exchange вместе с routing key" },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": { "en": "The name of the queue the consumer reads", "ru": "В очередь, которую читает потребитель" },
+              "correct": false,
+              "feedback": {
+                "en": "Producers never name a queue — bindings choose the queues for them.",
+                "ru": "Продюсеры не называют очередь — очереди за них выбирают привязки."
+              }
+            },
+            {
+              "id": "c",
+              "text": { "en": "The network address of the consumer service", "ru": "На сетевой адрес сервиса-потребителя" },
+              "correct": false,
+              "feedback": {
+                "en": "The producer does not know a consumer exists; that is the point of a broker.",
+                "ru": "Продюсер не знает, что потребитель существует; в этом и смысл брокера."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "pte-p1-names-queue-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In RabbitMQ, a producer names the queue its message should go into.",
+            "ru": "В RabbitMQ продюсер называет очередь, в которую должно попасть его сообщение."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It publishes to an exchange with a routing key; bindings pick the queues.",
+              "ru": "Он публикует в exchange с routing key; очереди выбирают привязки."
+            },
+            "incorrect": {
+              "en": "No — it publishes to an exchange with a routing key, and bindings pick the queues.",
+              "ru": "Нет — он публикует в exchange с routing key, а очереди выбирают привязки."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "pte-p2-add-reader",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "An audit service must start receiving the same RabbitMQ messages an existing worker already gets. What has to change?",
+            "ru": "Сервис аудита должен начать получать те же сообщения RabbitMQ, что уже получает существующий воркер. Что нужно изменить?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "New readers are a topology change: a new queue and a new binding.",
+              "ru": "Новый читатель — это изменение топологии: новая очередь и новая привязка."
+            },
+            "incorrect": {
+              "en": "Only the topology: add a queue and bind it to the exchange. The producer stays untouched.",
+              "ru": "Только топология: добавить очередь и привязать её к exchange. Продюсер не трогаем."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": { "en": "Add a queue and bind it to the exchange", "ru": "Добавить очередь и привязать её к exchange" },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": { "en": "The producer must publish the message a second time", "ru": "Продюсер должен опубликовать сообщение второй раз" },
+              "correct": false,
+              "feedback": {
+                "en": "The producer never changes — routing is the broker's job, not the sender's.",
+                "ru": "Продюсер не меняется — маршрутизация это работа брокера, а не отправителя."
+              }
+            },
+            {
+              "id": "c",
+              "text": { "en": "The audit service must connect to the worker's queue", "ru": "Сервис аудита должен подключиться к очереди воркера" },
+              "correct": false,
+              "feedback": {
+                "en": "Consumers on the same queue would share the messages, not both see all of them.",
+                "ru": "Потребители на одной очереди делили бы сообщения, а не видели все."
+              }
+            }
+          ]
+        },
+        {
+          "id": "pte-p3-match-roles",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each RabbitMQ component to its job.",
+            "ru": "Соотнеси каждый компонент RabbitMQ с его ролью."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Routing decides who gets a copy; only the queue stores anything.",
+              "ru": "Маршрутизация решает, кто получит копию; хранит только очередь."
+            },
+            "incorrect": {
+              "en": "Producer sends, exchange routes, binding is the rule, queue stores, consumer receives.",
+              "ru": "Продюсер отправляет, exchange маршрутизирует, привязка — правило, очередь хранит, потребитель получает."
+            }
+          },
+          "pairs": [
+            {
+              "id": "producer",
+              "left": { "en": "producer", "ru": "продюсер" },
+              "right": { "en": "Publishes a message with a routing key", "ru": "Публикует сообщение с routing key" }
+            },
+            {
+              "id": "exchange",
+              "left": { "en": "exchange", "ru": "exchange" },
+              "right": { "en": "Routes copies; stores nothing itself", "ru": "Маршрутизирует копии; сам ничего не хранит" }
+            },
+            {
+              "id": "binding",
+              "left": { "en": "binding", "ru": "привязка (binding)" },
+              "right": { "en": "The rule linking an exchange to a queue", "ru": "Правило, связывающее exchange с очередью" }
+            },
+            {
+              "id": "queue",
+              "left": { "en": "queue", "ru": "очередь" },
+              "right": { "en": "The ordered buffer that stores messages", "ru": "Упорядоченный буфер, который хранит сообщения" }
+            },
+            {
+              "id": "consumer",
+              "left": { "en": "consumer", "ru": "потребитель" },
+              "right": { "en": "Receives messages from a queue", "ru": "Получает сообщения из очереди" }
+            }
+          ]
+        },
+        {
+          "id": "pte-p4-fill-publish",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing terms.",
+            "ru": "Впиши пропущенные термины."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Exchange plus routing key is everything the producer knows about the topology.",
+              "ru": "Exchange плюс routing key — это всё, что продюсер знает о топологии."
+            },
+            "incorrect": {
+              "en": "A producer publishes to an exchange and tags the message with a routing key.",
+              "ru": "Продюсер публикует в exchange и помечает сообщение routing key."
+            }
+          },
+          "text": {
+            "en": "In RabbitMQ a producer publishes to an ___ and tags the message with a routing ___.",
+            "ru": "В RabbitMQ продюсер публикует в ___ и помечает сообщение routing ___."
+          },
+          "blanks": [
+            { "en": ["exchange"], "ru": ["exchange", "обменник"] },
+            { "en": ["key"], "ru": ["key", "ключ", "ключом"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bindings-and-unroutable",
+      "title": {
+        "en": "Bindings and unroutable messages",
+        "ru": "Привязки и недоставляемые сообщения"
+      },
+      "summary": {
+        "en": "A binding is the rule that copies a message into a queue; a message matching no binding is silently discarded and publish still succeeds.",
+        "ru": "Привязка — правило, копирующее сообщение в очередь; сообщение без подходящей привязки молча выбрасывается, а publish всё равно успешен."
+      },
+      "discovery": [
+        {
+          "id": "bind-d1-no-match",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Only one binding exists. Predict what happens to the published message.",
+            "ru": "Существует только одна привязка. Предскажи, что произойдёт с опубликованным сообщением."
+          },
+          "code": "exchange  orders          type = direct\nqueue     orders.created\nbinding   orders -> orders.created   with key \"created\"\n\npublish to exchange \"orders\" with routing key \"cancelled\"",
+          "codeLang": "text",
+          "reveal": {
+            "en": "A **binding** is a rule attached to a queue: \"give me the messages this exchange routes with binding key X\". The exchange compares the message's routing key against the bindings and copies the message into **zero or more** queues.\n\nHere the only binding wants `created`, the message carries `cancelled`, so **no binding matches**. The message is **unroutable**: the exchange throws it away, and `publish` still returns successfully — by default the producer is told nothing.\n\n```mermaid\nflowchart LR\n  X[\"exchange orders\"] -->|\"key = created\"| Q1[\"orders.created\"]\n  X -.->|\"key = cancelled: no binding\"| D[\"discarded\"]\n```\n\nThat silent loss is a classic production surprise. Three ways to notice it: the **`mandatory`** flag plus a return listener (the broker hands the message back), **publisher confirms**, or an **alternate exchange** that catches everything unroutable.",
+            "ru": "**Привязка (binding)** — правило, прикреплённое к очереди: «отдавай мне сообщения, которые этот exchange маршрутизирует с ключом привязки X». Exchange сравнивает routing key сообщения с привязками и копирует сообщение в **ноль или больше** очередей.\n\nЗдесь единственная привязка ждёт `created`, а сообщение несёт `cancelled`, поэтому **ни одна привязка не подошла**. Сообщение **недоставляемое**: exchange его выбрасывает, а `publish` всё равно завершается успешно — по умолчанию продюсеру ничего не сообщают.\n\n```mermaid\nflowchart LR\n  X[\"exchange orders\"] -->|\"ключ = created\"| Q1[\"orders.created\"]\n  X -.->|\"ключ = cancelled: привязки нет\"| D[\"выброшено\"]\n```\n\nТакая тихая потеря — классический сюрприз в проде. Заметить её можно тремя способами: флаг **`mandatory`** вместе с return listener (брокер возвращает сообщение обратно), **publisher confirms** или **alternate exchange**, который ловит всё недоставляемое."
+          },
+          "feedback": {
+            "correct": {
+              "en": "No matching binding means the message is dropped — quietly.",
+              "ru": "Нет подходящей привязки — сообщение выбрасывается, и молча."
+            },
+            "incorrect": {
+              "en": "With no matching binding the message is discarded, and publish still reports success.",
+              "ru": "Без подходящей привязки сообщение выбрасывается, а publish всё равно возвращается успешно."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": { "en": "It is discarded, and publish still succeeds", "ru": "Оно выбрасывается, а publish всё равно успешен" },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": { "en": "publish fails with an error", "ru": "publish завершается с ошибкой" },
+              "correct": false,
+              "feedback": {
+                "en": "By default the producer is told nothing; you need mandatory, confirms or an alternate exchange.",
+                "ru": "По умолчанию продюсеру ничего не сообщают; нужны mandatory, confirms или alternate exchange."
+              }
+            },
+            {
+              "id": "c",
+              "text": { "en": "It is stored in orders.created anyway", "ru": "Оно всё равно попадёт в orders.created" },
+              "correct": false,
+              "feedback": {
+                "en": "A direct exchange copies a message only into queues whose binding key equals the routing key.",
+                "ru": "Direct exchange копирует сообщение только в очереди, чей ключ привязки равен routing key."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "bind-p1-publish-fails-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In RabbitMQ, publishing a message that matches no binding reports an error to the producer by default.",
+            "ru": "В RabbitMQ публикация сообщения, не подошедшего ни под одну привязку, по умолчанию сообщает продюсеру об ошибке."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The message is dropped silently; publish returns as if all is well.",
+              "ru": "Сообщение молча выбрасывается; publish возвращается как ни в чём не бывало."
+            },
+            "incorrect": {
+              "en": "No — it is dropped silently. Use mandatory + returns, publisher confirms, or an alternate exchange.",
+              "ru": "Нет — оно молча выбрасывается. Нужны mandatory + returns, publisher confirms или alternate exchange."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "bind-p2-exchange-stores",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "How many messages does a RabbitMQ exchange store?",
+            "ru": "Сколько сообщений хранит exchange в RabbitMQ?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "An exchange is pure routing; storage is the queue's job.",
+              "ru": "Exchange — это чистая маршрутизация; хранение — задача очереди."
+            },
+            "incorrect": {
+              "en": "None — an exchange stores nothing; only queues store messages.",
+              "ru": "Нисколько — exchange ничего не хранит; сообщения хранят только очереди."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": { "en": "None — it only routes", "ru": "Нисколько — он только маршрутизирует" },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": { "en": "As many as fit in memory, until a queue takes them", "ru": "Сколько влезет в память, пока их не заберёт очередь" },
+              "correct": false,
+              "feedback": {
+                "en": "Routing is instantaneous: the exchange copies and forgets. Nothing waits in it.",
+                "ru": "Маршрутизация мгновенна: exchange копирует и забывает. В нём ничего не ждёт."
+              }
+            },
+            {
+              "id": "c",
+              "text": { "en": "One per binding, as a buffer", "ru": "По одному на привязку, в виде буфера" },
+              "correct": false,
+              "feedback": {
+                "en": "Bindings are rules, not buffers; the buffering happens in queues.",
+                "ru": "Привязки — это правила, а не буферы; буферизация происходит в очередях."
+              }
+            }
+          ]
+        },
+        {
+          "id": "bind-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble what a binding does in RabbitMQ.",
+            "ru": "Собери, что делает привязка в RabbitMQ."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The binding is the rule; the exchange applies it and copies the message.",
+              "ru": "Привязка — это правило; exchange применяет его и копирует сообщение."
+            },
+            "incorrect": {
+              "en": "A binding connects an exchange to a queue and decides which messages are copied into it.",
+              "ru": "Привязка соединяет exchange с очередью и решает, какие сообщения в неё копируются."
+            }
+          },
+          "tokens": {
+            "en": ["a", "binding", "connects", "an", "exchange", "to", "a", "queue"],
+            "ru": ["привязка", "соединяет", "exchange", "с", "очередью"]
+          },
+          "distractors": {
+            "en": ["stores", "consumer"],
+            "ru": ["хранит", "потребителем"]
+          }
+        },
+        {
+          "id": "bind-p4-fill-mandatory",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing publish flag.",
+            "ru": "Впиши пропущенный флаг публикации."
+          },
+          "feedback": {
+            "correct": {
+              "en": "With mandatory plus a return listener the broker hands an unroutable message back.",
+              "ru": "С mandatory и return listener брокер возвращает недоставляемое сообщение обратно."
+            },
+            "incorrect": {
+              "en": "It is mandatory — with a return listener it is how a producer learns a message was unroutable.",
+              "ru": "Это mandatory — вместе с return listener так продюсер узнаёт, что сообщение недоставляемо."
+            }
+          },
+          "text": {
+            "en": "To be told that a message was unroutable, publish it with the ___ flag and a return listener.",
+            "ru": "Чтобы узнать, что сообщение недоставляемо, публикуй его с флагом ___ и return listener."
+          },
+          "answers": { "en": ["mandatory"], "ru": ["mandatory"] }
+        }
+      ]
+    },
+    {
+      "id": "exchange-types",
+      "title": {
+        "en": "Exchange types",
+        "ru": "Типы exchange"
+      },
+      "summary": {
+        "en": "direct matches the routing key exactly, fanout copies to every bound queue, topic matches dotted patterns, headers matches message headers.",
+        "ru": "direct совпадает с routing key точно, fanout копирует во все привязанные очереди, topic сопоставляет шаблоны по точкам, headers — по заголовкам сообщения."
+      },
+      "discovery": [
+        {
+          "id": "xt-d1-choose-type",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "One \"order created\" event must reach three independent services. Each has its own queue and must process every event. Which exchange type?",
+            "ru": "Одно событие «заказ создан» должно дойти до трёх независимых сервисов. У каждого своя очередь, и каждый должен обработать все события. Какой тип exchange?"
+          },
+          "reveal": {
+            "en": "An exchange's **type** is the routing rule it applies:\n\n- **`direct`** — the binding key must **equal** the routing key. Use it for a task queue: one job goes to one worker pool.\n- **`fanout`** — every bound queue gets a copy, the routing key is ignored. This is publish/subscribe: one event feeds many independent readers.\n- **`topic`** — pattern match on dotted keys, where `*` matches exactly one word and `#` matches zero or more. Use it for content-based routing, e.g. a binding `payment.#`.\n- **`headers`** — match on message headers instead of the routing key. Rare; for when the key is not expressive enough.\n\n```mermaid\nflowchart LR\n  D[\"direct: key must be equal\"] --> DQ[\"one matching queue\"]\n  F[\"fanout: key ignored\"] --> FQ1[\"queue A gets a copy\"]\n  F --> FQ2[\"queue B gets a copy\"]\n```\n\nThe part people miss: with `fanout`, each bound **queue** holds its own separate copy of the message, acknowledged independently. That is how one event ends up feeding several services at once.",
+            "ru": "**Тип** exchange — это правило маршрутизации, которое он применяет:\n\n- **`direct`** — ключ привязки должен **равняться** routing key. Подходит для очереди задач: одна работа идёт в один пул воркеров.\n- **`fanout`** — копию получает каждая привязанная очередь, routing key игнорируется. Это publish/subscribe: одно событие питает много независимых читателей.\n- **`topic`** — сопоставление по шаблону для ключей из слов через точку, где `*` совпадает ровно с одним словом, а `#` — с нулём или более. Для маршрутизации по содержимому, например привязка `payment.#`.\n- **`headers`** — сопоставление по заголовкам сообщения, а не по ключу. Редкий вариант; когда ключа не хватает по выразительности.\n\n```mermaid\nflowchart LR\n  D[\"direct: ключ должен совпасть\"] --> DQ[\"одна подходящая очередь\"]\n  F[\"fanout: ключ игнорируется\"] --> FQ1[\"очередь A получает копию\"]\n  F --> FQ2[\"очередь B получает копию\"]\n```\n\nЧто обычно упускают: при `fanout` каждая привязанная **очередь** хранит собственную отдельную копию сообщения, и подтверждаются они независимо. Именно так одно событие питает сразу несколько сервисов."
+          },
+          "feedback": {
+            "correct": {
+              "en": "fanout: every bound queue gets its own copy.",
+              "ru": "fanout: каждая привязанная очередь получает свою копию."
+            },
+            "incorrect": {
+              "en": "fanout is the pub/sub type — it copies to every bound queue and ignores the routing key.",
+              "ru": "fanout — это тип для pub/sub: он копирует во все привязанные очереди и игнорирует routing key."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": { "en": "fanout", "ru": "fanout" },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": { "en": "direct", "ru": "direct" },
+              "correct": false,
+              "feedback": {
+                "en": "direct is an exact key match — the shape for a task queue, not for broadcasting.",
+                "ru": "direct — это точное совпадение ключа: форма для очереди задач, а не для рассылки."
+              }
+            },
+            {
+              "id": "c",
+              "text": { "en": "headers", "ru": "headers" },
+              "correct": false,
+              "feedback": {
+                "en": "headers matches on message headers; it solves expressiveness, not broadcasting.",
+                "ru": "headers сопоставляет по заголовкам; он решает вопрос выразительности, а не рассылки."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "xt-p1-topic-hash",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A queue is bound to a RabbitMQ topic exchange with the pattern `payment.#`. Which routing key matches it?",
+            "ru": "Очередь привязана к topic exchange в RabbitMQ по шаблону `payment.#`. Какой routing key ему соответствует?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "`#` matches zero or more words after `payment.`.",
+              "ru": "`#` совпадает с нулём или более слов после `payment.`."
+            },
+            "incorrect": {
+              "en": "`payment.#` matches keys starting with the word `payment`; `#` covers zero or more further words.",
+              "ru": "`payment.#` подходит ключам, начинающимся со слова `payment`; `#` покрывает ноль или более следующих слов."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": { "en": "payment.eu.captured", "ru": "payment.eu.captured" },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": { "en": "order.payment.captured", "ru": "order.payment.captured" },
+              "correct": false,
+              "feedback": {
+                "en": "The pattern is anchored: the key must START with the word payment.",
+                "ru": "Шаблон привязан к началу: ключ должен НАЧИНАТЬСЯ со слова payment."
+              }
+            },
+            {
+              "id": "c",
+              "text": { "en": "paymentcaptured", "ru": "paymentcaptured" },
+              "correct": false,
+              "feedback": {
+                "en": "Topic patterns match whole dot-separated words, not substrings.",
+                "ru": "Шаблоны topic сопоставляют целые слова через точку, а не подстроки."
+              }
+            }
+          ]
+        },
+        {
+          "id": "xt-p2-fanout-ignores-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A RabbitMQ fanout exchange ignores the routing key.",
+            "ru": "Fanout exchange в RabbitMQ игнорирует routing key."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Every bound queue gets a copy regardless of the key.",
+              "ru": "Копию получает каждая привязанная очередь независимо от ключа."
+            },
+            "incorrect": {
+              "en": "It does — fanout copies to every bound queue no matter what the routing key says.",
+              "ru": "Игнорирует — fanout копирует во все привязанные очереди, что бы ни было в routing key."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "xt-p3-match-types",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each RabbitMQ exchange type to its routing rule.",
+            "ru": "Соотнеси каждый тип exchange в RabbitMQ с его правилом маршрутизации."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The type IS the rule — that is all an exchange does.",
+              "ru": "Тип и есть правило — больше exchange ничего не делает."
+            },
+            "incorrect": {
+              "en": "direct = equal keys, fanout = every bound queue, topic = dotted patterns, headers = message headers.",
+              "ru": "direct — равные ключи, fanout — все привязанные очереди, topic — шаблоны по точкам, headers — заголовки сообщения."
+            }
+          },
+          "pairs": [
+            {
+              "id": "direct",
+              "left": { "en": "direct", "ru": "direct" },
+              "right": { "en": "Binding key equals the routing key", "ru": "Ключ привязки равен routing key" }
+            },
+            {
+              "id": "fanout",
+              "left": { "en": "fanout", "ru": "fanout" },
+              "right": { "en": "Every bound queue, routing key ignored", "ru": "Все привязанные очереди, routing key игнорируется" }
+            },
+            {
+              "id": "topic",
+              "left": { "en": "topic", "ru": "topic" },
+              "right": { "en": "Pattern match on dotted keys", "ru": "Сопоставление шаблона по ключу из слов через точку" }
+            },
+            {
+              "id": "headers",
+              "left": { "en": "headers", "ru": "headers" },
+              "right": { "en": "Match on message headers, not the key", "ru": "Сопоставление по заголовкам сообщения, а не по ключу" }
+            }
+          ]
+        },
+        {
+          "id": "xt-p4-fill-wildcards",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two topic-pattern wildcards.",
+            "ru": "Впиши два подстановочных знака шаблона topic."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One word versus zero or more — the whole difference between the two.",
+              "ru": "Одно слово против нуля или более — вся разница между ними."
+            },
+            "incorrect": {
+              "en": "In a topic pattern `*` matches exactly one word and `#` matches zero or more.",
+              "ru": "В шаблоне topic `*` совпадает ровно с одним словом, а `#` — с нулём или более."
+            }
+          },
+          "text": {
+            "en": "In a RabbitMQ topic pattern, ___ matches exactly one word and ___ matches zero or more words.",
+            "ru": "В шаблоне topic в RabbitMQ ___ совпадает ровно с одним словом, а ___ — с нулём или более слов."
+          },
+          "blanks": [
+            { "en": ["*"], "ru": ["*"] },
+            { "en": ["#"], "ru": ["#"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "queue-buffer",
+      "title": {
+        "en": "The queue is the buffer",
+        "ru": "Очередь — это буфер"
+      },
+      "summary": {
+        "en": "The queue is the only component that stores messages: a FIFO buffer that absorbs bursts, and whose depth is the load signal.",
+        "ru": "Очередь — единственный компонент, который хранит сообщения: FIFO-буфер, поглощающий всплески, и его глубина — сигнал о нагрузке."
+      },
+      "discovery": [
+        {
+          "id": "qb-d1-offline-worker",
+          "type": "predict_output",
+          "prompt": {
+            "en": "No consumer is running. Predict what happens to the producer.",
+            "ru": "Ни одного потребителя не запущено. Предскажи, что произойдёт с продюсером."
+          },
+          "code": "queue    orders.created   has 0 consumers running\nproducer publishes 10 000 messages to it",
+          "codeLang": "text",
+          "reveal": {
+            "en": "The queue is the only part of a broker that actually **stores** messages, and it is **FIFO**: messages are appended at the **tail** and taken from the **head**.\n\n```mermaid\nflowchart LR\n  P[\"producer\"] -->|\"append at the tail\"| Q[\"queue: FIFO buffer\"]\n  Q -->|\"taken from the head\"| C[\"consumer\"]\n```\n\nTwo properties follow:\n\n- **It absorbs bursts.** Each publish returns immediately and the messages simply wait. The producer's latency stops depending on the consumer's speed — that is the whole difference between synchronous and asynchronous communication.\n- **Queue depth is your load signal.** A depth that keeps rising means consumers are permanently slower than producers. Buffering cannot fix that; you need more consumers or faster handlers. It is one of the first things to alert on.\n\nMemory is finite, so a queue is not an infinite buffer. Real deployments bound it with a max length, a TTL, or an `x-overflow` behaviour (drop the head, or reject the publish) — and a very deep queue hurts throughput once it starts paging to disk.",
+            "ru": "Очередь — единственная часть брокера, которая действительно **хранит** сообщения, и работает она по **FIFO**: сообщения добавляются в **хвост** и берутся из **головы**.\n\n```mermaid\nflowchart LR\n  P[\"продюсер\"] -->|\"добавление в хвост\"| Q[\"очередь: FIFO-буфер\"]\n  Q -->|\"берётся из головы\"| C[\"потребитель\"]\n```\n\nОтсюда два свойства:\n\n- **Она поглощает всплески.** Каждый publish возвращается сразу, а сообщения просто ждут. Задержка продюсера перестаёт зависеть от скорости потребителя — в этом и вся разница между синхронным и асинхронным взаимодействием.\n- **Глубина очереди — сигнал о нагрузке.** Постоянно растущая глубина означает, что потребители стабильно медленнее продюсеров. Буферизация это не лечит; нужны либо новые потребители, либо более быстрые обработчики. Это одна из первых метрик, на которую ставят алерт.\n\nПамять конечна, поэтому очередь — не бесконечный буфер. В реальных развёртываниях её ограничивают максимальной длиной, TTL или поведением `x-overflow` (выбрасывать голову либо отклонять публикацию), а очень глубокая очередь снижает пропускную способность, когда начинает сбрасываться на диск."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The queue holds them; the producer returns immediately.",
+              "ru": "Очередь их держит; продюсер возвращается сразу."
+            },
+            "incorrect": {
+              "en": "Publishing succeeds and the messages wait in the queue — that is what a buffer is for.",
+              "ru": "Публикация проходит успешно, а сообщения ждут в очереди — для этого буфер и нужен."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": { "en": "Each publish returns immediately; the messages wait in the queue", "ru": "Каждый publish возвращается сразу; сообщения ждут в очереди" },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": { "en": "publish blocks until a consumer starts", "ru": "publish блокируется, пока не запустится потребитель" },
+              "correct": false,
+              "feedback": {
+                "en": "Then the producer's latency would depend on the consumer — exactly what a queue removes.",
+                "ru": "Тогда задержка продюсера зависела бы от потребителя — именно это очередь и убирает."
+              }
+            },
+            {
+              "id": "c",
+              "text": { "en": "publish fails because there is no consumer", "ru": "publish падает, потому что нет потребителя" },
+              "correct": false,
+              "feedback": {
+                "en": "A queue does not need a consumer to accept messages; that is the decoupling.",
+                "ru": "Очереди не нужен потребитель, чтобы принимать сообщения; в этом и развязка."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "qb-p1-depth-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A RabbitMQ queue depth that keeps rising means consumers are permanently slower than producers.",
+            "ru": "Постоянно растущая глубина очереди RabbitMQ означает, что потребители стабильно медленнее продюсеров."
+          },
+          "feedback": {
+            "correct": {
+              "en": "No amount of buffering fixes it — add consumers or make handlers faster.",
+              "ru": "Никакая буферизация это не исправит — добавь потребителей или ускорь обработчики."
+            },
+            "incorrect": {
+              "en": "It does — and buffering will not fix it; you need more consumers or faster handlers.",
+              "ru": "Означает — и буферизация это не исправит; нужны новые потребители или более быстрые обработчики."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "qb-p2-who-stores",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which RabbitMQ component actually stores messages?",
+            "ru": "Какой компонент RabbitMQ действительно хранит сообщения?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The queue — the exchange routes and the binding is just a rule.",
+              "ru": "Очередь — exchange маршрутизирует, а привязка это просто правило."
+            },
+            "incorrect": {
+              "en": "The queue. An exchange stores nothing and a binding is only a routing rule.",
+              "ru": "Очередь. Exchange ничего не хранит, а привязка — только правило маршрутизации."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": { "en": "The queue", "ru": "Очередь" },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": { "en": "The exchange", "ru": "Exchange" },
+              "correct": false,
+              "feedback": {
+                "en": "An exchange is pure routing — it copies a message onward and keeps nothing.",
+                "ru": "Exchange — чистая маршрутизация: он копирует сообщение дальше и ничего не оставляет."
+              }
+            },
+            {
+              "id": "c",
+              "text": { "en": "The binding", "ru": "Привязка" },
+              "correct": false,
+              "feedback": {
+                "en": "A binding is a rule, not a container.",
+                "ru": "Привязка — это правило, а не хранилище."
+              }
+            }
+          ]
+        },
+        {
+          "id": "qb-p3-bounded",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "How do real RabbitMQ deployments stop a queue from growing without bound?",
+            "ru": "Как в реальных развёртываниях RabbitMQ не дают очереди расти без ограничений?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Max length, a TTL, or an x-overflow policy — memory is finite.",
+              "ru": "Максимальная длина, TTL или политика x-overflow — память конечна."
+            },
+            "incorrect": {
+              "en": "With a max length, a message TTL, or an x-overflow behaviour; a queue is not an infinite buffer.",
+              "ru": "Максимальной длиной, TTL сообщения или поведением x-overflow; очередь — не бесконечный буфер."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": { "en": "A max length, a TTL, or an x-overflow behaviour", "ru": "Максимальной длиной, TTL или поведением x-overflow" },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": { "en": "The broker refuses new publishes once memory is half full", "ru": "Брокер отказывает в новых публикациях, когда память заполнена наполовину" },
+              "correct": false,
+              "feedback": {
+                "en": "Bounding is something you configure per queue, not an automatic memory rule.",
+                "ru": "Ограничение настраивается на очереди, а не является автоматическим правилом по памяти."
+              }
+            },
+            {
+              "id": "c",
+              "text": { "en": "Nothing is needed — a queue can hold any number of messages", "ru": "Ничего не нужно — очередь может держать любое число сообщений" },
+              "correct": false,
+              "feedback": {
+                "en": "Memory is finite, and a very deep queue hurts throughput once it pages to disk.",
+                "ru": "Память конечна, а очень глубокая очередь снижает пропускную способность, сбрасываясь на диск."
+              }
+            }
+          ]
+        },
+        {
+          "id": "qb-p4-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble what a RabbitMQ queue does for the producer.",
+            "ru": "Собери, что очередь RabbitMQ даёт продюсеру."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That decoupling is the reason to introduce a queue at all.",
+              "ru": "Ради этой развязки очередь и вводят."
+            },
+            "incorrect": {
+              "en": "The queue decouples the producer's speed from the consumer's speed.",
+              "ru": "Очередь развязывает скорость продюсера и скорость потребителя."
+            }
+          },
+          "tokens": {
+            "en": ["the", "queue", "decouples", "producer", "speed", "from", "consumer", "speed"],
+            "ru": ["очередь", "развязывает", "скорость", "продюсера", "и", "скорость", "потребителя"]
+          },
+          "distractors": {
+            "en": ["routes", "deletes"],
+            "ru": ["маршрутизирует", "удаляет"]
+          }
+        },
+        {
+          "id": "qb-p5-fill-fifo",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the ordering discipline and the two ends of the queue.",
+            "ru": "Впиши дисциплину порядка и два конца очереди."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Append at the tail, take from the head — plain FIFO.",
+              "ru": "Добавляем в хвост, берём из головы — обычный FIFO."
+            },
+            "incorrect": {
+              "en": "A queue is FIFO: messages are appended at the tail and taken from the head.",
+              "ru": "Очередь работает по FIFO: сообщения добавляются в хвост и берутся из головы."
+            }
+          },
+          "text": {
+            "en": "A RabbitMQ queue is ___: messages are appended at the ___ and taken from the ___.",
+            "ru": "Очередь RabbitMQ работает по ___: сообщения добавляются в ___ и берутся из ___."
+          },
+          "blanks": [
+            { "en": ["FIFO", "fifo"], "ru": ["FIFO", "fifo"] },
+            { "en": ["tail"], "ru": ["хвост", "хвосте", "tail"] },
+            { "en": ["head"], "ru": ["головы", "голова", "head"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "push-and-competing-consumers",
+      "title": {
+        "en": "Push delivery and competing consumers",
+        "ru": "Push-доставка и конкурирующие потребители"
+      },
+      "summary": {
+        "en": "RabbitMQ pushes messages to subscribed consumers; several consumers on the same queue share them round-robin, each message going to exactly one.",
+        "ru": "RabbitMQ проталкивает сообщения подписанным потребителям; несколько потребителей на одной очереди делят их по кругу, и каждое достаётся ровно одному."
+      },
+      "discovery": [
+        {
+          "id": "pcc-d1-two-workers",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Two workers subscribe to the same queue. Predict how many of them process message m1.",
+            "ru": "Два воркера подписались на одну очередь. Предскажи, сколько из них обработают сообщение m1."
+          },
+          "code": "queue  orders.created   holds m1, m2, m3\nworker-1 subscribes to orders.created\nworker-2 subscribes to orders.created",
+          "codeLang": "text",
+          "reveal": {
+            "en": "RabbitMQ **pushes**: a consumer subscribes once, and the broker sends messages to it as they arrive. There is no polling. (Kafka is the contrast — there the consumer pulls by offset and can re-read history.)\n\nSeveral consumers on the **same** queue are **competing consumers**: they share that queue's messages round-robin, and each message goes to exactly **one** of them. This is how you scale a queue horizontally — start more workers.\n\n```mermaid\nflowchart LR\n  Q[\"queue orders.created\"] -->|\"m1\"| W1[\"worker-1\"]\n  Q -->|\"m2\"| W2[\"worker-2\"]\n  Q -->|\"m3\"| W1\n```\n\nDo not confuse this with fanout. **Each bound queue** gets its own copy of a message; **consumers on one queue** share the messages of that queue. Competing consumers versus publish/subscribe is a question of how many queues you bind, not how many consumers you start.",
+            "ru": "RabbitMQ **проталкивает** сообщения: потребитель подписывается один раз, и брокер сам шлёт ему сообщения по мере поступления. Никакого опроса. (Контраст — Kafka: там потребитель сам вычитывает по offset и может перечитать историю.)\n\nНесколько потребителей на **одной** очереди — это **конкурирующие потребители**: они делят сообщения этой очереди по кругу, и каждое сообщение достаётся ровно **одному** из них. Так очередь масштабируется горизонтально — запускаете больше воркеров.\n\n```mermaid\nflowchart LR\n  Q[\"очередь orders.created\"] -->|\"m1\"| W1[\"worker-1\"]\n  Q -->|\"m2\"| W2[\"worker-2\"]\n  Q -->|\"m3\"| W1\n```\n\nНе путайте это с fanout. Собственную копию сообщения получает **каждая привязанная очередь**; сообщения одной очереди делят **потребители на ней**. Конкурирующие потребители против publish/subscribe — это вопрос числа привязанных очередей, а не числа запущенных потребителей."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Exactly one — consumers on one queue compete for its messages.",
+              "ru": "Ровно один — потребители на одной очереди конкурируют за её сообщения."
+            },
+            "incorrect": {
+              "en": "Exactly one. Consumers on the same queue share its messages; they do not each get a copy.",
+              "ru": "Ровно один. Потребители на одной очереди делят её сообщения, а не получают каждый по копии."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": { "en": "Exactly one of them", "ru": "Ровно один из них" },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": { "en": "Both — each subscriber gets its own copy", "ru": "Оба — каждый подписчик получит свою копию" },
+              "correct": false,
+              "feedback": {
+                "en": "Copies are made per bound QUEUE, not per consumer on one queue.",
+                "ru": "Копии делаются на каждую привязанную ОЧЕРЕДЬ, а не на каждого потребителя одной очереди."
+              }
+            },
+            {
+              "id": "c",
+              "text": { "en": "Whichever polls the broker first, and sometimes both", "ru": "Тот, кто первым опросит брокера, а иногда оба" },
+              "correct": false,
+              "feedback": {
+                "en": "Consumers do not poll — the broker pushes, and it pushes each message to one consumer.",
+                "ru": "Потребители не опрашивают — брокер проталкивает, и каждое сообщение уходит одному потребителю."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "pcc-p1-poll-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In RabbitMQ, consumers poll the broker to fetch new messages.",
+            "ru": "В RabbitMQ потребители опрашивают брокера, чтобы забрать новые сообщения."
+          },
+          "feedback": {
+            "correct": {
+              "en": "RabbitMQ pushes; pulling by offset is the Kafka model.",
+              "ru": "RabbitMQ проталкивает; вычитывание по offset — это модель Kafka."
+            },
+            "incorrect": {
+              "en": "No — RabbitMQ pushes to subscribed consumers. Pulling by offset is Kafka's model.",
+              "ru": "Нет — RabbitMQ проталкивает подписанным потребителям. Вычитывание по offset — модель Kafka."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "pcc-p2-fanout-two-queues",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Two queues are bound to a RabbitMQ fanout exchange, and each queue has exactly one consumer. One message is published. How many of the two consumers see it?",
+            "ru": "К fanout exchange в RabbitMQ привязаны две очереди, и у каждой ровно один потребитель. Опубликовано одно сообщение. Сколько из двух потребителей его увидят?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two queues means two independent copies, acked independently.",
+              "ru": "Две очереди — две независимые копии, подтверждаются независимо."
+            },
+            "incorrect": {
+              "en": "Both — each bound queue got its own copy, so each consumer has a message of its own.",
+              "ru": "Оба — каждая привязанная очередь получила свою копию, поэтому у каждого потребителя своё сообщение."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": { "en": "Both — each queue got its own copy", "ru": "Оба — каждая очередь получила свою копию" },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": { "en": "One — the two consumers share the message", "ru": "Один — оба потребителя делят сообщение" },
+              "correct": false,
+              "feedback": {
+                "en": "Sharing happens between consumers of the SAME queue; here they read different queues.",
+                "ru": "Делят сообщения потребители ОДНОЙ очереди; здесь они читают разные очереди."
+              }
+            },
+            {
+              "id": "c",
+              "text": { "en": "One — fanout picks a queue round-robin", "ru": "Один — fanout выбирает очередь по кругу" },
+              "correct": false,
+              "feedback": {
+                "en": "fanout copies to every bound queue; round-robin happens between consumers of one queue.",
+                "ru": "fanout копирует во все привязанные очереди; по кругу распределяются потребители одной очереди."
+              }
+            }
+          ]
+        },
+        {
+          "id": "pcc-p3-scale-out",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A single RabbitMQ queue is processed too slowly. How do you scale it horizontally?",
+            "ru": "Одна очередь RabbitMQ обрабатывается слишком медленно. Как масштабировать её горизонтально?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "More competing consumers on the same queue split the work.",
+              "ru": "Больше конкурирующих потребителей на той же очереди делят работу."
+            },
+            "incorrect": {
+              "en": "Start more consumers on the same queue — they compete for its messages round-robin.",
+              "ru": "Запусти больше потребителей на той же очереди — они конкурируют за её сообщения по кругу."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": { "en": "Start more consumers on the same queue", "ru": "Запустить больше потребителей на той же очереди" },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": { "en": "Bind a second queue to the same exchange", "ru": "Привязать вторую очередь к тому же exchange" },
+              "correct": false,
+              "feedback": {
+                "en": "That duplicates the work: the second queue gets its own copy of every message.",
+                "ru": "Это дублирует работу: вторая очередь получит свою копию каждого сообщения."
+              }
+            },
+            {
+              "id": "c",
+              "text": { "en": "Switch the exchange to fanout", "ru": "Переключить exchange на fanout" },
+              "correct": false,
+              "feedback": {
+                "en": "The exchange type controls who gets a copy, not how fast one queue is drained.",
+                "ru": "Тип exchange управляет тем, кто получит копию, а не скоростью разбора одной очереди."
+              }
+            }
+          ]
+        },
+        {
+          "id": "pcc-p4-match-shapes",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each RabbitMQ setup to what it produces.",
+            "ru": "Соотнеси каждую схему RabbitMQ с тем, что она даёт."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Queues make copies; consumers on one queue split the work.",
+              "ru": "Копии делают очереди; потребители одной очереди делят работу."
+            },
+            "incorrect": {
+              "en": "Consumers on one queue share; separate bound queues each get a copy.",
+              "ru": "Потребители одной очереди делят; каждая отдельная привязанная очередь получает копию."
+            }
+          },
+          "pairs": [
+            {
+              "id": "same-queue",
+              "left": { "en": "Two consumers on one queue", "ru": "Два потребителя на одной очереди" },
+              "right": { "en": "They share the messages; each goes to one", "ru": "Они делят сообщения; каждое достаётся одному" }
+            },
+            {
+              "id": "two-queues",
+              "left": { "en": "Two queues bound to a fanout exchange", "ru": "Две очереди, привязанные к fanout exchange" },
+              "right": { "en": "Each queue gets its own copy", "ru": "Каждая очередь получает свою копию" }
+            },
+            {
+              "id": "rabbit",
+              "left": { "en": "RabbitMQ delivery style", "ru": "Стиль доставки RabbitMQ" },
+              "right": { "en": "The broker pushes to subscribers", "ru": "Брокер проталкивает подписчикам" }
+            },
+            {
+              "id": "kafka",
+              "left": { "en": "Kafka delivery style", "ru": "Стиль доставки Kafka" },
+              "right": { "en": "The consumer pulls by offset", "ru": "Потребитель вычитывает по offset" }
+            }
+          ]
+        },
+        {
+          "id": "pcc-p5-fill-push-one",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing verb and number.",
+            "ru": "Впиши пропущенный глагол и число."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Push delivery plus one-consumer-per-message is the competing-consumers shape.",
+              "ru": "Push-доставка плюс одно сообщение одному потребителю — это схема конкурирующих потребителей."
+            },
+            "incorrect": {
+              "en": "RabbitMQ pushes messages, and a message on a shared queue goes to exactly one consumer.",
+              "ru": "RabbitMQ проталкивает сообщения, и сообщение на общей очереди достаётся ровно одному потребителю."
+            }
+          },
+          "text": {
+            "en": "RabbitMQ ___ messages to subscribed consumers, and each message on a shared queue goes to exactly ___ consumer.",
+            "ru": "RabbitMQ ___ сообщения подписанным потребителям, и каждое сообщение на общей очереди достаётся ровно ___ потребителю."
+          },
+          "blanks": [
+            { "en": ["pushes", "push"], "ru": ["проталкивает", "push", "пушит"] },
+            { "en": ["one", "1"], "ru": ["одному", "один", "1"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ack-contract",
+      "title": {
+        "en": "The ack is the contract",
+        "ru": "Ack — это контракт"
+      },
+      "summary": {
+        "en": "A delivered message is unacked, not deleted; only the consumer's ack deletes it, so ack after the work is done, never before.",
+        "ru": "Доставленное сообщение находится в состоянии unacked, а не удалено; удаляет его только ack потребителя, поэтому ack — после работы, никогда до неё."
+      },
+      "discovery": [
+        {
+          "id": "ack-d1-state-after-delivery",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The broker pushes a message to a worker. What is that message's state the instant after delivery?",
+            "ru": "Брокер протолкнул сообщение воркеру. В каком состоянии сообщение сразу после доставки?"
+          },
+          "reveal": {
+            "en": "A delivered message is **not** deleted. It moves into the **unacked** state — still owned by the broker — and stays there until the consumer answers:\n\n```mermaid\nstateDiagram-v2\n  [*] --> Ready: routed into the queue\n  Ready --> Unacked: pushed to a consumer\n  Unacked --> Acked: ack\n  Acked --> [*]: deleted by the broker\n  Unacked --> Ready: nack with requeue, or the consumer dies\n```\n\n- **ack** — \"done, you may delete it\".\n- **nack** — \"I could not handle it\". With `requeue = true` the message goes back into the queue to be tried again.\n\nSo the rule is: **ack after the work is done, never before.** Delivered means *unacked*, not *processed*.\n\nThere is a shortcut that breaks this: **auto-ack** (`autoAck = true`) acks at delivery time, before your handler runs. That converts the system to **at-most-once** — a crash mid-handler loses the message for good. It is a legitimate choice for throw-away telemetry and a bug everywhere else.",
+            "ru": "Доставленное сообщение **не** удаляется. Оно переходит в состояние **unacked** — всё ещё принадлежит брокеру — и остаётся там, пока потребитель не ответит:\n\n```mermaid\nstateDiagram-v2\n  [*] --> Ready: смаршрутизировано в очередь\n  Ready --> Unacked: протолкнуто потребителю\n  Unacked --> Acked: ack\n  Acked --> [*]: брокер удаляет\n  Unacked --> Ready: nack с requeue или потребитель умер\n```\n\n- **ack** — «готово, можно удалять».\n- **nack** — «я не смог обработать». При `requeue = true` сообщение возвращается в очередь для новой попытки.\n\nОтсюда правило: **ack после выполнения работы, никогда до неё.** Доставлено значит *unacked*, а не *обработано*.\n\nЕсть обходной путь, который это ломает: **auto-ack** (`autoAck = true`) подтверждает в момент доставки, до запуска обработчика. Это превращает систему в **at-most-once** — падение посреди обработчика теряет сообщение навсегда. Допустимый выбор для одноразовой телеметрии и баг во всех остальных случаях."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Unacked: delivered, but still the broker's.",
+              "ru": "Unacked: доставлено, но всё ещё принадлежит брокеру."
+            },
+            "incorrect": {
+              "en": "It is unacked — still owned by the broker until the consumer acks it.",
+              "ru": "Оно unacked — всё ещё принадлежит брокеру, пока потребитель не отправит ack."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": { "en": "Unacked — still owned by the broker", "ru": "Unacked — всё ещё принадлежит брокеру" },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": { "en": "Deleted — the queue handed it over", "ru": "Удалено — очередь его отдала" },
+              "correct": false,
+              "feedback": {
+                "en": "Deletion happens on ack, not on delivery; otherwise a crash would lose it.",
+                "ru": "Удаление происходит по ack, а не по доставке; иначе падение теряло бы сообщение."
+              }
+            },
+            {
+              "id": "c",
+              "text": { "en": "Copied into a backup queue until it is processed", "ru": "Скопировано в резервную очередь до обработки" },
+              "correct": false,
+              "feedback": {
+                "en": "There is no backup queue; the original message simply stays unacked.",
+                "ru": "Никакой резервной очереди нет; исходное сообщение просто остаётся unacked."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "ack-p1-deleted-on-delivery-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In RabbitMQ, a message is deleted from its queue as soon as it is delivered to a consumer.",
+            "ru": "В RabbitMQ сообщение удаляется из очереди сразу после доставки потребителю."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It becomes unacked; the ack is what deletes it.",
+              "ru": "Оно становится unacked; удаляет его именно ack."
+            },
+            "incorrect": {
+              "en": "No — it becomes unacked and is deleted only when the consumer acks it.",
+              "ru": "Нет — оно становится unacked и удаляется, только когда потребитель отправит ack."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "ack-p2-spot-early-ack",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This consumer can lose an order on a crash. What is the defect?",
+            "ru": "Этот потребитель может потерять заказ при падении. В чём дефект?"
+          },
+          "code": "handler for queue orders.created:\n  1. ack(message)\n  2. chargeCard(order)\n  3. writeReceipt(order)",
+          "codeLang": "text",
+          "feedback": {
+            "correct": {
+              "en": "Acking first tells the broker to delete it before the work exists.",
+              "ru": "Ack первым говорит брокеру удалить сообщение до того, как работа выполнена."
+            },
+            "incorrect": {
+              "en": "The ack comes before the work: a crash in step 2 or 3 loses the message for good.",
+              "ru": "Ack идёт до работы: падение на шаге 2 или 3 теряет сообщение навсегда."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": { "en": "The ack happens before the work, so a crash after it loses the message", "ru": "Ack происходит до работы, поэтому падение после него теряет сообщение" },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": { "en": "The handler should ack once per step", "ru": "Обработчик должен отправлять ack на каждом шаге" },
+              "correct": false,
+              "feedback": {
+                "en": "One message gets exactly one ack — and it belongs at the end.",
+                "ru": "У одного сообщения ровно один ack — и его место в конце."
+              }
+            },
+            {
+              "id": "c",
+              "text": { "en": "writeReceipt should run before chargeCard", "ru": "writeReceipt должен идти до chargeCard" },
+              "correct": false,
+              "feedback": {
+                "en": "The internal order of the work is not the issue; the ack's position is.",
+                "ru": "Дело не в порядке внутренних шагов, а в позиции ack."
+              }
+            }
+          ]
+        },
+        {
+          "id": "ack-p3-autoack",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does autoAck = true change in RabbitMQ?",
+            "ru": "Что меняет autoAck = true в RabbitMQ?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Acking at delivery makes it at-most-once: a crash mid-handler loses the message.",
+              "ru": "Ack в момент доставки делает доставку at-most-once: падение в обработчике теряет сообщение."
+            },
+            "incorrect": {
+              "en": "It acks at delivery time, turning the system into at-most-once delivery.",
+              "ru": "Он подтверждает в момент доставки, превращая систему в at-most-once."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": { "en": "The message is acked at delivery, making delivery at-most-once", "ru": "Сообщение подтверждается при доставке, и доставка становится at-most-once" },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": { "en": "The broker acks automatically once the handler returns", "ru": "Брокер подтверждает автоматически, когда обработчик завершится" },
+              "correct": false,
+              "feedback": {
+                "en": "The broker cannot see your handler; auto-ack fires at delivery, before any work.",
+                "ru": "Брокер не видит твой обработчик; auto-ack срабатывает при доставке, до всякой работы."
+              }
+            },
+            {
+              "id": "c",
+              "text": { "en": "It speeds delivery up but keeps the same guarantee", "ru": "Он ускоряет доставку, но гарантия остаётся прежней" },
+              "correct": false,
+              "feedback": {
+                "en": "The guarantee changes: without an ack after the work there is no retry on a crash.",
+                "ru": "Гарантия меняется: без ack после работы нет повторной доставки при падении."
+              }
+            }
+          ]
+        },
+        {
+          "id": "ack-p4-sort-life",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order what happens to one RabbitMQ message from arriving in a queue to being deleted.",
+            "ru": "Расставь по порядку, что происходит с одним сообщением RabbitMQ от попадания в очередь до удаления."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Ready, unacked, work, ack, delete — deletion is last, not first.",
+              "ru": "Ready, unacked, работа, ack, удаление — удаление в конце, а не в начале."
+            },
+            "incorrect": {
+              "en": "It waits ready, is pushed and becomes unacked, the handler works, the consumer acks, the broker deletes.",
+              "ru": "Ждёт в состоянии ready, проталкивается и становится unacked, обработчик работает, потребитель шлёт ack, брокер удаляет."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": { "en": "The message waits in the queue, ready", "ru": "Сообщение ждёт в очереди в состоянии ready" }
+            },
+            {
+              "id": "s2",
+              "text": { "en": "The broker pushes it to a consumer; it becomes unacked", "ru": "Брокер проталкивает его потребителю; оно становится unacked" }
+            },
+            {
+              "id": "s3",
+              "text": { "en": "The handler finishes the work", "ru": "Обработчик завершает работу" }
+            },
+            {
+              "id": "s4",
+              "text": { "en": "The consumer sends the ack", "ru": "Потребитель отправляет ack" }
+            },
+            {
+              "id": "s5",
+              "text": { "en": "The broker deletes the message", "ru": "Брокер удаляет сообщение" }
+            }
+          ]
+        },
+        {
+          "id": "ack-p5-fill-unacked",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing state and confirmation.",
+            "ru": "Впиши пропущенное состояние и подтверждение."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Unacked until acked — that is the whole ownership contract.",
+              "ru": "Unacked до ack — в этом весь контракт владения."
+            },
+            "incorrect": {
+              "en": "A delivered message sits unacked, and the broker deletes it only after the consumer's ack.",
+              "ru": "Доставленное сообщение находится в состоянии unacked, и брокер удаляет его только после ack потребителя."
+            }
+          },
+          "text": {
+            "en": "A delivered RabbitMQ message sits in the ___ state, and the broker deletes it only after the consumer sends an ___.",
+            "ru": "Доставленное сообщение RabbitMQ находится в состоянии ___, и брокер удаляет его только после того, как потребитель отправит ___."
+          },
+          "blanks": [
+            { "en": ["unacked"], "ru": ["unacked", "неподтверждённом"] },
+            { "en": ["ack"], "ru": ["ack"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "prefetch",
+      "title": {
+        "en": "Prefetch (basic.qos)",
+        "ru": "Prefetch (basic.qos)"
+      },
+      "summary": {
+        "en": "Prefetch caps how many unacked messages the broker leaves with one consumer; an unlimited one destroys fair dispatch and consumer memory.",
+        "ru": "Prefetch ограничивает число неподтверждённых сообщений у одного потребителя; неограниченный ломает честную раздачу и память потребителя."
+      },
+      "discovery": [
+        {
+          "id": "pf-d1-unlimited",
+          "type": "predict_output",
+          "prompt": {
+            "en": "worker-1 subscribes with no prefetch limit. Predict how much work worker-2 gets.",
+            "ru": "worker-1 подписывается без ограничения prefetch. Предскажи, сколько работы достанется worker-2."
+          },
+          "code": "queue    jobs   holds 10 000 messages\nworker-1 subscribes with prefetch = unlimited\nworker-2 subscribes one second later",
+          "codeLang": "text",
+          "reveal": {
+            "en": "**Prefetch** (`basic.qos`) is the maximum number of messages the broker will leave **unacked** with one consumer at a time.\n\n```mermaid\nflowchart LR\n  Q[\"queue: 10 000 messages\"] -->|\"prefetch 1: one unacked at a time\"| W1[\"worker-1\"]\n  Q -->|\"prefetch unlimited: the whole queue\"| W2[\"worker-2\"]\n```\n\nWith `prefetch = 1` a worker gets a new message only after acking the previous one, so a slow worker cannot hoard work while a fast one idles. That is **fair dispatch**.\n\nWith an unlimited prefetch the broker dumps the whole queue into the first consumer's buffer. Three things go wrong at once: fairness (a worker that joins later finds nothing left to take), memory (one consumer buffers everything), and recovery (a crash redelivers a huge batch).\n\nPrefetch is a throughput/latency trade-off, **not** a correctness one: `1` is the fairest and the slowest, and a value in the tens or low hundreds is the usual production setting.",
+            "ru": "**Prefetch** (`basic.qos`) — максимальное число сообщений, которые брокер оставит **неподтверждёнными** у одного потребителя одновременно.\n\n```mermaid\nflowchart LR\n  Q[\"очередь: 10 000 сообщений\"] -->|\"prefetch 1: одно неподтверждённое\"| W1[\"worker-1\"]\n  Q -->|\"prefetch без ограничения: вся очередь\"| W2[\"worker-2\"]\n```\n\nПри `prefetch = 1` воркер получает новое сообщение только после подтверждения предыдущего, поэтому медленный воркер не может нахватать работу, пока быстрый простаивает. Это **честная раздача** (fair dispatch).\n\nПри неограниченном prefetch брокер сваливает всю очередь в буфер первого потребителя. Ломается сразу три вещи: честность (подключившемуся позже воркеру уже нечего брать), память (один потребитель буферизует всё) и восстановление (падение вызывает повторную доставку огромной пачки).\n\nPrefetch — компромисс между пропускной способностью и задержкой, а **не** вопрос корректности: `1` — самый честный и самый медленный, а в проде обычно ставят значение в десятки или первые сотни."
+          },
+          "feedback": {
+            "correct": {
+              "en": "worker-1's buffer already holds the queue, so worker-2 idles.",
+              "ru": "Буфер worker-1 уже держит всю очередь, поэтому worker-2 простаивает."
+            },
+            "incorrect": {
+              "en": "Almost none — an unlimited prefetch lets worker-1 buffer the whole queue before worker-2 arrives.",
+              "ru": "Почти ничего — неограниченный prefetch позволяет worker-1 забуферизовать всю очередь до прихода worker-2."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": { "en": "Little or none — worker-1 already buffered the whole queue", "ru": "Мало или ничего — worker-1 уже забуферизовал всю очередь" },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": { "en": "Half of the messages, round-robin", "ru": "Половину сообщений, по кругу" },
+              "correct": false,
+              "feedback": {
+                "en": "Round-robin only distributes what is still in the queue; here it is already inside worker-1.",
+                "ru": "По кругу раздаётся только то, что ещё в очереди; здесь всё уже внутри worker-1."
+              }
+            },
+            {
+              "id": "c",
+              "text": { "en": "The broker rebalances the buffered messages to worker-2", "ru": "Брокер перераспределит забуферизованные сообщения на worker-2" },
+              "correct": false,
+              "feedback": {
+                "en": "There is no rebalancing; those messages come back only if worker-1 dies or nacks them.",
+                "ru": "Перераспределения нет; эти сообщения вернутся, только если worker-1 умрёт или отклонит их."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "pf-p1-bigger-faster-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In RabbitMQ, a bigger prefetch is always faster.",
+            "ru": "В RabbitMQ чем больше prefetch, тем быстрее."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It helps up to a point, then wrecks fairness, memory and crash recovery.",
+              "ru": "До определённого предела помогает, дальше рушит честность, память и восстановление после падений."
+            },
+            "incorrect": {
+              "en": "No — beyond a point it destroys fair dispatch, inflates consumer memory and enlarges redelivery batches.",
+              "ru": "Нет — с какого-то момента он рушит честную раздачу, раздувает память потребителя и увеличивает пачки повторной доставки."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "pf-p2-prefetch-one",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "With prefetch = 1, when does a RabbitMQ consumer receive its next message?",
+            "ru": "При prefetch = 1 когда потребитель RabbitMQ получит следующее сообщение?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Only after acking the previous one — that is fair dispatch.",
+              "ru": "Только после подтверждения предыдущего — это и есть честная раздача."
+            },
+            "incorrect": {
+              "en": "Only after it acks the previous message; prefetch counts unacked messages, not delivered ones.",
+              "ru": "Только после подтверждения предыдущего; prefetch считает неподтверждённые сообщения, а не доставленные."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": { "en": "Only after it acks the previous message", "ru": "Только после того, как он подтвердит предыдущее" },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": { "en": "Immediately after the previous one is delivered", "ru": "Сразу после доставки предыдущего" },
+              "correct": false,
+              "feedback": {
+                "en": "The delivered message is still unacked, and prefetch = 1 allows only one unacked message.",
+                "ru": "Доставленное сообщение всё ещё unacked, а prefetch = 1 разрешает лишь одно неподтверждённое."
+              }
+            },
+            {
+              "id": "c",
+              "text": { "en": "One second later, on the broker's next push cycle", "ru": "Через секунду, на следующем цикле проталкивания брокера" },
+              "correct": false,
+              "feedback": {
+                "en": "Delivery is not on a timer; it is gated by the number of unacked messages.",
+                "ru": "Доставка не по таймеру; её ограничивает число неподтверждённых сообщений."
+              }
+            }
+          ]
+        },
+        {
+          "id": "pf-p3-unlimited-costs",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What goes wrong with an unlimited prefetch in RabbitMQ?",
+            "ru": "Что ломается при неограниченном prefetch в RabbitMQ?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Fairness, consumer memory and the size of each redelivery batch.",
+              "ru": "Честность, память потребителя и размер каждой пачки повторной доставки."
+            },
+            "incorrect": {
+              "en": "One consumer hoards the queue: unfair dispatch, inflated memory, and a huge batch redelivered on a crash.",
+              "ru": "Один потребитель нахватывает очередь: нечестная раздача, раздутая память и огромная пачка при повторной доставке после падения."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": { "en": "One consumer hoards the queue: unfair dispatch, memory growth, huge redelivery batches", "ru": "Один потребитель нахватывает очередь: нечестная раздача, рост памяти, огромные пачки повторной доставки" },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": { "en": "Messages are lost, because the broker stops tracking them", "ru": "Сообщения теряются, потому что брокер перестаёт их отслеживать" },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing is lost — buffered messages are still unacked and still owned by the broker.",
+                "ru": "Ничего не теряется — забуферизованные сообщения всё ещё unacked и принадлежат брокеру."
+              }
+            },
+            {
+              "id": "c",
+              "text": { "en": "Ordering becomes guaranteed, at the cost of throughput", "ru": "Порядок становится гарантированным ценой пропускной способности" },
+              "correct": false,
+              "feedback": {
+                "en": "A large prefetch with a multi-threaded handler is one of the things that BREAKS ordering.",
+                "ru": "Большой prefetch с многопоточным обработчиком — одна из вещей, которые ЛОМАЮТ порядок."
+              }
+            }
+          ]
+        },
+        {
+          "id": "pf-p4-match-values",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each RabbitMQ prefetch value to its effect.",
+            "ru": "Соотнеси каждое значение prefetch в RabbitMQ с его эффектом."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It is a throughput/latency dial, not a correctness setting.",
+              "ru": "Это регулятор пропускной способности и задержки, а не настройка корректности."
+            },
+            "incorrect": {
+              "en": "1 = fairest and slowest, tens to low hundreds = usual production, unlimited = one consumer hoards everything.",
+              "ru": "1 — самый честный и медленный, десятки-первые сотни — обычный прод, без ограничения — один потребитель забирает всё."
+            }
+          },
+          "pairs": [
+            {
+              "id": "one",
+              "left": { "en": "prefetch = 1", "ru": "prefetch = 1" },
+              "right": { "en": "Fairest dispatch, lowest throughput", "ru": "Самая честная раздача, самая низкая пропускная способность" }
+            },
+            {
+              "id": "tens",
+              "left": { "en": "prefetch in the tens or low hundreds", "ru": "prefetch в десятках или первых сотнях" },
+              "right": { "en": "The usual production setting", "ru": "Обычная настройка в проде" }
+            },
+            {
+              "id": "unlimited",
+              "left": { "en": "prefetch unlimited", "ru": "prefetch без ограничения" },
+              "right": { "en": "One consumer buffers the whole queue", "ru": "Один потребитель буферизует всю очередь" }
+            },
+            {
+              "id": "qos",
+              "left": { "en": "basic.qos", "ru": "basic.qos" },
+              "right": { "en": "The call that sets the prefetch", "ru": "Вызов, который задаёт prefetch" }
+            }
+          ]
+        },
+        {
+          "id": "pf-p5-fill-qos",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the setting name and the message state it counts.",
+            "ru": "Впиши имя настройки и состояние сообщений, которые она считает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It bounds unacked messages per consumer — nothing else.",
+              "ru": "Она ограничивает неподтверждённые сообщения на одного потребителя — и ничего больше."
+            },
+            "incorrect": {
+              "en": "Prefetch is set with basic.qos and caps the number of unacked messages left with one consumer.",
+              "ru": "Prefetch задаётся через basic.qos и ограничивает число неподтверждённых сообщений у одного потребителя."
+            }
+          },
+          "text": {
+            "en": "Prefetch is set with ___ and caps how many ___ messages the broker leaves with one consumer.",
+            "ru": "Prefetch задаётся через ___ и ограничивает, сколько ___ сообщений брокер оставит у одного потребителя."
+          },
+          "blanks": [
+            { "en": ["basic.qos", "qos"], "ru": ["basic.qos", "qos"] },
+            { "en": ["unacked"], "ru": ["unacked", "неподтверждённых"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "at-least-once",
+      "title": {
+        "en": "At-least-once delivery",
+        "ru": "Доставка at-least-once"
+      },
+      "summary": {
+        "en": "The broker cannot tell a dead consumer from a lost ack, so it redelivers: the guarantee is at-least-once and handlers must be idempotent.",
+        "ru": "Брокер не отличает умершего потребителя от потерянного ack, поэтому доставляет повторно: гарантия — at-least-once, а обработчики обязаны быть идемпотентными."
+      },
+      "discovery": [
+        {
+          "id": "alo-d1-crash-after-work",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The card is already charged, but the ack never arrives. Predict what the broker does with m1.",
+            "ru": "Деньги с карты уже списаны, но ack так и не пришёл. Предскажи, что брокер сделает с m1."
+          },
+          "code": "worker-1 receives m1 (unacked)\nworker-1 charges the card\nworker-1 is killed before its ack reaches the broker\nworker-2 is running on the same queue",
+          "codeLang": "text",
+          "reveal": {
+            "en": "The broker faces an ambiguity it cannot resolve: \"the consumer died **before** doing the work\" and \"the consumer did the work and died **before** the ack reached me\" look identical from its side.\n\n```mermaid\nsequenceDiagram\n  participant B as Broker\n  participant C1 as worker-1\n  participant C2 as worker-2\n  B->>C1: deliver m1, now unacked\n  Note over C1: charges the card, then dies\n  B->>B: m1 returns to the queue\n  B->>C2: deliver m1 with redelivered = true\n  C2->>B: ack m1\n```\n\nFaced with that ambiguity it **retries**. So the practical guarantee is **at-least-once**, the retried delivery carries the flag **`redelivered = true`**, and duplicates are a normal event rather than an incident.\n\nThe consequence: **your handler must be idempotent** — applying it twice must equal applying it once. Either deduplicate on a stable message id (the **Inbox pattern**) or design the operation to be naturally idempotent. On the producer side, publishing reliably as part of a database transaction is the **Outbox pattern**.\n\n\"Exactly-once delivery\" does not exist over an unreliable network. Exactly-once *effect* does, and those patterns are what buy it.",
+            "ru": "Брокер сталкивается с неоднозначностью, которую не может разрешить: «потребитель умер, **не сделав** работу» и «потребитель сделал работу и умер **до того**, как ack дошёл до меня» выглядят с его стороны одинаково.\n\n```mermaid\nsequenceDiagram\n  participant B as Брокер\n  participant C1 as worker-1\n  participant C2 as worker-2\n  B->>C1: доставка m1, теперь unacked\n  Note over C1: списывает деньги, потом умирает\n  B->>B: m1 возвращается в очередь\n  B->>C2: доставка m1 с redelivered = true\n  C2->>B: ack m1\n```\n\nВ этой неоднозначности он **повторяет доставку**. Поэтому практическая гарантия — **at-least-once**, повторная доставка несёт флаг **`redelivered = true`**, а дубликаты — штатное событие, а не инцидент.\n\nСледствие: **обработчик обязан быть идемпотентным** — применить его дважды должно означать то же, что применить один раз. Либо дедуплицируйте по стабильному id сообщения (**паттерн Inbox**), либо проектируйте операцию естественно идемпотентной. На стороне продюсера надёжная публикация вместе с транзакцией базы — это **паттерн Outbox**.\n\n«Доставки exactly-once» поверх ненадёжной сети не существует. Существует exactly-once *эффект*, и именно его дают эти паттерны."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It retries — the broker cannot know the work already happened.",
+              "ru": "Он повторяет доставку — брокер не может знать, что работа уже выполнена."
+            },
+            "incorrect": {
+              "en": "It is requeued and redelivered with redelivered = true; the broker cannot know the work was done.",
+              "ru": "Оно возвращается в очередь и доставляется снова с redelivered = true; брокер не знает, что работа выполнена."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": { "en": "Redelivers it to worker-2 with redelivered = true", "ru": "Доставит его worker-2 повторно с redelivered = true" },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": { "en": "Discards it — the work was evidently done", "ru": "Выбросит его — работа очевидно выполнена" },
+              "correct": false,
+              "feedback": {
+                "en": "The broker never saw the work; without an ack it must assume nothing happened.",
+                "ru": "Брокер не видел работу; без ack он обязан считать, что ничего не произошло."
+              }
+            },
+            {
+              "id": "c",
+              "text": { "en": "Sends it straight to a dead-letter queue", "ru": "Отправит его сразу в dead-letter очередь" },
+              "correct": false,
+              "feedback": {
+                "en": "A consumer crash is a requeue, not a rejection; nothing gave up on the message.",
+                "ru": "Падение потребителя — это requeue, а не отказ; от сообщения никто не отказывался."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "alo-p1-exactly-once-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "RabbitMQ can be configured to give exactly-once delivery.",
+            "ru": "RabbitMQ можно настроить на доставку exactly-once."
+          },
+          "feedback": {
+            "correct": {
+              "en": "No broker can over a network; you get at-least-once plus an idempotent consumer.",
+              "ru": "Ни один брокер не может поверх сети; вы получаете at-least-once плюс идемпотентного потребителя."
+            },
+            "incorrect": {
+              "en": "No — exactly-once delivery does not exist over a network. At-least-once plus idempotency is the answer.",
+              "ru": "Нет — доставки exactly-once поверх сети не существует. Ответ — at-least-once плюс идемпотентность."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "alo-p2-why-guarantee",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why is RabbitMQ's practical delivery guarantee at-least-once?",
+            "ru": "Почему практическая гарантия доставки RabbitMQ — at-least-once?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Ambiguity forces a retry; a retry means a possible duplicate.",
+              "ru": "Неоднозначность вынуждает повторить; повтор означает возможный дубликат."
+            },
+            "incorrect": {
+              "en": "The broker cannot tell a crash before the work from a lost ack after it, so it retries.",
+              "ru": "Брокер не отличает падение до работы от потерянного ack после неё, поэтому повторяет доставку."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": { "en": "The broker cannot tell a crash before the work from a lost ack after it, so it retries", "ru": "Брокер не отличает падение до работы от потерянного ack после неё, поэтому повторяет доставку" },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": { "en": "The network duplicates packets, and the broker cannot deduplicate them", "ru": "Сеть дублирует пакеты, а брокер не может их дедуплицировать" },
+              "correct": false,
+              "feedback": {
+                "en": "The duplicate comes from the broker's own deliberate retry, not from packet duplication.",
+                "ru": "Дубликат появляется из-за сознательного повтора самого брокера, а не из-за дублирования пакетов."
+              }
+            },
+            {
+              "id": "c",
+              "text": { "en": "Because queues are FIFO, a message must be delivered more than once", "ru": "Поскольку очереди работают по FIFO, сообщение обязано доставляться больше одного раза" },
+              "correct": false,
+              "feedback": {
+                "en": "Ordering has nothing to do with it; the retry is caused by the unanswerable ack question.",
+                "ru": "Порядок тут ни при чём; повтор вызван неразрешимым вопросом про ack."
+              }
+            }
+          ]
+        },
+        {
+          "id": "alo-p3-cope-duplicates",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "How do you cope with duplicate deliveries in RabbitMQ?",
+            "ru": "Как справляться с дубликатами доставки в RabbitMQ?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Make applying it twice equal applying it once — by design or by dedup.",
+              "ru": "Сделать так, чтобы применить дважды значило то же, что применить один раз — по дизайну или через дедупликацию."
+            },
+            "incorrect": {
+              "en": "Make the handler idempotent: dedupe on a stable message id, or design a naturally idempotent operation.",
+              "ru": "Сделай обработчик идемпотентным: дедуплицируй по стабильному id сообщения или спроектируй естественно идемпотентную операцию."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": { "en": "Make the handler idempotent, e.g. dedupe on a stable message id", "ru": "Сделать обработчик идемпотентным, например дедуплицировать по стабильному id сообщения" },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": { "en": "Turn on auto-ack so a message is never delivered twice", "ru": "Включить auto-ack, чтобы сообщение не доставлялось дважды" },
+              "correct": false,
+              "feedback": {
+                "en": "That trades duplicates for lost messages: auto-ack makes delivery at-most-once.",
+                "ru": "Это меняет дубликаты на потери: auto-ack делает доставку at-most-once."
+              }
+            },
+            {
+              "id": "c",
+              "text": { "en": "Raise the prefetch so retries are batched away", "ru": "Поднять prefetch, чтобы повторы схлопнулись в пачку" },
+              "correct": false,
+              "feedback": {
+                "en": "Prefetch is a throughput dial; it does nothing about duplicate processing.",
+                "ru": "Prefetch — регулятор пропускной способности; на дублирующую обработку он не влияет."
+              }
+            }
+          ]
+        },
+        {
+          "id": "alo-p4-match-patterns",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each term to its meaning in RabbitMQ messaging.",
+            "ru": "Соотнеси каждый термин с его значением в обмене сообщениями RabbitMQ."
+          },
+          "feedback": {
+            "correct": {
+              "en": "At-least-once is the guarantee; Inbox and Outbox are how you live with it.",
+              "ru": "At-least-once — это гарантия; Inbox и Outbox — то, как с ней жить."
+            },
+            "incorrect": {
+              "en": "at-least-once = duplicates are normal, redelivered = true marks a retry, Inbox dedupes, Outbox publishes with the transaction.",
+              "ru": "at-least-once — дубликаты нормальны, redelivered = true помечает повтор, Inbox дедуплицирует, Outbox публикует вместе с транзакцией."
+            }
+          },
+          "pairs": [
+            {
+              "id": "alo",
+              "left": { "en": "at-least-once", "ru": "at-least-once" },
+              "right": { "en": "Duplicates are a normal event, not an incident", "ru": "Дубликаты — штатное событие, а не инцидент" }
+            },
+            {
+              "id": "redelivered",
+              "left": { "en": "redelivered = true", "ru": "redelivered = true" },
+              "right": { "en": "This delivery is a retry of an earlier one", "ru": "Эта доставка — повтор более ранней" }
+            },
+            {
+              "id": "inbox",
+              "left": { "en": "Inbox pattern", "ru": "Паттерн Inbox" },
+              "right": { "en": "Consumer dedupes on a stable message id", "ru": "Потребитель дедуплицирует по стабильному id сообщения" }
+            },
+            {
+              "id": "outbox",
+              "left": { "en": "Outbox pattern", "ru": "Паттерн Outbox" },
+              "right": { "en": "Producer publishes as part of a database transaction", "ru": "Продюсер публикует вместе с транзакцией базы" }
+            }
+          ]
+        },
+        {
+          "id": "alo-p5-fill-guarantee",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the flag, the guarantee and the required handler property.",
+            "ru": "Впиши флаг, гарантию и требуемое свойство обработчика."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Retry, therefore duplicates, therefore idempotency — the whole chain.",
+              "ru": "Повтор, значит дубликаты, значит идемпотентность — вся цепочка."
+            },
+            "incorrect": {
+              "en": "A retried delivery carries redelivered = true, the guarantee is at-least-once, and the handler must be idempotent.",
+              "ru": "Повторная доставка несёт redelivered = true, гарантия — at-least-once, а обработчик обязан быть идемпотентным."
+            }
+          },
+          "text": {
+            "en": "A retried RabbitMQ delivery arrives with ___ = true, so the guarantee is ___ and the handler must be ___.",
+            "ru": "Повторная доставка в RabbitMQ приходит с ___ = true, поэтому гарантия — ___, а обработчик обязан быть ___."
+          },
+          "blanks": [
+            { "en": ["redelivered"], "ru": ["redelivered"] },
+            { "en": ["at-least-once", "at least once"], "ru": ["at-least-once", "at least once"] },
+            { "en": ["idempotent"], "ru": ["идемпотентным", "идемпотентный", "idempotent"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dead-letter",
+      "title": {
+        "en": "Dead-letter queues and poison messages",
+        "ru": "Dead-letter очереди и ядовитые сообщения"
+      },
+      "summary": {
+        "en": "A message that always fails and is always requeued spins in a hot loop; a dead-letter exchange parks it in a separate queue instead.",
+        "ru": "Сообщение, которое всегда падает и всегда возвращается в очередь, крутится в горячем цикле; dead-letter exchange вместо этого паркует его в отдельной очереди."
+      },
+      "discovery": [
+        {
+          "id": "dlq-d1-hot-loop",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The handler fails on this message every single time. Predict what happens.",
+            "ru": "Обработчик падает на этом сообщении каждый раз. Предскажи, что произойдёт."
+          },
+          "code": "handler for m1 always throws\non every failure the consumer replies nack(requeue = true)\nthe queue has no dead-letter exchange configured",
+          "codeLang": "text",
+          "reveal": {
+            "en": "`nack(requeue = true)` puts the message straight back at the **head** of the queue. A message that always fails is therefore redelivered immediately, fails again, and spins in a hot loop burning CPU. That is a **poison message**.\n\nThe fix is a **dead-letter exchange** (the queue argument `x-dead-letter-exchange`) feeding a **dead-letter queue**: after the attempt cap is reached, `nack(requeue = false)` parks the message in a separate queue where a human or a retry job can look at it, instead of blocking the main queue.\n\n```mermaid\nstateDiagram-v2\n  Unacked --> Ready: nack with requeue\n  Unacked --> DeadLetter: nack without requeue, queue has a DLX\n  Unacked --> Lost: nack without requeue, no DLX\n```\n\nA queue with **no** dead-letter target simply destroys such messages — silent data loss. Messages are also dead-lettered when they exceed a TTL or the queue's max length.\n\nFor retries with backoff the usual trick is a **delay queue**: dead-letter into a queue that has a TTL, and let that queue dead-letter the message *back* into the working queue when the TTL expires.",
+            "ru": "`nack(requeue = true)` возвращает сообщение прямо в **голову** очереди. Поэтому сообщение, которое падает всегда, тут же доставляется снова, снова падает и закручивается в горячем цикле, сжигая CPU. Это **ядовитое сообщение** (poison message).\n\nЛечение — **dead-letter exchange** (аргумент очереди `x-dead-letter-exchange`), питающий **dead-letter очередь**: когда лимит попыток исчерпан, `nack(requeue = false)` паркует сообщение в отдельной очереди, где на него может посмотреть человек или задание повторов, вместо того чтобы блокировать основную очередь.\n\n```mermaid\nstateDiagram-v2\n  Unacked --> Ready: nack с requeue\n  Unacked --> DeadLetter: nack без requeue, у очереди есть DLX\n  Unacked --> Lost: nack без requeue, DLX нет\n```\n\nОчередь **без** dead-letter цели просто уничтожает такие сообщения — тихая потеря данных. В dead-letter сообщения попадают ещё и когда истекает TTL или превышена максимальная длина очереди.\n\nДля повторов с задержкой обычно применяют **delay-очередь**: сделать dead-letter в очередь с TTL и позволить ей по истечении TTL сделать dead-letter *обратно* в рабочую очередь."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Requeue to the head plus a permanent failure equals a hot loop.",
+              "ru": "Requeue в голову плюс постоянная ошибка равно горячий цикл."
+            },
+            "incorrect": {
+              "en": "It returns to the head and is retried immediately, forever — a poison message in a hot loop.",
+              "ru": "Оно возвращается в голову и тут же доставляется снова, и так бесконечно — ядовитое сообщение в горячем цикле."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": { "en": "It returns to the head and is retried immediately, in an endless loop", "ru": "Оно возвращается в голову и тут же доставляется снова, в бесконечном цикле" },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": { "en": "RabbitMQ drops it automatically after three attempts", "ru": "RabbitMQ выбросит его автоматически после трёх попыток" },
+              "correct": false,
+              "feedback": {
+                "en": "There is no built-in attempt cap; capping the retries is the application's job.",
+                "ru": "Встроенного лимита попыток нет; ограничивать повторы — задача приложения."
+              }
+            },
+            {
+              "id": "c",
+              "text": { "en": "It goes to a dead-letter queue after the first failure", "ru": "После первой ошибки оно уйдёт в dead-letter очередь" },
+              "correct": false,
+              "feedback": {
+                "en": "Dead-lettering needs nack WITHOUT requeue and a configured dead-letter exchange; neither is present.",
+                "ru": "Для dead-letter нужны nack БЕЗ requeue и настроенный dead-letter exchange; здесь нет ни того, ни другого."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "dlq-p1-no-dlx-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In RabbitMQ, a queue with no dead-letter target silently destroys messages that are nacked without requeue.",
+            "ru": "В RabbitMQ очередь без dead-letter цели молча уничтожает сообщения, отклонённые через nack без requeue."
+          },
+          "feedback": {
+            "correct": {
+              "en": "No DLX means nowhere to park them — that is silent data loss.",
+              "ru": "Нет DLX — значит парковать некуда, и это тихая потеря данных."
+            },
+            "incorrect": {
+              "en": "It does — with no dead-letter target the message is simply destroyed.",
+              "ru": "Уничтожает — без dead-letter цели сообщение просто уничтожается."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "dlq-p2-which-situations",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which situations send a RabbitMQ message to a dead-letter queue?",
+            "ru": "В каких ситуациях сообщение RabbitMQ попадает в dead-letter очередь?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Rejection without requeue, TTL expiry, and max-length overflow.",
+              "ru": "Отклонение без requeue, истечение TTL и превышение максимальной длины."
+            },
+            "incorrect": {
+              "en": "nack without requeue, an expired TTL, or exceeding the queue's max length.",
+              "ru": "nack без requeue, истёкший TTL или превышение максимальной длины очереди."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": { "en": "nack without requeue, an expired TTL, or the queue's max length exceeded", "ru": "nack без requeue, истёкший TTL или превышение максимальной длины очереди" },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": { "en": "A consumer crashing before it acks", "ru": "Падение потребителя до отправки ack" },
+              "correct": false,
+              "feedback": {
+                "en": "That is a requeue: the message returns to the same queue for another attempt.",
+                "ru": "Это requeue: сообщение возвращается в ту же очередь для новой попытки."
+              }
+            },
+            {
+              "id": "c",
+              "text": { "en": "Publishing with a routing key that matches no binding", "ru": "Публикация с routing key, не подошедшим ни под одну привязку" },
+              "correct": false,
+              "feedback": {
+                "en": "That message is discarded at the exchange and never reaches a queue; dead-lettering is a queue feature.",
+                "ru": "Такое сообщение выбрасывается на exchange и до очереди не доходит; dead-letter — свойство очереди."
+              }
+            }
+          ]
+        },
+        {
+          "id": "dlq-p3-sort-backoff",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the delay-queue trick that gives a RabbitMQ message a retry with backoff.",
+            "ru": "Расставь по порядку приём с delay-очередью, который даёт сообщению RabbitMQ повтор с задержкой."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Dead-letter out, wait on a TTL, dead-letter back — retry without a hot loop.",
+              "ru": "Dead-letter наружу, ожидание по TTL, dead-letter обратно — повтор без горячего цикла."
+            },
+            "incorrect": {
+              "en": "Reject without requeue into a TTL queue; when the TTL expires it dead-letters back into the working queue.",
+              "ru": "Отклонить без requeue в очередь с TTL; по истечении TTL она делает dead-letter обратно в рабочую очередь."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": { "en": "The handler fails and the attempt cap is reached", "ru": "Обработчик падает, и лимит попыток исчерпан" }
+            },
+            {
+              "id": "s2",
+              "text": { "en": "The consumer replies nack(requeue = false)", "ru": "Потребитель отвечает nack(requeue = false)" }
+            },
+            {
+              "id": "s3",
+              "text": { "en": "The message is dead-lettered into a delay queue that has a TTL", "ru": "Сообщение уходит по dead-letter в delay-очередь с TTL" }
+            },
+            {
+              "id": "s4",
+              "text": { "en": "The TTL expires in the delay queue", "ru": "TTL в delay-очереди истекает" }
+            },
+            {
+              "id": "s5",
+              "text": { "en": "The delay queue dead-letters it back into the working queue", "ru": "Delay-очередь делает dead-letter обратно в рабочую очередь" }
+            }
+          ]
+        },
+        {
+          "id": "dlq-p4-match-outcomes",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each RabbitMQ consumer reply to what happens to the message.",
+            "ru": "Соотнеси каждый ответ потребителя RabbitMQ с тем, что произойдёт с сообщением."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The requeue flag and the presence of a DLX decide everything here.",
+              "ru": "Здесь всё решают флаг requeue и наличие DLX."
+            },
+            "incorrect": {
+              "en": "requeue = true retries at the head; requeue = false parks it in the DLQ, or destroys it when no DLX exists.",
+              "ru": "requeue = true повторяет из головы; requeue = false паркует в DLQ или уничтожает, если DLX нет."
+            }
+          },
+          "pairs": [
+            {
+              "id": "ack",
+              "left": { "en": "ack", "ru": "ack" },
+              "right": { "en": "The broker deletes the message", "ru": "Брокер удаляет сообщение" }
+            },
+            {
+              "id": "requeue-true",
+              "left": { "en": "nack(requeue = true)", "ru": "nack(requeue = true)" },
+              "right": { "en": "Back to the head, retried immediately", "ru": "Обратно в голову, тут же новая попытка" }
+            },
+            {
+              "id": "requeue-false-dlx",
+              "left": { "en": "nack(requeue = false), DLX configured", "ru": "nack(requeue = false), DLX настроен" },
+              "right": { "en": "Parked in the dead-letter queue", "ru": "Припарковано в dead-letter очереди" }
+            },
+            {
+              "id": "requeue-false-nodlx",
+              "left": { "en": "nack(requeue = false), no DLX", "ru": "nack(requeue = false), DLX нет" },
+              "right": { "en": "Destroyed — silent data loss", "ru": "Уничтожено — тихая потеря данных" }
+            }
+          ]
+        },
+        {
+          "id": "dlq-p5-fill-poison",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the name of the problem and the queue argument that fixes it.",
+            "ru": "Впиши название проблемы и аргумент очереди, который её решает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Cap the attempts, then dead-letter it — that ends the loop.",
+              "ru": "Ограничь попытки, затем отправь в dead-letter — цикл прекратится."
+            },
+            "incorrect": {
+              "en": "It is a poison message, and x-dead-letter-exchange is the queue argument that routes it away.",
+              "ru": "Это ядовитое (poison) сообщение, а x-dead-letter-exchange — аргумент очереди, который уводит его в сторону."
+            }
+          },
+          "text": {
+            "en": "A message that always fails and is always requeued is a ___ message; the queue argument that routes it away is ___.",
+            "ru": "Сообщение, которое всегда падает и всегда возвращается в очередь, — это ___ сообщение; аргумент очереди, уводящий его в сторону, — ___."
+          },
+          "blanks": [
+            { "en": ["poison"], "ru": ["ядовитое", "poison"] },
+            { "en": ["x-dead-letter-exchange"], "ru": ["x-dead-letter-exchange"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "durability",
+      "title": {
+        "en": "Surviving a broker restart",
+        "ru": "Как пережить перезапуск брокера"
+      },
+      "summary": {
+        "en": "Durability needs three things together: a durable queue, persistent messages, and the producer waiting for a publisher confirm.",
+        "ru": "Долговечность требует трёх вещей сразу: durable-очереди, persistent-сообщений и ожидания продюсером publisher confirm."
+      },
+      "discovery": [
+        {
+          "id": "dur-d1-durable-only",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A queue was declared durable. The broker process restarts. What is guaranteed about the messages that were in it?",
+            "ru": "Очередь объявлена durable. Процесс брокера перезапускается. Что гарантировано о сообщениях, которые в ней были?"
+          },
+          "reveal": {
+            "en": "Durability needs **three** things together, and forgetting one is the classic \"we lost messages\" post-mortem:\n\n```mermaid\nflowchart LR\n  A[\"durable queue\"] --> S[\"survives a restart\"]\n  B[\"persistent message: delivery_mode = 2\"] --> S\n  C[\"publisher confirm received\"] --> S\n```\n\n1. The **queue** is declared `durable` — so the queue itself is redeclared after the restart rather than vanishing.\n2. The **message** is published as persistent (`delivery_mode = 2`) — so its body is written to disk rather than living only in memory.\n3. The producer waits for a **publisher confirm** before considering the message sent — otherwise it may have been lost before the broker ever wrote it down.\n\nAny one of these alone still loses data. A durable queue full of non-persistent messages comes back **empty**.\n\nEven with all three, a single broker is a single point of failure, so production setups use a **quorum queue** — replicated across nodes via Raft — so losing a node does not lose the queue. Persistence is not free either: fsync-ing every message costs throughput.",
+            "ru": "Долговечность требует **трёх** вещей одновременно, и забытая одна из них — это классический разбор полётов «мы потеряли сообщения»:\n\n```mermaid\nflowchart LR\n  A[\"durable-очередь\"] --> S[\"переживает перезапуск\"]\n  B[\"persistent-сообщение: delivery_mode = 2\"] --> S\n  C[\"получен publisher confirm\"] --> S\n```\n\n1. **Очередь** объявлена `durable` — тогда после перезапуска она восстанавливается, а не исчезает.\n2. **Сообщение** опубликовано как persistent (`delivery_mode = 2`) — тогда его тело записывается на диск, а не живёт только в памяти.\n3. Продюсер дождался **publisher confirm**, прежде чем считать сообщение отправленным, — иначе оно могло потеряться до того, как брокер вообще его записал.\n\nЛюбое из трёх по отдельности всё равно теряет данные. Durable-очередь, полная не-persistent сообщений, вернётся **пустой**.\n\nДаже со всеми тремя один брокер остаётся единой точкой отказа, поэтому в проде используют **quorum queue** — реплицируемую по Raft между узлами, чтобы потеря узла не унесла очередь. И персистентность не бесплатна: fsync на каждое сообщение стоит пропускной способности."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Nothing by itself — durability takes all three pieces.",
+              "ru": "Само по себе ничего — для долговечности нужны все три части."
+            },
+            "incorrect": {
+              "en": "Nothing by itself: the messages must also be persistent and confirmed.",
+              "ru": "Само по себе ничего: сообщения должны быть ещё и persistent, и подтверждены."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": { "en": "Nothing by itself — they must also be persistent and confirmed", "ru": "Само по себе ничего — они должны быть ещё persistent и подтверждены" },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": { "en": "All of them survive — that is what durable means", "ru": "Все они переживут — это и значит durable" },
+              "correct": false,
+              "feedback": {
+                "en": "A durable queue survives; its non-persistent messages do not. It comes back empty.",
+                "ru": "Durable-очередь переживает; её не-persistent сообщения — нет. Она вернётся пустой."
+              }
+            },
+            {
+              "id": "c",
+              "text": { "en": "Only the unacked ones survive", "ru": "Переживут только неподтверждённые" },
+              "correct": false,
+              "feedback": {
+                "en": "The ack state is unrelated: survival depends on durable + persistent + confirmed.",
+                "ru": "Состояние ack тут ни при чём: выживание зависит от durable + persistent + confirm."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "dur-p1-durable-enough-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Declaring a RabbitMQ queue durable is enough for its messages to survive a broker restart.",
+            "ru": "Объявить очередь RabbitMQ durable достаточно, чтобы её сообщения пережили перезапуск брокера."
+          },
+          "feedback": {
+            "correct": {
+              "en": "You also need persistent messages and publisher confirms.",
+              "ru": "Нужны ещё persistent-сообщения и publisher confirms."
+            },
+            "incorrect": {
+              "en": "No — a durable queue plus persistent messages plus publisher confirms. Any one alone still loses data.",
+              "ru": "Нет — нужны durable-очередь, persistent-сообщения и publisher confirms. Что-то одно всё равно теряет данные."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "dur-p2-persistent-flag",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What marks a published RabbitMQ message as persistent?",
+            "ru": "Что помечает опубликованное сообщение RabbitMQ как persistent?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "delivery_mode = 2 is the per-message half of durability.",
+              "ru": "delivery_mode = 2 — это часть долговечности на уровне сообщения."
+            },
+            "incorrect": {
+              "en": "delivery_mode = 2. Declaring the queue durable is a separate, per-queue setting.",
+              "ru": "delivery_mode = 2. Объявление очереди durable — отдельная настройка на уровне очереди."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": { "en": "delivery_mode = 2", "ru": "delivery_mode = 2" },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": { "en": "Declaring the queue durable", "ru": "Объявление очереди durable" },
+              "correct": false,
+              "feedback": {
+                "en": "That makes the QUEUE survive; the message needs its own persistence flag.",
+                "ru": "Это заставляет пережить перезапуск ОЧЕРЕДЬ; сообщению нужен свой флаг персистентности."
+              }
+            },
+            {
+              "id": "c",
+              "text": { "en": "The mandatory flag", "ru": "Флаг mandatory" },
+              "correct": false,
+              "feedback": {
+                "en": "mandatory is about unroutable messages, not about surviving a restart.",
+                "ru": "mandatory относится к недоставляемым сообщениям, а не к переживанию перезапуска."
+              }
+            }
+          ]
+        },
+        {
+          "id": "dur-p3-quorum",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why do production RabbitMQ setups use quorum queues?",
+            "ru": "Зачем в проде RabbitMQ используют quorum queue?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Raft replication across nodes removes the single point of failure.",
+              "ru": "Репликация по Raft между узлами убирает единую точку отказа."
+            },
+            "incorrect": {
+              "en": "They are replicated across nodes via Raft, so losing a node does not lose the queue.",
+              "ru": "Они реплицируются по Raft между узлами, поэтому потеря узла не уносит очередь."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": { "en": "They are Raft-replicated across nodes, so a node loss does not lose the queue", "ru": "Они реплицируются по Raft между узлами, поэтому потеря узла не уносит очередь" },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": { "en": "They are faster, because they skip the disk", "ru": "Они быстрее, потому что не пишут на диск" },
+              "correct": false,
+              "feedback": {
+                "en": "Replication costs throughput; the point is surviving a node loss, not speed.",
+                "ru": "Репликация стоит пропускной способности; смысл в переживании потери узла, а не в скорости."
+              }
+            },
+            {
+              "id": "c",
+              "text": { "en": "They provide exactly-once delivery", "ru": "Они дают доставку exactly-once" },
+              "correct": false,
+              "feedback": {
+                "en": "No queue type gives exactly-once delivery; replication is about availability, not duplicates.",
+                "ru": "Никакой тип очереди не даёт exactly-once; репликация про доступность, а не про дубликаты."
+              }
+            }
+          ]
+        },
+        {
+          "id": "dur-p4-sort-durable-publish",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order a durable publish in RabbitMQ, from topology to a message the producer may consider sent.",
+            "ru": "Расставь по порядку долговечную публикацию в RabbitMQ — от топологии до момента, когда продюсер вправе считать сообщение отправленным."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Durable queue, persistent message, disk write, confirm — only then is it sent.",
+              "ru": "Durable-очередь, persistent-сообщение, запись на диск, confirm — только тогда оно отправлено."
+            },
+            "incorrect": {
+              "en": "Declare the queue durable, publish with delivery_mode = 2, the broker writes it to disk, then the confirm arrives.",
+              "ru": "Объявить очередь durable, опубликовать с delivery_mode = 2, брокер пишет на диск, затем приходит confirm."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": { "en": "Declare the queue as durable", "ru": "Объявить очередь как durable" }
+            },
+            {
+              "id": "s2",
+              "text": { "en": "Publish the message with delivery_mode = 2", "ru": "Опубликовать сообщение с delivery_mode = 2" }
+            },
+            {
+              "id": "s3",
+              "text": { "en": "The broker writes the message to disk", "ru": "Брокер записывает сообщение на диск" }
+            },
+            {
+              "id": "s4",
+              "text": { "en": "The broker sends the publisher confirm", "ru": "Брокер отправляет publisher confirm" }
+            },
+            {
+              "id": "s5",
+              "text": { "en": "The producer treats the message as sent", "ru": "Продюсер считает сообщение отправленным" }
+            }
+          ]
+        },
+        {
+          "id": "dur-p5-fill-three",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the three things durability needs.",
+            "ru": "Впиши три вещи, которые нужны для долговечности."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Queue, message, producer — one setting each, all three required.",
+              "ru": "Очередь, сообщение, продюсер — по одной настройке на каждого, нужны все три."
+            },
+            "incorrect": {
+              "en": "A durable queue, persistent messages (delivery_mode = 2), and publisher confirms.",
+              "ru": "Durable-очередь, persistent-сообщения (delivery_mode = 2) и publisher confirms."
+            }
+          },
+          "text": {
+            "en": "Surviving a broker restart needs a ___ queue, persistent messages (delivery_mode = ___), and publisher ___.",
+            "ru": "Чтобы пережить перезапуск брокера, нужны ___-очередь, persistent-сообщения (delivery_mode = ___) и publisher ___."
+          },
+          "blanks": [
+            { "en": ["durable"], "ru": ["durable"] },
+            { "en": ["2"], "ru": ["2"] },
+            { "en": ["confirms", "confirm"], "ru": ["confirms", "confirm"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ordering",
+      "title": {
+        "en": "Ordering",
+        "ru": "Порядок сообщений"
+      },
+      "summary": {
+        "en": "One queue with one consumer is FIFO; more consumers, requeues, or prefetch > 1 with a multi-threaded handler break the order.",
+        "ru": "Одна очередь с одним потребителем даёт FIFO; порядок ломают несколько потребителей, requeue и prefetch > 1 с многопоточным обработчиком."
+      },
+      "discovery": [
+        {
+          "id": "ord-d1-two-workers",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Three messages sit in the queue in order. Predict the order in which they finish processing.",
+            "ru": "Три сообщения лежат в очереди по порядку. Предскажи, в каком порядке завершится их обработка."
+          },
+          "code": "queue  events   holds e1, e2, e3 in that order\nworker-1 consumes from events\nworker-2 consumes from events",
+          "codeLang": "text",
+          "reveal": {
+            "en": "A single queue with a **single** consumer delivers in FIFO order. Ordering breaks the moment you add any of three things:\n\n```mermaid\nflowchart LR\n  Q[\"one queue\"] --> C[\"one consumer\"]\n  C --> O[\"FIFO order holds\"]\n  M[\"more consumers\"] --> X[\"order breaks\"]\n  R[\"requeue to the head\"] --> X\n  P[\"prefetch > 1 with threads\"] --> X\n```\n\n- **More consumers** — two workers process messages concurrently, so the completion order is arbitrary even though delivery started in order.\n- **Requeues** — a nacked message goes back to the **head** and jumps in front of messages published after it.\n- **prefetch > 1** together with a multi-threaded handler — several messages are in flight inside one consumer at once.\n\nIf you need per-entity ordering, route each entity's messages to **one queue consumed by one consumer** (the \"consistent hashing\" shape). You cannot get it by tuning prefetch.",
+            "ru": "Одна очередь с **одним** потребителем доставляет в порядке FIFO. Порядок ломается, как только появляется что-то из трёх:\n\n```mermaid\nflowchart LR\n  Q[\"одна очередь\"] --> C[\"один потребитель\"]\n  C --> O[\"порядок FIFO сохраняется\"]\n  M[\"несколько потребителей\"] --> X[\"порядок ломается\"]\n  R[\"requeue в голову\"] --> X\n  P[\"prefetch > 1 с потоками\"] --> X\n```\n\n- **Несколько потребителей** — два воркера обрабатывают сообщения параллельно, поэтому порядок завершения произволен, даже если доставка началась по порядку.\n- **Requeue** — отклонённое сообщение возвращается в **голову** и обгоняет сообщения, опубликованные позже него.\n- **prefetch > 1** вместе с многопоточным обработчиком — внутри одного потребителя одновременно в работе несколько сообщений.\n\nЕсли нужен порядок в рамках одной сущности, направляйте её сообщения в **одну очередь, читаемую одним потребителем** (схема «consistent hashing»). Настройкой prefetch этого не добиться."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two workers run concurrently, so completion order is arbitrary.",
+              "ru": "Два воркера работают параллельно, поэтому порядок завершения произволен."
+            },
+            "incorrect": {
+              "en": "Arbitrary — concurrent workers finish in whatever order their handlers happen to complete.",
+              "ru": "Произвольный — параллельные воркеры завершаются в том порядке, в каком закончатся их обработчики."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": { "en": "Arbitrary — the two workers process concurrently", "ru": "Произвольный — два воркера обрабатывают параллельно" },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": { "en": "Strictly e1, e2, e3 — the queue is FIFO", "ru": "Строго e1, e2, e3 — очередь работает по FIFO" },
+              "correct": false,
+              "feedback": {
+                "en": "FIFO governs delivery from one queue, not the completion order across concurrent consumers.",
+                "ru": "FIFO управляет доставкой из очереди, а не порядком завершения у параллельных потребителей."
+              }
+            },
+            {
+              "id": "c",
+              "text": { "en": "e3, e2, e1 — the last message is pushed first", "ru": "e3, e2, e1 — последнее сообщение проталкивается первым" },
+              "correct": false,
+              "feedback": {
+                "en": "A queue is not a stack; messages are always taken from the head.",
+                "ru": "Очередь — не стек; сообщения всегда берутся из головы."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "ord-p1-guaranteed-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A RabbitMQ queue guarantees that its messages are PROCESSED in publish order.",
+            "ru": "Очередь RabbitMQ гарантирует, что её сообщения будут ОБРАБОТАНЫ в порядке публикации."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Only one queue with one consumer, no requeues, gets you that.",
+              "ru": "Это даёт только одна очередь с одним потребителем и без requeue."
+            },
+            "incorrect": {
+              "en": "No — concurrent consumers, requeues, or prefetch > 1 with threads all break the processing order.",
+              "ru": "Нет — параллельные потребители, requeue или prefetch > 1 с потоками ломают порядок обработки."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "ord-p2-what-breaks",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which of these breaks message ordering in RabbitMQ?",
+            "ru": "Что из перечисленного ломает порядок сообщений в RabbitMQ?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "A requeued message returns to the head and overtakes later ones.",
+              "ru": "Возвращённое сообщение попадает в голову и обгоняет более поздние."
+            },
+            "incorrect": {
+              "en": "A requeue: the message goes back to the head and jumps in front of messages published after it.",
+              "ru": "Requeue: сообщение возвращается в голову и обгоняет сообщения, опубликованные позже него."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": { "en": "A requeued message returning to the head of the queue", "ru": "Возвращённое сообщение, попадающее в голову очереди" },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": { "en": "Declaring the queue durable", "ru": "Объявление очереди durable" },
+              "correct": false,
+              "feedback": {
+                "en": "Durability is about surviving a restart; it does not touch delivery order.",
+                "ru": "Долговечность про переживание перезапуска; порядка доставки она не касается."
+              }
+            },
+            {
+              "id": "c",
+              "text": { "en": "Using a fanout exchange instead of a direct one", "ru": "Использование fanout exchange вместо direct" },
+              "correct": false,
+              "feedback": {
+                "en": "The exchange type decides who gets a copy; order is a property of each queue.",
+                "ru": "Тип exchange решает, кто получит копию; порядок — свойство каждой очереди."
+              }
+            }
+          ]
+        },
+        {
+          "id": "ord-p3-per-entity",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "You need RabbitMQ messages of one entity processed in order, while still scaling across entities. What works?",
+            "ru": "Нужно, чтобы сообщения одной сущности обрабатывались в RabbitMQ по порядку, но масштабирование по сущностям сохранялось. Что сработает?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "One queue per entity stream, one consumer each — the consistent hashing shape.",
+              "ru": "По одной очереди на поток сущности и по одному потребителю — схема consistent hashing."
+            },
+            "incorrect": {
+              "en": "Route each entity's messages to one queue consumed by one consumer; prefetch cannot buy ordering.",
+              "ru": "Направляй сообщения каждой сущности в одну очередь с одним потребителем; prefetch порядка не даёт."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": { "en": "Route each entity's messages to one queue consumed by one consumer", "ru": "Направить сообщения каждой сущности в одну очередь, читаемую одним потребителем" },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": { "en": "Set prefetch = 1 and keep many workers on the queue", "ru": "Поставить prefetch = 1 и оставить много воркеров на очереди" },
+              "correct": false,
+              "feedback": {
+                "en": "Many workers still run concurrently; prefetch controls throughput, not ordering.",
+                "ru": "Много воркеров всё равно работают параллельно; prefetch управляет пропускной способностью, а не порядком."
+              }
+            },
+            {
+              "id": "c",
+              "text": { "en": "Publish through a topic exchange", "ru": "Публиковать через topic exchange" },
+              "correct": false,
+              "feedback": {
+                "en": "Patterns choose destinations; they do not serialize processing within one destination.",
+                "ru": "Шаблоны выбирают получателей; они не сериализуют обработку внутри одного получателя."
+              }
+            }
+          ]
+        },
+        {
+          "id": "ord-p4-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the only RabbitMQ setup that preserves order.",
+            "ru": "Собери единственную схему RabbitMQ, которая сохраняет порядок."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Anything more concurrent than this loses the order.",
+              "ru": "Всё, что параллельнее этого, теряет порядок."
+            },
+            "incorrect": {
+              "en": "One queue with one consumer delivers in FIFO order.",
+              "ru": "Одна очередь с одним потребителем доставляет в порядке FIFO."
+            }
+          },
+          "tokens": {
+            "en": ["one", "queue", "with", "one", "consumer", "delivers", "in", "FIFO", "order"],
+            "ru": ["одна", "очередь", "с", "одним", "потребителем", "доставляет", "в", "порядке", "FIFO"]
+          },
+          "distractors": {
+            "en": ["two", "prefetch"],
+            "ru": ["две", "prefetch"]
+          }
+        },
+        {
+          "id": "ord-p5-fill-head",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing number and queue end.",
+            "ru": "Впиши пропущенное число и конец очереди."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Returning to the head is exactly why a requeue reorders the stream.",
+              "ru": "Возврат именно в голову и есть причина, по которой requeue переставляет поток."
+            },
+            "incorrect": {
+              "en": "FIFO holds with one consumer; a requeued message goes back to the head and overtakes later ones.",
+              "ru": "FIFO держится при одном потребителе; возвращённое сообщение попадает в голову и обгоняет более поздние."
+            }
+          },
+          "text": {
+            "en": "RabbitMQ keeps FIFO order only with one queue and ___ consumer; a requeued message goes back to the ___ of the queue.",
+            "ru": "RabbitMQ сохраняет порядок FIFO только при одной очереди и ___ потребителе; возвращённое сообщение попадает в ___ очереди."
+          },
+          "blanks": [
+            { "en": ["one", "1"], "ru": ["одном", "один", "1"] },
+            { "en": ["head"], "ru": ["голову", "голова", "head"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "message-lifecycle",
+      "title": {
+        "en": "The whole path of one message",
+        "ru": "Весь путь одного сообщения"
+      },
+      "summary": {
+        "en": "Publish to an exchange, route by bindings into queues, push within prefetch, sit unacked, then ack, requeue or dead-letter — plus what it takes to survive.",
+        "ru": "Публикация в exchange, маршрутизация привязками в очереди, push в пределах prefetch, состояние unacked, затем ack, requeue или dead-letter — плюс то, что нужно, чтобы выжить."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "cap-d1-fanout-crash",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Trace this from scratch. Which statement is true right after worker-C crashes?",
+            "ru": "Проследи всё с нуля. Какое утверждение верно сразу после падения worker-C?"
+          },
+          "code": "exchange billing            type = fanout\nqueues   billing.charge  and  billing.audit, both bound to billing\nworker-C consumes billing.charge with prefetch 1\nworker-A consumes billing.audit\n\npublish m1 to exchange billing\nworker-C charges the card, then crashes before its ack",
+          "codeLang": "text",
+          "reveal": {
+            "en": "The whole pipeline in one place:\n\n```mermaid\nflowchart LR\n  P[\"producer\"] -->|\"routing key\"| X[\"exchange\"]\n  X -->|\"bindings: a copy per queue\"| Q[\"queue: FIFO\"]\n  Q -->|\"push within prefetch\"| C[\"consumer: unacked\"]\n  C -->|\"ack\"| D[\"deleted\"]\n  C -->|\"crash or nack with requeue\"| Q\n  C -->|\"nack without requeue\"| DL[\"dead-letter queue\"]\n```\n\nA fanout exchange gives **each bound queue its own copy**, acknowledged independently — so `billing.audit` still holds its own m1 for worker-A, entirely unaffected by anything happening on the other queue.\n\nOn `billing.charge`, m1 was only **unacked** when worker-C died. The broker cannot tell \"died before the work\" from \"did the work, then died before the ack arrived\", so it requeues and redelivers with `redelivered = true`. That is at-least-once, and it is why the card can be charged twice unless the handler is idempotent.\n\nNothing here is a dead-letter case: no one rejected the message, no TTL expired, no length limit was hit.",
+            "ru": "Весь пайплайн в одном месте:\n\n```mermaid\nflowchart LR\n  P[\"продюсер\"] -->|\"routing key\"| X[\"exchange\"]\n  X -->|\"привязки: копия на очередь\"| Q[\"очередь: FIFO\"]\n  Q -->|\"push в пределах prefetch\"| C[\"потребитель: unacked\"]\n  C -->|\"ack\"| D[\"удалено\"]\n  C -->|\"падение или nack с requeue\"| Q\n  C -->|\"nack без requeue\"| DL[\"dead-letter очередь\"]\n```\n\nFanout exchange даёт **каждой привязанной очереди свою копию**, подтверждаемую независимо, — поэтому `billing.audit` по-прежнему держит собственное m1 для worker-A, и происходящее на другой очереди её никак не касается.\n\nВ `billing.charge` сообщение m1 было лишь **unacked**, когда worker-C умер. Брокер не отличает «умер до работы» от «сделал работу и умер до того, как ack дошёл», поэтому возвращает его в очередь и доставляет снова с `redelivered = true`. Это at-least-once, и именно поэтому карту могут списать дважды, если обработчик не идемпотентен.\n\nСлучая dead-letter здесь нет: никто не отклонял сообщение, TTL не истёк, ограничение длины не превышено."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two queues, two independent copies — and an unacked message is retried.",
+              "ru": "Две очереди — две независимые копии, а неподтверждённое сообщение доставляется снова."
+            },
+            "incorrect": {
+              "en": "billing.audit keeps its own copy, and billing.charge redelivers m1 with redelivered = true.",
+              "ru": "billing.audit хранит свою копию, а billing.charge доставит m1 повторно с redelivered = true."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": { "en": "billing.audit still holds its own copy, and billing.charge redelivers m1 with redelivered = true", "ru": "billing.audit по-прежнему держит свою копию, а billing.charge доставит m1 повторно с redelivered = true" },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": { "en": "m1 is gone from both queues — worker-C consumed it", "ru": "m1 исчезло из обеих очередей — worker-C его потребил" },
+              "correct": false,
+              "feedback": {
+                "en": "Delivery does not delete: m1 was unacked, and the audit queue holds a separate copy anyway.",
+                "ru": "Доставка не удаляет: m1 было unacked, а очередь аудита в любом случае держит отдельную копию."
+              }
+            },
+            {
+              "id": "c",
+              "text": { "en": "m1 is dead-lettered from billing.charge because its consumer crashed", "ru": "m1 уйдёт из billing.charge в dead-letter, потому что его потребитель упал" },
+              "correct": false,
+              "feedback": {
+                "en": "A crash is a requeue. Dead-lettering needs a rejection without requeue, a TTL, or a length limit.",
+                "ru": "Падение — это requeue. Для dead-letter нужны отклонение без requeue, TTL или предел длины."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cap-p1-partial-durability",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Two of the three durability requirements are met. Predict whether m1 survives the restart.",
+            "ru": "Выполнены два требования долговечности из трёх. Предскажи, переживёт ли m1 перезапуск."
+          },
+          "code": "queue    orders.created   declared NOT durable\npublish  m1 with delivery_mode = 2\nproducer waits for and receives the publisher confirm\n\nthe broker process restarts",
+          "codeLang": "text",
+          "feedback": {
+            "correct": {
+              "en": "A non-durable queue does not come back, so neither does its message.",
+              "ru": "Не-durable очередь не восстанавливается, а значит, и её сообщение тоже."
+            },
+            "incorrect": {
+              "en": "No — all three are required. Without a durable queue there is nothing to restore the message into.",
+              "ru": "Нет — нужны все три. Без durable-очереди сообщение просто некуда восстанавливать."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": { "en": "No — the queue is not durable, so it does not survive", "ru": "Нет — очередь не durable, поэтому она не переживёт перезапуск" },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": { "en": "Yes — the message was persistent and confirmed", "ru": "Да — сообщение было persistent и подтверждено" },
+              "correct": false,
+              "feedback": {
+                "en": "Persistence writes the message down, but the non-durable queue holding it is gone after the restart.",
+                "ru": "Персистентность записывает сообщение, но не-durable очередь, где оно лежит, после перезапуска исчезает."
+              }
+            },
+            {
+              "id": "c",
+              "text": { "en": "Yes — the publisher confirm alone guarantees it", "ru": "Да — publisher confirm сам по себе это гарантирует" },
+              "correct": false,
+              "feedback": {
+                "en": "A confirm only says the broker accepted it; durability still needs the queue and the message flags.",
+                "ru": "Confirm лишь говорит, что брокер принял сообщение; для долговечности нужны ещё очередь и флаги сообщения."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p2-spot-losing-consumer",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This RabbitMQ payment consumer can lose a payment when the process is killed. What is the defect?",
+            "ru": "Этот потребитель платежей RabbitMQ может потерять платёж, если процесс убьют. В чём дефект?"
+          },
+          "code": "subscribe(queue = \"payments\", prefetch = 50, autoAck = true)\n\nhandler(message):\n  chargeCard(message.payment)",
+          "codeLang": "text",
+          "feedback": {
+            "correct": {
+              "en": "Auto-ack deletes the message at delivery, before the charge ever runs.",
+              "ru": "Auto-ack удаляет сообщение в момент доставки, ещё до списания."
+            },
+            "incorrect": {
+              "en": "autoAck = true acks at delivery, so a crash mid-handler loses the payment for good.",
+              "ru": "autoAck = true подтверждает при доставке, поэтому падение в обработчике теряет платёж навсегда."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": { "en": "autoAck = true acks at delivery, so a crash mid-charge loses the message", "ru": "autoAck = true подтверждает при доставке, поэтому падение во время списания теряет сообщение" },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": { "en": "chargeCard is not idempotent", "ru": "chargeCard не идемпотентен" },
+              "correct": false,
+              "feedback": {
+                "en": "Idempotency guards against duplicates, not against loss; auto-ack is what loses the payment.",
+                "ru": "Идемпотентность защищает от дубликатов, а не от потери; платёж теряет именно auto-ack."
+              }
+            },
+            {
+              "id": "c",
+              "text": { "en": "prefetch = 50 is too high for a payment queue", "ru": "prefetch = 50 слишком велик для очереди платежей" },
+              "correct": false,
+              "feedback": {
+                "en": "Tens to low hundreds is a normal production prefetch; it is a throughput dial, not a loss cause.",
+                "ru": "Десятки-первые сотни — нормальный prefetch для прода; это регулятор пропускной способности, а не причина потери."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p3-sort-full-path",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the full path of one RabbitMQ message, from publish to deletion.",
+            "ru": "Расставь по порядку весь путь одного сообщения RabbitMQ — от публикации до удаления."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Route, store, push, work, ack, delete — the interview answer in six beats.",
+              "ru": "Маршрутизация, хранение, push, работа, ack, удаление — ответ для собеседования в шесть тактов."
+            },
+            "incorrect": {
+              "en": "Publish to the exchange, bindings copy it into queues, push within prefetch, it waits unacked, the ack deletes it.",
+              "ru": "Публикация в exchange, привязки копируют в очереди, push в пределах prefetch, ожидание в unacked, ack удаляет."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": { "en": "The producer publishes to an exchange with a routing key", "ru": "Продюсер публикует в exchange с routing key" }
+            },
+            {
+              "id": "s2",
+              "text": { "en": "Bindings copy it into every matching queue", "ru": "Привязки копируют его в каждую подходящую очередь" }
+            },
+            {
+              "id": "s3",
+              "text": { "en": "It waits in the queue in FIFO order", "ru": "Оно ждёт в очереди в порядке FIFO" }
+            },
+            {
+              "id": "s4",
+              "text": { "en": "The broker pushes it to a consumer, within that consumer's prefetch", "ru": "Брокер проталкивает его потребителю в пределах его prefetch" }
+            },
+            {
+              "id": "s5",
+              "text": { "en": "It sits unacked while the handler does the work", "ru": "Оно находится в состоянии unacked, пока обработчик делает работу" }
+            },
+            {
+              "id": "s6",
+              "text": { "en": "The consumer acks and the broker deletes it", "ru": "Потребитель отправляет ack, и брокер удаляет его" }
+            }
+          ]
+        },
+        {
+          "id": "cap-p4-match-situations",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each RabbitMQ situation to its outcome.",
+            "ru": "Соотнеси каждую ситуацию в RabbitMQ с её исходом."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Each outcome comes from a different half of the system: routing or acknowledgement.",
+              "ru": "Каждый исход идёт от своей половины системы: маршрутизации или подтверждения."
+            },
+            "incorrect": {
+              "en": "No binding = discarded, crash = redelivered, nack without requeue + DLX = dead-lettered, rising depth = consumers too slow.",
+              "ru": "Нет привязки — выброшено, падение — повторная доставка, nack без requeue + DLX — dead-letter, растущая глубина — потребители слишком медленные."
+            }
+          },
+          "pairs": [
+            {
+              "id": "unroutable",
+              "left": { "en": "No binding matches the routing key", "ru": "Ни одна привязка не совпала с routing key" },
+              "right": { "en": "Discarded, and publish still succeeds", "ru": "Выброшено, а publish всё равно успешен" }
+            },
+            {
+              "id": "crash",
+              "left": { "en": "The consumer dies before its ack", "ru": "Потребитель умер до отправки ack" },
+              "right": { "en": "Requeued and redelivered with redelivered = true", "ru": "Возвращено в очередь и доставлено снова с redelivered = true" }
+            },
+            {
+              "id": "dlx",
+              "left": { "en": "nack(requeue = false) with a DLX configured", "ru": "nack(requeue = false) при настроенном DLX" },
+              "right": { "en": "Parked in the dead-letter queue", "ru": "Припарковано в dead-letter очереди" }
+            },
+            {
+              "id": "depth",
+              "left": { "en": "Queue depth keeps rising in production", "ru": "Глубина очереди в проде постоянно растёт" },
+              "right": { "en": "Consumers are permanently slower than producers", "ru": "Потребители стабильно медленнее продюсеров" }
+            },
+            {
+              "id": "durable",
+              "left": { "en": "Durable queue, persistent message, publisher confirm", "ru": "Durable-очередь, persistent-сообщение, publisher confirm" },
+              "right": { "en": "Survives a broker restart", "ru": "Переживает перезапуск брокера" }
+            }
+          ]
+        },
+        {
+          "id": "cap-p5-fill-answer",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill the key parts of the 60-second answer.",
+            "ru": "Впиши ключевые части 60-секундного ответа."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Exchange in, unacked until the ack, three things to survive a restart.",
+              "ru": "Вход через exchange, unacked до ack, три вещи для переживания перезапуска."
+            },
+            "incorrect": {
+              "en": "Publish to an exchange, the message waits unacked until the ack, and a durable queue is one of the three survival requirements.",
+              "ru": "Публикация в exchange, сообщение ждёт в unacked до ack, а durable-очередь — одно из трёх требований для выживания."
+            }
+          },
+          "text": {
+            "en": "A producer publishes to an ___ with a routing key; the message stays ___ until the consumer sends an ___; and surviving a restart needs a ___ queue plus persistent messages and publisher confirms.",
+            "ru": "Продюсер публикует в ___ с routing key; сообщение остаётся в состоянии ___, пока потребитель не отправит ___; а чтобы пережить перезапуск, нужна ___-очередь плюс persistent-сообщения и publisher confirms."
+          },
+          "blanks": [
+            { "en": ["exchange"], "ru": ["exchange", "обменник"] },
+            { "en": ["unacked"], "ru": ["unacked", "неподтверждённом"] },
+            { "en": ["ack"], "ru": ["ack"] },
+            { "en": ["durable"], "ru": ["durable"] }
+          ]
+        }
+      ]
+    }
+  ]
+}

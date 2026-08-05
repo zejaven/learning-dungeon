@@ -1,0 +1,3153 @@
+{
+  "schemaVersion": 1,
+  "topicId": "compare-and-set",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "lost-update",
+      "title": {
+        "en": "Read, compute, write",
+        "ru": "Читаем, вычисляем, пишем"
+      },
+      "summary": {
+        "en": "count = count + 1 is three separate steps, so two threads can overwrite each other and lose one update.",
+        "ru": "count = count + 1 — это три отдельных шага, поэтому два потока могут затереть друг друга и потерять одно обновление."
+      },
+      "discovery": [
+        {
+          "id": "lost-update-d1-two-threads",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Two threads each run `count = count + 1` once on the same shared field, with no synchronization. What can the final value be?",
+            "ru": "Два потока по одному разу выполняют `count = count + 1` над одним общим полем, без синхронизации. Каким может оказаться итоговое значение?"
+          },
+          "code": "int count = 0;   // shared field\n\n// T1: count = count + 1;\n// T2: count = count + 1;",
+          "codeLang": "java",
+          "reveal": {
+            "en": "`count = count + 1` looks like one action, but it is **three** steps:\n\n```\n1. read    the current value of count\n2. compute current + 1\n3. write   the result back\n```\n\nAn operation is **atomic** when no other thread can interrupt it or observe it half-way. This one is not atomic. If T1 and T2 both read `0` before either of them writes, both compute `1` and both write `1` — one increment silently disappears. That is a **lost update**.\n\n```mermaid\nsequenceDiagram\n  participant T1 as Thread T1\n  participant C as count\n  participant T2 as Thread T2\n  T1->>C: read 0\n  T2->>C: read 0\n  T1->>C: write 1\n  T2->>C: write 1\n```\n\nNothing throws and nothing warns you — the counter is just wrong. The fix is not a faster write but a **guarded** write: one that refuses to run if the value changed after you read it.",
+            "ru": "`count = count + 1` выглядит как одно действие, но это **три** шага:\n\n```\n1. прочитать  текущее значение count\n2. вычислить  current + 1\n3. записать   результат обратно\n```\n\nОперация **атомарна**, когда другой поток не может её прервать или увидеть на середине. Эта операция не атомарна. Если T1 и T2 оба прочитают `0` до того, как кто-то запишет, оба вычислят `1` и оба запишут `1` — один инкремент молча исчезнет. Это **lost update** (потерянное обновление).\n\n```mermaid\nsequenceDiagram\n  participant T1 as Thread T1\n  participant C as count\n  participant T2 as Thread T2\n  T1->>C: читает 0\n  T2->>C: читает 0\n  T1->>C: пишет 1\n  T2->>C: пишет 1\n```\n\nНичего не бросается и ничего не предупреждает — счётчик просто неверен. Решение не в более быстрой записи, а в **защищённой** записи: такой, которая откажется выполняться, если значение изменилось после твоего чтения."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the two reads can overlap, and then one increment is lost.",
+              "ru": "Верно — чтения могут пересечься, и тогда один инкремент теряется."
+            },
+            "incorrect": {
+              "en": "Both threads can read the same old value and write the same result, so the total can end up as 1.",
+              "ru": "Оба потока могут прочитать одно старое значение и записать один и тот же результат, поэтому итог может оказаться 1."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "1 or 2, depending on the interleaving",
+                "ru": "1 или 2, в зависимости от переплетения"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Always 2",
+                "ru": "Всегда 2"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Only if the threads never overlap; they can both read the same 0 first.",
+                "ru": "Только если потоки не пересекутся; они могут оба сначала прочитать один и тот же 0."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Always 1",
+                "ru": "Всегда 1"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing forces them to collide; if they do not overlap the result is 2.",
+                "ru": "Ничто не заставляет их столкнуться; если они не пересекутся, получится 2."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "The JVM throws an exception",
+                "ru": "JVM бросит исключение"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing throws; the update is simply lost without any signal.",
+                "ru": "Ничего не бросается; обновление просто теряется без всякого сигнала."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "lost-update-p1-atomic-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "`count = count + 1` on a shared field is a single atomic step.",
+            "ru": "`count = count + 1` над общим полем — это один атомарный шаг."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It is three steps: read, compute, write.",
+              "ru": "Это три шага: read, compute, write."
+            },
+            "incorrect": {
+              "en": "No — it is read, compute, write, and other threads can interleave between them.",
+              "ru": "Нет — это read, compute, write, и между ними могут вклиниться другие потоки."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "lost-update-p2-name",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Two threads read the same shared counter value and both write back the same result, so one increment disappears. What is this called?",
+            "ru": "Два потока читают одно и то же значение общего счётчика и оба записывают один результат, из-за чего один инкремент исчезает. Как это называется?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "One writer's work is silently overwritten by the other — a lost update.",
+              "ru": "Работа одного пишущего молча затирается другим — это lost update."
+            },
+            "incorrect": {
+              "en": "It is a lost update: one write silently overwrites the other thread's result.",
+              "ru": "Это lost update: одна запись молча затирает результат другого потока."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A lost update",
+                "ru": "Lost update (потерянное обновление)"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A deadlock",
+                "ru": "Deadlock"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing is blocked or waiting here; one write simply replaced another.",
+                "ru": "Здесь ничто не заблокировано и не ждёт; одна запись просто заменила другую."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "An overflow",
+                "ru": "Переполнение"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "No numeric range was exceeded; the count is just one lower than it should be.",
+                "ru": "Числовой диапазон не превышен; счётчик просто на единицу меньше, чем должен быть."
+              }
+            }
+          ]
+        },
+        {
+          "id": "lost-update-p3-steps",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the steps hidden inside `count = count + 1`.",
+            "ru": "Расставь по порядку шаги, спрятанные внутри `count = count + 1`."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Read, compute, write — three points where another thread can interleave.",
+              "ru": "Read, compute, write — три точки, где может вклиниться другой поток."
+            },
+            "incorrect": {
+              "en": "The order is: read the current value, compute the new one, write it back.",
+              "ru": "Порядок такой: прочитать текущее значение, вычислить новое, записать обратно."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Read the current value of count",
+                "ru": "Прочитать текущее значение count"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Compute current + 1",
+                "ru": "Вычислить current + 1"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Write the result back into count",
+                "ru": "Записать результат обратно в count"
+              }
+            }
+          ]
+        },
+        {
+          "id": "lost-update-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the first and the last of the three hidden steps.",
+            "ru": "Назови первый и последний из трёх скрытых шагов."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Read and write are separate, so another thread can act between them.",
+              "ru": "Read и write разделены, поэтому между ними может действовать другой поток."
+            },
+            "incorrect": {
+              "en": "It is read, compute, write — three steps, not one.",
+              "ru": "Это read, compute, write — три шага, а не один."
+            }
+          },
+          "text": {
+            "en": "`count = count + 1` is three steps: ___, compute, ___.",
+            "ru": "`count = count + 1` — это три шага: ___, compute, ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "read"
+              ],
+              "ru": [
+                "read",
+                "прочитать",
+                "чтение"
+              ]
+            },
+            {
+              "en": [
+                "write"
+              ],
+              "ru": [
+                "write",
+                "записать",
+                "запись"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cas-contract",
+      "title": {
+        "en": "What compare-and-set does",
+        "ru": "Что делает compare-and-set"
+      },
+      "summary": {
+        "en": "CAS writes the update value only if the current value still equals the expected value; otherwise it changes nothing and returns false.",
+        "ru": "CAS записывает значение update, только если текущее значение всё ещё равно expected; иначе он ничего не меняет и возвращает false."
+      },
+      "discovery": [
+        {
+          "id": "cas-contract-d1-predict",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Predict what this prints.",
+            "ru": "Предскажи, что напечатает этот код."
+          },
+          "code": "AtomicInteger value = new AtomicInteger(10);\nboolean ok = value.compareAndSet(10, 11);\nSystem.out.println(ok + \" \" + value.get());",
+          "codeLang": "java",
+          "reveal": {
+            "en": "**Compare-and-set**, usually shortened to **CAS**, is an atomic conditional update. You hand it two values:\n\n- **expected** — the value you last read and believe is still there;\n- **update** — the value you want to write.\n\nIf the current value still equals `expected`, CAS writes `update` and returns `true`. If it does not, CAS changes nothing and returns `false`.\n\n```mermaid\nflowchart TD\n  A[\"read the current value as expected\"] --> B[\"CAS(expected, update)\"]\n  B --> C{\"current == expected?\"}\n  C -->|yes| D[\"write update and return true\"]\n  C -->|no| E[\"keep the current value and return false\"]\n```\n\nIn Java you meet it as `AtomicInteger.compareAndSet(expected, update)`, `AtomicReference.compareAndSet(expected, update)`, `VarHandle.compareAndSet(...)`, and inside lock-free data structures. Here the slot still holds `10`, so the comparison passes: `11` is written and the call returns `true`. The boolean result is the point of the whole operation — it tells you whether your view of the value was still current.",
+            "ru": "**Compare-and-set**, обычно сокращают до **CAS**, — это атомарное условное обновление. Ты передаёшь ему два значения:\n\n- **expected** — значение, которое ты прочитал последним и считаешь текущим;\n- **update** — значение, которое хочешь записать.\n\nЕсли текущее значение всё ещё равно `expected`, CAS записывает `update` и возвращает `true`. Если нет — CAS ничего не меняет и возвращает `false`.\n\n```mermaid\nflowchart TD\n  A[\"прочитать текущее значение как expected\"] --> B[\"CAS(expected, update)\"]\n  B --> C{\"current == expected?\"}\n  C -->|да| D[\"записать update и вернуть true\"]\n  C -->|нет| E[\"оставить текущее значение и вернуть false\"]\n```\n\nВ Java ты встречаешь его как `AtomicInteger.compareAndSet(expected, update)`, `AtomicReference.compareAndSet(expected, update)`, `VarHandle.compareAndSet(...)` и внутри lock-free структур данных. Здесь в слоте всё ещё `10`, поэтому сравнение проходит: записывается `11`, а вызов возвращает `true`. Булев результат — весь смысл операции: он говорит, было ли твоё представление о значении ещё актуальным."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The current value matched expected, so the update was written and the call returned true.",
+              "ru": "Текущее значение совпало с expected, поэтому update записан, а вызов вернул true."
+            },
+            "incorrect": {
+              "en": "The slot still held 10, so the comparison passed: it prints true 11.",
+              "ru": "В слоте всё ещё было 10, поэтому сравнение прошло: печатается true 11."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "true 11",
+                "ru": "true 11"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "false 10",
+                "ru": "false 10"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "CAS fails only when the current value differs from expected — here it is still 10.",
+                "ru": "CAS завершается неудачей, только если текущее значение отличается от expected — здесь это всё ещё 10."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "true 10",
+                "ru": "true 10"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A successful compareAndSet does write the update value, so the slot becomes 11.",
+                "ru": "Успешный compareAndSet действительно записывает значение update, поэтому в слоте станет 11."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cas-contract-p1-after-false",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "`AtomicInteger.compareAndSet(expected, update)` returned false. What does the variable hold now?",
+            "ru": "`AtomicInteger.compareAndSet(expected, update)` вернул false. Что теперь хранит переменная?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "A failed CAS is a no-op: it writes nothing.",
+              "ru": "Неудачный CAS ничего не делает: он не записывает ничего."
+            },
+            "incorrect": {
+              "en": "A failed CAS changes nothing — the value stays whatever it was.",
+              "ru": "Неудачный CAS ничего не меняет — значение остаётся прежним."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Whatever it held before the call — it is unchanged",
+                "ru": "То же, что и до вызова — оно не изменилось"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The update value",
+                "ru": "Значение update"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The update is written only when the comparison passes.",
+                "ru": "Update записывается, только если сравнение прошло."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The expected value",
+                "ru": "Значение expected"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "CAS never writes expected; expected is only compared against the current value.",
+                "ru": "CAS никогда не записывает expected; expected только сравнивается с текущим значением."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cas-contract-p2-compares-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "compareAndSet compares the current value with the expected value supplied by the caller.",
+            "ru": "compareAndSet сравнивает текущее значение со значением expected, которое передал вызывающий код."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That comparison is what makes the write conditional.",
+              "ru": "Именно это сравнение делает запись условной."
+            },
+            "incorrect": {
+              "en": "It does — the caller supplies expected, and CAS compares it with the current value.",
+              "ru": "Сравнивает — вызывающий передаёт expected, и CAS сравнивает его с текущим значением."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "cas-contract-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each part of `compareAndSet(expected, update)` to its meaning.",
+            "ru": "Соотнеси каждую часть `compareAndSet(expected, update)` с её смыслом."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two inputs and one boolean verdict — that is the whole operation.",
+              "ru": "Два входа и один булев вердикт — вот и вся операция."
+            },
+            "incorrect": {
+              "en": "expected is compared, update is written on success, and the boolean reports which happened.",
+              "ru": "expected сравнивается, update записывается при успехе, а булев результат сообщает, что произошло."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "expected",
+                "ru": "expected"
+              },
+              "right": {
+                "en": "The value the caller last read",
+                "ru": "Значение, которое вызывающий прочитал последним"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "update",
+                "ru": "update"
+              },
+              "right": {
+                "en": "The value written if the check passes",
+                "ru": "Значение, которое запишется, если проверка прошла"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "returns true",
+                "ru": "возвращает true"
+              },
+              "right": {
+                "en": "The update was written",
+                "ru": "Update был записан"
+              }
+            },
+            {
+              "id": "m4",
+              "left": {
+                "en": "returns false",
+                "ru": "возвращает false"
+              },
+              "right": {
+                "en": "The value had changed; nothing was written",
+                "ru": "Значение изменилось; ничего не записано"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cas-contract-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the definition of compare-and-set.",
+            "ru": "Дополни определение compare-and-set."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A conditional write: the update lands only while your expected value is still current.",
+              "ru": "Условная запись: update попадает в слот, только пока твой expected ещё актуален."
+            },
+            "incorrect": {
+              "en": "CAS writes the update value only if the current value still equals the expected value.",
+              "ru": "CAS записывает значение update, только если текущее значение всё ещё равно значению expected."
+            }
+          },
+          "text": {
+            "en": "CAS writes the ___ value only if the current value still equals the ___ value.",
+            "ru": "CAS записывает значение ___, только если текущее значение всё ещё равно значению ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "update",
+                "new"
+              ],
+              "ru": [
+                "update",
+                "new"
+              ]
+            },
+            {
+              "en": [
+                "expected"
+              ],
+              "ru": [
+                "expected"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cas-atomicity",
+      "title": {
+        "en": "Compare and set are one step",
+        "ru": "Сравнение и запись — один шаг"
+      },
+      "summary": {
+        "en": "The comparison and the write happen as one indivisible operation, so no thread can change the value between them.",
+        "ru": "Сравнение и запись выполняются как одна неделимая операция, поэтому между ними ни один поток не может изменить значение."
+      },
+      "discovery": [
+        {
+          "id": "cas-atomicity-d1-if-then-set",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Is this `if (get() == 10) set(11)` pair equivalent to `value.compareAndSet(10, 11)`?",
+            "ru": "Эквивалентна ли пара `if (get() == 10) set(11)` вызову `value.compareAndSet(10, 11)`?"
+          },
+          "code": "AtomicInteger value = new AtomicInteger(10);\n\nif (value.get() == 10) {\n    value.set(11);\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "`get()` is atomic and `set()` is atomic, but the **pair** is not: between them there is a window in which any other thread can write.\n\n```mermaid\nsequenceDiagram\n  participant T1 as Thread T1\n  participant S as atomic slot\n  participant T2 as Thread T2\n  T1->>S: get() returns 10\n  T2->>S: set(99)\n  T1->>S: set(11) overwrites 99\n```\n\nAtomic pieces do not compose into an atomic whole. `compareAndSet(10, 11)` closes that window: the comparison and the write are **one indivisible operation**, so nothing can slip in between them.\n\nThis is real synchronization — it just does not use a **Java monitor**, the lock behind `synchronized` that admits one thread at a time into a guarded block. CAS relies on hardware and JVM atomicity instead, so the thread never has to block and wait.",
+            "ru": "`get()` атомарен и `set()` атомарен, но **пара** — нет: между ними есть окно, в котором любой другой поток может записать своё значение.\n\n```mermaid\nsequenceDiagram\n  participant T1 as Thread T1\n  participant S as atomic slot\n  participant T2 as Thread T2\n  T1->>S: get() возвращает 10\n  T2->>S: set(99)\n  T1->>S: set(11) затирает 99\n```\n\nАтомарные части не складываются в атомарное целое. `compareAndSet(10, 11)` закрывает это окно: сравнение и запись — **одна неделимая операция**, между ними невозможно вклиниться.\n\nЭто настоящая синхронизация — просто она не использует **Java monitor**, ту самую блокировку за `synchronized`, которая пускает в защищённый блок по одному потоку. Вместо этого CAS опирается на атомарность hardware и JVM, поэтому потоку не приходится блокироваться и ждать."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two atomic calls do not add up to one atomic operation.",
+              "ru": "Два атомарных вызова не складываются в одну атомарную операцию."
+            },
+            "incorrect": {
+              "en": "No — another thread can write between get() and set(); CAS makes the check and the write one step.",
+              "ru": "Нет — между get() и set() может записать другой поток; CAS делает проверку и запись одним шагом."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "No — another thread can change the value between get() and set()",
+                "ru": "Нет — между get() и set() другой поток может изменить значение"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Yes — the two lines do exactly the same work",
+                "ru": "Да — эти две строки делают ровно ту же работу"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Only the result looks the same in a single thread; with two threads the gap between the calls is unguarded.",
+                "ru": "Результат совпадает только в одном потоке; при двух потоках промежуток между вызовами не защищён."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Yes — AtomicInteger is thread-safe, so any sequence of its calls is atomic",
+                "ru": "Да — AtomicInteger потокобезопасен, поэтому любая последовательность его вызовов атомарна"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Each single call is atomic; a sequence of them is not.",
+                "ru": "Атомарен каждый отдельный вызов; последовательность вызовов — нет."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cas-atomicity-p1-no-sync-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Using compareAndSet means no synchronization is happening at all.",
+            "ru": "Использование compareAndSet означает, что никакой синхронизации не происходит."
+          },
+          "feedback": {
+            "correct": {
+              "en": "CAS is synchronization — it just relies on hardware and JVM atomicity instead of a Java monitor.",
+              "ru": "CAS — это синхронизация, просто он опирается на атомарность hardware и JVM, а не на Java monitor."
+            },
+            "incorrect": {
+              "en": "No — CAS is synchronization; it simply does not use a Java monitor.",
+              "ru": "Нет — CAS это синхронизация; он просто не использует Java monitor."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "cas-atomicity-p2-spot-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This method is meant to move the counter from `next - 1` to `next` safely. What is the defect?",
+            "ru": "Этот метод должен безопасно перевести счётчик с `next - 1` на `next`. В чём дефект?"
+          },
+          "code": "AtomicInteger value = new AtomicInteger();\n\nvoid bumpTo(int next) {\n    int current = value.get();\n    if (current == next - 1) {\n        value.set(next);\n    }\n}",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "The check and the write are separate, so the decision can be stale by the time set() runs.",
+              "ru": "Проверка и запись разделены, поэтому к моменту set() решение может устареть."
+            },
+            "incorrect": {
+              "en": "The gap between get() and set() is unguarded; compareAndSet(next - 1, next) makes it one step.",
+              "ru": "Промежуток между get() и set() не защищён; compareAndSet(next - 1, next) делает это одним шагом."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The check and the write are two separate steps, so another thread can change the value in between",
+                "ru": "Проверка и запись — два отдельных шага, поэтому между ними значение может изменить другой поток"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing is wrong: every AtomicInteger call is atomic, so the method is atomic",
+                "ru": "Всё в порядке: каждый вызов AtomicInteger атомарен, значит и метод атомарен"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Atomic calls do not compose; the gap between get() and set() is unguarded.",
+                "ru": "Атомарные вызовы не складываются; промежуток между get() и set() не защищён."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "`set` cannot be called on an AtomicInteger",
+                "ru": "`set` нельзя вызывать у AtomicInteger"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "set() is a perfectly valid method; the defect is the unguarded gap between the two calls.",
+                "ru": "set() — вполне валидный метод; дефект в незащищённом промежутке между двумя вызовами."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cas-atomicity-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble what compareAndSet guarantees.",
+            "ru": "Собери, что гарантирует compareAndSet."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One indivisible step means no thread can act between the check and the write.",
+              "ru": "Один неделимый шаг означает, что между проверкой и записью не может вклиниться ни один поток."
+            },
+            "incorrect": {
+              "en": "The compare and the set happen as one indivisible step.",
+              "ru": "Сравнение и запись происходят как один неделимый шаг."
+            }
+          },
+          "tokens": {
+            "en": [
+              "compare",
+              "and",
+              "set",
+              "happen",
+              "as",
+              "one",
+              "indivisible",
+              "step"
+            ],
+            "ru": [
+              "сравнение",
+              "и",
+              "запись",
+              "происходят",
+              "как",
+              "один",
+              "неделимый",
+              "шаг"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "separately",
+              "twice"
+            ],
+            "ru": [
+              "раздельно",
+              "дважды"
+            ]
+          }
+        },
+        {
+          "id": "cas-atomicity-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the method that makes the check and the write one step.",
+            "ru": "Впиши метод, который делает проверку и запись одним шагом."
+          },
+          "feedback": {
+            "correct": {
+              "en": "compareAndSet closes the window between reading and writing.",
+              "ru": "compareAndSet закрывает окно между чтением и записью."
+            },
+            "incorrect": {
+              "en": "It is compareAndSet(expected, update) — one atomic call instead of get() then set().",
+              "ru": "Это compareAndSet(expected, update) — один атомарный вызов вместо get(), а затем set()."
+            }
+          },
+          "text": {
+            "en": "The atomic replacement for `if (value.get() == 10) value.set(11);` is `value.___(10, 11);`",
+            "ru": "Атомарная замена для `if (value.get() == 10) value.set(11);` — это `value.___(10, 11);`"
+          },
+          "blanks": [
+            {
+              "en": [
+                "compareAndSet",
+                "compareandset"
+              ],
+              "ru": [
+                "compareAndSet",
+                "compareandset"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stale-cas-fails",
+      "title": {
+        "en": "A stale writer fails instead of overwriting",
+        "ru": "Устаревший писатель терпит неудачу, а не затирает"
+      },
+      "summary": {
+        "en": "If another thread changed the value first, the late CAS returns false and the newer value survives.",
+        "ru": "Если другой поток изменил значение первым, опоздавший CAS возвращает false, и более новое значение сохраняется."
+      },
+      "discovery": [
+        {
+          "id": "stale-d1-predict",
+          "type": "predict_output",
+          "prompt": {
+            "en": "T1 read the value first, but T2 finished its update before T1 acted. Predict what this prints.",
+            "ru": "T1 прочитал значение первым, но T2 завершил своё обновление раньше, чем T1 начал действовать. Предскажи, что напечатает код."
+          },
+          "code": "AtomicInteger value = new AtomicInteger(0);\n\nint seen = value.get();            // T1 reads 0\n\nvalue.compareAndSet(0, 1);         // T2 updates first\n\nSystem.out.println(value.compareAndSet(seen, 1) + \" \" + value.get());",
+          "codeLang": "java",
+          "reveal": {
+            "en": "A value you read a moment ago is **stale** once someone else has written over it. Your `expected` still holds the old number, so the comparison fails and CAS refuses the write.\n\nThat refusal is exactly what prevents a lost update: a stale writer **cannot silently overwrite a newer value**. It is told `false` and can react.\n\n```mermaid\nsequenceDiagram\n  participant T1 as Thread T1\n  participant S as atomic slot\n  participant T2 as Thread T2\n  T1->>S: read 0\n  T2->>S: CAS(0, 1) = true\n  T1->>S: CAS(0, 1) = false\n  T1->>S: read 1\n  T1->>S: CAS(1, 2) = true\n```\n\nCompare this with the plain `count = count + 1`: there, T1's write would have landed on top of T2's and one increment would be gone. With CAS, T1 finds out, re-reads the fresh `1`, and applies its increment on top of it.",
+            "ru": "Значение, прочитанное мгновение назад, становится **устаревшим (stale)**, как только кто-то другой перезаписал его. В твоём `expected` осталось старое число, поэтому сравнение не проходит и CAS отказывается записывать.\n\nЭтот отказ и предотвращает lost update: устаревший писатель **не может молча перезаписать более новое значение**. Ему сообщают `false`, и он может отреагировать.\n\n```mermaid\nsequenceDiagram\n  participant T1 as Thread T1\n  participant S as atomic slot\n  participant T2 as Thread T2\n  T1->>S: читает 0\n  T2->>S: CAS(0, 1) = true\n  T1->>S: CAS(0, 1) = false\n  T1->>S: читает 1\n  T1->>S: CAS(1, 2) = true\n```\n\nСравни с обычным `count = count + 1`: там запись T1 легла бы поверх записи T2 и один инкремент исчез бы. С CAS T1 узнаёт об этом, перечитывает свежую `1` и применяет свой инкремент уже поверх неё."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The expected value 0 is out of date, so the CAS fails and T2's 1 stands.",
+              "ru": "Значение expected равное 0 устарело, поэтому CAS не проходит, и остаётся 1 от T2."
+            },
+            "incorrect": {
+              "en": "The slot already holds 1, so CAS(0, 1) fails: it prints false 1.",
+              "ru": "В слоте уже 1, поэтому CAS(0, 1) не проходит: печатается false 1."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "false 1",
+                "ru": "false 1"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "true 1",
+                "ru": "true 1"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The current value is 1 but expected is 0, so the comparison fails and CAS returns false.",
+                "ru": "Текущее значение 1, а expected — 0, поэтому сравнение не проходит и CAS возвращает false."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "false 0",
+                "ru": "false 0"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A failed CAS does not roll anything back; T2's write stands, so the value is 1.",
+                "ru": "Неудачный CAS ничего не откатывает; запись T2 остаётся, поэтому значение равно 1."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "stale-p1-overwrite-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A failed compareAndSet still overwrites the value that another thread just wrote.",
+            "ru": "Неудачный compareAndSet всё равно затирает значение, которое только что записал другой поток."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A failed CAS writes nothing — that is how the newer value survives.",
+              "ru": "Неудачный CAS ничего не записывает — именно так сохраняется более новое значение."
+            },
+            "incorrect": {
+              "en": "No — a failed CAS writes nothing, so the newer value stays.",
+              "ru": "Нет — неудачный CAS ничего не записывает, поэтому более новое значение остаётся."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "stale-p2-why-no-lost-update",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "How does CAS prevent a lost update?",
+            "ru": "Каким образом CAS предотвращает lost update?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The stale writer is rejected rather than allowed to overwrite.",
+              "ru": "Устаревшего писателя отклоняют, а не дают ему перезаписать значение."
+            },
+            "incorrect": {
+              "en": "A writer whose expected value is out of date fails instead of overwriting the newer value.",
+              "ru": "Писатель с устаревшим expected терпит неудачу вместо перезаписи более нового значения."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A writer using a stale expected value fails instead of writing",
+                "ru": "Писатель с устаревшим expected терпит неудачу вместо записи"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It blocks the other threads until the write finishes",
+                "ru": "Он блокирует другие потоки, пока запись не завершится"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "CAS does not block anyone; it either writes or reports failure.",
+                "ru": "CAS никого не блокирует; он либо записывает, либо сообщает о неудаче."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It merges the two updates into one result",
+                "ru": "Он объединяет два обновления в один результат"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no merging — the losing thread must recompute from the fresh value itself.",
+                "ru": "Никакого объединения нет — проигравший поток сам должен пересчитать от свежего значения."
+              }
+            }
+          ]
+        },
+        {
+          "id": "stale-p3-sort",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the events when a stale CAS loses the race.",
+            "ru": "Расставь по порядку события, когда устаревший CAS проигрывает гонку."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The late writer is told false and starts again from the fresh value.",
+              "ru": "Опоздавшему писателю сообщают false, и он начинает заново со свежего значения."
+            },
+            "incorrect": {
+              "en": "T1 reads, T2 wins with a successful CAS, T1's CAS returns false, T1 re-reads.",
+              "ru": "T1 читает, T2 выигрывает успешным CAS, CAS от T1 возвращает false, T1 перечитывает."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "T1 reads the value 0",
+                "ru": "T1 читает значение 0"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "T2 sets it to 1 with a successful CAS(0, 1)",
+                "ru": "T2 ставит 1 успешным CAS(0, 1)"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "T1's CAS(0, 1) returns false and writes nothing",
+                "ru": "CAS(0, 1) от T1 возвращает false и ничего не записывает"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "T1 reads the fresh value 1",
+                "ru": "T1 читает свежее значение 1"
+              }
+            }
+          ]
+        },
+        {
+          "id": "stale-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the outcome of a CAS built on an out-of-date read.",
+            "ru": "Дополни исход CAS, построенного на устаревшем чтении."
+          },
+          "feedback": {
+            "correct": {
+              "en": "No write, no lost update — the caller just learns it was too late.",
+              "ru": "Ни записи, ни lost update — вызывающий просто узнаёт, что опоздал."
+            },
+            "incorrect": {
+              "en": "A CAS with a stale expected value returns false and writes nothing.",
+              "ru": "CAS с устаревшим expected возвращает false и не записывает ничего."
+            }
+          },
+          "text": {
+            "en": "A CAS built on a stale read returns ___ and writes ___.",
+            "ru": "CAS, построенный на устаревшем чтении, возвращает ___ и записывает ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "false"
+              ],
+              "ru": [
+                "false"
+              ]
+            },
+            {
+              "en": [
+                "nothing"
+              ],
+              "ru": [
+                "ничего",
+                "nothing"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "retry-loop",
+      "title": {
+        "en": "The CAS retry loop",
+        "ru": "Retry loop вокруг CAS"
+      },
+      "summary": {
+        "en": "When a CAS fails, the thread re-reads the fresh value, recomputes, and tries again.",
+        "ru": "Когда CAS не проходит, поток перечитывает свежее значение, пересчитывает и пробует снова."
+      },
+      "discovery": [
+        {
+          "id": "retry-d1-on-false",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What happens in this loop when `compareAndSet` returns false?",
+            "ru": "Что произойдёт в этом цикле, когда `compareAndSet` вернёт false?"
+          },
+          "code": "while (true) {\n    int current = value.get();\n    int next = current + 1;\n    if (value.compareAndSet(current, next)) {\n        return;\n    }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "The loop is not a mistake — it is the standard shape of a CAS update. A `false` result is **information**, not an error: it means \"someone changed the value first, so your plan is out of date.\"\n\n```mermaid\nflowchart TD\n  R[\"read current\"] --> C[\"next = current + 1\"]\n  C --> S[\"CAS(current, next)\"]\n  S -->|true| D[\"done\"]\n  S -->|false| R\n```\n\nEvery pass reads a **fresh** `current` and derives a new `next` from it, so the retry is never based on the stale number that just failed. If the expected value were not re-read, the CAS could never succeed again.\n\nThis is a **non-blocking** update: the thread never parks waiting for another thread to release something. It just loses a race and runs the arithmetic again.",
+            "ru": "Цикл здесь не ошибка — это стандартная форма обновления через CAS. Результат `false` — это **информация**, а не сбой: он означает «кто-то изменил значение первым, поэтому твой план устарел».\n\n```mermaid\nflowchart TD\n  R[\"прочитать current\"] --> C[\"next = current + 1\"]\n  C --> S[\"CAS(current, next)\"]\n  S -->|true| D[\"готово\"]\n  S -->|false| R\n```\n\nКаждый проход читает **свежий** `current` и выводит из него новый `next`, поэтому повтор никогда не строится на устаревшем числе, которое только что не прошло. Если бы expected не перечитывался, CAS уже никогда не смог бы пройти.\n\nЭто **non-blocking** обновление: поток не засыпает в ожидании, пока другой поток что-то освободит. Он просто проигрывает гонку и заново выполняет арифметику."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A failed CAS sends the thread back to a fresh read.",
+              "ru": "Неудачный CAS отправляет поток обратно к свежему чтению."
+            },
+            "incorrect": {
+              "en": "The loop repeats: it re-reads the current value and computes a new next from it.",
+              "ru": "Цикл повторяется: он перечитывает текущее значение и вычисляет из него новый next."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The loop re-reads the fresh value and computes a new next",
+                "ru": "Цикл перечитывает свежее значение и вычисляет новый next"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The loop exits and the increment is skipped",
+                "ru": "Цикл завершается, и инкремент пропускается"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "`return` runs only when the CAS succeeds; on false the loop simply goes round again.",
+                "ru": "`return` выполняется только при успешном CAS; при false цикл просто идёт на новый круг."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The same expected value is retried forever",
+                "ru": "Тот же expected повторяется бесконечно"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "`current` is read again at the top of every pass, so each attempt uses a fresh expected value.",
+                "ru": "`current` перечитывается в начале каждого прохода, поэтому каждая попытка берёт свежий expected."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "retry-p1-broken-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A failed compareAndSet inside a retry loop means the program is broken.",
+            "ru": "Неудачный compareAndSet внутри retry loop означает, что программа сломана."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Failure is the expected signal that another thread was first; the loop just retries.",
+              "ru": "Неудача — ожидаемый сигнал, что другой поток был первым; цикл просто повторяет попытку."
+            },
+            "incorrect": {
+              "en": "No — failure is normal under concurrency; the loop re-reads and tries again.",
+              "ru": "Нет — при конкурентном доступе неудача нормальна; цикл перечитывает и пробует снова."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "retry-p2-next-expected",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In a CAS retry loop, where does the expected value for the next attempt come from?",
+            "ru": "Откуда в retry loop берётся expected для следующей попытки?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Each attempt starts from a fresh read, so the expected value is current again.",
+              "ru": "Каждая попытка начинается со свежего чтения, поэтому expected снова актуален."
+            },
+            "incorrect": {
+              "en": "From a fresh read of the current value at the top of the loop.",
+              "ru": "Из свежего чтения текущего значения в начале цикла."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "From a fresh read of the current value",
+                "ru": "Из свежего чтения текущего значения"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "From the value read before the first attempt",
+                "ru": "Из значения, прочитанного перед первой попыткой"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Reusing that stale value would make every retry fail for the same reason.",
+                "ru": "Переиспользование этого устаревшего значения приводило бы к неудаче каждой попытки по той же причине."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "From the update value of the failed attempt",
+                "ru": "Из значения update неудачной попытки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The failed update was never written, so nothing in the slot relates to it.",
+                "ru": "Неудачный update так и не был записан, поэтому в слоте нет ничего связанного с ним."
+              }
+            }
+          ]
+        },
+        {
+          "id": "retry-p3-sort",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order one pass of a CAS retry loop.",
+            "ru": "Расставь по порядку один проход retry loop с CAS."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Read, compute, CAS, and on false start over from a fresh read.",
+              "ru": "Прочитать, вычислить, CAS, а при false начать заново со свежего чтения."
+            },
+            "incorrect": {
+              "en": "The order is: read the current value, compute the next one, call compareAndSet, retry on false.",
+              "ru": "Порядок такой: прочитать текущее значение, вычислить следующее, вызвать compareAndSet, при false повторить."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Read the current value",
+                "ru": "Прочитать текущее значение"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Compute the next value from it",
+                "ru": "Вычислить из него следующее значение"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Call compareAndSet(current, next)",
+                "ru": "Вызвать compareAndSet(current, next)"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "If it returned false, start again from a fresh read",
+                "ru": "Если вернулся false, начать заново со свежего чтения"
+              }
+            }
+          ]
+        },
+        {
+          "id": "retry-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill in the two arguments of the CAS call in an increment loop.",
+            "ru": "Впиши два аргумента вызова CAS в цикле инкремента."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The freshly read value is the expected one; the computed value is the update.",
+              "ru": "Только что прочитанное значение — это expected; вычисленное — update."
+            },
+            "incorrect": {
+              "en": "It is compareAndSet(current, next): the fresh read is expected, the computed value is the update.",
+              "ru": "Это compareAndSet(current, next): свежее чтение — expected, вычисленное значение — update."
+            }
+          },
+          "text": {
+            "en": "`int current = value.get(); int next = current + 1; if (value.compareAndSet(___, ___)) return;`",
+            "ru": "`int current = value.get(); int next = current + 1; if (value.compareAndSet(___, ___)) return;`"
+          },
+          "blanks": [
+            {
+              "en": [
+                "current"
+              ],
+              "ru": [
+                "current"
+              ]
+            },
+            {
+              "en": [
+                "next"
+              ],
+              "ru": [
+                "next"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "retry-body-safety",
+      "title": {
+        "en": "The retry body must be repeatable",
+        "ru": "Тело retry loop должно быть повторяемым"
+      },
+      "summary": {
+        "en": "A failed CAS runs the loop body again, so the body may hold only pure computation, never side effects.",
+        "ru": "Неудачный CAS запускает тело цикла заново, поэтому в нём допустимы только чистые вычисления, но не side effects."
+      },
+      "discovery": [
+        {
+          "id": "retry-body-d1-spot-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "What is the defect in this retry loop?",
+            "ru": "В чём дефект этого retry loop?"
+          },
+          "code": "while (true) {\n    int current = balance.get();\n    int next = current - amount;\n    chargeCard(amount);\n    if (balance.compareAndSet(current, next)) {\n        return;\n    }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "A failed CAS sends control back to the top of the loop, so **everything in the body runs again**. Code inside a retry body must therefore be safe to repeat.\n\n- Safe: reading a value, arithmetic, building a new immutable object — pure computation with no trace left behind.\n- Unsafe: charging a card, sending an email, appending to a file, incrementing another counter — a **side effect**, an action whose result outlives the attempt.\n\n```mermaid\nflowchart LR\n  A[\"read\"] --> B[\"compute (safe to repeat)\"]\n  B --> C[\"CAS\"]\n  C -->|false| A\n  C -->|true| D[\"side effects go here, once\"]\n```\n\nHere `chargeCard` runs on every attempt, so under contention the customer is charged twice, three times, as many times as the CAS fails. Move such work after the loop, where it runs exactly once.",
+            "ru": "Неудачный CAS возвращает управление в начало цикла, поэтому **всё в теле выполняется заново**. Значит, код внутри retry body должен быть безопасен для повторения.\n\n- Безопасно: чтение значения, арифметика, создание нового неизменяемого объекта — чистые вычисления, не оставляющие следов.\n- Небезопасно: списание денег с карты, отправка email, дозапись в файл, инкремент другого счётчика — это **side effect**, действие, результат которого переживает попытку.\n\n```mermaid\nflowchart LR\n  A[\"чтение\"] --> B[\"вычисление (безопасно повторять)\"]\n  B --> C[\"CAS\"]\n  C -->|false| A\n  C -->|true| D[\"side effects здесь, один раз\"]\n```\n\nЗдесь `chargeCard` выполняется при каждой попытке, поэтому при contention клиента спишут дважды, трижды — столько раз, сколько CAS не прошёл. Такую работу выносят за цикл, где она выполнится ровно один раз."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Every failed CAS replays the body, so the charge happens again.",
+              "ru": "Каждый неудачный CAS проигрывает тело заново, поэтому списание повторяется."
+            },
+            "incorrect": {
+              "en": "chargeCard is a side effect inside the retry body: it runs once per attempt, not once per update.",
+              "ru": "chargeCard — это side effect внутри retry body: он выполняется на каждую попытку, а не на каждое обновление."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "chargeCard runs again on every failed attempt",
+                "ru": "chargeCard выполняется заново при каждой неудачной попытке"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The loop can never terminate",
+                "ru": "Цикл никогда не завершится"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It terminates as soon as a CAS succeeds; the problem is what happens before that.",
+                "ru": "Он завершится, как только CAS пройдёт; проблема в том, что происходит до этого."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "compareAndSet cannot be used with subtraction",
+                "ru": "compareAndSet нельзя использовать с вычитанием"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Any computed value can be the update; the defect is the repeated side effect.",
+                "ru": "Update может быть любым вычисленным значением; дефект — в повторяющемся side effect."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "retry-body-p1-email-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Sending an email inside a CAS retry loop body is safe, because the body runs only once.",
+            "ru": "Отправлять email внутри тела CAS retry loop безопасно, потому что тело выполняется только один раз."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The body runs once per attempt, so a failed CAS would send the email again.",
+              "ru": "Тело выполняется на каждую попытку, поэтому при неудачном CAS email уйдёт снова."
+            },
+            "incorrect": {
+              "en": "No — a failed CAS replays the body, so the email would be sent once per attempt.",
+              "ru": "Нет — неудачный CAS проигрывает тело заново, поэтому email уйдёт на каждую попытку."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "retry-body-p2-safe-op",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which operation is safe to place inside a CAS retry loop body?",
+            "ru": "Какую операцию безопасно размещать внутри тела CAS retry loop?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Pure calculation leaves no trace, so repeating it costs nothing but CPU.",
+              "ru": "Чистое вычисление не оставляет следов, поэтому его повтор стоит только процессорного времени."
+            },
+            "incorrect": {
+              "en": "Only pure computation is safe; anything with a lasting effect repeats on every failed attempt.",
+              "ru": "Безопасны только чистые вычисления; всё с длящимся эффектом повторится при каждой неудачной попытке."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Computing the next value from the current one",
+                "ru": "Вычисление следующего значения из текущего"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Appending a line to a log file",
+                "ru": "Дозапись строки в лог-файл"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Every failed attempt would add another duplicate line.",
+                "ru": "Каждая неудачная попытка добавляла бы ещё одну дублирующую строку."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Charging a customer's card",
+                "ru": "Списание денег с карты клиента"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The customer would be charged once per attempt instead of once per update.",
+                "ru": "С клиента списали бы деньги на каждую попытку, а не на каждое обновление."
+              }
+            }
+          ]
+        },
+        {
+          "id": "retry-body-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each operation to its verdict inside a CAS retry body.",
+            "ru": "Соотнеси каждую операцию с вердиктом для тела CAS retry loop."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Pure work may repeat; anything that leaves a trace must not.",
+              "ru": "Чистая работа может повторяться; всё, что оставляет след, — нет."
+            },
+            "incorrect": {
+              "en": "Reads and arithmetic are safe to repeat; I/O and payments are not.",
+              "ru": "Чтения и арифметику повторять безопасно; ввод-вывод и платежи — нет."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "Computing next = current + 1",
+                "ru": "Вычисление next = current + 1"
+              },
+              "right": {
+                "en": "Safe: pure calculation",
+                "ru": "Безопасно: чистое вычисление"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "Reading the current value",
+                "ru": "Чтение текущего значения"
+              },
+              "right": {
+                "en": "Safe: repeating a read is harmless",
+                "ru": "Безопасно: повторное чтение безвредно"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "Appending to a file",
+                "ru": "Дозапись в файл"
+              },
+              "right": {
+                "en": "Unsafe: duplicate lines on every retry",
+                "ru": "Небезопасно: дублирующиеся строки при каждом повторе"
+              }
+            },
+            {
+              "id": "m4",
+              "left": {
+                "en": "Charging a card",
+                "ru": "Списание денег с карты"
+              },
+              "right": {
+                "en": "Unsafe: the customer pays more than once",
+                "ru": "Небезопасно: клиент заплатит больше одного раза"
+              }
+            }
+          ]
+        },
+        {
+          "id": "retry-body-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the rule for the body of a CAS retry loop.",
+            "ru": "Дополни правило для тела CAS retry loop."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Only work that costs nothing to redo belongs inside the loop.",
+              "ru": "Внутри цикла место только той работе, которую ничего не стоит переделать."
+            },
+            "incorrect": {
+              "en": "The body must be safe to repeat, so side effects stay outside the loop.",
+              "ru": "Тело должно быть безопасно для повторения, поэтому side effects остаются снаружи цикла."
+            }
+          },
+          "text": {
+            "en": "The body of a CAS retry loop must be safe to ___; keep ___ effects outside it.",
+            "ru": "Тело CAS retry loop должно быть безопасно для ___; ___ effects держи снаружи."
+          },
+          "blanks": [
+            {
+              "en": [
+                "repeat",
+                "rerun",
+                "re-run"
+              ],
+              "ru": [
+                "повторения",
+                "повтора",
+                "repeat"
+              ]
+            },
+            {
+              "en": [
+                "side"
+              ],
+              "ru": [
+                "side"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "volatile-is-not-enough",
+      "title": {
+        "en": "volatile is visibility, not atomicity",
+        "ru": "volatile — это visibility, а не атомарность"
+      },
+      "summary": {
+        "en": "volatile makes the latest value visible, but count++ is still read, compute, write, so updates can still be lost.",
+        "ru": "volatile делает последнее значение видимым, но count++ остаётся read, compute, write, поэтому обновления всё ещё теряются."
+      },
+      "discovery": [
+        {
+          "id": "volatile-d1-can-lose",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The shared field is declared volatile and 1000 threads each run `count++` once. Can the final count be less than 1000?",
+            "ru": "Общее поле объявлено volatile, и 1000 потоков по разу выполняют `count++`. Может ли итоговый count оказаться меньше 1000?"
+          },
+          "code": "volatile int count = 0;   // shared field\n\n// each of 1000 threads runs:\ncount++;",
+          "codeLang": "java",
+          "reveal": {
+            "en": "**Visibility** and **atomicity** are two different guarantees, and `volatile` gives only the first one.\n\n- `volatile` guarantees **visibility**: a read always sees the most recently written value, never a cached stale copy.\n- It does *not* make a sequence atomic. `count++` is still read, compute, write.\n\n```mermaid\nflowchart LR\n  V[\"volatile: everyone sees the latest value\"] --> P[\"but count++ is still 3 steps\"]\n  P --> L[\"two threads can read the same latest value\"]\n  L --> C[\"CAS: the write happens only if nothing changed\"]\n```\n\nSo two threads can both read the freshest `41`, both compute `42`, and both write `42` — a lost update, even though every read was perfectly up to date. Seeing the truth is not the same as acting on it exclusively.\n\nCAS adds what is missing: the write is **conditional**, so only one of the two writers can win.",
+            "ru": "**Visibility** (видимость) и атомарность — это две разные гарантии, и `volatile` даёт только первую.\n\n- `volatile` гарантирует **visibility**: чтение всегда видит последнее записанное значение, а не устаревшую копию из кэша.\n- Но он *не* делает последовательность атомарной. `count++` всё так же read, compute, write.\n\n```mermaid\nflowchart LR\n  V[\"volatile: все видят последнее значение\"] --> P[\"но count++ всё ещё 3 шага\"]\n  P --> L[\"два потока могут прочитать одно последнее значение\"]\n  L --> C[\"CAS: запись происходит, только если ничего не изменилось\"]\n```\n\nПоэтому два потока могут оба прочитать свежайшее `41`, оба вычислить `42` и оба записать `42` — lost update, хотя каждое чтение было абсолютно актуальным. Видеть правду — не то же самое, что действовать по ней единолично.\n\nCAS добавляет недостающее: запись становится **условной**, поэтому победить может только один из двух писателей."
+          },
+          "feedback": {
+            "correct": {
+              "en": "volatile fixes staleness, not the read-compute-write gap.",
+              "ru": "volatile лечит устаревание данных, а не разрыв read-compute-write."
+            },
+            "incorrect": {
+              "en": "Yes it can — volatile gives visibility only; count++ is still three steps.",
+              "ru": "Да, может — volatile даёт только visibility; count++ всё ещё три шага."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Yes — count++ is still read, compute, write",
+                "ru": "Да — count++ всё ещё read, compute, write"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "No — volatile makes count++ atomic",
+                "ru": "Нет — volatile делает count++ атомарным"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "volatile guarantees visibility of the latest value, not atomicity of a sequence.",
+                "ru": "volatile гарантирует видимость последнего значения, а не атомарность последовательности."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "No — the JVM locks a volatile field during ++",
+                "ru": "Нет — JVM блокирует volatile-поле на время ++"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no implicit lock; volatile adds no exclusion at all.",
+                "ru": "Никакой неявной блокировки нет; volatile не даёт исключительного доступа."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "volatile-p1-atomic-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Declaring a counter volatile makes `count++` atomic.",
+            "ru": "Объявление счётчика volatile делает `count++` атомарным."
+          },
+          "feedback": {
+            "correct": {
+              "en": "volatile is about visibility; the three-step increment stays interruptible.",
+              "ru": "volatile отвечает за visibility; трёхшаговый инкремент остаётся прерываемым."
+            },
+            "incorrect": {
+              "en": "No — volatile gives visibility only; count++ remains read, compute, write.",
+              "ru": "Нет — volatile даёт только visibility; count++ остаётся read, compute, write."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "volatile-p2-what-it-gives",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does `volatile` guarantee for a shared field?",
+            "ru": "Что `volatile` гарантирует для общего поля?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Visibility: a read never returns a stale cached copy.",
+              "ru": "Visibility: чтение никогда не вернёт устаревшую копию из кэша."
+            },
+            "incorrect": {
+              "en": "It guarantees visibility of the latest written value — nothing about atomicity.",
+              "ru": "Он гарантирует видимость последнего записанного значения — и ничего про атомарность."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "That every read sees the latest written value",
+                "ru": "Что каждое чтение видит последнее записанное значение"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "That read-compute-write sequences run atomically",
+                "ru": "Что последовательности read-compute-write выполняются атомарно"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Atomicity of a sequence needs CAS or a lock; volatile does not provide it.",
+                "ru": "Атомарность последовательности требует CAS или lock; volatile её не даёт."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "That only one thread at a time may touch the field",
+                "ru": "Что к полю одновременно может обращаться только один поток"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "volatile grants no exclusive access; any number of threads can read and write.",
+                "ru": "volatile не даёт исключительного доступа; читать и писать может любое число потоков."
+              }
+            }
+          ]
+        },
+        {
+          "id": "volatile-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each mechanism to what it actually guarantees.",
+            "ru": "Соотнеси каждый механизм с тем, что он на самом деле гарантирует."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Visibility and atomicity are separate problems with separate tools.",
+              "ru": "Visibility и атомарность — разные задачи с разными инструментами."
+            },
+            "incorrect": {
+              "en": "volatile gives visibility, compareAndSet gives a conditional atomic write, plain ++ gives neither.",
+              "ru": "volatile даёт visibility, compareAndSet — условную атомарную запись, обычный ++ — ничего из этого."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "volatile",
+                "ru": "volatile"
+              },
+              "right": {
+                "en": "Visibility of the latest written value",
+                "ru": "Видимость последнего записанного значения"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "compareAndSet",
+                "ru": "compareAndSet"
+              },
+              "right": {
+                "en": "A conditional atomic write",
+                "ru": "Условная атомарная запись"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "count++ on a plain field",
+                "ru": "count++ на обычном поле"
+              },
+              "right": {
+                "en": "Read, compute, write — no guarantee at all",
+                "ru": "Read, compute, write — никаких гарантий"
+              }
+            }
+          ]
+        },
+        {
+          "id": "volatile-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the reason volatile is not enough for a counter.",
+            "ru": "Дополни объяснение, почему volatile недостаточно для счётчика."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Fresh values still do not stop two threads from writing the same result.",
+              "ru": "Свежие значения всё равно не мешают двум потокам записать один и тот же результат."
+            },
+            "incorrect": {
+              "en": "volatile gives visibility, but count++ is still read, compute, write.",
+              "ru": "volatile даёт visibility, но count++ всё равно остаётся read, compute, write."
+            }
+          },
+          "text": {
+            "en": "volatile gives ___, but count++ is still read, compute, ___.",
+            "ru": "volatile даёт ___, но count++ всё равно остаётся read, compute, ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "visibility"
+              ],
+              "ru": [
+                "visibility",
+                "видимость"
+              ]
+            },
+            {
+              "en": [
+                "write"
+              ],
+              "ru": [
+                "write",
+                "запись"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "aba-problem",
+      "title": {
+        "en": "The ABA problem",
+        "ru": "ABA problem"
+      },
+      "summary": {
+        "en": "A value that changes from A to B and back to A still passes a plain CAS, because CAS compares only the value.",
+        "ru": "Значение, изменившееся с A на B и обратно на A, всё равно проходит обычный CAS, потому что CAS сравнивает только значение."
+      },
+      "discovery": [
+        {
+          "id": "aba-d1-predict",
+          "type": "predict_output",
+          "prompt": {
+            "en": "T1 read the slot, then another thread changed it twice. Predict what this prints.",
+            "ru": "T1 прочитал слот, затем другой поток изменил его дважды. Предскажи, что напечатает код."
+          },
+          "code": "AtomicInteger slot = new AtomicInteger(1);\n\nint expected = slot.get();     // T1 reads 1\n\nslot.compareAndSet(1, 2);      // T2: 1 -> 2\nslot.compareAndSet(2, 1);      // T2: 2 -> 1\n\nSystem.out.println(slot.compareAndSet(expected, 3));   // T1 finally acts",
+          "codeLang": "java",
+          "reveal": {
+            "en": "CAS compares **only the value it was given**. It has no memory of what happened in between. If the value went `A -> B -> A`, the comparison sees `A` and succeeds, exactly as if nothing had happened.\n\nThat is the **ABA problem**.\n\n```mermaid\nflowchart LR\n  A[\"T1 reads A\"] --> B[\"T2 changes A to B\"]\n  B --> C[\"T2 changes B to A\"]\n  C --> D[\"T1 CAS(A, C) succeeds\"]\n  D --> E[\"ABA risk: the value looks unchanged\"]\n```\n\nWhy does it matter if the number matches anyway? Because the value is often a *stand-in* for a situation, not the situation itself: a reference that was freed and reallocated, a ticket number that was reused, a node that left a queue and came back. The number is equal; the world behind it is not. A plain CAS cannot tell those two cases apart.",
+            "ru": "CAS сравнивает **только то значение, которое ему дали**. У него нет памяти о том, что происходило в промежутке. Если значение прошло путь `A -> B -> A`, сравнение видит `A` и проходит — ровно как если бы ничего не было.\n\nЭто и есть **ABA problem**.\n\n```mermaid\nflowchart LR\n  A[\"T1 читает A\"] --> B[\"T2 меняет A на B\"]\n  B --> C[\"T2 меняет B на A\"]\n  C --> D[\"T1 CAS(A, C) успешен\"]\n  D --> E[\"риск ABA: значение выглядит неизменным\"]\n```\n\nПочему это важно, если число всё равно совпадает? Потому что значение часто лишь *представляет* ситуацию, а не является ею: ссылка, которую освободили и выделили заново, переиспользованный номер талона, узел, покинувший очередь и вернувшийся. Число равно; мир за ним — нет. Обычный CAS не может различить эти два случая."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The value came back to 1, so the comparison passes — history is invisible to CAS.",
+              "ru": "Значение вернулось к 1, поэтому сравнение проходит — история для CAS невидима."
+            },
+            "incorrect": {
+              "en": "It prints true: the slot holds 1 again, and CAS compares only the value.",
+              "ru": "Печатается true: в слоте снова 1, а CAS сравнивает только значение."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "true",
+                "ru": "true"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "false — the slot was modified twice in between",
+                "ru": "false — слот дважды изменили в промежутке"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "CAS does not track modifications; it only compares the current value with expected.",
+                "ru": "CAS не отслеживает изменения; он лишь сравнивает текущее значение с expected."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "false — expected no longer matches the current value",
+                "ru": "false — expected больше не совпадает с текущим значением"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It does match: the second CAS put the value back to 1.",
+                "ru": "Совпадает: второй CAS вернул значение обратно в 1."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "aba-p1-detect-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A plain compareAndSet can tell that the value was changed and then changed back.",
+            "ru": "Обычный compareAndSet может понять, что значение изменили, а затем вернули обратно."
+          },
+          "feedback": {
+            "correct": {
+              "en": "CAS sees only the current value, never the history — that is the ABA problem.",
+              "ru": "CAS видит только текущее значение, но не историю — это и есть ABA problem."
+            },
+            "incorrect": {
+              "en": "No — an A to B to A round trip looks identical to no change at all.",
+              "ru": "Нет — путь A -> B -> A выглядит точно так же, как отсутствие изменений."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "aba-p2-what-compared",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does a plain CAS actually compare?",
+            "ru": "Что на самом деле сравнивает обычный CAS?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Only the two values — which is why an A to B to A round trip slips through.",
+              "ru": "Только два значения — поэтому путь A -> B -> A и проскакивает."
+            },
+            "incorrect": {
+              "en": "Only the current value against the expected value; it has no history.",
+              "ru": "Только текущее значение с expected; истории у него нет."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Only the current value against the expected value",
+                "ru": "Только текущее значение со значением expected"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The whole history of changes since your read",
+                "ru": "Всю историю изменений с момента твоего чтения"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "CAS keeps no history; it looks at one value at one moment.",
+                "ru": "CAS не хранит историю; он смотрит на одно значение в один момент."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Which thread wrote the value last",
+                "ru": "Какой поток записал значение последним"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "CAS does not track writers, only the value itself.",
+                "ru": "CAS не отслеживает писателей, только само значение."
+              }
+            }
+          ]
+        },
+        {
+          "id": "aba-p3-sort",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the events of an ABA sequence.",
+            "ru": "Расставь по порядку события последовательности ABA."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The round trip restores the value, so the late CAS passes on a false premise.",
+              "ru": "Круговой путь восстанавливает значение, поэтому опоздавший CAS проходит на ложной посылке."
+            },
+            "incorrect": {
+              "en": "Read A, change A to B, change B back to A, then the late CAS still succeeds.",
+              "ru": "Прочитали A, сменили A на B, вернули B в A, и опоздавший CAS всё равно проходит."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "T1 reads the value A",
+                "ru": "T1 читает значение A"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Another thread changes A to B",
+                "ru": "Другой поток меняет A на B"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "The other thread changes B back to A",
+                "ru": "Тот же поток меняет B обратно на A"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "T1's CAS(A, C) succeeds, although the situation changed",
+                "ru": "CAS(A, C) от T1 проходит, хотя ситуация изменилась"
+              }
+            }
+          ]
+        },
+        {
+          "id": "aba-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the problem and the value that fools the CAS.",
+            "ru": "Назови проблему и значение, которое обманывает CAS."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The value returns to where it started, so the comparison sees no change.",
+              "ru": "Значение возвращается к исходному, поэтому сравнение не видит изменений."
+            },
+            "incorrect": {
+              "en": "The ABA problem: a value that goes A to B and back to A still passes a plain CAS.",
+              "ru": "ABA problem: значение, прошедшее A -> B и обратно в A, всё равно проходит обычный CAS."
+            }
+          },
+          "text": {
+            "en": "The ___ problem: a value that changes from A to B and back to ___ still passes a plain CAS.",
+            "ru": "___ problem: значение, меняющееся с A на B и обратно на ___, всё равно проходит обычный CAS."
+          },
+          "blanks": [
+            {
+              "en": [
+                "ABA",
+                "aba"
+              ],
+              "ru": [
+                "ABA",
+                "aba"
+              ]
+            },
+            {
+              "en": [
+                "A",
+                "a"
+              ],
+              "ru": [
+                "A",
+                "a"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "aba-fixes",
+      "title": {
+        "en": "Fixing ABA",
+        "ru": "Как чинить ABA"
+      },
+      "summary": {
+        "en": "Pair the value with a version stamp (AtomicStampedReference), avoid reusable identities, or take a lock when the invariant spans several values.",
+        "ru": "Сопроводи значение version stamp (AtomicStampedReference), избегай переиспользуемых identities или возьми lock, если invariant охватывает несколько значений."
+      },
+      "discovery": [
+        {
+          "id": "aba-fix-d1-tool",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "You must detect that a slot was changed and changed back before your update lands. Which tool does that?",
+            "ru": "Нужно обнаружить, что слот изменили и вернули обратно до того, как применится твоё обновление. Какой инструмент это делает?"
+          },
+          "reveal": {
+            "en": "The way out of ABA is to make the comparison check something the round trip **cannot restore**.\n\nThe usual trick is a **version stamp**: store the value together with a counter that increases on every write. `A` with stamp 7 and `A` with stamp 9 are the same value but different pairs, so the CAS on the pair fails.\n\n```mermaid\nflowchart LR\n  A[\"value A, stamp 7\"] --> B[\"value B, stamp 8\"]\n  B --> C[\"value A, stamp 9\"]\n  C --> D[\"CAS expecting A with stamp 7 fails\"]\n```\n\nJava ships this as `AtomicStampedReference`, whose CAS compares both the reference and the stamp.\n\nThe other fixes are just as valid:\n\n- **Avoid reusable identities** — if a freed object or number is never handed out again, the old value can never come back.\n- **Take a lock** — a mutual-exclusion guard that lets one thread at a time into a block of code. Use it when the thing you are protecting is not one value but an invariant spanning several of them; then no CAS on a single slot can express the rule anyway.",
+            "ru": "Выход из ABA — заставить сравнение проверять то, что круговой путь **не может восстановить**.\n\nОбычный приём — **version stamp** (версионная метка): хранить значение вместе со счётчиком, который растёт при каждой записи. `A` с меткой 7 и `A` с меткой 9 — одно значение, но разные пары, поэтому CAS по паре не пройдёт.\n\n```mermaid\nflowchart LR\n  A[\"значение A, stamp 7\"] --> B[\"значение B, stamp 8\"]\n  B --> C[\"значение A, stamp 9\"]\n  C --> D[\"CAS, ожидающий A со stamp 7, не проходит\"]\n```\n\nВ Java это `AtomicStampedReference`, чей CAS сравнивает и ссылку, и stamp.\n\nОстальные способы не хуже:\n\n- **Избегать переиспользуемых identities** — если освобождённый объект или номер больше никогда не выдаётся заново, старое значение не может вернуться.\n- **Взять lock** — защиту взаимного исключения, которая пускает в блок кода по одному потоку. Он нужен, когда защищаешь не одно значение, а invariant по нескольким; тогда CAS по одному слоту всё равно не выразит правило."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A stamp that grows on every write makes the round trip visible.",
+              "ru": "Метка, растущая при каждой записи, делает круговой путь заметным."
+            },
+            "incorrect": {
+              "en": "AtomicStampedReference compares a version stamp along with the value, so A to B to A no longer matches.",
+              "ru": "AtomicStampedReference сравнивает version stamp вместе со значением, поэтому A -> B -> A больше не совпадает."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "AtomicStampedReference — its CAS also compares a version stamp",
+                "ru": "AtomicStampedReference — его CAS сравнивает ещё и version stamp"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A second compareAndSet on the same value",
+                "ru": "Второй compareAndSet по тому же значению"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Repeating the same value check cannot reveal history that the first check missed.",
+                "ru": "Повтор той же проверки значения не откроет историю, которую не увидела первая."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Marking the field volatile",
+                "ru": "Пометить поле как volatile"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "volatile is visibility only; it records nothing about past writes.",
+                "ru": "volatile — это только visibility; он ничего не запоминает о прошлых записях."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "aba-fix-p1-stamp-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A version stamp that increases on every write lets a CAS notice an A to B to A change.",
+            "ru": "Version stamp, растущий при каждой записи, позволяет CAS заметить изменение A -> B -> A."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The value returns, but the stamp never does — so the comparison fails.",
+              "ru": "Значение возвращается, а stamp — никогда, поэтому сравнение не проходит."
+            },
+            "incorrect": {
+              "en": "It does — the value can come back, but the ever-growing stamp cannot.",
+              "ru": "Позволяет — значение может вернуться, а постоянно растущий stamp нет."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "aba-fix-p2-multi-value",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The invariant you need to protect spans more than one value. What is the recommended tool?",
+            "ru": "Invariant, который нужно защитить, охватывает больше одного значения. Какой инструмент рекомендуется?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "A lock can cover the whole rule; a single CAS covers a single slot.",
+              "ru": "Lock может накрыть всё правило; один CAS накрывает один слот."
+            },
+            "incorrect": {
+              "en": "Use a lock — a CAS can only guard one value at a time.",
+              "ru": "Используй lock — CAS может защитить только одно значение за раз."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A lock",
+                "ru": "Lock"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A longer retry loop",
+                "ru": "Более длинный retry loop"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "More retries do not widen what a single CAS is able to compare.",
+                "ru": "Больше повторов не расширяет то, что способен сравнить один CAS."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Two compareAndSet calls in a row",
+                "ru": "Два вызова compareAndSet подряд"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Two CAS calls are still two separate atomic steps, with a gap between them.",
+                "ru": "Два вызова CAS — это всё ещё два отдельных атомарных шага с промежутком между ними."
+              }
+            }
+          ]
+        },
+        {
+          "id": "aba-fix-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each ABA fix to what it does.",
+            "ru": "Соотнеси каждое средство против ABA с тем, что оно делает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Either make the round trip detectable, make it impossible, or step up to a lock.",
+              "ru": "Либо сделай круговой путь заметным, либо невозможным, либо перейди на lock."
+            },
+            "incorrect": {
+              "en": "A stamp reveals the round trip, unique identities prevent it, a lock covers a wider invariant.",
+              "ru": "Stamp обнаруживает круговой путь, уникальные identities его исключают, lock накрывает более широкий invariant."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "AtomicStampedReference",
+                "ru": "AtomicStampedReference"
+              },
+              "right": {
+                "en": "Compares a version stamp along with the value",
+                "ru": "Сравнивает version stamp вместе со значением"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "Avoiding reusable identities",
+                "ru": "Отказ от переиспользуемых identities"
+              },
+              "right": {
+                "en": "The old value can never come back",
+                "ru": "Старое значение уже не может вернуться"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "Taking a lock",
+                "ru": "Взять lock"
+              },
+              "right": {
+                "en": "Guards an invariant spanning several values",
+                "ru": "Защищает invariant по нескольким значениям"
+              }
+            }
+          ]
+        },
+        {
+          "id": "aba-fix-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the extra field and the Java class that carry it.",
+            "ru": "Назови дополнительное поле и Java-класс, который его несёт."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The stamp changes on every write, so an A to B to A round trip stops being invisible.",
+              "ru": "Stamp меняется при каждой записи, поэтому путь A -> B -> A перестаёт быть невидимым."
+            },
+            "incorrect": {
+              "en": "Pair the value with a version stamp; in Java that is AtomicStampedReference.",
+              "ru": "Сопроводи значение version stamp; в Java это AtomicStampedReference."
+            }
+          },
+          "text": {
+            "en": "To catch an A to B to A change, pair the value with a version ___; in Java use ___.",
+            "ru": "Чтобы поймать изменение A -> B -> A, сопроводи значение version ___; в Java используй ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "stamp"
+              ],
+              "ru": [
+                "stamp",
+                "штамп",
+                "метка"
+              ]
+            },
+            {
+              "en": [
+                "AtomicStampedReference"
+              ],
+              "ru": [
+                "AtomicStampedReference"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cas-scope-vs-lock",
+      "title": {
+        "en": "One CAS guards one value",
+        "ru": "Один CAS защищает одно значение"
+      },
+      "summary": {
+        "en": "A single CAS protects one variable or reference; use a lock when several fields must change together or the work blocks.",
+        "ru": "Один CAS защищает одну переменную или ссылку; используй lock, когда несколько полей меняются вместе или работа блокирующая."
+      },
+      "discovery": [
+        {
+          "id": "scope-d1-spot-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This is meant to move 10 units from one account to the other. Why is it not safe?",
+            "ru": "Этот код должен перевести 10 единиц с одного счёта на другой. Почему он небезопасен?"
+          },
+          "code": "AtomicInteger from = new AtomicInteger(100);\nAtomicInteger to   = new AtomicInteger(0);\n\nfrom.compareAndSet(100, 90);\nto.compareAndSet(0, 10);",
+          "codeLang": "java",
+          "reveal": {
+            "en": "A single CAS protects exactly **one variable or reference**. Two CAS calls are two atomic steps, not one — and between them there is a moment when the money has left `from` but has not arrived in `to`.\n\n```mermaid\nflowchart LR\n  A[\"CAS on from: succeeds\"] --> B[\"window: the 10 units exist nowhere\"]\n  B --> C[\"CAS on to: succeeds\"]\n```\n\nAny thread reading both accounts in that window sees a total that is wrong, and if the second CAS fails the state stays broken permanently.\n\nWhen the rule you are protecting is an **invariant across several fields** (\"the sum is constant\"), no per-field CAS can express it. Reach instead for a lock, an immutable holder object swapped by one CAS, or another design. The same applies when the operation must do blocking work such as I/O: a CAS loop has nothing to wait on.",
+            "ru": "Один CAS защищает ровно **одну переменную или ссылку**. Два вызова CAS — это два атомарных шага, а не один, и между ними есть момент, когда деньги уже ушли с `from`, но ещё не пришли на `to`.\n\n```mermaid\nflowchart LR\n  A[\"CAS по from: успешен\"] --> B[\"окно: 10 единиц нет нигде\"]\n  B --> C[\"CAS по to: успешен\"]\n```\n\nЛюбой поток, читающий оба счёта в этом окне, увидит неверную сумму, а если второй CAS не пройдёт, состояние останется сломанным навсегда.\n\nКогда защищаемое правило — это **invariant по нескольким полям** («сумма постоянна»), никакой отдельный CAS его не выразит. Здесь берут lock, неизменяемый holder-объект, заменяемый одним CAS, или другой дизайн. То же самое, когда операция должна выполнить блокирующую работу вроде I/O: CAS-циклу просто нечего ждать."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two atomic steps leave a window where the invariant is broken.",
+              "ru": "Два атомарных шага оставляют окно, в котором invariant нарушен."
+            },
+            "incorrect": {
+              "en": "Each CAS is atomic on its own field, but the transfer as a whole is not atomic.",
+              "ru": "Каждый CAS атомарен по своему полю, но перевод целиком не атомарен."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Two separate CAS calls are two separate steps, so another thread can observe a state where the units left one account but have not reached the other",
+                "ru": "Два отдельных вызова CAS — это два отдельных шага, поэтому другой поток может увидеть состояние, где единицы ушли с одного счёта, но не дошли до другого"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "compareAndSet cannot be used on two different objects",
+                "ru": "compareAndSet нельзя применять к двум разным объектам"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It can — the defect is that the two calls are not one atomic operation.",
+                "ru": "Можно — дефект в том, что два вызова не составляют одну атомарную операцию."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The second call should read `to.get()` as its expected value first",
+                "ru": "Второй вызов должен сначала прочитать `to.get()` как expected"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A fresher expected value would not join the two writes into a single atomic step.",
+                "ru": "Более свежий expected не объединит две записи в один атомарный шаг."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "scope-p1-two-fields-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "One compareAndSet call can atomically update two different fields at once.",
+            "ru": "Один вызов compareAndSet может атомарно обновить сразу два разных поля."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A CAS covers exactly one variable or reference.",
+              "ru": "CAS накрывает ровно одну переменную или ссылку."
+            },
+            "incorrect": {
+              "en": "No — a single CAS protects one variable or reference only.",
+              "ru": "Нет — один CAS защищает только одну переменную или ссылку."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "scope-p2-when-lock",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "When should you prefer a lock over a CAS loop?",
+            "ru": "Когда стоит предпочесть lock, а не CAS loop?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Multi-field invariants and blocking work are outside what one CAS can express.",
+              "ru": "Invariant по нескольким полям и блокирующая работа выходят за пределы одного CAS."
+            },
+            "incorrect": {
+              "en": "Use a lock when several fields must change together, the invariant is complex, or the work blocks.",
+              "ru": "Бери lock, когда несколько полей меняются вместе, invariant сложный или работа блокирующая."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "When the operation must update several fields together or perform blocking work",
+                "ru": "Когда операция должна обновить несколько полей вместе или выполнить блокирующую работу"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "When the value is a number rather than a reference",
+                "ru": "Когда значение — число, а не ссылка"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "CAS works on both; the type of the value is not the deciding factor.",
+                "ru": "CAS работает с обоими; тип значения не является решающим фактором."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Whenever more than one thread reads the value",
+                "ru": "Всякий раз, когда значение читает больше одного потока"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Shared reads alone are not the criterion; what matters is the width of the invariant.",
+                "ru": "Одни только общие чтения не критерий; важна ширина защищаемого invariant."
+              }
+            }
+          ]
+        },
+        {
+          "id": "scope-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each situation to the tool that fits it.",
+            "ru": "Соотнеси каждую ситуацию с подходящим инструментом."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One value, one CAS; a wider rule or blocking work needs a lock.",
+              "ru": "Одно значение — один CAS; более широкое правило или блокирующая работа требуют lock."
+            },
+            "incorrect": {
+              "en": "CAS fits single counters, flags and one-time transitions; locks fit multi-field rules and blocking work.",
+              "ru": "CAS подходит для одиночных счётчиков, флагов и разовых переходов; lock — для правил по нескольким полям и блокирующей работы."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "A single counter or flag",
+                "ru": "Одиночный счётчик или флаг"
+              },
+              "right": {
+                "en": "A CAS on one atomic variable",
+                "ru": "CAS по одной атомарной переменной"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "A one-time state transition",
+                "ru": "Разовый переход состояния"
+              },
+              "right": {
+                "en": "A CAS that can succeed exactly once",
+                "ru": "CAS, который может пройти ровно один раз"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "Three fields that must change together",
+                "ru": "Три поля, которые должны измениться вместе"
+              },
+              "right": {
+                "en": "A lock around a critical section",
+                "ru": "Lock вокруг critical section"
+              }
+            },
+            {
+              "id": "m4",
+              "left": {
+                "en": "Blocking work such as I/O",
+                "ru": "Блокирующая работа вроде I/O"
+              },
+              "right": {
+                "en": "A lock — a retry loop has nothing to wait on",
+                "ru": "Lock — retry loop нечего ждать"
+              }
+            }
+          ]
+        },
+        {
+          "id": "scope-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the scope rule for CAS.",
+            "ru": "Дополни правило о зоне действия CAS."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One slot per CAS; wider invariants need a different tool.",
+              "ru": "Один слот на один CAS; более широкие invariants требуют другого инструмента."
+            },
+            "incorrect": {
+              "en": "A single CAS protects one variable or reference; for several fields use a lock.",
+              "ru": "Один CAS защищает одну переменную или ссылку; для нескольких полей используй lock."
+            }
+          },
+          "text": {
+            "en": "A single CAS protects exactly ___ variable or reference; to change several fields together use a ___.",
+            "ru": "Один CAS защищает ровно ___ переменную или ссылку; чтобы менять несколько полей вместе, используй ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "one",
+                "1"
+              ],
+              "ru": [
+                "одну",
+                "один",
+                "1"
+              ]
+            },
+            {
+              "en": [
+                "lock"
+              ],
+              "ru": [
+                "lock",
+                "блокировку"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "contention-cost",
+      "title": {
+        "en": "CAS under contention",
+        "ru": "CAS при contention"
+      },
+      "summary": {
+        "en": "An uncontended CAS is cheap because nothing blocks, but heavy contention turns retries into wasted CPU.",
+        "ru": "CAS без конкуренции дёшев, потому что ничто не блокируется, но сильный contention превращает повторы в потраченный впустую CPU."
+      },
+      "discovery": [
+        {
+          "id": "contention-d1-many-threads",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Twenty threads hammer the same AtomicInteger with a CAS increment loop. What happens?",
+            "ru": "Двадцать потоков непрерывно бьют по одному AtomicInteger циклом инкремента через CAS. Что произойдёт?"
+          },
+          "reveal": {
+            "en": "**Contention** is several threads competing for the same value at the same time. It decides whether CAS is a bargain or a waste.\n\n- **Uncontended**: the thread reads, computes, and its CAS succeeds on the first try. It never blocks on a monitor, never gets suspended and rescheduled — this is why atomic counters and flags are fast.\n- **Heavily contended**: only one thread wins each round; the others get `false` and run their arithmetic again. Nothing is lost and nothing deadlocks, but the CPU burns cycles on attempts that are thrown away.\n\nSo \"CAS is always faster than a lock\" is a misconception. Under a hot enough contention point, a lock that suspends the losers can beat a crowd of threads spinning through retries.\n\nThe practical advice is to reach for a higher-level class when it expresses the problem directly — for example `ConcurrentHashMap`, which uses fine-grained concurrent mechanics internally — instead of hand-rolling a CAS loop.",
+            "ru": "**Contention** — это когда несколько потоков одновременно борются за одно значение. Именно он решает, выгоден CAS или расточителен.\n\n- **Без конкуренции**: поток читает, вычисляет, и его CAS проходит с первой попытки. Он не блокируется на monitor, его не снимают с процессора и не планируют заново — поэтому атомарные счётчики и флаги быстры.\n- **При сильной конкуренции**: в каждом раунде выигрывает только один поток; остальные получают `false` и заново выполняют свою арифметику. Ничего не теряется и не возникает deadlock, но процессор жжёт такты на попытки, которые выбрасываются.\n\nПоэтому «CAS всегда быстрее lock» — заблуждение. При достаточно горячей точке конкуренции lock, который усыпляет проигравших, может обойти толпу потоков, крутящихся в повторах.\n\nПрактический совет: бери более высокоуровневый класс, если он прямо выражает задачу — например `ConcurrentHashMap`, который внутри использует тонкие concurrent mechanics, — вместо самодельного CAS-цикла."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The losers retry rather than block, and those retries cost CPU.",
+              "ru": "Проигравшие повторяют попытку, а не блокируются, и эти повторы стоят CPU."
+            },
+            "incorrect": {
+              "en": "Most attempts fail and are retried; the work is correct but the CPU cost grows.",
+              "ru": "Большинство попыток не проходит и повторяется; работа корректна, но растёт нагрузка на CPU."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Many CAS attempts fail and are retried, burning CPU",
+                "ru": "Многие попытки CAS не проходят и повторяются, сжигая CPU"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The threads block on a monitor until the value is free",
+                "ru": "Потоки блокируются на monitor, пока значение не освободится"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "CAS never blocks; a losing thread stays runnable and simply tries again.",
+                "ru": "CAS никогда не блокирует; проигравший поток остаётся активным и просто пробует снова."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The JVM automatically switches to a lock",
+                "ru": "JVM автоматически переключается на lock"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no such fallback; choosing a lock is the developer's decision.",
+                "ru": "Такого автоматического перехода нет; выбор lock — решение разработчика."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "contention-p1-faster-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "CAS always makes concurrent code faster than a lock.",
+            "ru": "CAS всегда делает конкурентный код быстрее, чем lock."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Under heavy contention, repeated failed attempts can waste more CPU than blocking would.",
+              "ru": "При сильном contention повторяющиеся неудачные попытки могут тратить больше CPU, чем блокировка."
+            },
+            "incorrect": {
+              "en": "No — under heavy contention many retries waste CPU, and a lock can win.",
+              "ru": "Нет — при сильном contention множество повторов тратит CPU, и lock может оказаться выгоднее."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "contention-p2-why-cheap",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why is an uncontended CAS cheap?",
+            "ru": "Почему CAS без конкуренции дёшев?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "No monitor, no blocking — the update lands on the first attempt.",
+              "ru": "Ни monitor, ни блокировки — обновление проходит с первой попытки."
+            },
+            "incorrect": {
+              "en": "The thread updates the value without ever blocking on a monitor.",
+              "ru": "Поток обновляет значение, ни разу не блокируясь на monitor."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The thread updates the value without blocking on a monitor",
+                "ru": "Поток обновляет значение, не блокируясь на monitor"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It skips the comparison when no other thread is running",
+                "ru": "Он пропускает сравнение, когда других потоков нет"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The comparison always happens; that is the operation itself.",
+                "ru": "Сравнение выполняется всегда; это и есть сама операция."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The JVM caches the result of the previous CAS",
+                "ru": "JVM кэширует результат предыдущего CAS"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no such caching; each call compares and writes for itself.",
+                "ru": "Никакого такого кэширования нет; каждый вызов сам сравнивает и записывает."
+              }
+            }
+          ]
+        },
+        {
+          "id": "contention-p3-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the cost of CAS when many threads compete.",
+            "ru": "Дополни, чего стоит CAS, когда конкурируют многие потоки."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Retries are correct but not free — they consume processor time.",
+              "ru": "Повторы корректны, но не бесплатны — они съедают процессорное время."
+            },
+            "incorrect": {
+              "en": "Under heavy contention, many CAS retries waste CPU.",
+              "ru": "При сильном contention множество повторов CAS тратит CPU."
+            }
+          },
+          "text": {
+            "en": "Under heavy ___, many CAS retries waste ___.",
+            "ru": "При сильном ___ множество повторов CAS тратит ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "contention"
+              ],
+              "ru": [
+                "contention",
+                "конкуренции"
+              ]
+            },
+            {
+              "en": [
+                "CPU",
+                "cpu"
+              ],
+              "ru": [
+                "CPU",
+                "cpu",
+                "процессор"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "strong-vs-weak-cas",
+      "title": {
+        "en": "Strong vs weak CAS",
+        "ru": "Strong и weak CAS"
+      },
+      "summary": {
+        "en": "compareAndSet fails only when the comparison fails; weakCompareAndSet variants may also fail spuriously.",
+        "ru": "compareAndSet не проходит, только если не прошло сравнение; варианты weakCompareAndSet могут дать ещё и spurious failure."
+      },
+      "discovery": [
+        {
+          "id": "weak-d1-what-false-means",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A strong `compareAndSet(expected, update)` returned false. What do you know for certain?",
+            "ru": "Обычный (strong) `compareAndSet(expected, update)` вернул false. Что известно наверняка?"
+          },
+          "reveal": {
+            "en": "The ordinary `compareAndSet` is the **strong** form: `false` is a fact, not noise. It means the current value did not equal `expected` — someone else wrote first. Nothing else can produce a `false`.\n\nThere are also **weak** variants (`weakCompareAndSet...`) that may fail **spuriously**: they can return `false` even though the value did match, because on some hardware the cheaper instruction they use is allowed to give up. In exchange they can be faster.\n\n```mermaid\nflowchart TD\n  A[\"compareAndSet returns false\"] --> B[\"strong: the value definitely changed\"]\n  A --> C[\"weak: changed, or a spurious failure\"]\n```\n\nThat is why weak variants live in specialized retry loops, where an extra pass costs nothing and the loop would re-read anyway. Never use a weak CAS where a single `false` is treated as proof that another thread won.",
+            "ru": "Обычный `compareAndSet` — это **strong**-форма: `false` здесь факт, а не шум. Он означает, что текущее значение не равнялось `expected` — кто-то записал раньше. Ничто другое `false` вызвать не может.\n\nЕсть также **weak**-варианты (`weakCompareAndSet...`), которые могут завершаться **spurious failure**: они возвращают `false`, даже если значение совпадало, потому что на некоторой аппаратуре более дешёвой инструкции разрешено «сдаться». Взамен они бывают быстрее.\n\n```mermaid\nflowchart TD\n  A[\"compareAndSet вернул false\"] --> B[\"strong: значение точно изменилось\"]\n  A --> C[\"weak: изменилось либо spurious failure\"]\n```\n\nПоэтому weak-варианты живут в специализированных retry loops, где лишний проход ничего не стоит и цикл всё равно перечитает значение. Никогда не бери weak CAS там, где единственный `false` трактуется как доказательство, что победил другой поток."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A strong CAS returns false only for one reason: the comparison failed.",
+              "ru": "Strong CAS возвращает false только по одной причине: не прошло сравнение."
+            },
+            "incorrect": {
+              "en": "The current value did not equal expected — a strong CAS has no other failure mode.",
+              "ru": "Текущее значение не равнялось expected — у strong CAS нет других причин неудачи."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The current value did not equal the expected value",
+                "ru": "Текущее значение не равнялось значению expected"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The value equalled expected, but the attempt failed anyway",
+                "ru": "Значение равнялось expected, но попытка всё равно не удалась"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A strong compareAndSet does not fail that way — only the weak variants may.",
+                "ru": "Strong compareAndSet так не завершается — на это способны только weak-варианты."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Another thread currently holds a lock on the variable",
+                "ru": "Другой поток сейчас удерживает lock на переменной"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "CAS takes no lock at all; false reports a value mismatch, not a busy lock.",
+                "ru": "CAS вообще не берёт lock; false сообщает о несовпадении значения, а не о занятой блокировке."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "weak-p1-random-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "`compareAndSet` can randomly fail even when the current value equals the expected value.",
+            "ru": "`compareAndSet` может случайно завершиться неудачей, даже когда текущее значение равно expected."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The strong form fails only on a mismatch; spurious failure belongs to the weak variants.",
+              "ru": "Strong-форма не проходит только при несовпадении; spurious failure — удел weak-вариантов."
+            },
+            "incorrect": {
+              "en": "No — the strong compareAndSet fails only when the comparison fails.",
+              "ru": "Нет — strong compareAndSet не проходит только тогда, когда не прошло сравнение."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "weak-p2-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each form of CAS to how it can fail.",
+            "ru": "Соотнеси каждую форму CAS с тем, как она может завершиться неудачей."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A strong false is evidence; a weak false may be noise.",
+              "ru": "False у strong — это свидетельство; false у weak может быть шумом."
+            },
+            "incorrect": {
+              "en": "compareAndSet fails only on a mismatch; weakCompareAndSet may also fail spuriously.",
+              "ru": "compareAndSet не проходит только при несовпадении; weakCompareAndSet может дать ещё и spurious failure."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "compareAndSet",
+                "ru": "compareAndSet"
+              },
+              "right": {
+                "en": "Fails only when the value does not match",
+                "ru": "Не проходит только при несовпадении значения"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "weakCompareAndSet",
+                "ru": "weakCompareAndSet"
+              },
+              "right": {
+                "en": "May also fail spuriously, in exchange for speed",
+                "ru": "Может дать и spurious failure в обмен на скорость"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "A false from a strong CAS",
+                "ru": "False от strong CAS"
+              },
+              "right": {
+                "en": "Proof that the value had changed",
+                "ru": "Доказательство, что значение изменилось"
+              }
+            }
+          ]
+        },
+        {
+          "id": "weak-p3-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the variant and the kind of failure it allows.",
+            "ru": "Назови вариант и тип неудачи, который он допускает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Those variants belong in loops that would retry anyway.",
+              "ru": "Такие варианты уместны в циклах, которые и так повторили бы попытку."
+            },
+            "incorrect": {
+              "en": "The weak variants may give a spurious failure even when the value matches.",
+              "ru": "Weak-варианты могут дать spurious failure, даже когда значение совпадает."
+            }
+          },
+          "text": {
+            "en": "The ___ variants of CAS may give a ___ failure even when the value matches.",
+            "ru": "Варианты CAS с приставкой ___ могут дать ___ failure, даже когда значение совпадает."
+          },
+          "blanks": [
+            {
+              "en": [
+                "weak",
+                "weakCompareAndSet"
+              ],
+              "ru": [
+                "weak",
+                "weakCompareAndSet"
+              ]
+            },
+            {
+              "en": [
+                "spurious"
+              ],
+              "ru": [
+                "spurious"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cas-end-to-end",
+      "title": {
+        "en": "Putting CAS together",
+        "ru": "Собираем CAS вместе"
+      },
+      "summary": {
+        "en": "The whole picture: a guarded write, a retry from a fresh read, a repeatable body, one value only, and the ABA blind spot.",
+        "ru": "Полная картина: защищённая запись, повтор со свежего чтения, повторяемое тело, только одно значение и слепая зона ABA."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "cap-d1-trace",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Trace this from scratch. What does it print?",
+            "ru": "Проследи всё с нуля. Что напечатает код?"
+          },
+          "code": "AtomicInteger slot = new AtomicInteger(5);\n\nint expected = slot.get();     // T1 reads 5\n\nslot.compareAndSet(5, 6);      // T2: 5 -> 6\nslot.compareAndSet(6, 5);      // T2: 6 -> 5\n\nboolean first  = slot.compareAndSet(expected, 7);   // T1 acts\nboolean second = slot.compareAndSet(expected, 8);   // T1 reuses the same expected\nSystem.out.println(first + \" \" + second + \" \" + slot.get());",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Two separate lessons collide in these four lines.\n\n`first` succeeds because of **ABA**: the slot travelled `5 -> 6 -> 5`, so the comparison against the stale `expected = 5` passes as if nothing had happened, and `7` is written.\n\n`second` fails because the slot now holds `7`, and `expected` is still the never-refreshed `5`. That is the reason a retry always re-reads: reusing an old expected value can only fail from here on.\n\n```mermaid\nflowchart TD\n  R[\"read current as expected\"] --> C[\"CAS(expected, update)\"]\n  C -->|true| D[\"written; side effects go here, once\"]\n  C -->|false| R\n  D --> L[\"one value only: several fields need a lock\"]\n  D --> A[\"value only: A to B to A still passes\"]\n```\n\nThat is the whole model: read, guard the write with the value you read, retry from a *fresh* read on failure, keep the retried body repeatable, and remember that a CAS covers one slot and cannot see history.",
+            "ru": "В этих четырёх строках сталкиваются два разных урока.\n\n`first` проходит из-за **ABA**: слот прошёл путь `5 -> 6 -> 5`, поэтому сравнение с устаревшим `expected = 5` проходит, будто ничего не было, и записывается `7`.\n\n`second` не проходит, потому что в слоте теперь `7`, а `expected` — всё та же ни разу не обновлённая `5`. Именно поэтому повтор всегда перечитывает значение: переиспользование старого expected дальше может только проваливаться.\n\n```mermaid\nflowchart TD\n  R[\"прочитать current как expected\"] --> C[\"CAS(expected, update)\"]\n  C -->|true| D[\"записано; side effects здесь, один раз\"]\n  C -->|false| R\n  D --> L[\"только одно значение: для нескольких полей нужен lock\"]\n  D --> A[\"только значение: A -> B -> A всё равно проходит\"]\n```\n\nВот и вся модель: прочитать, защитить запись прочитанным значением, при неудаче повторить со *свежего* чтения, держать повторяемое тело повторяемым и помнить, что CAS накрывает один слот и не видит историю."
+          },
+          "feedback": {
+            "correct": {
+              "en": "ABA lets the first CAS through; the stale expected then dooms the second.",
+              "ru": "ABA пропускает первый CAS; затем устаревший expected обрекает второй на неудачу."
+            },
+            "incorrect": {
+              "en": "It prints true false 7: the value returned to 5 (ABA), then the stale expected no longer matched 7.",
+              "ru": "Печатается true false 7: значение вернулось к 5 (ABA), а затем устаревший expected уже не совпал с 7."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "true false 7",
+                "ru": "true false 7"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "false false 5",
+                "ru": "false false 5"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The 5 to 6 to 5 round trip restored the value, so the first comparison passed — that is ABA.",
+                "ru": "Путь 5 -> 6 -> 5 восстановил значение, поэтому первое сравнение прошло — это и есть ABA."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "true true 8",
+                "ru": "true true 8"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "After the first CAS the slot holds 7, so the unchanged expected 5 no longer matches.",
+                "ru": "После первого CAS в слоте 7, поэтому неизменившийся expected 5 больше не совпадает."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cap-p1-spot-bug-stale-loop",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This loop should decrement the stock by one. What is the defect?",
+            "ru": "Этот цикл должен уменьшить остаток на единицу. В чём дефект?"
+          },
+          "code": "AtomicInteger stock = new AtomicInteger(10);\n\nint current = stock.get();\nwhile (!stock.compareAndSet(current, current - 1)) {\n    // keep trying until it works\n}",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "The expected value is read once, so after any competing write the loop can never succeed.",
+              "ru": "Expected читается один раз, поэтому после чужой записи цикл уже никогда не пройдёт."
+            },
+            "incorrect": {
+              "en": "`current` is never re-read: once another thread writes, every retry compares against the same stale value.",
+              "ru": "`current` не перечитывается: как только запишет другой поток, каждая попытка сравнивает с одним и тем же устаревшим значением."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "`current` is never re-read, so every retry uses the same stale expected value",
+                "ru": "`current` не перечитывается, поэтому каждая попытка использует один и тот же устаревший expected"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "compareAndSet cannot be used in a while condition",
+                "ru": "compareAndSet нельзя использовать в условии while"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It returns a boolean, so that is valid Java; the defect is the expected value that never changes.",
+                "ru": "Он возвращает boolean, так что это валидная Java; дефект — в expected, который никогда не меняется."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing is wrong: the loop exits as soon as the CAS succeeds",
+                "ru": "Всё в порядке: цикл выйдет, как только CAS пройдёт"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It can never succeed after a competing write, because the expected value is never refreshed.",
+                "ru": "После чужой записи он уже не пройдёт никогда, потому что expected не обновляется."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p2-attempts",
+          "type": "predict_output",
+          "prompt": {
+            "en": "No other thread touches `value`. What does this print?",
+            "ru": "Ни один другой поток не трогает `value`. Что напечатает этот код?"
+          },
+          "code": "AtomicInteger value = new AtomicInteger(0);\nint calls = 0;\n\nwhile (true) {\n    int current = value.get();\n    calls++;\n    if (value.compareAndSet(current, current + 1)) break;\n}\nSystem.out.println(calls);",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "With no competitor the first CAS succeeds, so the body runs exactly once.",
+              "ru": "Без конкурентов первый CAS проходит, поэтому тело выполняется ровно один раз."
+            },
+            "incorrect": {
+              "en": "It prints 1: the body runs once per attempt, and an uncontended CAS succeeds on the first attempt.",
+              "ru": "Печатается 1: тело выполняется на каждую попытку, а CAS без конкуренции проходит с первой."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "1",
+                "ru": "1"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "0",
+                "ru": "0"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The body runs before the CAS is evaluated, so it executes at least once.",
+                "ru": "Тело выполняется до вычисления CAS, поэтому оно отработает как минимум раз."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It cannot be predicted",
+                "ru": "Предсказать невозможно"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Without contention there is nothing to lose a race to: the first CAS always succeeds here.",
+                "ru": "Без contention гонку некому проиграть: первый CAS здесь всегда проходит."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p3-sort-full",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order a complete lock-free update, including its failure path.",
+            "ru": "Расставь по порядку полное lock-free обновление, включая путь неудачи."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Read, compute, guard the write, retry from a fresh read, and do the side effects once at the end.",
+              "ru": "Прочитать, вычислить, защитить запись, повторить со свежего чтения и один раз выполнить side effects в конце."
+            },
+            "incorrect": {
+              "en": "Read, compute, CAS; on false re-read and recompute; on true leave the loop and run side effects once.",
+              "ru": "Прочитать, вычислить, CAS; при false перечитать и пересчитать; при true выйти из цикла и один раз выполнить side effects."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Read the current value and keep it as expected",
+                "ru": "Прочитать текущее значение и сохранить его как expected"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Compute the next value from it, without side effects",
+                "ru": "Вычислить из него следующее значение, без side effects"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Call compareAndSet(expected, next)",
+                "ru": "Вызвать compareAndSet(expected, next)"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "If it returned false, discard the attempt and read again",
+                "ru": "Если вернулся false, отбросить попытку и прочитать снова"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "If it returned true, leave the loop and run the side effects once",
+                "ru": "Если вернулся true, выйти из цикла и один раз выполнить side effects"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p4-match-roles",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each mechanism to its role in a CAS-based update.",
+            "ru": "Соотнеси каждый механизм с его ролью в обновлении на основе CAS."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Each piece covers a different failure mode: staleness, repetition, history, and scope.",
+              "ru": "Каждая часть закрывает свой тип сбоя: устаревание, повтор, историю и зону охвата."
+            },
+            "incorrect": {
+              "en": "false means retry, the body must be repeatable, a stamp catches ABA, a lock covers several fields, volatile is visibility only.",
+              "ru": "false означает повтор, тело должно быть повторяемым, stamp ловит ABA, lock накрывает несколько полей, volatile — только visibility."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "compareAndSet returning false",
+                "ru": "compareAndSet вернул false"
+              },
+              "right": {
+                "en": "Another thread wrote first; retry from a fresh read",
+                "ru": "Другой поток записал первым; повтори со свежего чтения"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "The body of a retry loop",
+                "ru": "Тело retry loop"
+              },
+              "right": {
+                "en": "Must contain only repeatable work",
+                "ru": "Должно содержать только повторяемую работу"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "AtomicStampedReference",
+                "ru": "AtomicStampedReference"
+              },
+              "right": {
+                "en": "Detects an A to B to A change",
+                "ru": "Обнаруживает изменение A -> B -> A"
+              }
+            },
+            {
+              "id": "m4",
+              "left": {
+                "en": "A lock",
+                "ru": "Lock"
+              },
+              "right": {
+                "en": "Guards an invariant spanning several fields",
+                "ru": "Защищает invariant по нескольким полям"
+              }
+            },
+            {
+              "id": "m5",
+              "left": {
+                "en": "volatile",
+                "ru": "volatile"
+              },
+              "right": {
+                "en": "Visibility only, never an atomic update",
+                "ru": "Только visibility, но не атомарное обновление"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p5-fill-answer",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill the key parts of the 60-second answer about CAS.",
+            "ru": "Впиши ключевые части 60-секундного ответа про CAS."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Conditional write, boolean verdict, retry from a fresh read — that is CAS in one line.",
+              "ru": "Условная запись, булев вердикт, повтор со свежего чтения — вот CAS в одну строку."
+            },
+            "incorrect": {
+              "en": "CAS writes only if the current value equals expected, returns true on success and false on failure, and a failed CAS retries from a fresh read.",
+              "ru": "CAS записывает, только если текущее значение равно expected, возвращает true при успехе и false при неудаче, а после неудачи повторяет со свежего чтения."
+            }
+          },
+          "text": {
+            "en": "CAS writes the update only if the current value equals the ___ value, returning ___ on success and ___ on failure; a failed CAS retries from a ___ read.",
+            "ru": "CAS записывает update, только если текущее значение равно значению ___, возвращая ___ при успехе и ___ при неудаче; после неудачи CAS повторяет попытку со ___ чтения."
+          },
+          "blanks": [
+            {
+              "en": [
+                "expected"
+              ],
+              "ru": [
+                "expected"
+              ]
+            },
+            {
+              "en": [
+                "true"
+              ],
+              "ru": [
+                "true"
+              ]
+            },
+            {
+              "en": [
+                "false"
+              ],
+              "ru": [
+                "false"
+              ]
+            },
+            {
+              "en": [
+                "fresh",
+                "new"
+              ],
+              "ru": [
+                "свежего",
+                "нового",
+                "fresh"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1469 @@
+{
+  "schemaVersion": 1,
+  "topicId": "duplicate-sale-prevention",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "duplicate-sources",
+      "title": { "en": "Where the second copy comes from", "ru": "Откуда берётся вторая копия" },
+      "summary": {
+        "en": "The same sale arrives twice because clients, brokers and operators retry correctly, so duplicates have to be stopped on the server.",
+        "ru": "Одна продажа приходит дважды, потому что клиенты, брокеры и операторы повторяют запросы правильно, поэтому дубли останавливают на сервере."
+      },
+      "discovery": [
+        {
+          "id": "sources-d1-lost-response",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A till sends `POST /sales`, the response is lost to a timeout, and the till sends the very same request again. Whose bug is that second delivery?",
+            "ru": "Касса отправляет `POST /sales`, ответ теряется из-за таймаута, и касса отправляет тот же запрос снова. Чей это баг — вторая доставка?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Nobody's — retrying after a lost response is correct behaviour", "ru": "Ничей — повтор после потерянного ответа это корректное поведение" }, "correct": true },
+            { "id": "b", "text": { "en": "The till's — a client must never repeat a request", "ru": "Кассы — клиент не должен повторять запрос" }, "correct": false,
+              "feedback": { "en": "Then a lost response becomes a lost sale; retrying is how the client avoids that.", "ru": "Тогда потерянный ответ станет потерянной продажей; повтор — то, чем клиент этого избегает." } },
+            { "id": "c", "text": { "en": "The network's — a correct network delivers each request exactly once", "ru": "Сети — правильная сеть доставляет каждый запрос ровно один раз" }, "correct": false,
+              "feedback": { "en": "Exactly-once delivery does not exist across a network you do not control.", "ru": "Доставки exactly-once не существует в сети, которую вы не контролируете." } }
+          ],
+          "reveal": {
+            "en": "A **duplicate sale** is one business action recorded twice. It is not produced by broken code — it is what a correct system does when it safely repeats an action:\n\n```mermaid\nflowchart LR\n  A[\"retry after a timeout\"] --> S[\"POST /sales\"]\n  B[\"broker redelivery\"] --> S\n  C[\"double tap / double submit\"] --> S\n  D[\"offline queue re-synced\"] --> S\n  E[\"operator replays a failed batch\"] --> S\n  S --> T[\"sales table\"]\n```\n\nNone of these arrows can be removed. Disabling the button, asking the operator to be careful, hoping the broker delivers once — each lowers the probability; none is a guarantee. Message brokers state this openly: they promise **at-least-once** delivery, meaning the same message can arrive again, and **exactly-once** delivery across a network you do not control does not exist.\n\nSo the design assumes the second copy will arrive and prevents duplicates **on the server** — the only place that sees every attempt.",
+            "ru": "**Дубль продажи** — это одно бизнес-действие, записанное дважды. Его порождает не сломанный код: так ведёт себя корректная система, безопасно повторяя действие:\n\n```mermaid\nflowchart LR\n  A[\"повтор после таймаута\"] --> S[\"POST /sales\"]\n  B[\"повторная доставка брокером\"] --> S\n  C[\"двойное нажатие / двойная отправка\"] --> S\n  D[\"повторная синхронизация офлайн-очереди\"] --> S\n  E[\"оператор переигрывает упавший батч\"] --> S\n  S --> T[\"таблица sales\"]\n```\n\nНи одну из этих стрелок нельзя убрать. Заблокировать кнопку, попросить оператора быть внимательнее, надеяться, что брокер доставит один раз — всё это снижает вероятность, но не даёт гарантии. Брокеры сообщений говорят об этом прямо: они обещают доставку **at-least-once**, то есть то же сообщение может прийти снова, а доставки **exactly-once** в сети, которую вы не контролируете, не существует.\n\nПоэтому дизайн исходит из того, что вторая копия придёт, и предотвращает дубли **на сервере** — там, где видны все попытки."
+          },
+          "feedback": {
+            "correct": { "en": "Right — the retry is correct, so the server must cope with it.", "ru": "Верно — повтор корректен, и справляться с ним должен сервер." },
+            "incorrect": { "en": "The retry is correct behaviour; the duplicate has to be stopped on the server.", "ru": "Повтор — корректное поведение; дубль нужно остановить на сервере." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "sources-p1-guarantee",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which of these guarantees that a sale can never reach the server twice?",
+            "ru": "Что из этого гарантирует, что продажа не сможет прийти на сервер дважды?"
+          },
+          "feedback": {
+            "correct": { "en": "Each measure only lowers the probability; the server still has to expect a second copy.", "ru": "Каждая мера лишь снижает вероятность; сервер всё равно должен ждать вторую копию." },
+            "incorrect": { "en": "None of them is a guarantee — they only reduce the probability of a second delivery.", "ru": "Ни одна не гарантия — они только снижают вероятность второй доставки." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "None of them — each only lowers the probability", "ru": "Ни одна — каждая лишь снижает вероятность" }, "correct": true },
+            { "id": "b", "text": { "en": "Disabling the submit button after the first tap", "ru": "Блокировка кнопки отправки после первого нажатия" }, "correct": false,
+              "feedback": { "en": "The request can still be repeated by a retry, an offline queue or an operator replaying a batch.", "ru": "Запрос всё равно может повториться из-за retry, офлайн-очереди или оператора, переигрывающего батч." } },
+            { "id": "c", "text": { "en": "Asking the operator to never replay a failed batch", "ru": "Просьба к оператору никогда не переигрывать упавший батч" }, "correct": false,
+              "feedback": { "en": "A process instruction is not a technical guarantee — and the batch may legitimately need a replay.", "ru": "Инструкция — не техническая гарантия, а батч может законно требовать повтора." } }
+          ]
+        },
+        {
+          "id": "sources-p2-server-side-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Duplicate sales are prevented on the client, by making sure the client never sends the same request twice.",
+            "ru": "Дубли продаж предотвращаются на клиенте: нужно лишь добиться, чтобы клиент не отправлял один запрос дважды."
+          },
+          "feedback": {
+            "correct": { "en": "The client cannot promise that; the server is the only place that sees every attempt.", "ru": "Клиент этого не может обещать; только сервер видит все попытки." },
+            "incorrect": { "en": "No — retries, redeliveries and re-synced queues are outside the client's control; the guard lives on the server.", "ru": "Нет — повторы, повторные доставки и синхронизация очередей вне контроля клиента; защита живёт на сервере." }
+          },
+          "answer": false
+        },
+        {
+          "id": "sources-p3-word-bank",
+          "type": "word_bank",
+          "prompt": { "en": "Assemble where duplicate sales are prevented.", "ru": "Собери, где предотвращаются дубли продаж." },
+          "feedback": {
+            "correct": { "en": "The server sees every attempt, so that is where identity is enforced.", "ru": "Сервер видит все попытки, поэтому идентичность проверяется там." },
+            "incorrect": { "en": "Duplicates are prevented on the server — no client-side measure is a guarantee.", "ru": "Дубли предотвращаются на сервере — никакая мера на клиенте не является гарантией." }
+          },
+          "tokens": {
+            "en": ["duplicates", "are", "prevented", "on", "the", "server"],
+            "ru": ["дубли", "предотвращаются", "на", "сервере"]
+          },
+          "distractors": {
+            "en": ["client", "device"],
+            "ru": ["клиенте", "устройстве"]
+          }
+        },
+        {
+          "id": "sources-p4-fill-delivery",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the delivery guarantee brokers actually give.", "ru": "Впиши гарантию доставки, которую реально дают брокеры." },
+          "feedback": {
+            "correct": { "en": "Acknowledgement is what retires a message, so an unacked message comes back.", "ru": "Сообщение снимается подтверждением, поэтому неподтверждённое приходит снова." },
+            "incorrect": { "en": "It is at-least-once: the same message can be delivered again.", "ru": "Это at-least-once: то же сообщение может быть доставлено снова." }
+          },
+          "text": {
+            "en": "Kafka and RabbitMQ guarantee ___ delivery, so the same message can arrive again.",
+            "ru": "Kafka и RabbitMQ гарантируют доставку ___, поэтому то же сообщение может прийти снова."
+          },
+          "blanks": [
+            { "en": ["at-least-once", "at least once"], "ru": ["at-least-once", "at least once"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sale-identity",
+      "title": { "en": "The sale's identity", "ru": "Идентичность продажи" },
+      "summary": {
+        "en": "Deduplication starts with a definition of identity: a key minted once per sale on the device and sent unchanged on every attempt.",
+        "ru": "Дедупликация начинается с определения идентичности: ключ создаётся один раз на продажу на устройстве и отправляется неизменным в каждой попытке."
+      },
+      "discovery": [
+        {
+          "id": "identity-d1-what-value",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The server has to decide whether two `POST /sales` requests are the same sale. Which value can answer that reliably?",
+            "ru": "Сервер должен решить, являются ли два запроса `POST /sales` одной продажей. Какое значение может ответить на это надёжно?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "A key the device generated once for that sale and repeats on every attempt", "ru": "Ключ, созданный устройством один раз для этой продажи и повторяемый в каждой попытке" }, "correct": true },
+            { "id": "b", "text": { "en": "A UUID the server generates for each incoming request", "ru": "UUID, который сервер генерирует для каждого входящего запроса" }, "correct": false,
+              "feedback": { "en": "A per-request id is fresh every time, so it makes every duplicate look unique.", "ru": "Id на каждый запрос каждый раз новый, поэтому каждый дубль выглядит уникальным." } },
+            { "id": "c", "text": { "en": "The arrival timestamp of the request", "ru": "Время прихода запроса" }, "correct": false,
+              "feedback": { "en": "Two attempts of one sale arrive at different times, and two different sales can arrive in the same second.", "ru": "Две попытки одной продажи приходят в разное время, а две разные продажи могут прийти в одну секунду." } }
+          ],
+          "reveal": {
+            "en": "Deduplication is not a technique, it is a **definition of identity** — everything else follows from it. There are three candidates:\n\n| Identity | Who assigns it | Verdict |\n| --- | --- | --- |\n| A client-generated key (`saleId`, `Idempotency-Key`) | the device, once, when the sale happens | the default answer |\n| A natural business key (`deviceId` + a per-device sequence number) | the device, implicitly | equally good, and self-auditing |\n| A hash of the request body | nobody — it is derived | wrong |\n\nThe key is minted **once per business action**, on the device, *before* the first send, and repeated unchanged on every attempt — that is exactly what makes attempt #2 recognisable as attempt #2. A `UUID` created by the server inside the request handler cannot do this: it is new on every call, so every duplicate looks like a fresh sale.\n\nThe natural business key is worth noticing: `deviceId` plus a per-device counter is self-auditing, because a gap in the sequence is visible.",
+            "ru": "Дедупликация — это не приём, а **определение идентичности**, и всё остальное следует из него. Кандидатов три:\n\n| Идентичность | Кто её назначает | Вердикт |\n| --- | --- | --- |\n| Ключ от клиента (`saleId`, `Idempotency-Key`) | устройство, один раз, в момент продажи | ответ по умолчанию |\n| Естественный бизнес-ключ (`deviceId` + порядковый номер устройства) | устройство, неявно | не хуже, и сам себя проверяет |\n| Хэш тела запроса | никто — он выводится | неверно |\n\nКлюч создаётся **один раз на бизнес-действие**, на устройстве, *до* первой отправки, и повторяется неизменным в каждой попытке — именно это делает попытку №2 распознаваемой как попытку №2. `UUID`, созданный сервером внутри обработчика, так не может: он новый при каждом вызове, поэтому любой дубль выглядит новой продажей.\n\nЕстественный бизнес-ключ стоит отметить: `deviceId` плюс счётчик устройства сам себя проверяет, потому что пропуск в нумерации заметен."
+          },
+          "feedback": {
+            "correct": { "en": "Identity comes from the business action, not from the handler.", "ru": "Идентичность приходит от бизнес-действия, а не от обработчика." },
+            "incorrect": { "en": "Only a key minted once by the device and repeated on every attempt identifies the sale.", "ru": "Продажу опознаёт только ключ, созданный устройством один раз и повторяемый в каждой попытке." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "identity-p1-who-generates",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In a sales API, who should generate the idempotency key of a sale?",
+            "ru": "Кто должен генерировать ключ идемпотентности продажи в API продаж?"
+          },
+          "feedback": {
+            "correct": { "en": "One key per business action, minted before the first send and reused by every retry.", "ru": "Один ключ на бизнес-действие, созданный до первой отправки и переиспользуемый каждым повтором." },
+            "incorrect": { "en": "The device, once, at the moment of the sale — anything generated per request cannot match a retry.", "ru": "Устройство, один раз, в момент продажи — всё, что создаётся на каждый запрос, не совпадёт с повтором." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "The device, once, at the moment of the sale", "ru": "Устройство, один раз, в момент продажи" }, "correct": true },
+            { "id": "b", "text": { "en": "The server, when the request arrives", "ru": "Сервер, когда запрос приходит" }, "correct": false,
+              "feedback": { "en": "A server-generated id is new on every attempt, so it makes every duplicate unique.", "ru": "Id от сервера новый на каждой попытке, поэтому делает каждый дубль уникальным." } },
+            { "id": "c", "text": { "en": "The database, as an auto-increment id", "ru": "База данных, как auto-increment id" }, "correct": false,
+              "feedback": { "en": "The row is created per insert, so a duplicate insert simply gets the next number.", "ru": "Строка создаётся на каждый insert, поэтому дубль просто получит следующий номер." } }
+          ]
+        },
+        {
+          "id": "identity-p2-match-candidates",
+          "type": "match_pairs",
+          "prompt": { "en": "Match each candidate identity for a sale with its verdict.", "ru": "Соотнеси каждого кандидата на идентичность продажи с вердиктом." },
+          "feedback": {
+            "correct": { "en": "Identity must be assigned once by the business action, not derived or re-generated.", "ru": "Идентичность назначается один раз бизнес-действием, а не выводится и не генерируется заново." },
+            "incorrect": { "en": "A client key or deviceId + sequence identifies a sale; a body hash and a per-request UUID do not.", "ru": "Продажу опознают ключ клиента или deviceId + номер; хэш тела и UUID на запрос — нет." }
+          },
+          "pairs": [
+            { "id": "client-key", "left": { "en": "A key the device generates once per sale", "ru": "Ключ, созданный устройством один раз на продажу" }, "right": { "en": "The default identity for deduplication", "ru": "Идентичность по умолчанию для дедупликации" } },
+            { "id": "device-sequence", "left": { "en": "deviceId + a per-device sequence number", "ru": "deviceId + порядковый номер устройства" }, "right": { "en": "A natural business key, equally good and self-auditing", "ru": "Естественный бизнес-ключ, не хуже и сам себя проверяет" } },
+            { "id": "payload-hash", "left": { "en": "A hash of the request body", "ru": "Хэш тела запроса" }, "right": { "en": "Not an identity: nobody assigns it, it is derived", "ru": "Не идентичность: её никто не назначает, она выводится" } },
+            { "id": "server-uuid", "left": { "en": "A UUID the server generates per request", "ru": "UUID, который сервер генерирует на каждый запрос" }, "right": { "en": "Useless for dedup: it is new on every attempt", "ru": "Бесполезен для дедупликации: он новый на каждой попытке" } }
+          ]
+        },
+        {
+          "id": "identity-p3-fill-header",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the missing header name and the missing word.", "ru": "Впиши имя заголовка и пропущенное слово." },
+          "feedback": {
+            "correct": { "en": "One key per business action, carried unchanged by every attempt.", "ru": "Один ключ на бизнес-действие, неизменно переносимый каждой попыткой." },
+            "incorrect": { "en": "The header is `Idempotency-Key`, and the key is minted once per sale.", "ru": "Заголовок — `Idempotency-Key`, а ключ создаётся один раз на продажу." }
+          },
+          "text": {
+            "en": "A client-generated dedup key travels in the HTTP header `___-Key`, and it is minted ___ per sale.",
+            "ru": "Ключ дедупликации от клиента передаётся в HTTP-заголовке `___-Key` и создаётся ___ на продажу."
+          },
+          "blanks": [
+            { "en": ["Idempotency", "idempotency"], "ru": ["Idempotency", "idempotency"] },
+            { "en": ["once", "one time"], "ru": ["один раз", "однажды", "единожды"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "payload-hash-trap",
+      "title": { "en": "Why not a hash of the payload", "ru": "Почему не хэш тела запроса" },
+      "summary": {
+        "en": "Two identical purchases are two sales, so deduplicating by a hash of the request body silently deletes real revenue.",
+        "ru": "Две одинаковые покупки — это две продажи, поэтому дедупликация по хэшу тела запроса молча удаляет настоящую выручку."
+      },
+      "discovery": [
+        {
+          "id": "hash-d1-two-customers",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The server deduplicates by a SHA-256 hash of the request body. Two different customers buy the same latte for the same price, one second apart. What happens to the second request?",
+            "ru": "Сервер дедуплицирует по SHA-256 хэшу тела запроса. Два разных покупателя берут один и тот же латте по одной цене с разницей в секунду. Что произойдёт со вторым запросом?"
+          },
+          "code": "// dedup key = sha256(request body)\n09:15:02  POST /sales  {\"item\":\"latte\",\"amount\":350}   -> stored\n09:15:03  POST /sales  {\"item\":\"latte\",\"amount\":350}   -> ?",
+          "codeLang": "text",
+          "options": [
+            { "id": "a", "text": { "en": "It is treated as a duplicate, and a real sale disappears from the takings", "ru": "Он считается дублем, и настоящая продажа исчезает из выручки" }, "correct": true },
+            { "id": "b", "text": { "en": "It is stored, because the two requests arrived at different times", "ru": "Он сохраняется, потому что запросы пришли в разное время" }, "correct": false,
+              "feedback": { "en": "The hash covers the body only; identical bodies hash identically no matter when they arrive.", "ru": "Хэш считается только по телу; одинаковые тела дают одинаковый хэш, когда бы они ни пришли." } },
+            { "id": "c", "text": { "en": "It gets 409 Conflict, so the cashier can decide what to do", "ru": "Он получит 409 Conflict, и кассир решит, что делать" }, "correct": false,
+              "feedback": { "en": "Nothing tells the server these bodies belong to different sales, so no conflict is detected.", "ru": "Ничто не говорит серверу, что эти тела относятся к разным продажам, поэтому конфликт не обнаруживается." } }
+          ],
+          "reveal": {
+            "en": "**Content equality is not identity.** The one-sentence version is worth memorising: *two customers buying the same coffee for the same price at the same second are two sales, not one.*\n\nA payload hash catches the retry, and it catches the next customer's real sale with it — which then quietly vanishes from the takings. Nothing logs an error, nothing looks broken, and revenue is simply lower than it should be. **A guard that deletes revenue is worse than the duplicate it prevented**, because a duplicate leaves a row you can find and correct, while a discarded sale leaves nothing at all.\n\nThe only case where hashing the body behaves is when the body already carries the sale's own key — but then you are deduplicating by that identity, and the hash adds nothing except a new risk: any unrelated field that changes between attempts makes a genuine retry look like a new sale.",
+            "ru": "**Равенство содержимого не является идентичностью.** Формулировку в одну фразу стоит запомнить: *два покупателя, купившие один и тот же кофе по одной цене в одну и ту же секунду, — это две продажи, а не одна.*\n\nХэш тела поймает повтор, а вместе с ним и настоящую продажу следующего покупателя, которая затем тихо исчезнет из выручки. Ошибка не логируется, ничто не выглядит сломанным, просто выручка меньше, чем должна быть. **Защита, которая удаляет выручку, хуже дубля, который она предотвратила**, потому что от дубля остаётся строка, которую можно найти и исправить, а от выброшенной продажи не остаётся ничего.\n\nЕдинственный случай, когда хэш тела ведёт себя нормально, — когда тело уже несёт собственный ключ продажи. Но тогда вы дедуплицируете по этой идентичности, и хэш ничего не добавляет, кроме нового риска: любое постороннее поле, изменившееся между попытками, превратит настоящий повтор в новую продажу."
+          },
+          "feedback": {
+            "correct": { "en": "Identical bodies, different sales — the guard discards one of them.", "ru": "Одинаковые тела, разные продажи — защита выбрасывает одну из них." },
+            "incorrect": { "en": "The bodies are identical, so the hash matches and a real second sale is dropped.", "ru": "Тела одинаковые, поэтому хэш совпадает и настоящая вторая продажа теряется." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "hash-p1-why-worse",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why is deduplicating sales by a hash of the request body considered worse than the duplicate it prevents?",
+            "ru": "Почему дедупликация продаж по хэшу тела запроса считается хуже дубля, который она предотвращает?"
+          },
+          "feedback": {
+            "correct": { "en": "A duplicate is findable and repairable; a discarded sale leaves no trace.", "ru": "Дубль можно найти и исправить; выброшенная продажа не оставляет следов." },
+            "incorrect": { "en": "It silently discards a real second sale, and a lost sale leaves nothing to find later.", "ru": "Она молча выбрасывает настоящую вторую продажу, а потерянную продажу потом не найти." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "It silently deletes a real second sale from the takings", "ru": "Она молча удаляет настоящую вторую продажу из выручки" }, "correct": true },
+            { "id": "b", "text": { "en": "Hashing every request body is too slow for a sales endpoint", "ru": "Хэшировать каждое тело запроса слишком медленно для эндпоинта продаж" }, "correct": false,
+              "feedback": { "en": "Cost is not the objection; discarding real sales is.", "ru": "Возражение не в стоимости, а в выбрасывании настоящих продаж." } },
+            { "id": "c", "text": { "en": "Hash collisions between different payloads are too likely", "ru": "Коллизии хэшей разных тел слишком вероятны" }, "correct": false,
+              "feedback": { "en": "The problem is not accidental collisions but genuinely identical sales.", "ru": "Проблема не в случайных коллизиях, а в реально одинаковых продажах." } }
+          ]
+        },
+        {
+          "id": "hash-p2-identical-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Two sale requests with byte-identical bodies always describe the same sale.",
+            "ru": "Два запроса на продажу с побайтово одинаковыми телами всегда описывают одну и ту же продажу."
+          },
+          "feedback": {
+            "correct": { "en": "Identical contents can be two genuine purchases; identity has to be assigned, not derived.", "ru": "Одинаковое содержимое может быть двумя реальными покупками; идентичность назначают, а не выводят." },
+            "incorrect": { "en": "No — two customers can buy the same item at the same price; that is two sales.", "ru": "Нет — два покупателя могут купить один товар по одной цене; это две продажи." }
+          },
+          "answer": false
+        },
+        {
+          "id": "hash-p3-word-bank",
+          "type": "word_bank",
+          "prompt": { "en": "Assemble the rule that rules out a payload hash.", "ru": "Собери правило, которое исключает хэш тела запроса." },
+          "feedback": {
+            "correct": { "en": "Identity is assigned to an action; content is just what the action carried.", "ru": "Идентичность назначается действию; содержимое — лишь то, что действие несло." },
+            "incorrect": { "en": "Content equality is not identity — identical bodies can be two different sales.", "ru": "Равенство содержимого не является идентичностью — одинаковые тела могут быть двумя продажами." }
+          },
+          "tokens": {
+            "en": ["content", "equality", "is", "not", "identity"],
+            "ru": ["равенство", "содержимого", "не", "является", "идентичностью"]
+          },
+          "distractors": {
+            "en": ["hash", "body"],
+            "ru": ["хэш", "тела"]
+          }
+        },
+        {
+          "id": "hash-p4-fill-two",
+          "type": "fill_blank",
+          "prompt": { "en": "Complete the one-sentence argument.", "ru": "Дополни аргумент в одну фразу." },
+          "feedback": {
+            "correct": { "en": "That sentence is the whole objection to hashing the payload.", "ru": "Эта фраза и есть всё возражение против хэша тела." },
+            "incorrect": { "en": "They are two sales — identical contents do not merge two purchases into one.", "ru": "Это две продажи — одинаковое содержимое не сливает две покупки в одну." }
+          },
+          "text": {
+            "en": "Two customers buying the same item at the same price in the same second are ___ sales, not one.",
+            "ru": "Два покупателя, купившие один товар по одной цене в одну секунду, — это ___ продажи, а не одна."
+          },
+          "blanks": [
+            { "en": ["two", "2"], "ru": ["две", "2"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "check-then-insert-race",
+      "title": { "en": "\"Check, then insert\" is not a guard", "ru": "«Проверить, потом вставить» — не защита" },
+      "summary": {
+        "en": "SELECT-then-INSERT is a check-then-act race: two overlapping deliveries both see no row and both insert.",
+        "ru": "SELECT, а потом INSERT — это гонка check-then-act: две пересекающиеся доставки обе видят «строк нет» и обе вставляют."
+      },
+      "discovery": [
+        {
+          "id": "race-d1-spot-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This endpoint is meant to register each sale exactly once. What is wrong with it?",
+            "ru": "Этот эндпоинт должен регистрировать каждую продажу ровно один раз. Что с ним не так?"
+          },
+          "code": "@PostMapping(\"/sales\")\npublic Receipt register(@RequestBody Sale sale) {\n    if (!salesRepository.existsBySaleId(sale.saleId())) {   // 1. check\n        salesRepository.save(sale);                         // 2. act\n    }\n    return receiptFor(sale.saleId());\n}",
+          "codeLang": "java",
+          "options": [
+            { "id": "a", "text": { "en": "Two overlapping requests can both pass the check before either one saves", "ru": "Два пересекающихся запроса могут оба пройти проверку раньше, чем хоть один сохранит" }, "correct": true },
+            { "id": "b", "text": { "en": "It forgets to catch the exception that save() throws on a duplicate", "ru": "Он забывает поймать исключение, которое save() бросает на дубле" }, "correct": false,
+              "feedback": { "en": "Nothing throws here — the defect is that the check and the write are two separate operations.", "ru": "Здесь ничего не бросается — дефект в том, что проверка и запись это две отдельные операции." } },
+            { "id": "c", "text": { "en": "Nothing is wrong: existsBySaleId covers the duplicate case", "ru": "Всё в порядке: existsBySaleId покрывает случай дубля" }, "correct": false,
+              "feedback": { "en": "It covers duplicates that arrive one after another; overlapping deliveries both read \"no row\".", "ru": "Он покрывает дубли, приходящие по очереди; пересекающиеся доставки обе читают «строк нет»." } }
+          ],
+          "reveal": {
+            "en": "Almost everyone writes this first, and it passes every test written for it, because tests send requests one at a time. Two overlapping deliveries defeat it:\n\n```mermaid\nsequenceDiagram\n  participant A as instance A\n  participant B as instance B\n  participant DB as sales\n  A->>DB: SELECT ... WHERE sale_id = 'sale-1'\n  DB-->>A: no row\n  B->>DB: SELECT ... WHERE sale_id = 'sale-1'\n  DB-->>B: no row\n  A->>DB: INSERT sale-1\n  B->>DB: INSERT sale-1\n  Note over DB: two rows, one sale\n```\n\nThis is an ordinary **check-then-act race**: between the check and the act the world changes. It needs no bad luck and no second server — two threads in one instance, or one instance plus a retry from a scheduler, are enough.\n\nA higher isolation level does not rescue it either: under **MVCC** (multi-version concurrency control) each transaction reads its own snapshot of the data, so neither `SELECT` can see the other's uncommitted row. The rule is the one behind compare-and-set: **the check and the write have to be a single indivisible operation.**",
+            "ru": "Почти все пишут сначала именно это, и оно проходит все написанные для него тесты, потому что тесты шлют запросы по одному. Две пересекающиеся доставки его ломают:\n\n```mermaid\nsequenceDiagram\n  participant A as инстанс A\n  participant B as инстанс B\n  participant DB as sales\n  A->>DB: SELECT ... WHERE sale_id = 'sale-1'\n  DB-->>A: строк нет\n  B->>DB: SELECT ... WHERE sale_id = 'sale-1'\n  DB-->>B: строк нет\n  A->>DB: INSERT sale-1\n  B->>DB: INSERT sale-1\n  Note over DB: две строки, одна продажа\n```\n\nЭто обычная гонка **check-then-act**: между проверкой и действием мир меняется. Для неё не нужно ни невезения, ни второго сервера — достаточно двух потоков в одном инстансе или одного инстанса и повтора от планировщика.\n\nПовышение уровня изоляции тоже не спасает: при **MVCC** (многоверсионном управлении конкурентным доступом) каждая транзакция читает свой снимок данных, поэтому ни один `SELECT` не видит незакоммиченную строку другого. Правило то же, что за compare-and-set: **проверка и запись должны быть одной неделимой операцией.**"
+          },
+          "feedback": {
+            "correct": { "en": "A check that is not the write is not a guard.", "ru": "Проверка, которая не является записью, — не защита." },
+            "incorrect": { "en": "The check and the write are separate, so two overlapping requests both pass the check.", "ru": "Проверка и запись раздельны, поэтому два пересекающихся запроса оба проходят проверку." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "race-p1-single-instance-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "\"If the row does not exist, insert it\" becomes a safe duplicate guard as soon as the service runs on a single instance.",
+            "ru": "«Если строки нет, вставить» становится безопасной защитой от дублей, как только сервис работает в одном инстансе."
+          },
+          "feedback": {
+            "correct": { "en": "Two threads in one instance, or one instance plus a scheduler retry, race exactly the same way.", "ru": "Два потока в одном инстансе или инстанс плюс повтор от планировщика гоняются точно так же." },
+            "incorrect": { "en": "No — the race only needs overlap, and two threads in one process provide it.", "ru": "Нет — гонке нужно лишь пересечение во времени, а его дают два потока в одном процессе." }
+          },
+          "answer": false
+        },
+        {
+          "id": "race-p2-mvcc",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why doesn't a higher transaction isolation level rescue a SELECT-then-INSERT duplicate check?",
+            "ru": "Почему повышение уровня изоляции не спасает проверку «SELECT, потом INSERT»?"
+          },
+          "feedback": {
+            "correct": { "en": "Snapshots hide the other transaction's uncommitted row, so both readers see \"absent\".", "ru": "Снимки скрывают незакоммиченную строку другой транзакции, поэтому оба читателя видят «нет»." },
+            "incorrect": { "en": "Under MVCC each transaction reads its own snapshot, so neither SELECT sees the other's uncommitted row.", "ru": "При MVCC каждая транзакция читает свой снимок, поэтому ни один SELECT не видит незакоммиченную строку другого." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Under MVCC each transaction reads its own snapshot of the data", "ru": "При MVCC каждая транзакция читает свой снимок данных" }, "correct": true },
+            { "id": "b", "text": { "en": "Because the SELECT runs outside any transaction", "ru": "Потому что SELECT выполняется вне транзакции" }, "correct": false,
+              "feedback": { "en": "Even inside one transaction, the reader still sees a snapshot without the other's uncommitted row.", "ru": "Даже внутри транзакции читатель видит снимок без незакоммиченной строки другого." } },
+            { "id": "c", "text": { "en": "Because isolation levels apply to updates only, not to inserts", "ru": "Потому что уровни изоляции действуют только на update, а не на insert" }, "correct": false,
+              "feedback": { "en": "Isolation covers inserts too; the problem is that two statements are not one operation.", "ru": "Изоляция действует и на insert; проблема в том, что два оператора — не одна операция." } }
+          ]
+        },
+        {
+          "id": "race-p3-sort-timeline",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the events that turn one sale into two rows with a SELECT-then-INSERT guard.",
+            "ru": "Расставь по порядку события, превращающие одну продажу в две строки при защите «SELECT, потом INSERT»."
+          },
+          "feedback": {
+            "correct": { "en": "Both checks happen before either write — that gap is the whole defect.", "ru": "Обе проверки происходят раньше любой записи — этот зазор и есть весь дефект." },
+            "incorrect": { "en": "Both instances read \"no row\" first, and only then do both inserts run.", "ru": "Сначала оба инстанса читают «строк нет», и только потом выполняются оба insert." }
+          },
+          "steps": [
+            { "id": "s1", "text": { "en": "Instance A: SELECT sale-1 — no row", "ru": "Инстанс A: SELECT sale-1 — строк нет" } },
+            { "id": "s2", "text": { "en": "Instance B: SELECT sale-1 — no row", "ru": "Инстанс B: SELECT sale-1 — строк нет" } },
+            { "id": "s3", "text": { "en": "Instance A: INSERT sale-1", "ru": "Инстанс A: INSERT sale-1" } },
+            { "id": "s4", "text": { "en": "Instance B: INSERT sale-1 — a second row for one sale", "ru": "Инстанс B: INSERT sale-1 — вторая строка для одной продажи" } }
+          ]
+        },
+        {
+          "id": "race-p4-fill-indivisible",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the missing word.", "ru": "Впиши пропущенное слово." },
+          "feedback": {
+            "correct": { "en": "That is the same rule that makes compare-and-set work.", "ru": "Это то же правило, благодаря которому работает compare-and-set." },
+            "incorrect": { "en": "The check must be the write: one indivisible operation, not two statements.", "ru": "Проверка должна быть записью: одна неделимая операция, а не два оператора." }
+          },
+          "text": {
+            "en": "A duplicate check is a guard only when the check and the ___ are a single indivisible operation.",
+            "ru": "Проверка на дубль является защитой только тогда, когда проверка и ___ — одна неделимая операция."
+          },
+          "blanks": [
+            { "en": ["write", "insert"], "ru": ["запись", "insert", "вставка"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "unique-constraint",
+      "title": { "en": "Let the database enforce identity", "ru": "Пусть идентичность обеспечивает база" },
+      "summary": {
+        "en": "A UNIQUE constraint on the identity column makes the database arbitrate the race, so the check becomes the write.",
+        "ru": "Ограничение UNIQUE на колонке идентичности заставляет базу разрешать гонку, и проверка становится записью."
+      },
+      "discovery": [
+        {
+          "id": "unique-d1-two-inserts",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The sales table has `UNIQUE (sale_id)`. Two instances insert the same `sale_id` at the same moment. What happens?",
+            "ru": "На таблице sales стоит `UNIQUE (sale_id)`. Два инстанса вставляют один и тот же `sale_id` в один момент. Что произойдёт?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Exactly one INSERT succeeds; the other fails with a constraint violation", "ru": "Ровно один INSERT проходит; другой падает с нарушением ограничения" }, "correct": true },
+            { "id": "b", "text": { "en": "Both succeed, and the table ends up with two rows", "ru": "Проходят оба, и в таблице оказываются две строки" }, "correct": false,
+              "feedback": { "en": "The unique index makes that impossible — the second row cannot be committed.", "ru": "Уникальный индекс делает это невозможным — вторую строку нельзя закоммитить." } },
+            { "id": "c", "text": { "en": "Both fail, and the sale is lost", "ru": "Падают оба, и продажа теряется" }, "correct": false,
+              "feedback": { "en": "One of them wins; only the loser sees the violation.", "ru": "Один из них выигрывает; нарушение видит только проигравший." } }
+          ],
+          "reveal": {
+            "en": "Move the check into the one place that can serialise it — the table itself:\n\n```sql\nALTER TABLE sales ADD CONSTRAINT uq_sales_sale_id UNIQUE (sale_id);\n```\n\nNow the check *is* the write. The database refuses the second row for you, atomically, no matter how many threads or instances race:\n\n```mermaid\nflowchart LR\n  A[\"instance A: INSERT sale-1\"] --> U[\"UNIQUE (sale_id)\"]\n  B[\"instance B: INSERT sale-1\"] --> U\n  U --> W[\"one row committed\"]\n  U --> L[\"SQLState 23505 for the loser\"]\n```\n\nA rejected insert reports **SQLState `23505`** (unique violation) — that code is how your code learns it lost the race. The constraint is backed by a **unique index**, so looking a key up stays cheap: you are not paying extra for the guard.\n\nRaising isolation to `SERIALIZABLE` instead is not a substitute. It converts the duplicate into a serialization failure that you must catch and retry — so you still want the constraint, and now you have paid for the same guarantee twice.",
+            "ru": "Перенесите проверку туда, где её можно сериализовать, — в саму таблицу:\n\n```sql\nALTER TABLE sales ADD CONSTRAINT uq_sales_sale_id UNIQUE (sale_id);\n```\n\nТеперь проверка *и есть* запись. База сама, атомарно, откажет второй строке, сколько бы потоков и инстансов ни соревновалось:\n\n```mermaid\nflowchart LR\n  A[\"инстанс A: INSERT sale-1\"] --> U[\"UNIQUE (sale_id)\"]\n  B[\"инстанс B: INSERT sale-1\"] --> U\n  U --> W[\"одна строка закоммичена\"]\n  U --> L[\"SQLState 23505 проигравшему\"]\n```\n\nОтклонённая вставка сообщает **SQLState `23505`** (нарушение уникальности) — по этому коду ваш код узнаёт, что проиграл гонку. Ограничение опирается на **уникальный индекс**, поэтому поиск ключа остаётся дешёвым: за защиту вы не переплачиваете.\n\nПовышение изоляции до `SERIALIZABLE` — не замена. Оно превращает дубль в ошибку сериализации, которую надо ловить и повторять, так что ограничение всё равно нужно, а за одну и ту же гарантию вы заплатили дважды."
+          },
+          "feedback": {
+            "correct": { "en": "The database serialises the race for you — application code cannot lose it.", "ru": "База сериализует гонку за вас — код приложения проиграть её не может." },
+            "incorrect": { "en": "The unique index lets exactly one insert commit; the loser gets SQLState 23505.", "ru": "Уникальный индекс пропускает ровно одну вставку; проигравший получает SQLState 23505." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "unique-p1-what-it-gives",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does a UNIQUE constraint on sale_id give you that an application-level existence check cannot?",
+            "ru": "Что даёт ограничение UNIQUE на sale_id, чего не может проверка существования на уровне приложения?"
+          },
+          "feedback": {
+            "correct": { "en": "The database is the one place that can make the check and the write indivisible.", "ru": "База — единственное место, где проверка и запись становятся неделимыми." },
+            "incorrect": { "en": "It makes the check and the write one indivisible operation that the database serialises.", "ru": "Она делает проверку и запись одной неделимой операцией, которую сериализует база." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "The check and the write become one indivisible operation", "ru": "Проверка и запись становятся одной неделимой операцией" }, "correct": true },
+            { "id": "b", "text": { "en": "Faster lookups of sale_id", "ru": "Более быстрый поиск по sale_id" }, "correct": false,
+              "feedback": { "en": "The backing index does help lookups, but speed is not what stops the race.", "ru": "Индекс действительно ускоряет поиск, но гонку останавливает не скорость." } },
+            { "id": "c", "text": { "en": "It stops the client from retrying the request", "ru": "Она мешает клиенту повторять запрос" }, "correct": false,
+              "feedback": { "en": "Clients keep retrying; the constraint is what makes the retry harmless.", "ru": "Клиенты продолжают повторять; ограничение делает повтор безвредным." } }
+          ]
+        },
+        {
+          "id": "unique-p2-serializable-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Setting the isolation level to SERIALIZABLE removes the need for a UNIQUE constraint on sale_id.",
+            "ru": "Уровень изоляции SERIALIZABLE снимает необходимость в ограничении UNIQUE на sale_id."
+          },
+          "reveal": {
+            "en": "`SERIALIZABLE` does not make the duplicate disappear — it turns it into a **serialization failure**: one transaction is aborted and your code has to catch that error and retry the request. You now handle an extra error path, pay the concurrency cost of the strictest isolation level, and still want the `UNIQUE` constraint as the thing that actually defines identity in the schema. That is why the constraint is the primary guard and isolation is not a replacement for it.",
+            "ru": "`SERIALIZABLE` не заставляет дубль исчезнуть — он превращает его в **ошибку сериализации**: одна транзакция откатывается, и ваш код обязан поймать эту ошибку и повторить запрос. В итоге вы обрабатываете дополнительную ветку ошибок, платите за самый строгий уровень изоляции и всё равно хотите ограничение `UNIQUE` как то, что действительно задаёт идентичность в схеме. Поэтому основная защита — ограничение, а изоляция ему не замена."
+          },
+          "feedback": {
+            "correct": { "en": "It only converts the duplicate into a serialization failure you must catch and retry.", "ru": "Он лишь превращает дубль в ошибку сериализации, которую надо ловить и повторять." },
+            "incorrect": { "en": "No — you still want the constraint, and now you have paid for the guarantee twice.", "ru": "Нет — ограничение всё равно нужно, а за гарантию вы заплатили дважды." }
+          },
+          "answer": false
+        },
+        {
+          "id": "unique-p3-fill-sqlstate",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the SQLState of a unique violation.", "ru": "Впиши SQLState нарушения уникальности." },
+          "feedback": {
+            "correct": { "en": "That code is how the losing insert learns it lost.", "ru": "По этому коду проигравшая вставка узнаёт, что проиграла." },
+            "incorrect": { "en": "It is 23505 — the unique-violation SQLState in PostgreSQL.", "ru": "Это 23505 — SQLState нарушения уникальности в PostgreSQL." }
+          },
+          "text": {
+            "en": "In PostgreSQL, an INSERT rejected by a UNIQUE constraint reports SQLState ___.",
+            "ru": "В PostgreSQL INSERT, отклонённый ограничением UNIQUE, сообщает SQLState ___."
+          },
+          "blanks": [
+            { "en": ["23505"], "ru": ["23505"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "insert-vs-upsert",
+      "title": { "en": "Two ways to write it", "ru": "Два способа записи" },
+      "summary": {
+        "en": "Either insert and catch the unique violation, or upsert with ON CONFLICT DO NOTHING, where 0 affected rows means \"already there\".",
+        "ru": "Либо вставлять и ловить нарушение уникальности, либо upsert с ON CONFLICT DO NOTHING, где 0 затронутых строк означает «уже есть»."
+      },
+      "discovery": [
+        {
+          "id": "write-d1-upsert",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The row for `sale-1` is already in the table. What does this statement do?",
+            "ru": "Строка для `sale-1` уже есть в таблице. Что сделает этот оператор?"
+          },
+          "code": "INSERT INTO sales (sale_id, device_id, item, amount)\nVALUES ('sale-1', 'till-7', 'latte', 350)\nON CONFLICT (sale_id) DO NOTHING;",
+          "codeLang": "sql",
+          "options": [
+            { "id": "a", "text": { "en": "Affects 0 rows and raises no error", "ru": "Затрагивает 0 строк и не вызывает ошибки" }, "correct": true },
+            { "id": "b", "text": { "en": "Raises a unique violation", "ru": "Вызывает нарушение уникальности" }, "correct": false,
+              "feedback": { "en": "That is the plain INSERT; ON CONFLICT DO NOTHING swallows the conflict instead.", "ru": "Так делает обычный INSERT; ON CONFLICT DO NOTHING вместо этого проглатывает конфликт." } },
+            { "id": "c", "text": { "en": "Overwrites the stored row with the new values", "ru": "Перезаписывает сохранённую строку новыми значениями" }, "correct": false,
+              "feedback": { "en": "DO NOTHING leaves the stored row untouched — that is exactly the point.", "ru": "DO NOTHING оставляет сохранённую строку нетронутой — в этом и смысл." } }
+          ],
+          "reveal": {
+            "en": "With the constraint in place, pick one of two writes:\n\n```sql\n-- 1. Insert and handle the violation: you learn whether you won.\nINSERT INTO sales (sale_id, device_id, item, amount) VALUES (?, ?, ?, ?);\n-- on SQLState 23505 -> load the existing row and return its stored response\n\n-- 2. Upsert: one statement, no exception; 0 affected rows means \"already there\".\nINSERT INTO sales (sale_id, device_id, item, amount) VALUES (?, ?, ?, ?)\nON CONFLICT (sale_id) DO NOTHING;\n```\n\nBoth are correct, and both rely on the same `UNIQUE` constraint — the difference is purely ergonomic. The upsert keeps an exception off the normal path; the explicit `INSERT` makes it easy to tell \"I registered it\" from \"it was already there\", which you need whenever the two answers differ (`201 Created` for the first attempt, `200 OK` with the original receipt for a repeat).\n\nWhat is *not* on this list is `SELECT`, then `INSERT` if absent: that one is not a write with a guard, it is two statements with a gap.",
+            "ru": "Когда ограничение на месте, выберите один из двух вариантов записи:\n\n```sql\n-- 1. Вставить и обработать нарушение: вы узнаете, выиграли ли вы.\nINSERT INTO sales (sale_id, device_id, item, amount) VALUES (?, ?, ?, ?);\n-- при SQLState 23505 -> прочитать существующую строку и вернуть сохранённый ответ\n\n-- 2. Upsert: один оператор, без исключения; 0 затронутых строк означает «уже есть».\nINSERT INTO sales (sale_id, device_id, item, amount) VALUES (?, ?, ?, ?)\nON CONFLICT (sale_id) DO NOTHING;\n```\n\nОба варианта корректны, и оба опираются на одно и то же ограничение `UNIQUE` — разница чисто в удобстве. Upsert убирает исключение с нормального пути; явный `INSERT` позволяет легко отличить «я зарегистрировал» от «оно уже было», а это нужно, когда ответы разные (`201 Created` на первую попытку, `200 OK` с исходным чеком на повтор).\n\nЧего в этом списке *нет* — так это `SELECT`, а потом `INSERT`, если нет: это не запись с защитой, а два оператора с зазором между ними."
+          },
+          "feedback": {
+            "correct": { "en": "0 affected rows is the signal: the sale was already registered.", "ru": "0 затронутых строк — это сигнал: продажа уже зарегистрирована." },
+            "incorrect": { "en": "DO NOTHING skips the conflicting row silently: 0 rows affected, no exception.", "ru": "DO NOTHING молча пропускает конфликтующую строку: 0 строк, без исключения." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "write-p1-zero-rows",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "With `INSERT ... ON CONFLICT (sale_id) DO NOTHING`, how does the service learn that the sale was already registered?",
+            "ru": "Как при `INSERT ... ON CONFLICT (sale_id) DO NOTHING` сервис узнаёт, что продажа уже была зарегистрирована?"
+          },
+          "feedback": {
+            "correct": { "en": "The affected-row count is the whole signal — 1 means you won, 0 means a repeat.", "ru": "Число затронутых строк и есть сигнал: 1 — вы выиграли, 0 — повтор." },
+            "incorrect": { "en": "The statement reports 0 affected rows; no exception is raised.", "ru": "Оператор сообщает 0 затронутых строк; исключение не бросается." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "The statement reports 0 affected rows", "ru": "Оператор сообщает 0 затронутых строк" }, "correct": true },
+            { "id": "b", "text": { "en": "It throws a unique violation, which the service catches", "ru": "Он бросает нарушение уникальности, которое сервис ловит" }, "correct": false,
+              "feedback": { "en": "That is the other write shape — DO NOTHING keeps the exception off the path.", "ru": "Это другой вариант записи — DO NOTHING убирает исключение с пути." } },
+            { "id": "c", "text": { "en": "It returns the row that was already stored", "ru": "Он возвращает уже сохранённую строку" }, "correct": false,
+              "feedback": { "en": "DO NOTHING returns nothing; read the row separately if you need its stored response.", "ru": "DO NOTHING ничего не возвращает; читайте строку отдельно, если нужен сохранённый ответ." } }
+          ]
+        },
+        {
+          "id": "write-p2-match-shapes",
+          "type": "match_pairs",
+          "prompt": { "en": "Match each write shape with what it gives you.", "ru": "Соотнеси каждый вариант записи с тем, что он даёт." },
+          "feedback": {
+            "correct": { "en": "Both correct shapes lean on the constraint; the check-then-insert shape leans on luck.", "ru": "Оба корректных варианта опираются на ограничение; «проверить, потом вставить» — на удачу." },
+            "incorrect": { "en": "Catching 23505 tells you whether you won; DO NOTHING reports 0 rows; SELECT-then-INSERT races.", "ru": "Перехват 23505 говорит, выиграли ли вы; DO NOTHING даёт 0 строк; SELECT-потом-INSERT гоняется." }
+          },
+          "pairs": [
+            { "id": "plain-insert", "left": { "en": "INSERT, then catch SQLState 23505", "ru": "INSERT, затем перехват SQLState 23505" }, "right": { "en": "You learn whether you won the race", "ru": "Вы узнаёте, выиграли ли гонку" } },
+            { "id": "upsert", "left": { "en": "INSERT ... ON CONFLICT (sale_id) DO NOTHING", "ru": "INSERT ... ON CONFLICT (sale_id) DO NOTHING" }, "right": { "en": "No exception; 0 affected rows means it was already there", "ru": "Без исключения; 0 затронутых строк означает «уже было»" } },
+            { "id": "select-then-insert", "left": { "en": "SELECT, then INSERT if absent", "ru": "SELECT, потом INSERT, если нет" }, "right": { "en": "Not a guard: two overlapping deliveries both pass the check", "ru": "Не защита: две пересекающиеся доставки обе проходят проверку" } },
+            { "id": "constraint", "left": { "en": "UNIQUE (sale_id)", "ru": "UNIQUE (sale_id)" }, "right": { "en": "The constraint both correct writes rely on", "ru": "Ограничение, на которое опираются оба корректных варианта" } }
+          ]
+        },
+        {
+          "id": "write-p3-fill-upsert",
+          "type": "fill_blank",
+          "prompt": { "en": "Complete the upsert that ignores an already-registered sale.", "ru": "Дополни upsert, который игнорирует уже зарегистрированную продажу." },
+          "feedback": {
+            "correct": { "en": "One statement, no exception, and 0 affected rows on a repeat.", "ru": "Один оператор, без исключения, и 0 затронутых строк на повторе." },
+            "incorrect": { "en": "It is `ON CONFLICT (sale_id) DO NOTHING`.", "ru": "Это `ON CONFLICT (sale_id) DO NOTHING`." }
+          },
+          "text": {
+            "en": "INSERT INTO sales (...) VALUES (...) ON ___ (sale_id) DO ___;",
+            "ru": "INSERT INTO sales (...) VALUES (...) ON ___ (sale_id) DO ___;"
+          },
+          "blanks": [
+            { "en": ["CONFLICT", "conflict"], "ru": ["CONFLICT", "conflict"] },
+            { "en": ["NOTHING", "nothing"], "ru": ["NOTHING", "nothing"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "replay-the-response",
+      "title": { "en": "Replay the response, don't just skip", "ru": "Возвращайте сохранённый ответ, а не пропуск" },
+      "summary": {
+        "en": "Storing key -> (status, response) turns deduplication into idempotency: a retry gets the same receipt as the original.",
+        "ru": "Хранение ключ -> (статус, ответ) превращает дедупликацию в идемпотентность: повтор получает тот же чек, что и оригинал."
+      },
+      "discovery": [
+        {
+          "id": "replay-d1-empty-ok",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A retry is correctly recognised as a duplicate, and the server answers `200 OK` with an empty body. What has the till lost?",
+            "ru": "Повтор корректно распознан как дубль, и сервер отвечает `200 OK` с пустым телом. Что потеряла касса?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "The receipt data it has to print, and any way to tell success from a swallowed error", "ru": "Данные чека, который надо напечатать, и возможность отличить успех от проглоченной ошибки" }, "correct": true },
+            { "id": "b", "text": { "en": "Nothing — the sale is registered, which is all that matters", "ru": "Ничего — продажа зарегистрирована, и это главное" }, "correct": false,
+              "feedback": { "en": "The sale is safe, but the client still has to print a receipt and confirm the outcome.", "ru": "Продажа в порядке, но клиенту всё ещё нужно напечатать чек и подтвердить результат." } },
+            { "id": "c", "text": { "en": "The sale itself, because DO NOTHING skipped the insert", "ru": "Саму продажу, потому что DO NOTHING пропустил вставку" }, "correct": false,
+              "feedback": { "en": "The original row is still there; only the answer to the client is missing.", "ru": "Исходная строка на месте; не хватает только ответа клиенту." } }
+          ],
+          "reveal": {
+            "en": "Deduplication keeps the table clean. **Idempotency** is stronger: repeating the same request produces the same *observable result*, including the answer the caller receives. You get there by storing the outcome next to the key:\n\n```\nsale-1 -> (201, {\"receiptId\": \"R-8842\", \"total\": 350})\n```\n\nOn a repeat you load that stored response and replay it verbatim — same receipt id, same body, so the till can print the receipt it missed the first time. That is the difference between *deduplication* (the table is right) and *idempotency* (the client is right too).\n\nAnswering \"OK, nothing to do\" instead leaves the till unable to print and unable to distinguish success from an error that was swallowed, so it keeps retrying, or worse, asks the cashier to re-enter the sale — which creates a genuinely different sale with a new key.",
+            "ru": "Дедупликация держит таблицу в порядке. **Идемпотентность** сильнее: повтор того же запроса даёт тот же *наблюдаемый результат*, включая ответ, который получает вызывающий. Для этого результат хранят рядом с ключом:\n\n```\nsale-1 -> (201, {\"receiptId\": \"R-8842\", \"total\": 350})\n```\n\nНа повторе вы читаете сохранённый ответ и возвращаете его дословно — тот же id чека, то же тело, чтобы касса напечатала чек, который не получила с первого раза. В этом и разница между *дедупликацией* (таблица верна) и *идемпотентностью* (клиент тоже прав).\n\nОтвет «OK, делать нечего» лишает кассу возможности напечатать чек и отличить успех от проглоченной ошибки, поэтому она продолжает повторять или, хуже, просит кассира ввести продажу заново — а это уже действительно другая продажа с новым ключом."
+          },
+          "feedback": {
+            "correct": { "en": "A repeat must be answered, not just tolerated.", "ru": "На повтор надо отвечать, а не просто терпеть его." },
+            "incorrect": { "en": "The sale is fine; what is missing is the stored response the till needs to print.", "ru": "С продажей всё хорошо; не хватает сохранённого ответа, нужного кассе для печати." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "replay-p1-what-turns",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What turns deduplication into idempotency in a sales API?",
+            "ru": "Что превращает дедупликацию в идемпотентность в API продаж?"
+          },
+          "feedback": {
+            "correct": { "en": "The caller must observe the same result, not just the table.", "ru": "Вызывающий должен наблюдать тот же результат, а не только таблица." },
+            "incorrect": { "en": "Storing the original response with the key and replaying it on a repeat.", "ru": "Хранение исходного ответа вместе с ключом и его возврат на повторе." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Storing the original response with the key and replaying it on a repeat", "ru": "Хранение исходного ответа вместе с ключом и его возврат на повторе" }, "correct": true },
+            { "id": "b", "text": { "en": "Answering every duplicate with an empty 200 OK", "ru": "Ответ на каждый дубль пустым 200 OK" }, "correct": false,
+              "feedback": { "en": "An empty answer leaves the client without the receipt it needs.", "ru": "Пустой ответ оставляет клиента без нужного ему чека." } },
+            { "id": "c", "text": { "en": "Deleting the duplicate row after the fact", "ru": "Удаление дублирующей строки постфактум" }, "correct": false,
+              "feedback": { "en": "With a constraint in place there is no duplicate row; the missing piece is the replayed answer.", "ru": "При ограничении дублирующей строки нет; не хватает именно возвращённого ответа." } }
+          ]
+        },
+        {
+          "id": "replay-p2-sort-repeat",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order what an idempotent sales endpoint does when a known sale key arrives again.",
+            "ru": "Расставь по порядку, что делает идемпотентный эндпоинт продаж, когда известный ключ приходит снова."
+          },
+          "feedback": {
+            "correct": { "en": "The conflict is detected first, and only then is the stored answer replayed.", "ru": "Сначала обнаруживается конфликт, и только потом возвращается сохранённый ответ." },
+            "incorrect": { "en": "Detect the conflict, load the stored status and body, and return them unchanged.", "ru": "Обнаружить конфликт, прочитать сохранённые статус и тело, вернуть их без изменений." }
+          },
+          "steps": [
+            { "id": "s1", "text": { "en": "Receive POST /sales carrying a sale key that is already stored", "ru": "Получить POST /sales с ключом продажи, который уже сохранён" } },
+            { "id": "s2", "text": { "en": "The insert conflicts with the UNIQUE constraint: this is a repeat", "ru": "Вставка конфликтует с ограничением UNIQUE: это повтор" } },
+            { "id": "s3", "text": { "en": "Load the status and response stored for that key", "ru": "Прочитать статус и ответ, сохранённые для этого ключа" } },
+            { "id": "s4", "text": { "en": "Return that response unchanged, so the till prints the same receipt", "ru": "Вернуть этот ответ без изменений, чтобы касса напечатала тот же чек" } }
+          ]
+        },
+        {
+          "id": "replay-p3-fill-idempotency",
+          "type": "fill_blank",
+          "prompt": { "en": "Complete what is stored and what it achieves.", "ru": "Дополни, что хранится и чего это достигает." },
+          "feedback": {
+            "correct": { "en": "Same key, same status, same body — every time.", "ru": "Тот же ключ, тот же статус, то же тело — каждый раз." },
+            "incorrect": { "en": "Storing key -> (status, response) is what turns deduplication into idempotency.", "ru": "Хранение ключ -> (статус, ответ) превращает дедупликацию в идемпотентность." }
+          },
+          "text": {
+            "en": "Storing `key -> (status, ___)` is what turns deduplication into ___.",
+            "ru": "Хранение `ключ -> (статус, ___)` превращает дедупликацию в ___."
+          },
+          "blanks": [
+            { "en": ["response", "body"], "ru": ["ответ", "тело", "тело ответа"] },
+            { "en": ["idempotency"], "ru": ["идемпотентность", "idempotency"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "key-conflict-409",
+      "title": { "en": "A known key with a different body", "ru": "Известный ключ с другим телом" },
+      "summary": {
+        "en": "The same key carrying different contents is a client bug: answer 409 Conflict instead of replaying the stored response.",
+        "ru": "Тот же ключ с другим содержимым — баг клиента: отвечайте 409 Conflict, а не сохранённым ответом."
+      },
+      "discovery": [
+        {
+          "id": "conflict-d1-reused-key",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The key `sale-1` is already stored with a latte for 350. The next request reuses that key for a different sale. What should the server answer?",
+            "ru": "Ключ `sale-1` уже сохранён с латте за 350. Следующий запрос переиспользует этот ключ для другой продажи. Что должен ответить сервер?"
+          },
+          "code": "POST /sales  Idempotency-Key: sale-1  {\"item\":\"latte\",\"amount\":350}  -> 201 Created\nPOST /sales  Idempotency-Key: sale-1  {\"item\":\"cake\",\"amount\":900}    -> ?",
+          "codeLang": "text",
+          "options": [
+            { "id": "a", "text": { "en": "409 Conflict, so the client bug becomes visible", "ru": "409 Conflict, чтобы баг клиента стал заметным" }, "correct": true },
+            { "id": "b", "text": { "en": "200 OK with the stored latte receipt", "ru": "200 OK с сохранённым чеком на латте" }, "correct": false,
+              "feedback": { "en": "Replaying the old response would silently swallow a real second sale.", "ru": "Возврат старого ответа молча проглотил бы настоящую вторую продажу." } },
+            { "id": "c", "text": { "en": "201 Created for the cake, ignoring the reused key", "ru": "201 Created для торта, игнорируя переиспользованный ключ" }, "correct": false,
+              "feedback": { "en": "Then the key guarantees nothing — one key would register two different sales.", "ru": "Тогда ключ не гарантирует ничего — один ключ зарегистрировал бы две разные продажи." } }
+          ],
+          "reveal": {
+            "en": "A retry repeats the *same* sale, so it repeats the same body. A known key arriving with a **different** body is therefore not a retry at all — it is a client bug: some device minted one key and reused it for a second sale.\n\n```mermaid\nflowchart TD\n  R[\"request with a known key\"] --> Q{\"same body as the stored one?\"}\n  Q -->|yes| A[\"replay the stored response: 200\"]\n  Q -->|no| C[\"409 Conflict\"]\n```\n\nReplaying the stored response here would answer \"already registered\" for a sale that was never registered — you would erase a real second sale, quietly, exactly like the payload-hash trap does. Registering it under the same key is no better: the key would then identify two different sales, and every later retry becomes ambiguous.\n\n`409 Conflict` refuses to guess. It makes the bug loud while the money can still be recovered, and it tells the client honestly that its key discipline is broken.",
+            "ru": "Повтор повторяет *ту же* продажу, а значит и то же тело. Поэтому известный ключ с **другим** телом — вовсе не повтор, а баг клиента: какое-то устройство создало один ключ и переиспользовало его для второй продажи.\n\n```mermaid\nflowchart TD\n  R[\"запрос с известным ключом\"] --> Q{\"тело такое же, как сохранённое?\"}\n  Q -->|да| A[\"вернуть сохранённый ответ: 200\"]\n  Q -->|нет| C[\"409 Conflict\"]\n```\n\nВозврат сохранённого ответа здесь ответил бы «уже зарегистрировано» на продажу, которую никогда не регистрировали, — вы тихо стёрли бы настоящую вторую продажу, ровно как в ловушке с хэшем тела. Зарегистрировать её под тем же ключом не лучше: тогда ключ опознавал бы две разные продажи, и любой последующий повтор стал бы неоднозначным.\n\n`409 Conflict` отказывается угадывать. Он делает баг громким, пока деньги ещё можно вернуть, и честно сообщает клиенту, что его дисциплина ключей нарушена."
+          },
+          "feedback": {
+            "correct": { "en": "Different body means it is not the same sale, so nothing may be replayed.", "ru": "Другое тело означает, что это не та же продажа, поэтому возвращать нечего." },
+            "incorrect": { "en": "It is a reused key — a client bug — so the server answers 409 instead of guessing.", "ru": "Это переиспользованный ключ — баг клиента — поэтому сервер отвечает 409, а не угадывает." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "conflict-p1-right-answer",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A sales endpoint receives a known idempotency key with a body that differs from the stored one. What is the correct response?",
+            "ru": "Эндпоинт продаж получает известный ключ идемпотентности с телом, отличным от сохранённого. Какой ответ правильный?"
+          },
+          "feedback": {
+            "correct": { "en": "The server refuses to guess which of the two sales the key means.", "ru": "Сервер отказывается угадывать, какую из двух продаж означает ключ." },
+            "incorrect": { "en": "409 Conflict — replaying would erase a real sale, and registering would make the key ambiguous.", "ru": "409 Conflict — возврат стёр бы настоящую продажу, а регистрация сделала бы ключ неоднозначным." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "409 Conflict", "ru": "409 Conflict" }, "correct": true },
+            { "id": "b", "text": { "en": "200 OK with the stored response", "ru": "200 OK с сохранённым ответом" }, "correct": false,
+              "feedback": { "en": "That answers \"already registered\" for a sale that was never registered.", "ru": "Это отвечает «уже зарегистрировано» на продажу, которую не регистрировали." } },
+            { "id": "c", "text": { "en": "201 Created, registering it as a new sale", "ru": "201 Created, регистрируя её как новую продажу" }, "correct": false,
+              "feedback": { "en": "Then one key identifies two sales, and later retries become ambiguous.", "ru": "Тогда один ключ опознаёт две продажи, и последующие повторы становятся неоднозначными." } }
+          ]
+        },
+        {
+          "id": "conflict-p2-word-bank",
+          "type": "word_bank",
+          "prompt": { "en": "Assemble what a known key with a different body means.", "ru": "Собери, что означает известный ключ с другим телом." },
+          "feedback": {
+            "correct": { "en": "It is a broken client, not a retry — so it gets 409, not a replay.", "ru": "Это сломанный клиент, а не повтор — поэтому 409, а не возврат ответа." },
+            "incorrect": { "en": "Same key, different body is a client bug: the key was reused for another sale.", "ru": "Тот же ключ, другое тело — это баг клиента: ключ переиспользовали для другой продажи." }
+          },
+          "tokens": {
+            "en": ["same", "key,", "different", "body", "is", "a", "client", "bug"],
+            "ru": ["тот", "же", "ключ,", "другое", "тело", "это", "баг", "клиента"]
+          },
+          "distractors": {
+            "en": ["retry"],
+            "ru": ["повтор"]
+          }
+        },
+        {
+          "id": "conflict-p3-fill-status",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the HTTP status code.", "ru": "Впиши HTTP-код ответа." },
+          "feedback": {
+            "correct": { "en": "Loud beats silent: the bug is visible while the money is recoverable.", "ru": "Громко лучше, чем тихо: баг виден, пока деньги можно вернуть." },
+            "incorrect": { "en": "It is 409 Conflict — the key was reused for a different sale.", "ru": "Это 409 Conflict — ключ переиспользовали для другой продажи." }
+          },
+          "text": {
+            "en": "A known sale key arriving with a different body is answered with HTTP status ___.",
+            "ru": "На известный ключ продажи с другим телом отвечают HTTP-статусом ___."
+          },
+          "blanks": [
+            { "en": ["409"], "ru": ["409"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "one-transaction",
+      "title": { "en": "One transaction for both writes", "ru": "Одна транзакция на обе записи" },
+      "summary": {
+        "en": "The dedup record and the sale must commit together; split them and a crash either duplicates the sale or swallows it forever.",
+        "ru": "Запись дедупликации и продажа должны коммититься вместе; разнесите их — и падение либо продублирует продажу, либо навсегда её проглотит."
+      },
+      "discovery": [
+        {
+          "id": "atomic-d1-key-without-sale",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The dedup key is committed on its own, the process dies, and the till retries the sale with the same key. What does the retry get?",
+            "ru": "Ключ дедупликации закоммичен отдельно, процесс падает, и касса повторяет продажу с тем же ключом. Что получит повтор?"
+          },
+          "code": "dedupRepository.insert(saleKey);   // transaction 1: COMMIT\n// <-- the process is killed here\nsalesRepository.insert(sale);      // transaction 2: never runs",
+          "codeLang": "java",
+          "options": [
+            { "id": "a", "text": { "en": "\"Already registered\" — for a sale that does not exist", "ru": "«Уже зарегистрировано» — для продажи, которой не существует" }, "correct": true },
+            { "id": "b", "text": { "en": "A fresh 201 Created, and the sale is finally stored", "ru": "Свежий 201 Created, и продажа наконец сохраняется" }, "correct": false,
+              "feedback": { "en": "The key survived the crash, so the retry is rejected as a duplicate.", "ru": "Ключ пережил падение, поэтому повтор отклоняется как дубль." } },
+            { "id": "c", "text": { "en": "A 500 error that tells the operator something went wrong", "ru": "Ошибку 500, которая скажет оператору, что что-то не так" }, "correct": false,
+              "feedback": { "en": "Nothing throws on the retry path — the failure is completely silent.", "ru": "На пути повтора ничего не бросается — сбой полностью бесшумный." } }
+          ],
+          "reveal": {
+            "en": "Both writes belong to one transaction:\n\n```mermaid\nflowchart TD\n  A[\"POST /sales + sale key\"] --> B[\"BEGIN\"]\n  B --> C[\"INSERT the dedup key (UNIQUE)\"]\n  C --> D{\"insert won?\"}\n  D -->|no| E[\"load the stored response, apply nothing\"]\n  D -->|yes| F[\"INSERT the sale and store the response\"]\n  F --> G[\"COMMIT\"]\n```\n\nSplit them and the order decides how you fail:\n\n- **Dedup row first, sale second.** A crash in between leaves a key with no sale. Every retry is answered \"already registered\" for a sale that never happened, the money is gone, and nothing logs an exception — the quietest failure in the whole topic, because the dedup counters look healthy.\n- **Sale first, dedup row second.** A crash in between leaves a sale with no key, so the retry registers it again: duplicates are back.\n\nWhen both rows live in the same database this costs nothing — it is the atomicity you already have from ACID, and in Spring it is a single `@Transactional` boundary. Simplest of all: let the sales table itself carry the unique key, so there is only one row to write and nothing to split.",
+            "ru": "Обе записи принадлежат одной транзакции:\n\n```mermaid\nflowchart TD\n  A[\"POST /sales + ключ продажи\"] --> B[\"BEGIN\"]\n  B --> C[\"INSERT ключа дедупликации (UNIQUE)\"]\n  C --> D{\"вставка удалась?\"}\n  D -->|нет| E[\"прочитать сохранённый ответ, ничего не применять\"]\n  D -->|да| F[\"INSERT продажи и сохранение ответа\"]\n  F --> G[\"COMMIT\"]\n```\n\nРазнесите их — и порядок решит, как вы сломаетесь:\n\n- **Сначала строка дедупликации, потом продажа.** Падение между ними оставляет ключ без продажи. На любой повтор отвечают «уже зарегистрировано» для продажи, которой не было, деньги пропали, и никакое исключение не логируется — самый тихий сбой во всём топике, ведь счётчики дедупликации выглядят здоровыми.\n- **Сначала продажа, потом строка дедупликации.** Падение между ними оставляет продажу без ключа, поэтому повтор зарегистрирует её снова: дубли вернулись.\n\nКогда обе строки живут в одной базе, это бесплатно: это та самая атомарность, которая уже есть по ACID, а в Spring — одна граница `@Transactional`. Проще всего — чтобы уникальный ключ нёс сам столбец таблицы продаж: тогда писать нужно одну строку и разносить нечего."
+          },
+          "feedback": {
+            "correct": { "en": "A key without a sale refuses every retry — silently.", "ru": "Ключ без продажи отклоняет любой повтор — молча." },
+            "incorrect": { "en": "The committed key makes every retry look like a duplicate, so the sale is lost with no error.", "ru": "Закоммиченный ключ делает любой повтор дублем, поэтому продажа теряется без ошибки." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "atomic-p1-consequence",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A sales service commits the dedup key in its own transaction and crashes before inserting the sale. What is the consequence?",
+            "ru": "Сервис продаж коммитит ключ дедупликации в отдельной транзакции и падает до вставки продажи. Каково следствие?"
+          },
+          "feedback": {
+            "correct": { "en": "The guard now protects a sale that was never written.", "ru": "Защита теперь охраняет продажу, которую никогда не записали." },
+            "incorrect": { "en": "Every retry is answered \"already registered\" for a sale that was never stored.", "ru": "На каждый повтор отвечают «уже зарегистрировано» для продажи, которой не сохранили." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Every retry is refused as a duplicate, and the sale is lost silently", "ru": "Каждый повтор отклоняется как дубль, и продажа теряется молча" }, "correct": true },
+            { "id": "b", "text": { "en": "The sale is eventually registered twice", "ru": "Продажа в итоге регистрируется дважды" }, "correct": false,
+              "feedback": { "en": "That is the opposite order — sale committed first, dedup key second.", "ru": "Это обратный порядок — сначала закоммичена продажа, потом ключ." } },
+            { "id": "c", "text": { "en": "The dedup key is rolled back together with the missing sale", "ru": "Ключ дедупликации откатывается вместе с ненаписанной продажей" }, "correct": false,
+              "feedback": { "en": "It was already committed on its own; nothing will roll it back.", "ru": "Он уже закоммичен сам по себе; ничто его не откатит." } }
+          ]
+        },
+        {
+          "id": "atomic-p2-marker-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Writing the dedup key in its own transaction before the sale is safe, because the key is only a marker.",
+            "ru": "Писать ключ дедупликации в отдельной транзакции перед продажей безопасно, ведь ключ — просто маркер."
+          },
+          "feedback": {
+            "correct": { "en": "That marker is what refuses every later retry, so it must not outlive a missing sale.", "ru": "Этот маркер отклоняет все последующие повторы, поэтому он не должен переживать отсутствующую продажу." },
+            "incorrect": { "en": "No — a crash between the two commits leaves a key with no sale, and the sale can never be retried in.", "ru": "Нет — падение между коммитами оставляет ключ без продажи, и продажу уже не дослать повтором." }
+          },
+          "answer": false
+        },
+        {
+          "id": "atomic-p3-match-orders",
+          "type": "match_pairs",
+          "prompt": { "en": "Match each write arrangement with what a crash leaves behind.", "ru": "Соотнеси каждый порядок записи с тем, что оставляет падение." },
+          "feedback": {
+            "correct": { "en": "Only the single transaction has no half-written state to leave.", "ru": "Только у одной транзакции нет промежуточного состояния, которое можно оставить." },
+            "incorrect": { "en": "One transaction is all-or-nothing; key-first loses the sale; sale-first duplicates it.", "ru": "Одна транзакция — всё или ничего; ключ первым теряет продажу; продажа первой её дублирует." }
+          },
+          "pairs": [
+            { "id": "one-tx", "left": { "en": "Dedup key and sale in one transaction", "ru": "Ключ дедупликации и продажа в одной транзакции" }, "right": { "en": "Either both rows exist or neither does", "ru": "Либо есть обе строки, либо ни одной" } },
+            { "id": "key-first", "left": { "en": "Dedup key committed first, then a crash", "ru": "Сначала закоммичен ключ, потом падение" }, "right": { "en": "A key with no sale: retries are refused and the sale is lost", "ru": "Ключ без продажи: повторы отклоняются, продажа потеряна" } },
+            { "id": "sale-first", "left": { "en": "Sale committed first, then a crash", "ru": "Сначала закоммичена продажа, потом падение" }, "right": { "en": "A sale with no key: the retry registers it again", "ru": "Продажа без ключа: повтор регистрирует её снова" } }
+          ]
+        },
+        {
+          "id": "atomic-p4-fill-one",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the missing number.", "ru": "Впиши пропущенное число." },
+          "feedback": {
+            "correct": { "en": "In the same database that is free — it is the atomicity of ACID.", "ru": "В одной базе это бесплатно — это атомарность из ACID." },
+            "incorrect": { "en": "One transaction: the dedup record and the sale commit together or not at all.", "ru": "Одна транзакция: запись дедупликации и продажа коммитятся вместе или никак." }
+          },
+          "text": {
+            "en": "The dedup record and the sale are committed in ___ transaction.",
+            "ru": "Запись дедупликации и продажа коммитятся в ___ транзакции."
+          },
+          "blanks": [
+            { "en": ["one", "a single", "1"], "ru": ["одной", "1"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dedup-window",
+      "title": { "en": "How long dedup keys live", "ru": "Сколько живут ключи дедупликации" },
+      "summary": {
+        "en": "Retention must outlast the longest possible retry, not the average one — weeks, not minutes.",
+        "ru": "Окно хранения должно переживать самый долгий возможный повтор, а не средний, — недели, а не минуты."
+      },
+      "discovery": [
+        {
+          "id": "window-d1-till-in-drawer",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Dedup keys are purged after 30 minutes. A till that sat switched off in a drawer for three days syncs its queued sale. What happens?",
+            "ru": "Ключи дедупликации удаляются через 30 минут. Касса, три дня пролежавшая выключенной в ящике, синхронизирует продажу из своей очереди. Что произойдёт?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "The key is gone, so the duplicate is registered as a new sale", "ru": "Ключа нет, поэтому дубль регистрируется как новая продажа" }, "correct": true },
+            { "id": "b", "text": { "en": "Nothing: the till's queued sale expired too", "ru": "Ничего: продажа в очереди кассы тоже истекла" }, "correct": false,
+              "feedback": { "en": "The device's queue and the server's retention are independent; the till still holds the sale.", "ru": "Очередь устройства и окно хранения на сервере независимы; продажа у кассы осталась." } },
+            { "id": "c", "text": { "en": "The sale is rejected because its key has expired", "ru": "Продажа отклоняется, потому что её ключ истёк" }, "correct": false,
+              "feedback": { "en": "There is nothing left to compare against, so the request simply looks brand new.", "ru": "Сравнивать больше не с чем, поэтому запрос выглядит просто новым." } }
+          ],
+          "reveal": {
+            "en": "A retention window is not an implementation detail, it is part of the guarantee:\n\n> The window must outlast the **longest possible** retry, not the average one.\n\nA till switched off in a drawer over a long weekend, a courier's phone with no signal for two days, an operator replaying last week's failed batch — each one retries with a key you may already have purged, and the guard then treats a duplicate as a brand-new sale. **Thirty to ninety days** is a normal window; thirty minutes is not.\n\nIf keeping keys sounds expensive, notice that you usually need no separate store at all: when the `UNIQUE` constraint lives on the sales table, the sale rows *are* the dedup index — and you keep those anyway, for accounting. A separate dedup table only costs you extra when you invent one.",
+            "ru": "Окно хранения — не деталь реализации, а часть гарантии:\n\n> Окно должно переживать **самый долгий возможный** повтор, а не средний.\n\nКасса, выключенная и убранная в ящик на длинные выходные; телефон курьера без связи двое суток; оператор, переигрывающий упавший батч прошлой недели — каждый повторяет запрос с ключом, который вы, возможно, уже удалили, и защита тогда считает дубль совершенно новой продажей. **Тридцать–девяносто дней** — нормальное окно, тридцать минут — нет.\n\nЕсли хранить ключи кажется дорого, заметьте: отдельное хранилище обычно и не нужно. Когда ограничение `UNIQUE` стоит на таблице продаж, строки продаж *и есть* индекс дедупликации — а их вы храните и так, для учёта. Отдельная таблица дедупликации стоит денег только тогда, когда вы её заводите."
+          },
+          "feedback": {
+            "correct": { "en": "A purged key is indistinguishable from a key that never existed.", "ru": "Удалённый ключ не отличим от ключа, которого никогда не было." },
+            "incorrect": { "en": "The purge removed the only thing the guard could match, so the retry looks new.", "ru": "Очистка удалила единственное, с чем могла сравнить защита, поэтому повтор выглядит новым." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "window-p1-how-chosen",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "How is the retention window for dedup keys chosen?",
+            "ru": "Как выбирается окно хранения ключей дедупликации?"
+          },
+          "feedback": {
+            "correct": { "en": "The window is part of the guarantee, so it is sized by the worst case.", "ru": "Окно — часть гарантии, поэтому его считают по худшему случаю." },
+            "incorrect": { "en": "It must outlast the longest possible retry — offline queues resync days later.", "ru": "Оно должно переживать самый долгий возможный повтор — офлайн-очереди синхронизируются через дни." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "It must outlast the longest possible retry", "ru": "Оно должно переживать самый долгий возможный повтор" }, "correct": true },
+            { "id": "b", "text": { "en": "It should cover the average retry delay", "ru": "Оно должно покрывать средний интервал повтора" }, "correct": false,
+              "feedback": { "en": "The average retry is not the one that breaks you; the longest one is.", "ru": "Ломает не средний повтор, а самый долгий." } },
+            { "id": "c", "text": { "en": "It should match the HTTP client timeout", "ru": "Оно должно совпадать с таймаутом HTTP-клиента" }, "correct": false,
+              "feedback": { "en": "Offline queues and replayed batches retry days later, long after any HTTP timeout.", "ru": "Офлайн-очереди и переигранные батчи повторяют через дни, много позже любого HTTP-таймаута." } }
+          ]
+        },
+        {
+          "id": "window-p2-thirty-minutes-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A thirty-minute dedup window is enough for a sales API, because clients retry within seconds.",
+            "ru": "Тридцатиминутного окна дедупликации достаточно для API продаж, потому что клиенты повторяют запрос за секунды."
+          },
+          "feedback": {
+            "correct": { "en": "Offline devices and replayed batches retry days later, into a hole the purge opened.", "ru": "Офлайн-устройства и переигранные батчи повторяют через дни — прямо в дыру, открытую очисткой." },
+            "incorrect": { "en": "No — thirty to ninety days is a normal window; thirty minutes reopens the hole.", "ru": "Нет — нормальное окно тридцать–девяносто дней; тридцать минут открывают дыру обратно." }
+          },
+          "answer": false
+        },
+        {
+          "id": "window-p3-word-bank",
+          "type": "word_bank",
+          "prompt": { "en": "Assemble the retention rule.", "ru": "Собери правило хранения." },
+          "feedback": {
+            "correct": { "en": "The worst case sets the window, not the typical one.", "ru": "Окно задаёт худший случай, а не типичный." },
+            "incorrect": { "en": "Keep keys longer than the longest possible retry — not longer than the average.", "ru": "Храните ключи дольше самого долгого возможного повтора, а не дольше среднего." }
+          },
+          "tokens": {
+            "en": ["keep", "keys", "longer", "than", "the", "longest", "possible", "retry"],
+            "ru": ["храните", "ключи", "дольше", "самого", "долгого", "возможного", "повтора"]
+          },
+          "distractors": {
+            "en": ["average"],
+            "ru": ["среднего"]
+          }
+        },
+        {
+          "id": "window-p4-fill-days",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the normal retention window in days.", "ru": "Впиши нормальное окно хранения в днях." },
+          "feedback": {
+            "correct": { "en": "Weeks, not minutes — and on the sales table the rows are kept anyway.", "ru": "Недели, а не минуты — а на таблице продаж строки хранятся и так." },
+            "incorrect": { "en": "Thirty to ninety days is the normal window for dedup keys.", "ru": "Нормальное окно для ключей дедупликации — от тридцати до девяноста дней." }
+          },
+          "text": {
+            "en": "A normal dedup retention window is ___ to ___ days.",
+            "ru": "Нормальное окно хранения ключей дедупликации — от ___ до ___ дней."
+          },
+          "blanks": [
+            { "en": ["30", "thirty"], "ru": ["30", "тридцати", "тридцать"] },
+            { "en": ["90", "ninety"], "ru": ["90", "девяноста", "девяносто"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "where-dedup-state-lives",
+      "title": { "en": "Where the dedup state lives", "ru": "Где живёт состояние дедупликации" },
+      "summary": {
+        "en": "With many instances behind a load balancer the dedup state must be the shared database; a distributed lock is an optimisation, never the source of truth.",
+        "ru": "При множестве инстансов за балансировщиком состояние дедупликации должно жить в общей базе; распределённая блокировка — оптимизация, а не источник истины."
+      },
+      "discovery": [
+        {
+          "id": "shared-d1-ten-instances",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The sales service runs on ten instances behind a load balancer, and the two deliveries of one sale land on different instances. Where must the deduplication state live?",
+            "ru": "Сервис продаж работает на десяти инстансах за балансировщиком, и две доставки одной продажи попадают на разные инстансы. Где должно жить состояние дедупликации?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "In the shared database, behind the UNIQUE constraint", "ru": "В общей базе, за ограничением UNIQUE" }, "correct": true },
+            { "id": "b", "text": { "en": "In an in-memory set of seen keys inside each instance", "ru": "В in-memory множестве увиденных ключей внутри каждого инстанса" }, "correct": false,
+              "feedback": { "en": "Each instance would have its own set, so instance 8 has never seen what instance 3 stored.", "ru": "У каждого инстанса было бы своё множество, поэтому инстанс 8 не видел того, что сохранил инстанс 3." } },
+            { "id": "c", "text": { "en": "In a distributed lock held while the sale is processed", "ru": "В распределённой блокировке, удерживаемой на время обработки продажи" }, "correct": false,
+              "feedback": { "en": "A lock can reduce contention, but it expires — it is not a record of what was written.", "ru": "Блокировка может снизить конкуренцию, но она истекает — это не запись о том, что записано." } }
+          ],
+          "reveal": {
+            "en": "Two attempts of one sale can land on any two instances, so any state kept **inside** an instance — a `Set` of seen keys, a local cache — is invisible to the one that receives the retry:\n\n```mermaid\nflowchart TD\n  LB[\"load balancer\"] --> I1[\"instance 1\"]\n  LB --> I8[\"instance 8\"]\n  I1 --> DB[\"sales table + UNIQUE (sale_id)\"]\n  I8 --> DB\n```\n\nDeduplication state has to live where every instance agrees on it, and where the decision survives a restart: the shared database, enforced by the `UNIQUE` constraint. Scaling from one instance to ten changes nothing about the design — which is a good sign that the design was right at one instance too.\n\nA distributed lock (Redis, ZooKeeper) in front of all this can reduce contention, but it is never the source of truth: locks **expire**, clients **crash while holding them**, and the lock service is a second system that can disagree with your database. If the lock fails, the constraint is what is still standing.",
+            "ru": "Две попытки одной продажи могут попасть на любые два инстанса, поэтому любое состояние **внутри** инстанса — `Set` увиденных ключей, локальный кэш — невидимо для того, кто получит повтор:\n\n```mermaid\nflowchart TD\n  LB[\"балансировщик\"] --> I1[\"инстанс 1\"]\n  LB --> I8[\"инстанс 8\"]\n  I1 --> DB[\"таблица sales + UNIQUE (sale_id)\"]\n  I8 --> DB\n```\n\nСостояние дедупликации должно жить там, где о нём согласны все инстансы и где решение переживает перезапуск: в общей базе, за ограничением `UNIQUE`. Переход с одного инстанса на десять ничего в дизайне не меняет — и это хороший признак, что дизайн был верен и на одном инстансе.\n\nРаспределённая блокировка (Redis, ZooKeeper) перед всем этим может снизить конкуренцию, но источником истины она не является никогда: блокировки **истекают**, клиенты **падают, удерживая их**, а сервис блокировок — вторая система, которая может разойтись с вашей базой. Если блокировка подведёт, устоит именно ограничение."
+          },
+          "feedback": {
+            "correct": { "en": "Shared state needs a shared store — the database with the constraint.", "ru": "Общему состоянию нужно общее хранилище — база с ограничением." },
+            "incorrect": { "en": "Only the shared database is visible to all ten instances and survives restarts.", "ru": "Только общая база видна всем десяти инстансам и переживает перезапуски." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "shared-p1-redis-lock",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why is a Redis lock not the source of truth for deduplicating sales?",
+            "ru": "Почему блокировка в Redis не является источником истины для дедупликации продаж?"
+          },
+          "feedback": {
+            "correct": { "en": "A lock coordinates attempts; only the constraint records what was written.", "ru": "Блокировка координирует попытки; только ограничение фиксирует, что записано." },
+            "incorrect": { "en": "Locks expire and clients crash holding them, so only the database constraint always stands.", "ru": "Блокировки истекают, а клиенты падают, удерживая их, поэтому устоит только ограничение в базе." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Locks expire and clients crash while holding them", "ru": "Блокировки истекают, а клиенты падают, удерживая их" }, "correct": true },
+            { "id": "b", "text": { "en": "Redis is slower than PostgreSQL for this check", "ru": "Redis медленнее PostgreSQL для такой проверки" }, "correct": false,
+              "feedback": { "en": "Speed is not the objection — the durability of the decision is.", "ru": "Возражение не в скорости, а в надёжности сохранения решения." } },
+            { "id": "c", "text": { "en": "Redis cannot store a key for ninety days", "ru": "Redis не может хранить ключ девяносто дней" }, "correct": false,
+              "feedback": { "en": "Retention is a separate question; a lock is simply not a record of what was written.", "ru": "Хранение — отдельный вопрос; блокировка просто не является записью о том, что записано." } }
+          ]
+        },
+        {
+          "id": "shared-p2-match-places",
+          "type": "match_pairs",
+          "prompt": { "en": "Match each place dedup state could live with what it actually is.", "ru": "Соотнеси каждое возможное место для состояния дедупликации с тем, чем оно на самом деле является." },
+          "feedback": {
+            "correct": { "en": "Exactly one of these survives a restart and is seen by every instance.", "ru": "Ровно одно из этого переживает перезапуск и видно каждому инстансу." },
+            "incorrect": { "en": "The constraint is the source of truth; a lock is an optimisation; local memory is invisible to peers.", "ru": "Ограничение — источник истины; блокировка — оптимизация; локальная память невидима соседям." }
+          },
+          "pairs": [
+            { "id": "constraint", "left": { "en": "UNIQUE constraint in the shared database", "ru": "Ограничение UNIQUE в общей базе" }, "right": { "en": "The source of truth every instance agrees on", "ru": "Источник истины, с которым согласны все инстансы" } },
+            { "id": "lock", "left": { "en": "Distributed lock in Redis or ZooKeeper", "ru": "Распределённая блокировка в Redis или ZooKeeper" }, "right": { "en": "An optimisation that reduces contention and can expire", "ru": "Оптимизация, снижающая конкуренцию, и она может истечь" } },
+            { "id": "local-set", "left": { "en": "A set of seen keys inside one instance", "ru": "Множество увиденных ключей внутри одного инстанса" }, "right": { "en": "Invisible to the other instances and lost on restart", "ru": "Невидимо другим инстансам и теряется при перезапуске" } }
+          ]
+        },
+        {
+          "id": "shared-p3-fill-database",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the missing word.", "ru": "Впиши пропущенное слово." },
+          "feedback": {
+            "correct": { "en": "Ten instances or one, the state lives in the same place.", "ru": "Десять инстансов или один — состояние живёт в одном и том же месте." },
+            "incorrect": { "en": "In the shared database, behind the UNIQUE constraint.", "ru": "В общей базе данных, за ограничением UNIQUE." }
+          },
+          "text": {
+            "en": "With ten instances behind a load balancer, the deduplication state lives in the shared ___.",
+            "ru": "При десяти инстансах за балансировщиком состояние дедупликации живёт в общей ___."
+          },
+          "blanks": [
+            { "en": ["database", "db"], "ru": ["базе", "базе данных", "БД"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "broker-redelivery",
+      "title": { "en": "Duplicates from the message broker", "ru": "Дубли от брокера сообщений" },
+      "summary": {
+        "en": "At-least-once delivery means a consumer will see a message again; the Inbox pattern stores the message id in the same transaction as the effect.",
+        "ru": "Доставка at-least-once означает, что консьюмер увидит сообщение снова; паттерн Inbox сохраняет id сообщения в той же транзакции, что и эффект."
+      },
+      "discovery": [
+        {
+          "id": "broker-d1-crash-before-ack",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A consumer reads a sale from the broker, writes it to the database, and crashes before acknowledging the message. What does the broker do?",
+            "ru": "Консьюмер читает продажу из брокера, пишет её в базу и падает до подтверждения сообщения. Что сделает брокер?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Delivers the same message again", "ru": "Доставит то же сообщение снова" }, "correct": true },
+            { "id": "b", "text": { "en": "Discards it, because it was already processed", "ru": "Отбросит его, потому что оно уже обработано" }, "correct": false,
+              "feedback": { "en": "The broker only knows about the acknowledgement it never received.", "ru": "Брокер знает только о подтверждении, которого не получил." } },
+            { "id": "c", "text": { "en": "Moves it to a dead-letter queue", "ru": "Переместит его в dead-letter очередь" }, "correct": false,
+              "feedback": { "en": "From the broker's point of view nothing failed — the message is merely unacknowledged.", "ru": "С точки зрения брокера ничего не упало — сообщение просто не подтверждено." } }
+          ],
+          "reveal": {
+            "en": "Kafka and RabbitMQ both deliver **at-least-once**: only an acknowledgement retires a message, so a consumer that crashes *after* writing the sale and *before* acking will see that message again.\n\n```mermaid\nflowchart LR\n  M[\"message: sale-1\"] --> P[\"process: INSERT the sale\"]\n  P --> X[\"crash before ack\"]\n  X --> M2[\"redelivery of sale-1\"]\n```\n\nThe consumer-side fix has a name — the **Inbox pattern** — and it is the same mechanism as the HTTP one: store the unique message id in the **same transaction** as the effect, so a redelivery finds the id already there and applies nothing.\n\nTwo things this is not. Kafka's \"exactly-once semantics\" is exactly-once *processing inside Kafka*, not exactly-once effects in your database. And if registering a sale also publishes an event, do not send it inline: write it together with the sale via the **Outbox pattern**, which also delivers at-least-once and therefore needs a deduplicating consumer at the other end. At-least-once delivery plus an idempotent effect is what people call **effectively-once**.",
+            "ru": "Kafka и RabbitMQ доставляют **at-least-once**: сообщение снимается только подтверждением, поэтому консьюмер, упавший *после* записи продажи и *до* подтверждения, увидит это сообщение снова.\n\n```mermaid\nflowchart LR\n  M[\"сообщение: sale-1\"] --> P[\"обработка: INSERT продажи\"]\n  P --> X[\"падение до ack\"]\n  X --> M2[\"повторная доставка sale-1\"]\n```\n\nУ решения на стороне консьюмера есть имя — паттерн **Inbox** — и механизм тот же, что и в HTTP: сохранить уникальный id сообщения в **той же транзакции**, что и эффект, чтобы повторная доставка нашла id на месте и ничего не применила.\n\nЧем это не является. «Exactly-once semantics» в Kafka — это exactly-once *обработка внутри Kafka*, а не exactly-once эффекты в вашей базе. И если регистрация продажи ещё и публикует событие, не отправляйте его встроенно: записывайте вместе с продажей через паттерн **Outbox**, который тоже доставляет at-least-once и потому требует дедуплицирующего консьюмера на другом конце. Доставку at-least-once плюс идемпотентный эффект называют **effectively-once**."
+          },
+          "feedback": {
+            "correct": { "en": "An unacknowledged message comes back — that is what at-least-once means.", "ru": "Неподтверждённое сообщение возвращается — это и есть at-least-once." },
+            "incorrect": { "en": "Only an ack retires a message, so the broker redelivers it.", "ru": "Сообщение снимается только подтверждением, поэтому брокер доставит его снова." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "broker-p1-inbox",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which pattern has the consumer store a unique message id in the same transaction as the effect?",
+            "ru": "В каком паттерне консьюмер сохраняет уникальный id сообщения в той же транзакции, что и эффект?"
+          },
+          "feedback": {
+            "correct": { "en": "Same mechanism as the HTTP guard, applied to a message id.", "ru": "Тот же механизм, что в HTTP-защите, применённый к id сообщения." },
+            "incorrect": { "en": "The Inbox pattern — Outbox is the publishing side.", "ru": "Паттерн Inbox — Outbox отвечает за публикацию." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "The Inbox pattern", "ru": "Паттерн Inbox" }, "correct": true },
+            { "id": "b", "text": { "en": "The Outbox pattern", "ru": "Паттерн Outbox" }, "correct": false,
+              "feedback": { "en": "Outbox is the publishing side: the event is written together with the sale.", "ru": "Outbox — сторона публикации: событие пишется вместе с продажей." } },
+            { "id": "c", "text": { "en": "Exactly-once delivery", "ru": "Доставка exactly-once" }, "correct": false,
+              "feedback": { "en": "That does not exist across a network you do not control.", "ru": "Её не существует в сети, которую вы не контролируете." } }
+          ]
+        },
+        {
+          "id": "broker-p2-kafka-eos-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Kafka's exactly-once semantics guarantees that the effects of a message can never be applied twice to your database.",
+            "ru": "Exactly-once semantics в Kafka гарантирует, что эффекты сообщения не могут быть применены к вашей базе дважды."
+          },
+          "reveal": {
+            "en": "Kafka's exactly-once semantics covers reads and writes **inside Kafka**: consuming from a topic, producing to another, and committing offsets can be made one atomic unit. Your database is not part of that unit. The moment the effect is an `INSERT` into your own tables, the consumer can still be redelivered a message it already applied — so the guard is the same as everywhere else: a unique id for the message, stored in the same transaction as the effect. At-least-once delivery plus an idempotent effect is the combination people call effectively-once.",
+            "ru": "Exactly-once semantics в Kafka покрывает чтения и записи **внутри Kafka**: чтение из топика, запись в другой и коммит офсетов можно сделать одной атомарной единицей. Ваша база в эту единицу не входит. Как только эффект — это `INSERT` в ваши таблицы, консьюмеру всё ещё может прийти сообщение, которое он уже применил, поэтому защита та же, что и везде: уникальный id сообщения, сохранённый в той же транзакции, что и эффект. Доставку at-least-once плюс идемпотентный эффект и называют effectively-once."
+          },
+          "feedback": {
+            "correct": { "en": "It is exactly-once processing inside Kafka, not exactly-once effects in your database.", "ru": "Это exactly-once обработка внутри Kafka, а не exactly-once эффекты в вашей базе." },
+            "incorrect": { "en": "No — it covers processing inside Kafka; your database still needs an idempotent effect.", "ru": "Нет — оно покрывает обработку внутри Kafka; вашей базе всё ещё нужен идемпотентный эффект." }
+          },
+          "answer": false
+        },
+        {
+          "id": "broker-p3-match-terms",
+          "type": "match_pairs",
+          "prompt": { "en": "Match each messaging term with what it means.", "ru": "Соотнеси каждый термин из мира сообщений с его значением." },
+          "feedback": {
+            "correct": { "en": "Delivery is at-least-once; the idempotent effect is what you add.", "ru": "Доставка — at-least-once; идемпотентный эффект добавляете вы." },
+            "incorrect": { "en": "Inbox dedups on the consumer side, Outbox publishes with the sale, effectively-once is the combination.", "ru": "Inbox дедуплицирует у консьюмера, Outbox публикует вместе с продажей, effectively-once — их комбинация." }
+          },
+          "pairs": [
+            { "id": "at-least-once", "left": { "en": "at-least-once delivery", "ru": "доставка at-least-once" }, "right": { "en": "The same message can be delivered again", "ru": "То же сообщение может быть доставлено снова" } },
+            { "id": "inbox", "left": { "en": "Inbox pattern", "ru": "Паттерн Inbox" }, "right": { "en": "The consumer stores the message id in the same transaction as the effect", "ru": "Консьюмер сохраняет id сообщения в той же транзакции, что и эффект" } },
+            { "id": "outbox", "left": { "en": "Outbox pattern", "ru": "Паттерн Outbox" }, "right": { "en": "The event is written together with the sale instead of sent inline", "ru": "Событие записывается вместе с продажей, а не отправляется встроенно" } },
+            { "id": "effectively-once", "left": { "en": "effectively-once", "ru": "effectively-once" }, "right": { "en": "At-least-once delivery plus an idempotent effect", "ru": "Доставка at-least-once плюс идемпотентный эффект" } }
+          ]
+        },
+        {
+          "id": "broker-p4-fill-effectively",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the name of the combination.", "ru": "Впиши название комбинации." },
+          "feedback": {
+            "correct": { "en": "You cannot buy exactly-once delivery, but you can build this.", "ru": "Купить доставку exactly-once нельзя, но это построить можно." },
+            "incorrect": { "en": "It is effectively-once: at-least-once delivery plus an idempotent effect.", "ru": "Это effectively-once: доставка at-least-once плюс идемпотентный эффект." }
+          },
+          "text": {
+            "en": "At-least-once delivery plus an idempotent effect is called ___-once.",
+            "ru": "Доставку at-least-once плюс идемпотентный эффект называют ___-once."
+          },
+          "blanks": [
+            { "en": ["effectively"], "ru": ["effectively"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "downstream-side-effects",
+      "title": { "en": "Downstream side effects", "ru": "Побочные эффекты вниз по цепочке" },
+      "summary": {
+        "en": "A retry deduplicated at the sales endpoint can still double-decrement stock, so the sale's key is propagated to every downstream call.",
+        "ru": "Повтор, дедуплицированный на эндпоинте продаж, всё ещё может дважды списать остаток, поэтому ключ продажи пробрасывают в каждый вызов вниз по цепочке."
+      },
+      "discovery": [
+        {
+          "id": "downstream-d1-spot-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "The sale row itself is deduplicated correctly here. What still goes wrong when the till retries?",
+            "ru": "Сама строка продажи здесь дедуплицирована правильно. Что всё равно ломается, когда касса повторяет запрос?"
+          },
+          "code": "@PostMapping(\"/sales\")\n@Transactional\npublic Receipt register(@RequestBody Sale sale) {\n    inventoryClient.decrement(sale.item(), sale.quantity());     // no key passed\n    int rows = salesRepository.insertOnConflictDoNothing(sale);  // dedup happens here\n    return rows == 1 ? created(sale) : storedResponseFor(sale.saleId());\n}",
+          "codeLang": "java",
+          "options": [
+            { "id": "a", "text": { "en": "Stock is decremented again: the inventory call runs before the dedup and carries no key", "ru": "Остаток списывается снова: вызов склада идёт до дедупликации и не несёт ключа" }, "correct": true },
+            { "id": "b", "text": { "en": "Nothing — the upsert protects the whole method", "ru": "Ничего — upsert защищает весь метод" }, "correct": false,
+              "feedback": { "en": "The upsert protects the sales table only; the inventory call has already happened.", "ru": "Upsert защищает только таблицу продаж; вызов склада уже произошёл." } },
+            { "id": "c", "text": { "en": "The receipt id changes on the retry", "ru": "Id чека меняется при повторе" }, "correct": false,
+              "feedback": { "en": "The stored response keeps the receipt stable; the unguarded part is the inventory call.", "ru": "Сохранённый ответ держит чек стабильным; не защищён именно вызов склада." } }
+          ],
+          "reveal": {
+            "en": "Deduplicating the sale row does not deduplicate everything the request *did*. Two things break a downstream call:\n\n- it runs **before** the dedup decision, so a retry executes it again;\n- it is made **non-idempotently**, so the receiving service has no way to recognise the repeat.\n\n```mermaid\nflowchart LR\n  S[\"POST /sales (key sale-1)\"] --> D[\"dedup on sale-1\"]\n  D --> I[\"inventory: decrement (key sale-1)\"]\n  D --> P[\"payment: charge (key sale-1)\"]\n```\n\nThe fix is to place the effects *after* the guard and to **propagate the sale's key** to every downstream call, so inventory, payments and published events each deduplicate on the same identity. The key is not private to your endpoint: it is the identity of the business action, and every service acting on that action needs it.\n\nThis is why a published event goes through the Outbox rather than an inline send — the event carries the same key, and the consumer at the other end deduplicates on it.",
+            "ru": "Дедупликация строки продажи не дедуплицирует всё, что запрос *сделал*. Вызов вниз по цепочке ломают две вещи:\n\n- он выполняется **до** решения о дедупликации, поэтому повтор запускает его снова;\n- он сделан **неидемпотентно**, поэтому принимающий сервис не может распознать повтор.\n\n```mermaid\nflowchart LR\n  S[\"POST /sales (ключ sale-1)\"] --> D[\"дедупликация по sale-1\"]\n  D --> I[\"склад: списание (ключ sale-1)\"]\n  D --> P[\"оплата: списание денег (ключ sale-1)\"]\n```\n\nЛечится это так: эффекты выполняются *после* защиты, а ключ продажи **пробрасывается** в каждый вызов вниз по цепочке, чтобы склад, платежи и публикуемые события дедуплицировали по одной и той же идентичности. Ключ не является частной деталью вашего эндпоинта: это идентичность бизнес-действия, и она нужна каждому сервису, который на это действие реагирует.\n\nПоэтому публикуемое событие идёт через Outbox, а не отправляется встроенно: событие несёт тот же ключ, и консьюмер на другом конце дедуплицирует по нему."
+          },
+          "feedback": {
+            "correct": { "en": "The guard protected the row, not the side effect.", "ru": "Защита прикрыла строку, а не побочный эффект." },
+            "incorrect": { "en": "The inventory call runs before the dedup and without the key, so the retry repeats it.", "ru": "Вызов склада идёт до дедупликации и без ключа, поэтому повтор его повторяет." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "downstream-p1-double-decrement",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A retried sale is correctly deduplicated at the endpoint, yet stock was decremented twice. What is the most likely cause?",
+            "ru": "Повторная продажа корректно дедуплицирована на эндпоинте, но остаток списан дважды. Какова наиболее вероятная причина?"
+          },
+          "feedback": {
+            "correct": { "en": "Effects belong after the guard, and each must receive the sale's key.", "ru": "Эффекты должны идти после защиты, и каждый должен получить ключ продажи." },
+            "incorrect": { "en": "The inventory call ran before the dedup decision and carried no sale key.", "ru": "Вызов склада выполнился до решения о дедупликации и без ключа продажи." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "The inventory call ran before the dedup decision and carried no sale key", "ru": "Вызов склада шёл до решения о дедупликации и не нёс ключа продажи" }, "correct": true },
+            { "id": "b", "text": { "en": "The UNIQUE constraint on the sales table was missing", "ru": "На таблице продаж не было ограничения UNIQUE" }, "correct": false,
+              "feedback": { "en": "Then the sale row would be duplicated too; here only the side effect repeated.", "ru": "Тогда продублировалась бы и строка продажи; здесь повторился только побочный эффект." } },
+            { "id": "c", "text": { "en": "The dedup retention window was too short", "ru": "Окно хранения ключей было слишком коротким" }, "correct": false,
+              "feedback": { "en": "A short window would duplicate the sale row as well, not just the stock change.", "ru": "Короткое окно продублировало бы и строку продажи, а не только списание." } }
+          ]
+        },
+        {
+          "id": "downstream-p2-sort-order",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order a sale registration so that a retry cannot double-charge or double-decrement.",
+            "ru": "Расставь регистрацию продажи так, чтобы повтор не мог списать деньги или остаток дважды."
+          },
+          "feedback": {
+            "correct": { "en": "The guard decides first; effects run only for the attempt that won, and carry the key.", "ru": "Сначала решает защита; эффекты выполняются только для выигравшей попытки и несут ключ." },
+            "incorrect": { "en": "Decide with the constraint first, then run the side effects with the sale's key, then store the response.", "ru": "Сначала решение через ограничение, затем побочные эффекты с ключом продажи, затем сохранение ответа." }
+          },
+          "steps": [
+            { "id": "s1", "text": { "en": "Receive POST /sales carrying the sale's key", "ru": "Получить POST /sales с ключом продажи" } },
+            { "id": "s2", "text": { "en": "Let the UNIQUE constraint decide whether this is the first attempt", "ru": "Позволить ограничению UNIQUE решить, первая ли это попытка" } },
+            { "id": "s3", "text": { "en": "Only for the winning attempt, call inventory and payment passing the same key", "ru": "Только для выигравшей попытки вызвать склад и оплату, передав тот же ключ" } },
+            { "id": "s4", "text": { "en": "Store the response so a later retry replays it and applies nothing", "ru": "Сохранить ответ, чтобы поздний повтор вернул его и ничего не применил" } }
+          ]
+        },
+        {
+          "id": "downstream-p3-fill-key",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the missing word.", "ru": "Впиши пропущенное слово." },
+          "feedback": {
+            "correct": { "en": "One identity for the business action, shared by every service that acts on it.", "ru": "Одна идентичность бизнес-действия — общая для всех сервисов, которые на него реагируют." },
+            "incorrect": { "en": "The sale's key is propagated downstream so each service can deduplicate on it.", "ru": "Ключ продажи пробрасывают вниз по цепочке, чтобы каждый сервис дедуплицировал по нему." }
+          },
+          "text": {
+            "en": "To keep a retry from charging or decrementing twice, the sale's ___ is propagated to every downstream call.",
+            "ru": "Чтобы повтор не списал деньги или остаток дважды, ___ продажи пробрасывается в каждый вызов вниз по цепочке."
+          },
+          "blanks": [
+            { "en": ["key", "identity"], "ru": ["ключ", "идентичность"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "detect-and-reconcile",
+      "title": { "en": "Finding the duplicates you already have", "ru": "Как найти уже существующие дубли" },
+      "summary": {
+        "en": "A scheduled GROUP BY ... HAVING COUNT(*) > 1 job finds duplicates, and reconciliation with the devices finds the opposite error, a missing sale.",
+        "ru": "Регулярная задача с GROUP BY ... HAVING COUNT(*) > 1 находит дубли, а сверка с устройствами находит обратную ошибку — пропавшую продажу."
+      },
+      "discovery": [
+        {
+          "id": "detect-d1-query",
+          "type": "predict_output",
+          "prompt": {
+            "en": "What does this query report about the sales table?",
+            "ru": "Что этот запрос сообщает о таблице sales?"
+          },
+          "code": "SELECT sale_id, COUNT(*)\nFROM sales\nGROUP BY sale_id\nHAVING COUNT(*) > 1;",
+          "codeLang": "sql",
+          "options": [
+            { "id": "a", "text": { "en": "Every sale_id stored more than once, with how many rows it has", "ru": "Каждый sale_id, сохранённый более одного раза, и сколько у него строк" }, "correct": true },
+            { "id": "b", "text": { "en": "The number of sales per device", "ru": "Количество продаж на каждое устройство" }, "correct": false,
+              "feedback": { "en": "There is no device column here, and HAVING keeps only the repeated keys.", "ru": "Здесь нет колонки устройства, а HAVING оставляет только повторяющиеся ключи." } },
+            { "id": "c", "text": { "en": "The sales that are missing from the table", "ru": "Продажи, которых в таблице нет" }, "correct": false,
+              "feedback": { "en": "A missing sale has no row at all, so no query over this table can see it.", "ru": "У пропавшей продажи вообще нет строки, поэтому никакой запрос по этой таблице её не увидит." } }
+          ],
+          "reveal": {
+            "en": "Prevention is half the job; you also need to know whether it worked.\n\n```sql\nSELECT sale_id, COUNT(*)\nFROM sales\nGROUP BY sale_id\nHAVING COUNT(*) > 1;\n```\n\nRun it as a **monitored scheduled job**, not once after a release: this is how duplicates that reached production are found, and the extra rows can then be reversed in the books while the receipts still exist.\n\nPair it with **reconciliation** against the devices — \"this till says 214 sales today, the server has 216\" — because the opposite error exists too. A device whose queue was wiped produces a *missing* sale, and no idempotency key will ever tell you about it; only comparing counts will.\n\nThat asymmetry sets your defaults. A duplicate is loud and repairable: the query finds it. A lost sale leaves no trace anywhere. This is why a guard that discards real sales is worse than the duplicate it prevented, and why the answer to a retrying client is to make the retry safe rather than to forbid it.",
+            "ru": "Предотвращение — половина работы; надо ещё знать, сработало ли оно.\n\n```sql\nSELECT sale_id, COUNT(*)\nFROM sales\nGROUP BY sale_id\nHAVING COUNT(*) > 1;\n```\n\nЗапускайте это как **регулярную задачу с мониторингом**, а не один раз после релиза: именно так находят дубли, доехавшие до продакшена, и лишние строки потом можно сторнировать в учёте, пока чеки ещё существуют.\n\nДополните это **сверкой** с устройствами — «касса говорит 214 продаж за день, на сервере 216», — потому что существует и обратная ошибка. Устройство с затёртой очередью даёт *пропавшую* продажу, и никакой ключ идемпотентности о ней не расскажет; расскажет только сравнение количеств.\n\nЭта асимметрия задаёт ваши настройки по умолчанию. Дубль громкий и исправимый: его находит запрос. Потерянная продажа не оставляет следов нигде. Поэтому защита, выбрасывающая настоящие продажи, хуже дубля, который она предотвратила, и поэтому ответ повторяющему клиенту — сделать повтор безопасным, а не запретить его."
+          },
+          "feedback": {
+            "correct": { "en": "Grouping by the identity column exposes every key stored more than once.", "ru": "Группировка по колонке идентичности показывает каждый ключ, сохранённый больше раза." },
+            "incorrect": { "en": "It groups by sale_id and keeps only the keys with more than one row.", "ru": "Он группирует по sale_id и оставляет только ключи с более чем одной строкой." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "detect-p1-duplicate-vs-lost",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "For a sales system, why is a duplicate easier to live with than a lost sale?",
+            "ru": "Почему для системы продаж дубль пережить легче, чем потерянную продажу?"
+          },
+          "feedback": {
+            "correct": { "en": "That asymmetry is why the default is to make retries safe rather than forbid them.", "ru": "Из-за этой асимметрии по умолчанию повторы делают безопасными, а не запрещают." },
+            "incorrect": { "en": "A duplicate leaves a row a query can find and the books can correct; a lost sale leaves nothing.", "ru": "От дубля остаётся строка, которую находит запрос и правит учёт; от потерянной продажи не остаётся ничего." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "A duplicate leaves a row you can find and correct; a lost sale leaves nothing", "ru": "От дубля остаётся строка, которую можно найти и исправить; от потерянной продажи ничего" }, "correct": true },
+            { "id": "b", "text": { "en": "Duplicates do not affect the takings", "ru": "Дубли не влияют на выручку" }, "correct": false,
+              "feedback": { "en": "They do overstate revenue — the point is that they are visible and repairable.", "ru": "Они завышают выручку — суть в том, что они видимы и исправимы." } },
+            { "id": "c", "text": { "en": "Accounting systems ignore repeated rows automatically", "ru": "Учётные системы автоматически игнорируют повторяющиеся строки" }, "correct": false,
+              "feedback": { "en": "Nothing ignores them; a scheduled query is what finds them.", "ru": "Никто их не игнорирует; находит их регулярный запрос." } }
+          ]
+        },
+        {
+          "id": "detect-p2-reconciliation-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Reconciling per-device sale counts against the server can reveal a missing sale that no idempotency key would report.",
+            "ru": "Сверка количества продаж по устройствам с сервером может выявить пропавшую продажу, о которой не сообщит никакой ключ идемпотентности."
+          },
+          "feedback": {
+            "correct": { "en": "A wiped device queue leaves no row and no key — only the counts disagree.", "ru": "Затёртая очередь устройства не оставляет ни строки, ни ключа — расходятся только количества." },
+            "incorrect": { "en": "It does — a missing sale has no row to query, so only comparing counts finds it.", "ru": "Может — у пропавшей продажи нет строки, поэтому её находит только сравнение количеств." }
+          },
+          "answer": true
+        },
+        {
+          "id": "detect-p3-word-bank-sql",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the tail of the query that finds duplicated sale ids (after SELECT sale_id, COUNT(*) FROM sales).",
+            "ru": "Собери хвост запроса, который находит дублирующиеся sale_id (после SELECT sale_id, COUNT(*) FROM sales)."
+          },
+          "feedback": {
+            "correct": { "en": "GROUP BY collapses the rows per key; HAVING keeps only the keys with more than one.", "ru": "GROUP BY сворачивает строки по ключу; HAVING оставляет только ключи с более чем одной." },
+            "incorrect": { "en": "GROUP BY sale_id HAVING COUNT(*) > 1 — WHERE cannot filter an aggregate.", "ru": "GROUP BY sale_id HAVING COUNT(*) > 1 — WHERE не может фильтровать агрегат." }
+          },
+          "tokens": {
+            "en": ["GROUP", "BY", "sale_id", "HAVING", "COUNT(*)", ">", "1"],
+            "ru": ["GROUP", "BY", "sale_id", "HAVING", "COUNT(*)", ">", "1"]
+          },
+          "distractors": {
+            "en": ["WHERE", "ORDER"],
+            "ru": ["WHERE", "ORDER"]
+          }
+        },
+        {
+          "id": "detect-p4-fill-query",
+          "type": "fill_blank",
+          "prompt": { "en": "Complete the duplicate-detection query.", "ru": "Дополни запрос поиска дублей." },
+          "feedback": {
+            "correct": { "en": "Run it as a monitored job, and pair it with device reconciliation.", "ru": "Запускайте его как задачу с мониторингом и дополняйте сверкой с устройствами." },
+            "incorrect": { "en": "Group by the identity column and keep the groups with more than one row.", "ru": "Группируйте по колонке идентичности и оставляйте группы с более чем одной строкой." }
+          },
+          "text": {
+            "en": "SELECT sale_id, COUNT(*) FROM sales GROUP BY ___ HAVING COUNT(*) > ___;",
+            "ru": "SELECT sale_id, COUNT(*) FROM sales GROUP BY ___ HAVING COUNT(*) > ___;"
+          },
+          "blanks": [
+            { "en": ["sale_id"], "ru": ["sale_id"] },
+            { "en": ["1"], "ru": ["1"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "duplicate-guard-end-to-end",
+      "title": { "en": "The whole guard, end to end", "ru": "Вся защита от начала до конца" },
+      "summary": {
+        "en": "One request path: identity from the client, the constraint as arbiter, both writes in one transaction, the stored response replayed, and a window that outlasts the retry.",
+        "ru": "Один путь запроса: идентичность от клиента, ограничение как арбитр, обе записи в одной транзакции, возврат сохранённого ответа и окно, переживающее повтор."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "cap-d1-three-requests",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The endpoint inserts under `UNIQUE (sale_id)` in one transaction and stores each response; keys are kept 90 days. What do the second and third requests return?",
+            "ru": "Эндпоинт вставляет под `UNIQUE (sale_id)` в одной транзакции и сохраняет каждый ответ; ключи хранятся 90 дней. Что вернут второй и третий запросы?"
+          },
+          "code": "09:15:02  POST /sales  key sale-1  {\"item\":\"latte\",\"amount\":350}  -> 201 {\"receiptId\":\"R-1\"}\n09:15:04  POST /sales  key sale-1  {\"item\":\"latte\",\"amount\":350}  -> ?\n09:15:07  POST /sales  key sale-2  {\"item\":\"latte\",\"amount\":350}  -> ?",
+          "codeLang": "text",
+          "options": [
+            { "id": "a", "text": { "en": "200 with the stored receipt R-1, then 201 with a new receipt", "ru": "200 с сохранённым чеком R-1, затем 201 с новым чеком" }, "correct": true },
+            { "id": "b", "text": { "en": "200 with R-1, then 200 with R-1 again", "ru": "200 с R-1, затем снова 200 с R-1" }, "correct": false,
+              "feedback": { "en": "The third request carries its own key: identical contents do not make it a duplicate.", "ru": "У третьего запроса свой ключ: одинаковое содержимое не делает его дублем." } },
+            { "id": "c", "text": { "en": "409 Conflict, then 201 Created", "ru": "409 Conflict, затем 201 Created" }, "correct": false,
+              "feedback": { "en": "The second request repeats the same key AND the same body — that is a retry, so its stored response is replayed.", "ru": "Второй запрос повторяет тот же ключ И то же тело — это повтор, поэтому возвращается сохранённый ответ." } }
+          ],
+          "reveal": {
+            "en": "The whole guard, in one path:\n\n```mermaid\nflowchart TD\n  K[\"device mints one key per sale\"] --> B[\"BEGIN\"]\n  B --> I[\"INSERT under UNIQUE (sale_id)\"]\n  I --> Q{\"insert won?\"}\n  Q -->|yes| S[\"store the sale and the response, call downstream with the same key\"]\n  Q -->|no| R{\"same body as stored?\"}\n  R -->|yes| P[\"replay the stored response: 200\"]\n  R -->|no| C[\"409 Conflict\"]\n  S --> M[\"COMMIT: 201\"]\n```\n\nEvery part answers one specific failure: the client-minted key defines identity (a server UUID cannot); the constraint removes the race (a SELECT cannot); one transaction removes the half-written states; the stored response makes the retry usable by the till; the body check stops a reused key from erasing a real sale; propagating the key stops the retry from decrementing stock twice; and a retention window longer than the longest retry keeps all of it true for the till that syncs three days late.\n\nThe third request in the example is the check on all of it: same contents, different key — a different sale, and any guard that merges the two is destroying revenue.",
+            "ru": "Вся защита в одном пути:\n\n```mermaid\nflowchart TD\n  K[\"устройство создаёт один ключ на продажу\"] --> B[\"BEGIN\"]\n  B --> I[\"INSERT под UNIQUE (sale_id)\"]\n  I --> Q{\"вставка удалась?\"}\n  Q -->|да| S[\"сохранить продажу и ответ, вызвать смежные сервисы с тем же ключом\"]\n  Q -->|нет| R{\"тело такое же, как сохранённое?\"}\n  R -->|да| P[\"вернуть сохранённый ответ: 200\"]\n  R -->|нет| C[\"409 Conflict\"]\n  S --> M[\"COMMIT: 201\"]\n```\n\nКаждая часть отвечает на конкретный сбой: ключ от клиента задаёт идентичность (UUID от сервера не может); ограничение убирает гонку (SELECT не может); одна транзакция убирает недописанные состояния; сохранённый ответ делает повтор пригодным для кассы; проверка тела не даёт переиспользованному ключу стереть настоящую продажу; проброс ключа не даёт повтору списать остаток дважды; а окно хранения дольше самого долгого повтора сохраняет всё это верным для кассы, которая синхронизируется через три дня.\n\nТретий запрос в примере — проверка всего этого: то же содержимое, другой ключ — другая продажа, и любая защита, которая сливает их в одну, уничтожает выручку."
+          },
+          "feedback": {
+            "correct": { "en": "Same key and same body is a retry; a different key is a different sale.", "ru": "Тот же ключ и то же тело — повтор; другой ключ — другая продажа." },
+            "incorrect": { "en": "The retry replays the stored 200/R-1; the third request has its own key, so it is a new sale.", "ru": "Повтор возвращает сохранённые 200/R-1; у третьего запроса свой ключ, поэтому это новая продажа." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "cap-p1-which-line-deletes-revenue",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This handler is meant to register each sale once. Which line introduces the failure that silently DELETES revenue?",
+            "ru": "Этот обработчик должен регистрировать каждую продажу один раз. Какая строка вносит сбой, который молча УДАЛЯЕТ выручку?"
+          },
+          "code": "String key = sha256(requestBody);          // 1\nif (!dedupRepository.exists(key)) {        // 2\n    dedupRepository.insert(key);           // 3  (own transaction)\n    salesRepository.insert(sale);           // 4  (own transaction)\n}\nreturn new Receipt(UUID.randomUUID());     // 5",
+          "codeLang": "java",
+          "feedback": {
+            "correct": { "en": "Hashing the body merges two different customers' identical purchases into one sale.", "ru": "Хэш тела сливает одинаковые покупки двух разных покупателей в одну продажу." },
+            "incorrect": { "en": "Line 1: a payload hash makes a second identical sale look like a retry, so it is discarded.", "ru": "Строка 1: хэш тела делает вторую одинаковую продажу похожей на повтор, и её выбрасывают." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Line 1 — a payload hash makes a second identical sale look like a retry", "ru": "Строка 1 — хэш тела делает вторую одинаковую продажу похожей на повтор" }, "correct": true },
+            { "id": "b", "text": { "en": "Line 2 — the existence check races with a concurrent delivery", "ru": "Строка 2 — проверка существования гоняется с параллельной доставкой" }, "correct": false,
+              "feedback": { "en": "A real defect, but it creates extra rows, not missing ones.", "ru": "Настоящий дефект, но он создаёт лишние строки, а не теряет их." } },
+            { "id": "c", "text": { "en": "Line 5 — a new receipt id is generated per attempt", "ru": "Строка 5 — на каждой попытке генерируется новый id чека" }, "correct": false,
+              "feedback": { "en": "That confuses the till, but no sale is lost by it.", "ru": "Это путает кассу, но продажу из-за этого не теряют." } }
+          ]
+        },
+        {
+          "id": "cap-p2-inbox-plus-window",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The consumer stores the message id in the same transaction as the sale, but dedup ids are purged after 30 minutes. What does the redelivery at 13:30 do?",
+            "ru": "Консьюмер сохраняет id сообщения в той же транзакции, что и продажу, но id дедупликации удаляются через 30 минут. Что сделает повторная доставка в 13:30?"
+          },
+          "code": "// dedup ids are purged after 30 minutes\n12:00  broker delivers sale-1; the consumer inserts it and crashes before the ack\n13:30  the broker redelivers sale-1  -> ?",
+          "codeLang": "text",
+          "feedback": {
+            "correct": { "en": "A correct Inbox with a too-short window is not a guard at all.", "ru": "Правильный Inbox со слишком коротким окном — вовсе не защита." },
+            "incorrect": { "en": "The stored id was purged an hour earlier, so the redelivery inserts the sale a second time.", "ru": "Сохранённый id удалили часом раньше, поэтому повторная доставка вставит продажу второй раз." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Inserts the sale a second time — the id it would have matched was purged", "ru": "Вставит продажу второй раз — id, с которым она бы совпала, удалён" }, "correct": true },
+            { "id": "b", "text": { "en": "Finds the stored id and applies nothing", "ru": "Найдёт сохранённый id и ничего не применит" }, "correct": false,
+              "feedback": { "en": "The id was deleted 60 minutes before the redelivery; nothing is left to match.", "ru": "Id удалили за 60 минут до повторной доставки; сравнивать не с чем." } },
+            { "id": "c", "text": { "en": "Fails with a unique violation, so nothing changes", "ru": "Упадёт с нарушением уникальности, поэтому ничего не изменится" }, "correct": false,
+              "feedback": { "en": "The purge removed the row, so there is nothing left to conflict with.", "ru": "Очистка удалила строку, поэтому конфликтовать больше не с чем." } }
+          ]
+        },
+        {
+          "id": "cap-p3-sort-full-path",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the complete server-side handling of a sale registration, including its edge cases.",
+            "ru": "Расставь по порядку полную обработку регистрации продажи на сервере, включая краевые случаи."
+          },
+          "feedback": {
+            "correct": { "en": "Identity, then the constraint, then the branches, then one commit.", "ru": "Идентичность, затем ограничение, затем ветки, затем один COMMIT." },
+            "incorrect": { "en": "The key arrives first, the constraint decides, the branches answer, and COMMIT makes both rows durable together.", "ru": "Сначала приходит ключ, решает ограничение, ветки отвечают, а COMMIT делает обе строки надёжными вместе." }
+          },
+          "steps": [
+            { "id": "s1", "text": { "en": "The device sends the sale with the key it minted once, unchanged on every attempt", "ru": "Устройство отправляет продажу с ключом, созданным один раз и неизменным в каждой попытке" } },
+            { "id": "s2", "text": { "en": "BEGIN a single transaction", "ru": "Открыть одну транзакцию (BEGIN)" } },
+            { "id": "s3", "text": { "en": "INSERT under the UNIQUE constraint and let the database decide who won", "ru": "INSERT под ограничением UNIQUE, и пусть база решит, кто выиграл" } },
+            { "id": "s4", "text": { "en": "If the insert lost: compare bodies, then replay the stored response or answer 409", "ru": "Если вставка проиграла: сравнить тела, затем вернуть сохранённый ответ или ответить 409" } },
+            { "id": "s5", "text": { "en": "If the insert won: store the sale and its response, and call downstream services with the same key", "ru": "Если вставка выиграла: сохранить продажу и её ответ и вызвать смежные сервисы с тем же ключом" } },
+            { "id": "s6", "text": { "en": "COMMIT, so the dedup record and the sale become durable together", "ru": "COMMIT, чтобы запись дедупликации и продажа стали надёжными вместе" } }
+          ]
+        },
+        {
+          "id": "cap-p4-match-mechanisms",
+          "type": "match_pairs",
+          "prompt": { "en": "Match each mechanism with the failure it removes.", "ru": "Соотнеси каждый механизм со сбоем, который он убирает." },
+          "feedback": {
+            "correct": { "en": "Remove any one of them and a specific failure comes back.", "ru": "Уберите любой из них — и конкретный сбой вернётся." },
+            "incorrect": { "en": "Identity, the constraint, one transaction, the stored response and retention each cover a different failure.", "ru": "Идентичность, ограничение, одна транзакция, сохранённый ответ и хранение закрывают разные сбои." }
+          },
+          "pairs": [
+            { "id": "client-key", "left": { "en": "Client-minted sale key", "ru": "Ключ продажи, созданный клиентом" }, "right": { "en": "Defines which requests are the same sale", "ru": "Определяет, какие запросы являются одной продажей" } },
+            { "id": "constraint", "left": { "en": "UNIQUE (sale_id)", "ru": "UNIQUE (sale_id)" }, "right": { "en": "Makes the check and the write one indivisible operation", "ru": "Делает проверку и запись одной неделимой операцией" } },
+            { "id": "one-tx", "left": { "en": "One transaction around both writes", "ru": "Одна транзакция вокруг обеих записей" }, "right": { "en": "Leaves no key without a sale and no sale without a key", "ru": "Не оставляет ни ключа без продажи, ни продажи без ключа" } },
+            { "id": "stored-response", "left": { "en": "Stored key -> (status, response)", "ru": "Сохранённое ключ -> (статус, ответ)" }, "right": { "en": "Lets a retry print the same receipt", "ru": "Позволяет повтору напечатать тот же чек" } },
+            { "id": "retention", "left": { "en": "Retention longer than the longest retry", "ru": "Хранение дольше самого долгого повтора" }, "right": { "en": "Keeps a three-day-late sync from looking like a new sale", "ru": "Не даёт синхронизации через три дня выглядеть новой продажей" } }
+          ]
+        },
+        {
+          "id": "cap-p5-fill-three-answers",
+          "type": "fill_blank",
+          "prompt": { "en": "Complete the three answers a deduplicating sales endpoint gives.", "ru": "Дополни три ответа, которые даёт дедуплицирующий эндпоинт продаж." },
+          "feedback": {
+            "correct": { "en": "One statement, one replayed answer, one loud refusal.", "ru": "Один оператор, один возвращённый ответ, один громкий отказ." },
+            "incorrect": { "en": "DO NOTHING on conflict, 200 with the stored response for a true retry, 409 for a reused key.", "ru": "DO NOTHING при конфликте, 200 с сохранённым ответом на настоящий повтор, 409 на переиспользованный ключ." }
+          },
+          "text": {
+            "en": "Under UNIQUE (sale_id) the write is `ON CONFLICT (sale_id) DO ___`; a true retry is answered with status ___ and the stored response; a known key with a different body gets ___.",
+            "ru": "При UNIQUE (sale_id) запись выглядит как `ON CONFLICT (sale_id) DO ___`; на настоящий повтор отвечают статусом ___ и сохранённым ответом; известный ключ с другим телом получает ___."
+          },
+          "blanks": [
+            { "en": ["NOTHING", "nothing"], "ru": ["NOTHING", "nothing"] },
+            { "en": ["200"], "ru": ["200"] },
+            { "en": ["409"], "ru": ["409"] }
+          ]
+        }
+      ]
+    }
+  ]
+}

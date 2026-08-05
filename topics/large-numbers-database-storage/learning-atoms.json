@@ -1,0 +1,3315 @@
+{
+  "schemaVersion": 1,
+  "topicId": "large-numbers-database-storage",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "requirements-first",
+      "title": {
+        "en": "What the choice really depends on",
+        "ru": "От чего на самом деле зависит выбор"
+      },
+      "summary": {
+        "en": "The storage choice follows from the semantics the queries need — exact arithmetic, ordering, ranges, aggregates — not from the size of the number alone.",
+        "ru": "Выбор хранения следует из семантики, которая нужна запросам, — точная арифметика, сортировка, диапазоны, агрегаты, — а не только из размера числа."
+      },
+      "discovery": [
+        {
+          "id": "requirements-d1-first-question",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A column must hold values far larger than int64. What should you decide BEFORE picking a type?",
+            "ru": "Колонка должна хранить значения намного больше int64. Что нужно решить ДО выбора типа?"
+          },
+          "reveal": {
+            "en": "A database will store almost any value if you turn it into text — but it will not compare that text as a number. So the first question is not \"how big is it\", it is **what do the queries need to do with it**:\n\n```mermaid\nflowchart TD\n  R[\"what do the queries need?\"] --> A[\"exact arithmetic\"]\n  R --> O[\"ORDER BY and range filters\"]\n  R --> G[\"aggregates such as SUM\"]\n  R --> D[\"exact storage and display only\"]\n```\n\nOnly the last branch can be served by plain text. Exact arithmetic, ordering, ranges and aggregates all need a column whose **type** carries numeric comparison semantics.\n\nA database compares a column using the rules of its type, not using the meaning you had in mind when you wrote the characters. That single sentence drives every decision in this topic.",
+            "ru": "База данных сохранит почти любое значение, если превратить его в текст, — но сравнивать этот текст как число она не станет. Поэтому первый вопрос не «насколько оно большое», а **что запросам нужно с ним делать**:\n\n```mermaid\nflowchart TD\n  R[\"что нужно запросам?\"] --> A[\"точная арифметика\"]\n  R --> O[\"ORDER BY и фильтры по диапазону\"]\n  R --> G[\"агрегаты вроде SUM\"]\n  R --> D[\"только точное хранение и отображение\"]\n```\n\nОбычный текст закрывает только последнюю ветку. Точная арифметика, сортировка, диапазоны и агрегаты требуют колонки, **тип** которой несёт семантику числового сравнения.\n\nБД сравнивает колонку по правилам её типа, а не по смыслу, который ты вкладывал, когда писал символы. Эта одна фраза определяет все решения в теме."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the required semantics decide the type.",
+              "ru": "Верно — тип определяется нужной семантикой."
+            },
+            "incorrect": {
+              "en": "Start from what the queries must do: arithmetic, ordering, ranges, aggregates.",
+              "ru": "Начинай с того, что должны уметь запросы: арифметика, сортировка, диапазоны, агрегаты."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Which semantics the queries need: exact arithmetic, ordering, ranges, aggregates",
+                "ru": "Какая семантика нужна запросам: точная арифметика, сортировка, диапазоны, агрегаты"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "How many rows the table will hold",
+                "ru": "Сколько строк будет в таблице"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Row count affects size and speed, not whether numeric semantics are required.",
+                "ru": "Количество строк влияет на объём и скорость, а не на то, нужна ли числовая семантика."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Which index to create on the column",
+                "ru": "Какой индекс создать на колонке"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "An index only reproduces the ordering the column's type already defines, so the type comes first.",
+                "ru": "Индекс лишь воспроизводит порядок, заданный типом колонки, поэтому тип идёт первым."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "requirements-p1-auto-numeric",
+          "type": "true_false",
+          "prompt": {
+            "en": "A relational database compares two text values as numbers when both contain only digits.",
+            "ru": "Реляционная БД сравнивает два текстовых значения как числа, если оба состоят только из цифр."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Comparison follows the column's type; a text column compares characters.",
+              "ru": "Сравнение следует типу колонки; текстовая колонка сравнивает символы."
+            },
+            "incorrect": {
+              "en": "No — a text column compares characters, whatever those characters happen to be.",
+              "ru": "Нет — текстовая колонка сравнивает символы, какими бы они ни были."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "requirements-p2-what-text-serves",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which requirement can a plain text column satisfy on its own for a very large number?",
+            "ru": "Какое требование обычная текстовая колонка может закрыть сама по себе для очень большого числа?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Text keeps the characters exactly; everything numeric has to be rebuilt.",
+              "ru": "Текст точно сохраняет символы; всю числовую семантику приходится строить заново."
+            },
+            "incorrect": {
+              "en": "Only exact storage and display — ordering, ranges and aggregates need numeric semantics.",
+              "ru": "Только точное хранение и отображение — сортировка, диапазоны и агрегаты требуют числовой семантики."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Exact storage and display of the value",
+                "ru": "Точное хранение и отображение значения"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "ORDER BY by numeric value",
+                "ru": "ORDER BY по числовому значению"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Text ordering is character order, not numeric order.",
+                "ru": "Порядок текста — это порядок символов, а не чисел."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "SUM over the column",
+                "ru": "SUM по колонке"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Aggregating requires a numeric type; text has no arithmetic.",
+                "ru": "Агрегация требует числового типа; у текста нет арифметики."
+              }
+            }
+          ]
+        },
+        {
+          "id": "requirements-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the rule about storing a number as text.",
+            "ru": "Собери правило о хранении числа в виде текста."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Storage is easy; comparison is what text gives up.",
+              "ru": "Сохранить легко; текст отдаёт именно сравнение."
+            },
+            "incorrect": {
+              "en": "Text can store any value but cannot compare it as a number.",
+              "ru": "Текст может сохранить любое значение, но не может сравнивать его как число."
+            }
+          },
+          "tokens": {
+            "en": [
+              "text",
+              "can",
+              "store",
+              "any",
+              "value",
+              "but",
+              "cannot",
+              "compare",
+              "it",
+              "as",
+              "a",
+              "number"
+            ],
+            "ru": [
+              "текст",
+              "может",
+              "сохранить",
+              "любое",
+              "значение",
+              "но",
+              "не",
+              "может",
+              "сравнивать",
+              "его",
+              "как",
+              "число"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "sort",
+              "numerically"
+            ],
+            "ru": [
+              "сортировать",
+              "численно"
+            ]
+          }
+        },
+        {
+          "id": "requirements-p4-fill-type",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing word.",
+            "ru": "Впиши пропущенное слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The column's type is the whole contract: it defines comparison, ranges and arithmetic.",
+              "ru": "Тип колонки — это весь контракт: он задаёт сравнение, диапазоны и арифметику."
+            },
+            "incorrect": {
+              "en": "It is the type: a database compares by the column's type, not by what the characters mean to you.",
+              "ru": "Это тип: БД сравнивает по типу колонки, а не по тому, что символы значат для тебя."
+            }
+          },
+          "text": {
+            "en": "A database compares a column using the semantics of its ___, not of the characters you stored.",
+            "ru": "БД сравнивает колонку по семантике её ___, а не по символам, которые ты сохранил."
+          },
+          "answers": {
+            "en": [
+              "type",
+              "data type",
+              "column type"
+            ],
+            "ru": [
+              "типа",
+              "тип",
+              "type"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "bigint-first",
+      "title": {
+        "en": "Start with BIGINT",
+        "ru": "Начни с BIGINT"
+      },
+      "summary": {
+        "en": "If the value fits int64, BIGINT is the right type; you climb to an exact decimal type only when it does not fit.",
+        "ru": "Если значение помещается в int64, правильный тип — BIGINT; к точному decimal-типу переходят, только когда оно не помещается."
+      },
+      "discovery": [
+        {
+          "id": "bigint-d1-fits-int64",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A value is known to fit in int64. Which type does the decision start with?",
+            "ru": "Известно, что значение помещается в int64. С какого типа начинается решение?"
+          },
+          "reveal": {
+            "en": "The decision is a ladder, and the first rung is the cheapest one that works.\n\n```mermaid\nflowchart TD\n  A[\"value requirement\"] --> B{\"fits BIGINT?\"}\n  B -->|yes| C[\"BIGINT\"]\n  B -->|no| D[\"exact decimal type: NUMERIC / DECIMAL\"]\n```\n\n**BIGINT** is the SQL type for a 64-bit signed integer — what interview answers call `int64`. It is a native numeric type, so comparisons, ranges and aggregates all behave numerically for free, and its index keys are small.\n\nWhy not reach for the biggest type available and be done? Because a bigger key costs pages, writes and cache on every index that contains it. Use the smallest exact type that fits.\n\nOnly when the value does not fit int64 do you climb to the next rung: an exact decimal type, `NUMERIC` / `DECIMAL`, declared with explicit precision and scale. The next atom takes those two words apart.",
+            "ru": "Решение — это лестница, и первая ступень должна быть самой дешёвой из работающих.\n\n```mermaid\nflowchart TD\n  A[\"требование к значению\"] --> B{\"помещается в BIGINT?\"}\n  B -->|да| C[\"BIGINT\"]\n  B -->|нет| D[\"точный decimal-тип: NUMERIC / DECIMAL\"]\n```\n\n**BIGINT** — это SQL-тип для 64-битного знакового целого, то самое, что в ответах на собеседовании называют `int64`. Это нативный числовой тип, поэтому сравнения, диапазоны и агрегаты сразу работают по-числовому, а ключи индекса получаются маленькими.\n\nПочему не взять сразу самый большой тип? Потому что больший ключ стоит страниц, записей и кэша в каждом индексе, куда он входит. Бери наименьший точный тип, который подходит.\n\nИ только если значение не помещается в int64, поднимайся на следующую ступень: точный decimal-тип `NUMERIC` / `DECIMAL` с явными precision и scale. Следующий атом разбирает эти два слова."
+          },
+          "feedback": {
+            "correct": {
+              "en": "BIGINT is the first rung: native, exact, and cheap to index.",
+              "ru": "BIGINT — первая ступень: нативный, точный и дешёвый для индекса."
+            },
+            "incorrect": {
+              "en": "If it fits int64, use BIGINT — a bigger type only makes index keys heavier.",
+              "ru": "Если помещается в int64 — бери BIGINT; более крупный тип лишь утяжелит ключи индекса."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "BIGINT",
+                "ru": "BIGINT"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "NUMERIC(78, 0)",
+                "ru": "NUMERIC(78, 0)"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Maximum precision for a value that already fits a native integer makes keys larger for no benefit.",
+                "ru": "Максимальная precision для значения, которое и так помещается в нативное целое, лишь увеличивает ключи без пользы."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A text column",
+                "ru": "Текстовая колонка"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Text gives up numeric comparison; there is no reason to give it up for a value that fits int64.",
+                "ru": "Текст отказывается от числового сравнения; нет причин отдавать его для значения, помещающегося в int64."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "bigint-p1-next-rung",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A value does not fit int64, but it does fit the target database's exact decimal type. What should the column be?",
+            "ru": "Значение не помещается в int64, но помещается в точный decimal-тип целевой БД. Каким должен быть тип колонки?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The second rung of the ladder is an exact decimal type with both numbers stated.",
+              "ru": "Вторая ступень лестницы — точный decimal-тип с обоими явно указанными числами."
+            },
+            "incorrect": {
+              "en": "Use NUMERIC / DECIMAL with explicit precision and scale — it is exact and still compares numerically.",
+              "ru": "Используй NUMERIC / DECIMAL с явными precision и scale — это точно и всё ещё сравнивается по-числовому."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "NUMERIC / DECIMAL with explicit precision and scale",
+                "ru": "NUMERIC / DECIMAL с явными precision и scale"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A text column, because the value is large",
+                "ru": "Текстовая колонка, раз значение большое"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Size alone is not a reason to give up numeric comparison.",
+                "ru": "Один только размер — не причина отказываться от числового сравнения."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Two BIGINT columns holding halves of the value",
+                "ru": "Две колонки BIGINT, хранящие половины значения"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Splitting a value across columns is a last resort for values beyond exact decimal support.",
+                "ru": "Разделение значения по колонкам — крайняя мера для значений за пределами точного decimal-типа."
+              }
+            }
+          ]
+        },
+        {
+          "id": "bigint-p2-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the first rule of choosing a type for a large number.",
+            "ru": "Собери первое правило выбора типа для большого числа."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The cheapest exact type that fits is always the right first answer.",
+              "ru": "Самый дешёвый подходящий точный тип — всегда правильный первый ответ."
+            },
+            "incorrect": {
+              "en": "If the value fits int64, use BIGINT.",
+              "ru": "Если значение помещается в int64, используй BIGINT."
+            }
+          },
+          "tokens": {
+            "en": [
+              "if",
+              "the",
+              "value",
+              "fits",
+              "int64",
+              "use",
+              "BIGINT"
+            ],
+            "ru": [
+              "если",
+              "значение",
+              "помещается",
+              "в",
+              "int64",
+              "используй",
+              "BIGINT"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "text"
+            ],
+            "ru": [
+              "текст"
+            ]
+          }
+        },
+        {
+          "id": "bigint-p3-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing SQL type.",
+            "ru": "Впиши пропущенный SQL-тип."
+          },
+          "feedback": {
+            "correct": {
+              "en": "BIGINT is the native 64-bit signed integer type.",
+              "ru": "BIGINT — нативный 64-битный знаковый целый тип."
+            },
+            "incorrect": {
+              "en": "It is BIGINT — the SQL type matching int64.",
+              "ru": "Это BIGINT — SQL-тип, соответствующий int64."
+            }
+          },
+          "text": {
+            "en": "A value that fits int64 belongs in a ___ column.",
+            "ru": "Значение, которое помещается в int64, должно лежать в колонке ___."
+          },
+          "answers": {
+            "en": [
+              "BIGINT",
+              "bigint"
+            ],
+            "ru": [
+              "BIGINT",
+              "bigint"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-and-scale",
+      "title": {
+        "en": "NUMERIC(p, s): precision and scale",
+        "ru": "NUMERIC(p, s): precision и scale"
+      },
+      "summary": {
+        "en": "In NUMERIC/DECIMAL(p, s), p is the total number of significant digits and s is how many of them sit after the decimal point.",
+        "ru": "В NUMERIC/DECIMAL(p, s) p — общее число значащих цифр, а s — сколько из них стоит после десятичной точки."
+      },
+      "discovery": [
+        {
+          "id": "precision-d1-predict-10-2",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Predict how many digits this column can keep BEFORE the decimal point.",
+            "ru": "Предскажи, сколько цифр эта колонка может хранить ДО десятичной точки."
+          },
+          "code": "CREATE TABLE invoice (\n  amount NUMERIC(10, 2) NOT NULL\n);",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "`NUMERIC(p, s)` — spelled `DECIMAL(p, s)` in some databases — is an **exact** decimal type: it keeps the digits you gave it, with no rounding.\n\n- **precision** `p` — the total count of significant digits.\n- **scale** `s` — how many of those digits are after the decimal point.\n- so `p - s` digits are left before the point.\n\n```\nNUMERIC(10, 2)\n  precision p = 10  -> 10 significant digits in total\n  scale     s =  2  ->  2 of them after the point\n  p - s     =  8    ->  8 digits before the point\n  largest value: 99999999.99\n```\n\nScale `0` makes the type integer-like: `NUMERIC(78, 0)` is 78 digits with nothing after the point.\n\nBoth numbers are part of the declaration. \"Just use DECIMAL\" without stating `p` and `s` is not yet a design — it does not say what fits or where the point goes.",
+            "ru": "`NUMERIC(p, s)` — в некоторых БД пишется как `DECIMAL(p, s)` — это **точный** десятичный тип: он хранит ровно те цифры, которые ты дал, без округления.\n\n- **precision** `p` — общее число значащих цифр.\n- **scale** `s` — сколько из них стоит после десятичной точки.\n- значит, до точки остаётся `p - s` цифр.\n\n```\nNUMERIC(10, 2)\n  precision p = 10  -> всего 10 значащих цифр\n  scale     s =  2  ->  2 из них после точки\n  p - s     =  8    ->  8 цифр до точки\n  максимум: 99999999.99\n```\n\nScale `0` делает тип целочисленным: `NUMERIC(78, 0)` — это 78 цифр и ничего после точки.\n\nОба числа — часть объявления. «Просто возьми DECIMAL» без `p` и `s` — это ещё не дизайн: непонятно, что помещается и где стоит точка."
+          },
+          "feedback": {
+            "correct": {
+              "en": "p - s = 10 - 2 = 8 digits before the point.",
+              "ru": "p - s = 10 - 2 = 8 цифр до точки."
+            },
+            "incorrect": {
+              "en": "Precision is the TOTAL: 10 digits minus the scale of 2 leaves 8 before the point.",
+              "ru": "Precision — это ВСЕГО: 10 цифр минус scale 2 оставляет 8 до точки."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "8",
+                "ru": "8"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "10",
+                "ru": "10"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "10 is the total number of significant digits, including the two after the point.",
+                "ru": "10 — общее число значащих цифр, включая две после точки."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "2",
+                "ru": "2"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "2 is the scale — the digits after the point, not before it.",
+                "ru": "2 — это scale, цифры после точки, а не до неё."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "precision-p1-38-18",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In NUMERIC(38, 18), how many digits are available before the decimal point?",
+            "ru": "Сколько цифр доступно до десятичной точки в NUMERIC(38, 18)?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "38 - 18 = 20 digits before the point.",
+              "ru": "38 - 18 = 20 цифр до точки."
+            },
+            "incorrect": {
+              "en": "Subtract the scale from the precision: 38 - 18 = 20.",
+              "ru": "Вычти scale из precision: 38 - 18 = 20."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "20",
+                "ru": "20"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "38",
+                "ru": "38"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "38 is the total precision; the 18 digits after the point come out of it.",
+                "ru": "38 — общая precision; 18 цифр после точки берутся из неё."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "18",
+                "ru": "18"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "18 is the scale — the digits after the point.",
+                "ru": "18 — это scale, цифры после точки."
+              }
+            }
+          ]
+        },
+        {
+          "id": "precision-p2-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each declaration or term to what it means.",
+            "ru": "Соотнеси объявление или термин с его значением."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Precision is the total; scale carves the digits after the point out of it.",
+              "ru": "Precision — это всего; scale вырезает из него цифры после точки."
+            },
+            "incorrect": {
+              "en": "p is the total count of significant digits, s is how many of them follow the decimal point.",
+              "ru": "p — общее число значащих цифр, s — сколько из них идёт после десятичной точки."
+            }
+          },
+          "pairs": [
+            {
+              "id": "precision",
+              "left": {
+                "en": "precision",
+                "ru": "precision"
+              },
+              "right": {
+                "en": "Total count of significant digits",
+                "ru": "Общее число значащих цифр"
+              }
+            },
+            {
+              "id": "scale",
+              "left": {
+                "en": "scale",
+                "ru": "scale"
+              },
+              "right": {
+                "en": "Count of digits after the decimal point",
+                "ru": "Число цифр после десятичной точки"
+              }
+            },
+            {
+              "id": "n78-0",
+              "left": {
+                "en": "NUMERIC(78, 0)",
+                "ru": "NUMERIC(78, 0)"
+              },
+              "right": {
+                "en": "78 digits, nothing after the point",
+                "ru": "78 цифр, после точки ничего"
+              }
+            },
+            {
+              "id": "n78-18",
+              "left": {
+                "en": "NUMERIC(78, 18)",
+                "ru": "NUMERIC(78, 18)"
+              },
+              "right": {
+                "en": "60 digits before the point, 18 after",
+                "ru": "60 цифр до точки, 18 после"
+              }
+            }
+          ]
+        },
+        {
+          "id": "precision-p3-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name both parts of the declaration.",
+            "ru": "Назови обе части объявления."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Precision and scale together decide what the column can hold.",
+              "ru": "Precision и scale вместе решают, что может хранить колонка."
+            },
+            "incorrect": {
+              "en": "p is the precision (total digits), s is the scale (digits after the point).",
+              "ru": "p — это precision (всего цифр), s — scale (цифры после точки)."
+            }
+          },
+          "text": {
+            "en": "In NUMERIC(p, s), p is the ___ and s is the ___.",
+            "ru": "В NUMERIC(p, s) p — это ___, а s — это ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "precision"
+              ],
+              "ru": [
+                "precision",
+                "точность"
+              ]
+            },
+            {
+              "en": [
+                "scale"
+              ],
+              "ru": [
+                "scale",
+                "масштаб"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "never-floating-point",
+      "title": {
+        "en": "Never floating point for exact values",
+        "ru": "Никакого floating point для точных значений"
+      },
+      "summary": {
+        "en": "FLOAT, REAL and DOUBLE trade exactness for range, so they must never hold balances, ledger amounts, identifiers or exact counters.",
+        "ru": "FLOAT, REAL и DOUBLE меняют точность на диапазон, поэтому им нельзя доверять балансы, суммы ledger, идентификаторы и точные счётчики."
+      },
+      "discovery": [
+        {
+          "id": "float-d1-spot-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This table is meant to hold exact token balances. What is the defect?",
+            "ru": "Эта таблица должна хранить точные балансы токенов. В чём дефект?"
+          },
+          "code": "CREATE TABLE token_balance (\n  account_id BIGINT PRIMARY KEY,\n  balance    DOUBLE PRECISION NOT NULL\n);",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "Floating-point types — `FLOAT`, `REAL`, `DOUBLE PRECISION` — **trade exactness for range**. They store an approximation of the value, so two amounts that should be equal can differ, and repeated arithmetic drifts away from the truth.\n\nThat trade is fine for a temperature reading. It is unacceptable for:\n\n- ledger entries and account balances\n- token balances\n- identifiers\n- exact counters\n\nThe exact alternatives are the rungs you already know: `BIGINT` when the value fits int64, `NUMERIC` / `DECIMAL(p, s)` when it is larger or has a fixed scale.\n\n\"The range is huge\" is never an argument for floating point when the value must be exact — range and exactness are the two things the type is trading against each other.",
+            "ru": "Floating-point типы — `FLOAT`, `REAL`, `DOUBLE PRECISION` — **меняют точность на диапазон**. Они хранят приближение значения, поэтому две суммы, которые должны быть равны, могут различаться, а повторяющаяся арифметика уводит результат от истины.\n\nДля показаний термометра такой обмен нормален. Он недопустим для:\n\n- записей ledger и балансов счетов\n- балансов токенов\n- идентификаторов\n- точных счётчиков\n\nТочные альтернативы — уже знакомые ступени: `BIGINT`, если значение помещается в int64, и `NUMERIC` / `DECIMAL(p, s)`, если оно больше или имеет фиксированный scale.\n\n«Зато диапазон огромный» — никогда не аргумент за floating point, когда значение должно быть точным: диапазон и точность и есть те две вещи, которые этот тип меняет друг на друга."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Floating point approximates — a balance must be exact.",
+              "ru": "Floating point приближает — а баланс должен быть точным."
+            },
+            "incorrect": {
+              "en": "The balance column is floating point, so the stored amount is an approximation.",
+              "ru": "Колонка balance — floating point, поэтому хранимая сумма является приближением."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "balance is a floating-point type, so the stored amount is not exact",
+                "ru": "balance — floating-point тип, поэтому сумма хранится неточно"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "account_id should be a text column",
+                "ru": "account_id должен быть текстовой колонкой"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The identifier fits int64, so BIGINT is exactly right for it.",
+                "ru": "Идентификатор помещается в int64, поэтому BIGINT для него как раз подходит."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — DOUBLE PRECISION covers a huge range",
+                "ru": "Ничего — у DOUBLE PRECISION огромный диапазон"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Range is not the problem: floating point buys that range by giving up exactness.",
+                "ru": "Проблема не в диапазоне: floating point покупает этот диапазон ценой точности."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "float-p1-range-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "DOUBLE PRECISION is a safe type for exact account balances because its range is very large.",
+            "ru": "DOUBLE PRECISION — безопасный тип для точных балансов счетов, потому что у него очень большой диапазон."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Range and exactness are exactly what floating point trades against each other.",
+              "ru": "Диапазон и точность — именно то, что floating point меняет друг на друга."
+            },
+            "incorrect": {
+              "en": "No — a large range is bought by giving up exactness, which balances cannot afford.",
+              "ru": "Нет — большой диапазон куплен ценой точности, а балансы себе этого позволить не могут."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "float-p2-which-exact",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which types store a money-like value exactly in a relational database?",
+            "ru": "Какие типы хранят денежное значение точно в реляционной БД?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Both are exact types: one native integer, one exact decimal.",
+              "ru": "Оба типа точные: один — нативное целое, другой — точный decimal."
+            },
+            "incorrect": {
+              "en": "BIGINT and NUMERIC / DECIMAL are exact; every FLOAT-family type approximates.",
+              "ru": "BIGINT и NUMERIC / DECIMAL точны; все типы семейства FLOAT приближают."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "BIGINT and NUMERIC / DECIMAL",
+                "ru": "BIGINT и NUMERIC / DECIMAL"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "REAL and DOUBLE PRECISION",
+                "ru": "REAL и DOUBLE PRECISION"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Both are floating point: they store an approximation.",
+                "ru": "Оба — floating point: они хранят приближение."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "FLOAT and a text column",
+                "ru": "FLOAT и текстовая колонка"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "FLOAT approximates, and text carries no numeric semantics at all.",
+                "ru": "FLOAT приближает, а текст вообще не несёт числовой семантики."
+              }
+            }
+          ]
+        },
+        {
+          "id": "float-p3-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing type name.",
+            "ru": "Впиши пропущенное имя типа."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The whole FLOAT family is off limits for exact values.",
+              "ru": "Всё семейство FLOAT под запретом для точных значений."
+            },
+            "incorrect": {
+              "en": "It is FLOAT — it, REAL and DOUBLE PRECISION are all approximate.",
+              "ru": "Это FLOAT — он, REAL и DOUBLE PRECISION все приближённые."
+            }
+          },
+          "text": {
+            "en": "Never store an exact balance in ___, REAL or DOUBLE PRECISION.",
+            "ru": "Никогда не храни точный баланс в ___, REAL или DOUBLE PRECISION."
+          },
+          "answers": {
+            "en": [
+              "FLOAT",
+              "float"
+            ],
+            "ru": [
+              "FLOAT",
+              "float"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "uint256-digits",
+      "title": {
+        "en": "How many digits a uint256 needs",
+        "ru": "Сколько цифр нужно uint256"
+      },
+      "summary": {
+        "en": "A raw uint256 can require up to 78 decimal digits; with display scale 18 that is 60 digits before the point and 18 after — still 78 significant digits.",
+        "ru": "Сырое uint256 может требовать до 78 десятичных цифр; при display scale 18 это 60 цифр до точки и 18 после — всё те же 78 значащих цифр."
+      },
+      "discovery": [
+        {
+          "id": "uint256-d1-how-many",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "You must store a raw uint256 value exactly. How many decimal digits can it need?",
+            "ru": "Нужно точно сохранить сырое значение uint256. Сколько десятичных цифр оно может потребовать?"
+          },
+          "reveal": {
+            "en": "A **uint256** is an unsigned 256-bit integer — the width used for token amounts. Written out in decimal, its maximum needs **up to 78 digits**, so `NUMERIC(78, 0)` is the exact decimal type that can hold it.\n\nToken amounts also carry a **display scale**: how many of the digits belong after the decimal point when a human reads the value. Scale 18 is the common case.\n\n```\nraw uint256 maximum        -> 78 decimal digits\nNUMERIC(78, 0)             -> 78 digits, scale 0 (base units)\nhuman form with scale 18   -> 60 digits . 18 digits\n                              60 + 18 = 78 significant digits\n```\n\nThe classic trap is adding the two numbers: 78 digits with 18 decimals is **not** 96 digits. The 18 decimals are carved out of the same 78 significant digits, leaving 60 in front of the point. And 256 is the count of *bits*, not of decimal digits — the two never coincide.",
+            "ru": "**uint256** — беззнаковое 256-битное целое, та самая ширина, что используется для сумм токенов. В десятичной записи его максимум требует **до 78 цифр**, поэтому точный decimal-тип, способный его вместить, — это `NUMERIC(78, 0)`.\n\nУ сумм токенов есть ещё **display scale**: сколько цифр относится к части после десятичной точки, когда значение читает человек. Обычный случай — scale 18.\n\n```\nмаксимум сырого uint256    -> 78 десятичных цифр\nNUMERIC(78, 0)             -> 78 цифр, scale 0 (базовые единицы)\nчеловеческая форма scale 18 -> 60 цифр . 18 цифр\n                              60 + 18 = 78 значащих цифр\n```\n\nКлассическая ловушка — сложить эти два числа: 78 цифр с 18 decimals — это **не** 96 цифр. 18 знаков после точки вырезаны из тех же 78 значащих цифр, и до точки остаётся 60. А 256 — это количество *битов*, а не десятичных цифр; они никогда не совпадают."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Up to 78 decimal digits — which is why NUMERIC(78, 0) is the target type.",
+              "ru": "До 78 десятичных цифр — поэтому целевой тип и есть NUMERIC(78, 0)."
+            },
+            "incorrect": {
+              "en": "A raw uint256 can need up to 78 decimal digits.",
+              "ru": "Сырое uint256 может требовать до 78 десятичных цифр."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Up to 78",
+                "ru": "До 78"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Up to 256",
+                "ru": "До 256"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "256 is the number of bits, not of decimal digits.",
+                "ru": "256 — количество битов, а не десятичных цифр."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Up to 96",
+                "ru": "До 96"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "96 comes from adding 78 and 18; the 18 decimals are part of the same 78 digits, not extra ones.",
+                "ru": "96 получается сложением 78 и 18; 18 decimals входят в те же 78 цифр, а не добавляются к ним."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "uint256-p1-96-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A uint256 amount with 18 decimals needs 96 significant decimal digits.",
+            "ru": "Сумма uint256 с 18 decimals требует 96 значащих десятичных цифр."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It is 78: the 18 decimals are carved out of them, leaving 60 in front.",
+              "ru": "Их 78: 18 decimals вырезаны из них, спереди остаётся 60."
+            },
+            "incorrect": {
+              "en": "No — the total stays 78 significant digits: 60 before the point and 18 after.",
+              "ru": "Нет — всего остаётся 78 значащих цифр: 60 до точки и 18 после."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "uint256-p2-which-type",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which type holds a raw uint256 exactly, in a database that supports that precision?",
+            "ru": "Какой тип точно вмещает сырое uint256 в БД, поддерживающей такую precision?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "78 digits, scale 0 — the raw integer with no fractional part.",
+              "ru": "78 цифр, scale 0 — сырое целое без дробной части."
+            },
+            "incorrect": {
+              "en": "NUMERIC(78, 0): 78 digits is the maximum a raw uint256 needs.",
+              "ru": "NUMERIC(78, 0): 78 цифр — максимум, который нужен сырому uint256."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "NUMERIC(78, 0)",
+                "ru": "NUMERIC(78, 0)"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "NUMERIC(18, 0)",
+                "ru": "NUMERIC(18, 0)"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "18 is the display scale, not the digit count of the value itself.",
+                "ru": "18 — это display scale, а не количество цифр самого значения."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "BIGINT",
+                "ru": "BIGINT"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A uint256 is far beyond int64.",
+                "ru": "uint256 намного выходит за пределы int64."
+              }
+            }
+          ]
+        },
+        {
+          "id": "uint256-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each item to what it describes for a uint256 token amount.",
+            "ru": "Соотнеси каждый элемент с тем, что он описывает для суммы токена uint256."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Same 78 digits, split differently depending on where the point sits.",
+              "ru": "Те же 78 цифр, просто по-разному разделённые в зависимости от места точки."
+            },
+            "incorrect": {
+              "en": "78 digits total: scale 0 keeps them all before the point, scale 18 moves 18 of them after it.",
+              "ru": "Всего 78 цифр: scale 0 держит их все до точки, scale 18 переносит 18 из них после неё."
+            }
+          },
+          "pairs": [
+            {
+              "id": "raw-max",
+              "left": {
+                "en": "Raw uint256 maximum",
+                "ru": "Максимум сырого uint256"
+              },
+              "right": {
+                "en": "Up to 78 decimal digits",
+                "ru": "До 78 десятичных цифр"
+              }
+            },
+            {
+              "id": "n78-0-units",
+              "left": {
+                "en": "NUMERIC(78, 0)",
+                "ru": "NUMERIC(78, 0)"
+              },
+              "right": {
+                "en": "The raw value in base units",
+                "ru": "Сырое значение в базовых единицах"
+              }
+            },
+            {
+              "id": "n78-18-human",
+              "left": {
+                "en": "NUMERIC(78, 18)",
+                "ru": "NUMERIC(78, 18)"
+              },
+              "right": {
+                "en": "The human form: 60 digits before the point, 18 after",
+                "ru": "Человеческая форма: 60 цифр до точки, 18 после"
+              }
+            },
+            {
+              "id": "display-scale",
+              "left": {
+                "en": "Display scale 18",
+                "ru": "Display scale 18"
+              },
+              "right": {
+                "en": "How many digits belong after the decimal point",
+                "ru": "Сколько цифр относится к части после десятичной точки"
+              }
+            }
+          ]
+        },
+        {
+          "id": "uint256-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type both missing numbers.",
+            "ru": "Впиши оба пропущенных числа."
+          },
+          "feedback": {
+            "correct": {
+              "en": "78 total, of which 18 go after the point, leaving 60 in front.",
+              "ru": "78 всего, из них 18 идут после точки, спереди остаётся 60."
+            },
+            "incorrect": {
+              "en": "78 digits in total; 78 - 18 = 60 of them sit before the decimal point.",
+              "ru": "Всего 78 цифр; 78 - 18 = 60 из них стоят до десятичной точки."
+            }
+          },
+          "text": {
+            "en": "A raw uint256 needs up to ___ decimal digits; with display scale 18 that leaves ___ digits before the decimal point.",
+            "ru": "Сырое uint256 требует до ___ десятичных цифр; при display scale 18 до десятичной точки остаётся ___ цифр."
+          },
+          "blanks": [
+            {
+              "en": [
+                "78"
+              ],
+              "ru": [
+                "78"
+              ]
+            },
+            {
+              "en": [
+                "60"
+              ],
+              "ru": [
+                "60"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "precision-headroom",
+      "title": {
+        "en": "Vendor limits and aggregate headroom",
+        "ru": "Лимиты вендора и запас для агрегатов"
+      },
+      "summary": {
+        "en": "Maximum NUMERIC precision is vendor-specific, and SUM over many rows can need more headroom than any single row, so the type must be checked against both the target database and the aggregates.",
+        "ru": "Максимальная precision у NUMERIC зависит от вендора, а SUM по многим строкам может требовать больше запаса, чем отдельная строка, поэтому тип проверяют и по целевой БД, и по агрегатам."
+      },
+      "discovery": [
+        {
+          "id": "headroom-d1-vendor",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A design says \"store the uint256 in NUMERIC(78, 0)\". What must you verify before accepting it?",
+            "ru": "В дизайне написано «храним uint256 в NUMERIC(78, 0)». Что нужно проверить, прежде чем это принять?"
+          },
+          "reveal": {
+            "en": "`NUMERIC(78, 0)` is only available where the database actually supports precision 78 — and many do not. SQL Server and Oracle-style `NUMBER` limits are commonly much smaller, and MySQL `DECIMAL` has its own maximum precision.\n\nThat is why the complete answer is *\"`NUMERIC` / `DECIMAL` with enough precision — after checking the target database's numeric limits\"*, not just *\"use DECIMAL\"*.\n\n```mermaid\nflowchart TD\n  N[\"NUMERIC(78, 0) proposed\"] --> Q{\"does the target database support precision 78?\"}\n  Q -->|yes| U[\"use it\"]\n  Q -->|no| S[\"another representation is required\"]\n```\n\nIf 78 digits are unavailable, the design is pushed to the next rung of the ladder — a canonical raw value plus sortable columns — which later atoms cover. \"DECIMAL is always enough\" is a misconception because the limit is a property of the vendor, not of SQL.",
+            "ru": "`NUMERIC(78, 0)` доступен только там, где БД реально поддерживает precision 78, — а многие не поддерживают. Ограничения SQL Server и Oracle-подобного `NUMBER` обычно заметно меньше, а у MySQL `DECIMAL` свой максимум precision.\n\nПоэтому полный ответ звучит как *«`NUMERIC` / `DECIMAL` с достаточной precision — после проверки числовых лимитов целевой БД»*, а не просто *«используй DECIMAL»*.\n\n```mermaid\nflowchart TD\n  N[\"предложен NUMERIC(78, 0)\"] --> Q{\"целевая БД поддерживает precision 78?\"}\n  Q -->|да| U[\"используем\"]\n  Q -->|нет| S[\"нужно другое представление\"]\n```\n\nЕсли 78 цифр недоступны, дизайн переходит на следующую ступень лестницы — каноническое raw-значение плюс сортируемые колонки, — о чём будет в следующих атомах. «DECIMAL всегда хватит» — заблуждение, потому что лимит принадлежит вендору, а не SQL."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Precision limits are vendor-specific — check them before promising the type.",
+              "ru": "Лимиты precision зависят от вендора — проверь их, прежде чем обещать тип."
+            },
+            "incorrect": {
+              "en": "Verify that the target database supports precision 78; many databases cap it far lower.",
+              "ru": "Проверь, поддерживает ли целевая БД precision 78; во многих БД предел заметно ниже."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "That the target database actually supports precision 78",
+                "ru": "Что целевая БД действительно поддерживает precision 78"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "That the table will hold fewer than a million rows",
+                "ru": "Что в таблице будет меньше миллиона строк"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Row count does not change the type's maximum precision.",
+                "ru": "Количество строк не меняет максимальную precision типа."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — DECIMAL precision is unlimited in SQL",
+                "ru": "Ничего — precision у DECIMAL в SQL не ограничена"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Maximum precision is vendor-specific; there is no universal unlimited DECIMAL.",
+                "ru": "Максимальная precision зависит от вендора; универсального безлимитного DECIMAL нет."
+              }
+            }
+          ]
+        },
+        {
+          "id": "headroom-d2-sum",
+          "type": "true_false",
+          "prompt": {
+            "en": "Every individual balance fits NUMERIC(38, 0), so SUM(balance) over the whole table is guaranteed to fit as well.",
+            "ru": "Каждый отдельный баланс помещается в NUMERIC(38, 0), значит, SUM(balance) по всей таблице гарантированно тоже поместится."
+          },
+          "reveal": {
+            "en": "One row fitting the type says nothing about the total. `SUM(balance)` over many rows adds digits: the result can outgrow the business range, the column's type, or whatever type the aggregate is computed in.\n\n```\none row         : up to 38 digits\nmillions of rows: the total can need several digits more\n```\n\nSo the design has to state which of three things is true:\n\n1. overflow is **impossible** by domain rules — for example a hard cap on total supply;\n2. overflow **should fail** loudly, so nobody silently reads a wrong total;\n3. overflow is **handled in a wider type**, by widening the value before summing.\n\nThis is the second half of \"DECIMAL is always enough\" being wrong: even inside one vendor's limits, aggregates need more headroom than individual rows.",
+            "ru": "То, что строка помещается в тип, ничего не говорит про итог. `SUM(balance)` по многим строкам добавляет цифры: результат может выйти за бизнес-диапазон, за тип колонки или за тот тип, в котором считается агрегат.\n\n```\nодна строка       : до 38 цифр\nмиллионы строк    : итогу может понадобиться на несколько цифр больше\n```\n\nПоэтому в дизайне должно быть явно написано, что из трёх верно:\n\n1. переполнение **невозможно** по правилам домена — например, есть жёсткий предел общей эмиссии;\n2. переполнение **должно падать** с ошибкой, чтобы никто молча не прочитал неверный итог;\n3. переполнение **обрабатывается в более широком типе** — значение расширяют до суммирования.\n\nЭто вторая половина того, почему «DECIMAL всегда хватит» неверно: даже внутри лимитов одного вендора агрегатам нужен больший запас, чем отдельным строкам."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A total adds digits — the row limit is not the aggregate limit.",
+              "ru": "Итог добавляет цифры — предел строки не равен пределу агрегата."
+            },
+            "incorrect": {
+              "en": "No — summing many rows adds digits, so the total can exceed what one row fits.",
+              "ru": "Нет — суммирование многих строк добавляет цифры, и итог может превысить предел одной строки."
+            }
+          },
+          "answer": false
+        }
+      ],
+      "practice": [
+        {
+          "id": "headroom-p1-all-dbs-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Every relational database supports NUMERIC with precision 78.",
+            "ru": "Каждая реляционная БД поддерживает NUMERIC с precision 78."
+          },
+          "feedback": {
+            "correct": {
+              "en": "SQL Server, Oracle NUMBER and MySQL DECIMAL each cap precision lower.",
+              "ru": "У SQL Server, Oracle NUMBER и MySQL DECIMAL предел precision ниже."
+            },
+            "incorrect": {
+              "en": "No — maximum precision is vendor-specific and often far below 78.",
+              "ru": "Нет — максимальная precision зависит от вендора и часто заметно ниже 78."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "headroom-p2-sum-check",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Each balance fits its NUMERIC column. What must the design still state about SUM(balance) over the whole table?",
+            "ru": "Каждый баланс помещается в свою колонку NUMERIC. Что дизайн всё равно должен сказать про SUM(balance) по всей таблице?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Overflow behaviour is a design decision, not something to discover in production.",
+              "ru": "Поведение при переполнении — решение дизайна, а не сюрприз в проде."
+            },
+            "incorrect": {
+              "en": "State whether the total is impossible by domain rules, should fail, or is computed in a wider type.",
+              "ru": "Укажи, невозможен ли итог по правилам домена, должен ли он падать, или считается в более широком типе."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Whether overflow is impossible by domain rules, should fail, or is handled in a wider type",
+                "ru": "Невозможно ли переполнение по правилам домена, должно ли оно падать или обрабатывается в более широком типе"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Which index the aggregate should use",
+                "ru": "Какой индекс должен использовать агрегат"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "An index changes the speed of the aggregate, not the range of its result.",
+                "ru": "Индекс меняет скорость агрегата, а не диапазон его результата."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — every database widens aggregates automatically",
+                "ru": "Ничего — любая БД автоматически расширяет агрегаты"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "You cannot rely on that; overflow behaviour has to be decided explicitly.",
+                "ru": "На это нельзя полагаться; поведение при переполнении нужно решать явно."
+              }
+            }
+          ]
+        },
+        {
+          "id": "headroom-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the rule about DECIMAL precision limits.",
+            "ru": "Собери правило про лимиты precision у DECIMAL."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The limit belongs to the vendor, not to SQL.",
+              "ru": "Лимит принадлежит вендору, а не SQL."
+            },
+            "incorrect": {
+              "en": "Maximum precision is vendor-specific, so check the target database.",
+              "ru": "Максимальная precision зависит от вендора, поэтому проверь целевую БД."
+            }
+          },
+          "tokens": {
+            "en": [
+              "maximum",
+              "precision",
+              "is",
+              "vendor",
+              "specific",
+              "so",
+              "check",
+              "the",
+              "target",
+              "database"
+            ],
+            "ru": [
+              "максимальная",
+              "precision",
+              "зависит",
+              "от",
+              "вендора",
+              "поэтому",
+              "проверь",
+              "целевую",
+              "БД"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "unlimited"
+            ],
+            "ru": [
+              "безлимитная"
+            ]
+          }
+        },
+        {
+          "id": "headroom-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing word.",
+            "ru": "Впиши пропущенное слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Precision is the vendor-specific limit you have to check first.",
+              "ru": "Precision — тот самый зависящий от вендора лимит, который нужно проверить первым."
+            },
+            "incorrect": {
+              "en": "It is precision — the maximum number of significant digits the vendor allows.",
+              "ru": "Это precision — максимальное число значащих цифр, которое разрешает вендор."
+            }
+          },
+          "text": {
+            "en": "NUMERIC(78, 0) holds a raw uint256 only in databases that support that ___.",
+            "ru": "NUMERIC(78, 0) хранит сырое uint256 только в БД, которые поддерживают такую ___."
+          },
+          "answers": {
+            "en": [
+              "precision"
+            ],
+            "ru": [
+              "precision",
+              "точность"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "base-units-vs-human-form",
+      "title": {
+        "en": "Base units or human decimals",
+        "ru": "Базовые единицы или человекочитаемые decimals"
+      },
+      "summary": {
+        "en": "A fixed-scale amount is stored either as integer base units in NUMERIC(p, 0) with a recorded display scale, or as the human decimal form in NUMERIC(p, 18) — and every reader must know which.",
+        "ru": "Сумму с фиксированным scale хранят либо как целые базовые единицы в NUMERIC(p, 0) с зафиксированным display scale, либо как человекочитаемую десятичную форму в NUMERIC(p, 18) — и каждый читатель должен знать, что именно."
+      },
+      "discovery": [
+        {
+          "id": "units-d1-predict",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The column stores base units and the display scale is 18. Predict the human-readable amount this row represents.",
+            "ru": "Колонка хранит базовые единицы, display scale равен 18. Предскажи, какую человекочитаемую сумму представляет эта строка."
+          },
+          "code": "-- amount_units NUMERIC(78, 0), display scale 18\nSELECT amount_units FROM balance WHERE account_id = 7;\n-- returns: 1500000000000000000",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "Two storage conventions describe the same amount, and both are exact:\n\n- **base units** — `amount_units NUMERIC(78, 0)` stores the integer count of the smallest unit, and the **display scale** (18) is recorded as metadata next to it. Showing the value means shifting the point 18 places left.\n- **human decimal form** — `amount NUMERIC(78, 18)` stores the value with the point already in place, when the database supports that precision and scale.\n\n```\nbase units : 1500000000000000000    NUMERIC(78, 0), display scale 18\nhuman form : 1.500000000000000000   NUMERIC(78, 18)\nsame amount, two conventions\n```\n\nThe danger is not either choice — it is a mismatch between them. The same digits mean wildly different amounts under different units, so the convention has to be written down and shared by every writer and reader of the column. A number without its unit is not yet data.",
+            "ru": "Две конвенции хранения описывают одну и ту же сумму, и обе точны:\n\n- **базовые единицы** — `amount_units NUMERIC(78, 0)` хранит целое количество наименьших единиц, а **display scale** (18) записан рядом как метаданные. Показать значение — значит сдвинуть точку на 18 позиций влево.\n- **человекочитаемая десятичная форма** — `amount NUMERIC(78, 18)` хранит значение с уже расставленной точкой, если БД поддерживает такие precision и scale.\n\n```\nбазовые единицы : 1500000000000000000    NUMERIC(78, 0), display scale 18\nчеловеческая форма : 1.500000000000000000  NUMERIC(78, 18)\nодна и та же сумма, две конвенции\n```\n\nОпасен не выбор, а рассогласование. Одни и те же цифры означают совершенно разные суммы при разных единицах, поэтому конвенцию нужно зафиксировать и разделять всем, кто пишет и читает колонку. Число без единицы измерения — это ещё не данные."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Shift the point 18 places: 1500000000000000000 base units is 1.5.",
+              "ru": "Сдвигаем точку на 18 позиций: 1500000000000000000 базовых единиц — это 1.5."
+            },
+            "incorrect": {
+              "en": "The display scale of 18 shifts the decimal point 18 places, giving 1.5.",
+              "ru": "Display scale 18 сдвигает десятичную точку на 18 позиций, получается 1.5."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "1.5",
+                "ru": "1.5"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "1500000000000000000",
+                "ru": "1500000000000000000"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the raw base-unit count; the display scale of 18 still has to be applied.",
+                "ru": "Это сырое количество базовых единиц; display scale 18 ещё нужно применить."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "15",
+                "ru": "15"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Shifting by 18 places, not 17, gives 1.5.",
+                "ru": "Сдвиг на 18 позиций, а не на 17, даёт 1.5."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "units-p1-what-counts",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A column is amount_units NUMERIC(78, 0) with display scale 18. What does the stored number count?",
+            "ru": "Есть колонка amount_units NUMERIC(78, 0) с display scale 18. Что считает хранимое число?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Base units are the amount expressed in the smallest indivisible unit.",
+              "ru": "Базовые единицы — это сумма, выраженная в наименьшей неделимой единице."
+            },
+            "incorrect": {
+              "en": "It counts base units — the amount multiplied by 10^18.",
+              "ru": "Оно считает базовые единицы — сумму, умноженную на 10^18."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Base units — the amount multiplied by 10^18",
+                "ru": "Базовые единицы — сумму, умноженную на 10^18"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Whole tokens",
+                "ru": "Целые токены"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Whole tokens would be the human decimal form, stored with scale 18.",
+                "ru": "Целые токены — это человекочитаемая форма, которую хранят со scale 18."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The number of decimal digits in the amount",
+                "ru": "Количество десятичных цифр в сумме"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The column holds the amount itself, not a count of its digits.",
+                "ru": "Колонка хранит саму сумму, а не количество её цифр."
+              }
+            }
+          ]
+        },
+        {
+          "id": "units-p2-exact-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Storing an 18-decimal amount as NUMERIC(p, 18) keeps arithmetic exact when the database supports that precision and scale.",
+            "ru": "Хранение суммы с 18 decimals как NUMERIC(p, 18) сохраняет арифметику точной, если БД поддерживает такие precision и scale."
+          },
+          "feedback": {
+            "correct": {
+              "en": "NUMERIC is an exact type: the declared scale is kept, not approximated.",
+              "ru": "NUMERIC — точный тип: объявленный scale сохраняется, а не приближается."
+            },
+            "incorrect": {
+              "en": "It does — NUMERIC is exact, which is the whole reason to prefer it over floating point.",
+              "ru": "Сохраняет — NUMERIC точен, ради этого его и предпочитают floating point."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "units-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each storage choice for an 18-decimal amount to what it means.",
+            "ru": "Соотнеси каждый вариант хранения суммы с 18 decimals с тем, что он означает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Both exact forms are fine; mixing them up is what breaks the data.",
+              "ru": "Обе точные формы годятся; ломает данные именно их смешение."
+            },
+            "incorrect": {
+              "en": "Scale 0 holds base units, scale 18 holds the human form, and floating point holds neither exactly.",
+              "ru": "Scale 0 хранит базовые единицы, scale 18 — человеческую форму, а floating point не хранит точно ни одну."
+            }
+          },
+          "pairs": [
+            {
+              "id": "units-scale-0",
+              "left": {
+                "en": "NUMERIC(78, 0) plus a recorded display scale",
+                "ru": "NUMERIC(78, 0) плюс зафиксированный display scale"
+              },
+              "right": {
+                "en": "Integer count of base units",
+                "ru": "Целое количество базовых единиц"
+              }
+            },
+            {
+              "id": "units-scale-18",
+              "left": {
+                "en": "NUMERIC(78, 18)",
+                "ru": "NUMERIC(78, 18)"
+              },
+              "right": {
+                "en": "Human decimal form stored directly",
+                "ru": "Человекочитаемая десятичная форма напрямую"
+              }
+            },
+            {
+              "id": "units-double",
+              "left": {
+                "en": "DOUBLE PRECISION",
+                "ru": "DOUBLE PRECISION"
+              },
+              "right": {
+                "en": "Never acceptable for an exact amount",
+                "ru": "Недопустимо для точной суммы"
+              }
+            },
+            {
+              "id": "units-mismatch",
+              "left": {
+                "en": "A mismatched unit convention",
+                "ru": "Рассогласованная конвенция единиц"
+              },
+              "right": {
+                "en": "The same digits read as a different amount",
+                "ru": "Те же цифры читаются как другая сумма"
+              }
+            }
+          ]
+        },
+        {
+          "id": "units-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type both missing scales.",
+            "ru": "Впиши оба пропущенных scale."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Scale 0 for base units, scale 18 for the human form.",
+              "ru": "Scale 0 — для базовых единиц, scale 18 — для человеческой формы."
+            },
+            "incorrect": {
+              "en": "Base units use scale 0; the human 18-decimal form uses scale 18.",
+              "ru": "Базовые единицы используют scale 0; человеческая форма с 18 decimals — scale 18."
+            }
+          },
+          "text": {
+            "en": "An 18-decimal amount is stored either as base units in NUMERIC(p, ___) or as the human form in NUMERIC(p, ___).",
+            "ru": "Сумму с 18 decimals хранят либо как базовые единицы в NUMERIC(p, ___), либо как человеческую форму в NUMERIC(p, ___)."
+          },
+          "blanks": [
+            {
+              "en": [
+                "0"
+              ],
+              "ru": [
+                "0"
+              ]
+            },
+            {
+              "en": [
+                "18"
+              ],
+              "ru": [
+                "18"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "text-sorts-lexicographically",
+      "title": {
+        "en": "Text sorts lexicographically, not numerically",
+        "ru": "Текст сортируется лексикографически, а не численно"
+      },
+      "summary": {
+        "en": "A B-tree index on a text column orders strings by collation, so \"100\" can come before \"20\" and every ORDER BY, BETWEEN or top-N over that column answers the wrong question.",
+        "ru": "B-tree индекс по текстовой колонке упорядочивает строки по collation, поэтому \"100\" может идти перед \"20\", и любые ORDER BY, BETWEEN или top-N по такой колонке отвечают не на тот вопрос."
+      },
+      "discovery": [
+        {
+          "id": "textsort-d1-predict-order",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Predict the order of the returned rows.",
+            "ru": "Предскажи порядок возвращённых строк."
+          },
+          "code": "-- amount_text is a TEXT column holding: '1', '10', '100', '2', '20'\nSELECT amount_text FROM t ORDER BY amount_text;",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "A **B-tree index** on a text column stores its keys in **text order**, defined by the column's **collation** — the rule set that says how strings compare. Strings are compared character by character, so `\"100\"` comes before `\"20\"`: the first characters are `'1'` and `'2'`, and `'1'` wins immediately, no matter what follows. This is **lexicographic** order, the rule a dictionary uses.\n\n```mermaid\nflowchart LR\n  T[\"text values\"] --> L[\"lexicographic order\"]\n  L --> A[\"1, 10, 100, 2, 20\"]\n  N[\"numeric values\"] --> V[\"numeric order\"]\n  V --> B[\"1, 2, 10, 20, 100\"]\n```\n\nThe index can be perfectly fast and still answer the wrong question — speed and correctness are independent here. Everything built on ordering inherits the mistake: `ORDER BY`, `BETWEEN`, `>`, `<`, keyset pagination and top-N queries all return the wrong rows, silently and without an error.",
+            "ru": "**B-tree индекс** по текстовой колонке хранит ключи в **текстовом порядке**, который задаёт **collation** колонки — набор правил сравнения строк. Строки сравниваются посимвольно, поэтому `\"100\"` идёт перед `\"20\"`: первые символы — `'1'` и `'2'`, и `'1'` выигрывает сразу, что бы ни шло дальше. Это **лексикографический** порядок, то же правило, что и в словаре.\n\n```mermaid\nflowchart LR\n  T[\"текстовые значения\"] --> L[\"лексикографический порядок\"]\n  L --> A[\"1, 10, 100, 2, 20\"]\n  N[\"числовые значения\"] --> V[\"числовой порядок\"]\n  V --> B[\"1, 2, 10, 20, 100\"]\n```\n\nИндекс может быть идеально быстрым и всё равно отвечать не на тот вопрос — скорость и корректность здесь независимы. Ошибку наследует всё, что построено на порядке: `ORDER BY`, `BETWEEN`, `>`, `<`, keyset-пагинация и top-N возвращают не те строки, молча и без ошибки."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Character by character: '1' beats '2', so 10 and 100 come early.",
+              "ru": "Посимвольно: '1' сильнее '2', поэтому 10 и 100 идут раньше."
+            },
+            "incorrect": {
+              "en": "Text order compares characters, so it is 1, 10, 100, 2, 20.",
+              "ru": "Текстовый порядок сравнивает символы, поэтому получается 1, 10, 100, 2, 20."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "1, 10, 100, 2, 20",
+                "ru": "1, 10, 100, 2, 20"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "1, 2, 10, 20, 100",
+                "ru": "1, 2, 10, 20, 100"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is numeric order; a text column is compared character by character.",
+                "ru": "Это числовой порядок; текстовая колонка сравнивается посимвольно."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "100, 20, 10, 2, 1",
+                "ru": "100, 20, 10, 2, 1"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Descending was not requested — and text order is not numeric order in either direction.",
+                "ru": "Убывающий порядок не запрашивали — и текстовый порядок не совпадает с числовым ни в одну сторону."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "textsort-p1-100-before-20",
+          "type": "true_false",
+          "prompt": {
+            "en": "In a text column, the value '100' can sort before the value '20'.",
+            "ru": "В текстовой колонке значение '100' может сортироваться раньше значения '20'."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The first character decides: '1' comes before '2'.",
+              "ru": "Решает первый символ: '1' идёт раньше '2'."
+            },
+            "incorrect": {
+              "en": "It can — text compares character by character, and '1' precedes '2'.",
+              "ru": "Может — текст сравнивается посимвольно, а '1' предшествует '2'."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "textsort-p2-which-break",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A numeric value is stored in a text column. Which queries silently return the wrong rows?",
+            "ru": "Числовое значение хранится в текстовой колонке. Какие запросы молча возвращают не те строки?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Everything that depends on ordering inherits the text comparison rule.",
+              "ru": "Всё, что зависит от порядка, наследует правило текстового сравнения."
+            },
+            "incorrect": {
+              "en": "All ordering-based queries break: ORDER BY, BETWEEN, >, <, pagination and top-N.",
+              "ru": "Ломаются все запросы, основанные на порядке: ORDER BY, BETWEEN, >, <, пагинация и top-N."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "ORDER BY, BETWEEN, >, <, pagination and top-N",
+                "ru": "ORDER BY, BETWEEN, >, <, пагинация и top-N"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Only ORDER BY",
+                "ru": "Только ORDER BY"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Every comparison uses the same text ordering, so ranges, pagination and top-N break too.",
+                "ru": "Все сравнения используют тот же текстовый порядок, поэтому диапазоны, пагинация и top-N тоже ломаются."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "None — the database detects that the strings are digits",
+                "ru": "Никакие — БД поймёт, что в строках цифры"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Comparison follows the column's type; digits inside a string are still characters.",
+                "ru": "Сравнение следует типу колонки; цифры внутри строки остаются символами."
+              }
+            }
+          ]
+        },
+        {
+          "id": "textsort-p3-sort",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Put these text values in the order a text index stores them.",
+            "ru": "Расставь эти текстовые значения в порядке, в котором их хранит текстовый индекс."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Dictionary order: compare the first character, then the next, and so on.",
+              "ru": "Словарный порядок: сравниваем первый символ, потом следующий, и так далее."
+            },
+            "incorrect": {
+              "en": "Text order is 1, 10, 100, 2, 20 — the first character decides before the length does.",
+              "ru": "Текстовый порядок — 1, 10, 100, 2, 20: первый символ решает раньше, чем длина."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "'1'",
+                "ru": "'1'"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "'10'",
+                "ru": "'10'"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "'100'",
+                "ru": "'100'"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "'2'",
+                "ru": "'2'"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "'20'",
+                "ru": "'20'"
+              }
+            }
+          ]
+        },
+        {
+          "id": "textsort-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing term.",
+            "ru": "Впиши пропущенный термин."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Collation is the rule set that decides how two strings compare.",
+              "ru": "Collation — набор правил, определяющий, как сравниваются две строки."
+            },
+            "incorrect": {
+              "en": "It is the collation — the text comparison rules of the column.",
+              "ru": "Это collation — правила текстового сравнения для колонки."
+            }
+          },
+          "text": {
+            "en": "A text column is compared character by character according to its ___, not by numeric value.",
+            "ru": "Текстовая колонка сравнивается посимвольно согласно её ___, а не по числовому значению."
+          },
+          "answers": {
+            "en": [
+              "collation"
+            ],
+            "ru": [
+              "collation",
+              "коллации",
+              "коллация"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "canonical-text-and-padding",
+      "title": {
+        "en": "Canonical text and the padding trap",
+        "ru": "Канонический текст и ловушка padding"
+      },
+      "summary": {
+        "en": "'0020', '20', '+20' and '20.0' are one number stored as four different strings; a canonical format buys reliable equality and auditing, and zero padding fixes ordering only for non-negative integers of one scale under one binary collation.",
+        "ru": "'0020', '20', '+20' и '20.0' — одно число, сохранённое четырьмя разными строками; канонический формат даёт надёжное равенство и аудит, а zero padding чинит порядок только для неотрицательных целых с одним scale и одной binary collation."
+      },
+      "discovery": [
+        {
+          "id": "canonical-d1-four-strings",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A text column holds '0020', '20', '+20' and '20.0'. How does the database treat them?",
+            "ru": "Текстовая колонка содержит '0020', '20', '+20' и '20.0'. Как БД с ними обращается?"
+          },
+          "reveal": {
+            "en": "A **canonical format** is one agreed spelling for every value: a fixed rule for leading zeros, for the sign, and for the scale. It is worth having — with it the same number always produces the same characters, so equality comparisons and audits become reliable. Without it, `'0020'`, `'20'`, `'+20'` and `'20.0'` are four different strings that are simply not equal to each other, even though they are one number.\n\nWhat a canonical format does **not** buy is numeric comparison: canonical text is still ordered as text.\n\n**Zero padding** to a fixed width is the usual attempt to fix that, and it works only inside a narrow box:\n\n```\nnon-negative, one scale, one binary collation:\n  0001  0002  0010  0020  0100   -> text order matches numeric order\n\nadd a sign, a decimal point or a different collation:\n  -0005    0020.5    0020,5      -> the match breaks\n```\n\nSigns, variable scale, decimals and locale-dependent collations each break padded ordering. That is why padding is a fragile trick, not a design.",
+            "ru": "**Канонический формат** — это одно согласованное написание для каждого значения: фиксированные правила для ведущих нулей, знака и scale. Его стоит иметь: с ним одно и то же число всегда даёт одни и те же символы, поэтому сравнение на равенство и аудит становятся надёжными. Без него `'0020'`, `'20'`, `'+20'` и `'20.0'` — четыре разные строки, попросту не равные друг другу, хотя число одно.\n\nЧего канонический формат **не** даёт — это числового сравнения: канонический текст всё равно упорядочен как текст.\n\n**Zero padding** до фиксированной ширины — обычная попытка это починить, и работает она только в узких рамках:\n\n```\nнеотрицательные, один scale, одна binary collation:\n  0001  0002  0010  0020  0100   -> текстовый порядок совпадает с числовым\n\nдобавь знак, десятичную точку или другую collation:\n  -0005    0020.5    0020,5      -> совпадение ломается\n```\n\nЗнаки, переменный scale, decimals и зависящие от локали collations — каждое ломает порядок с padding. Поэтому padding — хрупкий трюк, а не дизайн."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Four different strings — text equality is character equality.",
+              "ru": "Четыре разные строки — равенство текста есть равенство символов."
+            },
+            "incorrect": {
+              "en": "The column is text, so these are four different, unequal strings.",
+              "ru": "Колонка текстовая, поэтому это четыре разные, неравные строки."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "As four different strings that are not equal to each other",
+                "ru": "Как четыре разные строки, не равные друг другу"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "As one value, because they are the same number",
+                "ru": "Как одно значение, ведь это одно и то же число"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The column's type is text, so the comparison is character by character.",
+                "ru": "Тип колонки — текст, поэтому сравнение идёт посимвольно."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "As four values that at least still sort numerically",
+                "ru": "Как четыре значения, которые хотя бы сортируются численно"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Leading zeros, signs and decimal separators all change the text order.",
+                "ru": "Ведущие нули, знаки и десятичные разделители — всё это меняет текстовый порядок."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "canonical-p1-semantics-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A canonical text format gives a text column numeric comparison semantics.",
+            "ru": "Канонический текстовый формат даёт текстовой колонке семантику числового сравнения."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It helps equality and auditing; ordering stays lexicographic.",
+              "ru": "Он помогает равенству и аудиту; порядок остаётся лексикографическим."
+            },
+            "incorrect": {
+              "en": "No — canonical text is still text; only the column's type can carry numeric comparison.",
+              "ru": "Нет — канонический текст остаётся текстом; числовое сравнение несёт только тип колонки."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "canonical-p2-padding",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "When can fixed-width zero padding make text sorting match numeric sorting?",
+            "ru": "Когда zero padding до фиксированной ширины заставляет текстовую сортировку совпасть с числовой?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Equal width plus no signs and one scale is exactly the narrow box where it holds.",
+              "ru": "Одинаковая ширина плюс отсутствие знаков и один scale — ровно те узкие рамки, где это работает."
+            },
+            "incorrect": {
+              "en": "Only for non-negative integers with one scale under one binary collation.",
+              "ru": "Только для неотрицательных целых с одним scale и одной binary collation."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "For non-negative integers with one scale under one binary collation",
+                "ru": "Для неотрицательных целых с одним scale и одной binary collation"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "For any numeric value written as text",
+                "ru": "Для любого числового значения, записанного текстом"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Signs, variable scale and decimals all break padded text order.",
+                "ru": "Знаки, переменный scale и decimals ломают порядок с padding."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Whenever the column carries a B-tree index",
+                "ru": "Всегда, когда на колонке есть B-tree индекс"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The index reflects the column's ordering rules; it cannot create numeric semantics.",
+                "ru": "Индекс отражает правила порядка колонки; создать числовую семантику он не может."
+              }
+            }
+          ]
+        },
+        {
+          "id": "canonical-p3-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing word.",
+            "ru": "Впиши пропущенное слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One number, four spellings — and text equality compares spellings.",
+              "ru": "Одно число, четыре написания — а равенство текста сравнивает написания."
+            },
+            "incorrect": {
+              "en": "They are four different strings: text equality is character equality.",
+              "ru": "Это четыре разные строки: равенство текста есть равенство символов."
+            }
+          },
+          "text": {
+            "en": "'0020', '20', '+20' and '20.0' are the same number stored as four different ___.",
+            "ru": "'0020', '20', '+20' и '20.0' — одно и то же число, сохранённое как четыре разные ___."
+          },
+          "answers": {
+            "en": [
+              "strings",
+              "string"
+            ],
+            "ru": [
+              "строки",
+              "строк",
+              "strings"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "casting-in-queries",
+      "title": {
+        "en": "Casting text to NUMERIC in a query",
+        "ru": "Приведение текста к NUMERIC в запросе"
+      },
+      "summary": {
+        "en": "ORDER BY amount_text::numeric restores numeric semantics, but the plain text index no longer matches the expression, so the database may scan and sort everything unless a matching expression index exists.",
+        "ru": "ORDER BY amount_text::numeric возвращает числовую семантику, но обычный текстовый индекс больше не подходит выражению, поэтому БД может просканировать и отсортировать всё, если нет подходящего expression index."
+      },
+      "discovery": [
+        {
+          "id": "cast-d1-predict-cost",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The rows do come back in correct numeric order. Predict what that costs.",
+            "ru": "Строки действительно возвращаются в правильном числовом порядке. Предскажи, чего это стоит."
+          },
+          "code": "-- amount_text TEXT, covered by a plain B-tree index on amount_text\nSELECT id FROM ledger ORDER BY amount_text::numeric LIMIT 10;",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "Casting in the query — `ORDER BY amount_text::numeric` — genuinely restores numeric ordering in databases that support the cast. It has two prices.\n\n**The plan.** The ordinary index is built on `amount_text`, but the query orders by `amount_text::numeric`, which is a different key. The index no longer matches, so the plan usually falls back to a full scan plus a sort. The fix is an **expression index** — an index built on the result of the expression itself:\n\n```sql\nCREATE INDEX ledger_amount_num_idx ON ledger ((amount_text::numeric));\n```\n\n**Runtime.** The cast is evaluated per row, so a single stored value that is not a valid number makes the whole query fail — a data problem surfacing as a query error.\n\n```mermaid\nflowchart LR\n  Q[\"ORDER BY amount_text::numeric\"] --> M{\"matching expression index?\"}\n  M -->|yes| I[\"index scan in numeric order\"]\n  M -->|no| S[\"full scan and sort\"]\n```\n\nCasting is a repair, not an architecture: correct, but it does not turn text into a good home for numbers.",
+            "ru": "Приведение прямо в запросе — `ORDER BY amount_text::numeric` — действительно возвращает числовой порядок в БД, которые такой cast поддерживают. У этого две цены.\n\n**План.** Обычный индекс построен по `amount_text`, а запрос сортирует по `amount_text::numeric` — это другой ключ. Индекс больше не подходит, поэтому план обычно откатывается к полному scan и sort. Лечится это **expression index** — индексом по результату самого выражения:\n\n```sql\nCREATE INDEX ledger_amount_num_idx ON ledger ((amount_text::numeric));\n```\n\n**Runtime.** Cast вычисляется для каждой строки, поэтому одно сохранённое значение, не являющееся корректным числом, роняет весь запрос — проблема данных всплывает как ошибка запроса.\n\n```mermaid\nflowchart LR\n  Q[\"ORDER BY amount_text::numeric\"] --> M{\"есть подходящий expression index?\"}\n  M -->|да| I[\"index scan в числовом порядке\"]\n  M -->|нет| S[\"полный scan и sort\"]\n```\n\nCast — это ремонт, а не архитектура: он корректен, но не делает текст хорошим местом для чисел."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Different key, no index match — scan and sort.",
+              "ru": "Другой ключ, индекс не подходит — scan и sort."
+            },
+            "incorrect": {
+              "en": "The index is on amount_text, not on the cast expression, so the plan falls back to a scan and a sort.",
+              "ru": "Индекс построен по amount_text, а не по выражению с cast, поэтому план откатывается к scan и sort."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The plain text index no longer matches, so the database may scan and sort the whole table",
+                "ru": "Обычный текстовый индекс больше не подходит, поэтому БД может просканировать и отсортировать всю таблицу"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing — the existing index still answers the query",
+                "ru": "Ничего — существующий индекс всё ещё отвечает на запрос"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The index stores text keys; the ORDER BY is over an expression the index does not match.",
+                "ru": "Индекс хранит текстовые ключи; ORDER BY идёт по выражению, которому индекс не соответствует."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The query is rejected, because a cast is not allowed in ORDER BY",
+                "ru": "Запрос будет отклонён, потому что cast нельзя использовать в ORDER BY"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The cast is allowed where the database supports it; the cost shows up in the plan, not in the syntax.",
+                "ru": "Cast разрешён там, где БД его поддерживает; цена проявляется в плане, а не в синтаксисе."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cast-p1-index-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Casting a text column to NUMERIC inside a query lets the ordinary text index answer the numeric ORDER BY.",
+            "ru": "Приведение текстовой колонки к NUMERIC внутри запроса позволяет обычному текстовому индексу обслужить числовой ORDER BY."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The cast creates a different key, so the plain index stops matching.",
+              "ru": "Cast создаёт другой ключ, поэтому обычный индекс перестаёт подходить."
+            },
+            "incorrect": {
+              "en": "No — the ORDER BY is over an expression, which needs a matching expression index.",
+              "ru": "Нет — ORDER BY идёт по выражению, для которого нужен подходящий expression index."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "cast-p2-what-breaks",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What can make a query that casts a text column to NUMERIC fail at runtime?",
+            "ru": "Из-за чего запрос, приводящий текстовую колонку к NUMERIC, может упасть во время выполнения?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The cast is evaluated per row, so one bad value is enough.",
+              "ru": "Cast вычисляется для каждой строки, поэтому хватает одного плохого значения."
+            },
+            "incorrect": {
+              "en": "A single stored row whose text is not a valid number breaks the cast.",
+              "ru": "Одна сохранённая строка, текст которой не является корректным числом, ломает cast."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A single stored row whose text is not a valid number",
+                "ru": "Одна сохранённая строка, текст которой не является корректным числом"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Having too many rows in the table",
+                "ru": "Слишком много строк в таблице"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Volume makes the query slow, not incorrect; the cast fails on a bad value.",
+                "ru": "Объём делает запрос медленным, а не неверным; cast падает на плохом значении."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "An index existing on a different column",
+                "ru": "Существующий индекс на другой колонке"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Unrelated indexes do not affect whether a cast succeeds.",
+                "ru": "Посторонние индексы не влияют на успешность cast."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cast-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each element of a text-plus-cast setup to its consequence.",
+            "ru": "Соотнеси каждый элемент схемы «текст плюс cast» с его следствием."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The cast fixes semantics; only an expression index fixes the plan.",
+              "ru": "Cast чинит семантику; план чинит только expression index."
+            },
+            "incorrect": {
+              "en": "A plain text index does not match the cast; an expression index does, and a bad row still breaks it.",
+              "ru": "Обычный текстовый индекс не подходит cast; expression index подходит, но плохая строка всё равно всё ломает."
+            }
+          },
+          "pairs": [
+            {
+              "id": "cast-plain-index",
+              "left": {
+                "en": "Plain B-tree index on the text column",
+                "ru": "Обычный B-tree индекс по текстовой колонке"
+              },
+              "right": {
+                "en": "Does not match the cast expression",
+                "ru": "Не соответствует выражению с cast"
+              }
+            },
+            {
+              "id": "cast-expr-index",
+              "left": {
+                "en": "Expression index built on the cast",
+                "ru": "Expression index, построенный по cast"
+              },
+              "right": {
+                "en": "Can serve the numeric ORDER BY",
+                "ru": "Может обслужить числовой ORDER BY"
+              }
+            },
+            {
+              "id": "cast-bad-row",
+              "left": {
+                "en": "An unparseable stored value",
+                "ru": "Нераспознаваемое сохранённое значение"
+              },
+              "right": {
+                "en": "Makes the cast fail at runtime",
+                "ru": "Роняет cast во время выполнения"
+              }
+            },
+            {
+              "id": "cast-everywhere",
+              "left": {
+                "en": "Casting in every query",
+                "ru": "Cast в каждом запросе"
+              },
+              "right": {
+                "en": "Correct, but not a scalable ordering design",
+                "ru": "Корректно, но не масштабируемый дизайн сортировки"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cast-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing kind of index.",
+            "ru": "Впиши пропущенный вид индекса."
+          },
+          "feedback": {
+            "correct": {
+              "en": "An expression index stores the result of the expression as the key.",
+              "ru": "Expression index хранит в качестве ключа результат выражения."
+            },
+            "incorrect": {
+              "en": "It is an expression index — built on amount_text::numeric, not on amount_text.",
+              "ru": "Это expression index — построенный по amount_text::numeric, а не по amount_text."
+            }
+          },
+          "text": {
+            "en": "To let ORDER BY amount_text::numeric use an index, create a matching ___ index.",
+            "ru": "Чтобы ORDER BY amount_text::numeric мог использовать индекс, создай подходящий ___ index."
+          },
+          "answers": {
+            "en": [
+              "expression"
+            ],
+            "ru": [
+              "expression"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "sortable-key-columns",
+      "title": {
+        "en": "Split columns when the value outgrows the type",
+        "ru": "Разделение на колонки, когда значение переросло тип"
+      },
+      "summary": {
+        "en": "When the value is beyond native decimal support and still needs ordering, store a canonical raw value for display and audit plus sortable components — sign, magnitude length and fixed-width chunks — indexed in comparison order.",
+        "ru": "Когда значение выходит за пределы native decimal-типа, но сортировка всё ещё нужна, храни каноническое raw-значение для отображения и аудита плюс сортируемые компоненты — sign, длину magnitude и chunks фиксированной ширины, — проиндексированные в порядке сравнения."
+      },
+      "discovery": [
+        {
+          "id": "split-d1-shape",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A BigInteger value is larger than the target database's exact decimal type, and queries must still order rows by it. Which storage shape works?",
+            "ru": "Значение BigInteger больше точного decimal-типа целевой БД, но запросы всё равно должны сортировать строки по нему. Какая схема хранения работает?"
+          },
+          "reveal": {
+            "en": "Past the database's exact decimal type, the value is split into two jobs.\n\n- The **canonical raw value** — text or binary in the agreed format — keeps the value exactly, for display and auditing.\n- **Sortable key columns** give the B-tree something it can compare: the **sign**, the length of the **magnitude** (the digits without the sign), then fixed-width **chunks** of the number from the high end down, or high/low numeric limbs.\n\n```mermaid\nflowchart LR\n  V[\"canonical raw value\"] --> D[\"exact display and audit\"]\n  V --> S[\"sign\"]\n  V --> L[\"magnitude length\"]\n  V --> C[\"fixed-width chunks, high to low\"]\n  S --> IX[\"composite index in comparison order\"]\n  L --> IX\n  C --> IX\n```\n\nThose columns must be indexed **in comparison order**, because that is the order a human compares the numbers in: the sign first; then — since the canonical form carries no leading zeros — the longer magnitude is the larger number; and only among equal lengths do the chunks decide, starting from the highest one.",
+            "ru": "За пределами точного decimal-типа значение разделяют на две задачи.\n\n- **Каноническое raw-значение** — текст или binary в согласованном формате — хранит значение точно, для отображения и аудита.\n- **Сортируемые ключевые колонки** дают B-tree то, что он умеет сравнивать: **sign** (знак), длину **magnitude** (цифр без знака), затем **chunks** фиксированной ширины со старшего конца вниз или high/low numeric limbs.\n\n```mermaid\nflowchart LR\n  V[\"каноническое raw-значение\"] --> D[\"точное отображение и аудит\"]\n  V --> S[\"sign\"]\n  V --> L[\"длина magnitude\"]\n  V --> C[\"chunks фиксированной ширины, от старших к младшим\"]\n  S --> IX[\"составной индекс в порядке сравнения\"]\n  L --> IX\n  C --> IX\n```\n\nЭти колонки нужно индексировать **в порядке сравнения**, потому что именно так числа сравнивает человек: сначала знак; затем — раз канонический вид не содержит ведущих нулей — большее число то, у которого magnitude длиннее; и только при равной длине решают chunks, начиная со старшего."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Raw value for exactness, sortable columns for ordering.",
+              "ru": "Raw-значение — для точности, сортируемые колонки — для порядка."
+            },
+            "incorrect": {
+              "en": "Keep a canonical raw value and add sortable columns: sign, magnitude length, fixed-width chunks.",
+              "ru": "Храни каноническое raw-значение и добавь сортируемые колонки: sign, длину magnitude, chunks фиксированной ширины."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A canonical raw value plus separate sortable columns: sign, magnitude length and fixed-width chunks",
+                "ru": "Каноническое raw-значение плюс отдельные сортируемые колонки: sign, длина magnitude и chunks фиксированной ширины"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A single text column holding the digits",
+                "ru": "Одна текстовая колонка с цифрами"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Text ordering is lexicographic, so the ordering would still be wrong.",
+                "ru": "Порядок текста лексикографический, поэтому сортировка всё равно была бы неверной."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A DOUBLE PRECISION column, because its range is huge",
+                "ru": "Колонка DOUBLE PRECISION, ведь у неё огромный диапазон"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Floating point would drop exactness, and the value must stay exact.",
+                "ru": "Floating point потеряет точность, а значение должно оставаться точным."
+              }
+            }
+          ]
+        },
+        {
+          "id": "split-d2-big-endian",
+          "type": "true_false",
+          "prompt": {
+            "en": "Storing every uint256 as a fixed-width 32-byte big-endian binary value keeps byte comparison in numeric order.",
+            "ru": "Хранение каждого uint256 как binary фиксированной ширины в 32 байта в big-endian сохраняет числовой порядок при побайтовом сравнении."
+          },
+          "reveal": {
+            "en": "**Big-endian** means the most significant byte is stored first. When a database or index compares binary values lexicographically — byte by byte from the front — and **every value has exactly the same width**, big-endian byte order coincides with numeric order: the first byte that differs is the most significant byte that differs.\n\n```\n0x00 00 ... 01   (32 bytes)\n0x00 00 ... FF   (32 bytes)\n0x01 00 ... 00   (32 bytes)\nbyte-by-byte order == numeric order\n```\n\nThe equal-width condition is what carries the whole trick. As soon as values have different lengths, a short number can sort before or after a long one for the wrong reason — the same failure unpadded text has.\n\nSo this is a narrow, genuinely useful case for fixed-width unsigned values such as a 32-byte `uint256`. It is not a general licence to store numbers as strings.",
+            "ru": "**Big-endian** означает, что самый старший байт хранится первым. Когда БД или индекс сравнивает binary-значения лексикографически — побайтово с начала — и **все значения имеют ровно одинаковую ширину**, порядок байтов big-endian совпадает с числовым: первый различающийся байт и есть самый старший различающийся байт.\n\n```\n0x00 00 ... 01   (32 байта)\n0x00 00 ... FF   (32 байта)\n0x01 00 ... 00   (32 байта)\nпобайтовый порядок == числовой порядок\n```\n\nВесь трюк держится на условии одинаковой ширины. Как только значения разной длины, короткое число может встать раньше или позже длинного по неправильной причине — та же беда, что и у текста без padding.\n\nЭто узкий, но действительно полезный случай для беззнаковых значений фиксированной ширины вроде 32-байтового `uint256`. Общего разрешения хранить все числа строками он не даёт."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Equal width plus big-endian is what makes byte order match numeric order.",
+              "ru": "Одинаковая ширина плюс big-endian — вот что делает порядок байтов числовым."
+            },
+            "incorrect": {
+              "en": "It does — with identical widths, the first differing byte is the most significant one.",
+              "ru": "Сохраняет — при одинаковой ширине первый различающийся байт и есть самый старший."
+            }
+          },
+          "answer": true
+        }
+      ],
+      "practice": [
+        {
+          "id": "split-p1-no-order-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "If a very large number never needs numeric ordering, canonical text or binary storage can be enough.",
+            "ru": "Если очень большому числу никогда не нужна числовая сортировка, канонического текста или binary может быть достаточно."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Without ordering, exact storage is the only requirement left.",
+              "ru": "Без сортировки остаётся единственное требование — точное хранение."
+            },
+            "incorrect": {
+              "en": "It can — the sortable key columns exist only to support ordering you actually need.",
+              "ru": "Достаточно — сортируемые ключевые колонки нужны только ради сортировки, которая реально требуется."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "split-p2-order",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In which order should the sortable key columns of a split large number be compared?",
+            "ru": "В каком порядке нужно сравнивать сортируемые ключевые колонки разделённого большого числа?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Sign, then length, then chunks — the order a human compares numbers in.",
+              "ru": "Sign, затем длина, затем chunks — тот порядок, в котором числа сравнивает человек."
+            },
+            "incorrect": {
+              "en": "Sign first, then magnitude length, and only then chunks from the high end down.",
+              "ru": "Сначала sign, затем длина magnitude, и только потом chunks от старших к младшим."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Sign, then magnitude length, then chunks from the high end down",
+                "ru": "Sign, затем длина magnitude, затем chunks от старших к младшим"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Chunks first, then length, then sign",
+                "ru": "Сначала chunks, потом длина, потом sign"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A shorter number can start with a bigger chunk, so chunks alone order it wrongly.",
+                "ru": "Более короткое число может начинаться с большего chunk, поэтому одни chunks дают неверный порядок."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Alphabetically by column name",
+                "ru": "По алфавиту, по именам колонок"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Index order must follow numeric comparison order, not naming.",
+                "ru": "Порядок в индексе должен следовать порядку числового сравнения, а не именам."
+              }
+            }
+          ]
+        },
+        {
+          "id": "split-p3-sort",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the comparison steps for a large number stored as sign, magnitude length and fixed-width chunks.",
+            "ru": "Расставь шаги сравнения для большого числа, хранимого как sign, длина magnitude и chunks фиксированной ширины."
+          },
+          "feedback": {
+            "correct": {
+              "en": "This is exactly the column order a composite index must use.",
+              "ru": "Это ровно тот порядок колонок, который должен использовать составной индекс."
+            },
+            "incorrect": {
+              "en": "Sign, then magnitude length, then the highest chunk, then the rest toward the low end.",
+              "ru": "Sign, затем длина magnitude, затем старший chunk, затем остальные к младшим."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Compare the sign",
+                "ru": "Сравнить sign"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Compare the length of the magnitude",
+                "ru": "Сравнить длину magnitude"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Compare the highest-order chunk",
+                "ru": "Сравнить старший chunk"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Compare the remaining chunks toward the low end",
+                "ru": "Сравнить оставшиеся chunks в сторону младших"
+              }
+            }
+          ]
+        },
+        {
+          "id": "split-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing byte order.",
+            "ru": "Впиши пропущенный порядок байтов."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Most significant byte first, so the first differing byte is the decisive one.",
+              "ru": "Старший байт первым, поэтому первый различающийся байт и есть решающий."
+            },
+            "incorrect": {
+              "en": "It is big-endian: the most significant byte comes first.",
+              "ru": "Это big-endian: старший байт идёт первым."
+            }
+          },
+          "text": {
+            "en": "For fixed-width unsigned values, ___-endian binary keeps byte comparison in numeric order.",
+            "ru": "Для беззнаковых значений фиксированной ширины ___-endian binary сохраняет числовой порядок при побайтовом сравнении."
+          },
+          "answers": {
+            "en": [
+              "big"
+            ],
+            "ru": [
+              "big"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "index-cost",
+      "title": {
+        "en": "What an index over a big value costs",
+        "ru": "Чего стоит индекс по большому значению"
+      },
+      "summary": {
+        "en": "An index compares keys with the semantics of the column's type and operator class, and large keys make B-tree pages hold fewer entries, so writes touch more bytes and cache hit rates drop.",
+        "ru": "Индекс сравнивает ключи по семантике типа колонки и её operator class, а большие ключи уменьшают число записей на странице B-tree, из-за чего записи трогают больше байтов, а cache hit rate падает."
+      },
+      "discovery": [
+        {
+          "id": "indexcost-d1-composite",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A composite index (account_id, amount_units) is created for a \"largest balances per account\" query. When does it actually answer that question?",
+            "ru": "Составной индекс (account_id, amount_units) создан для запроса «самые большие балансы по аккаунту». Когда он действительно отвечает на этот вопрос?"
+          },
+          "reveal": {
+            "en": "An index is not a \"make it faster\" switch. It stores keys in the order defined by the **column's type and its operator class** — the set of comparison rules the index uses for that type. A numeric column compares numerically; a text column compares by collation.\n\nSo a composite index `(account_id, amount_units)` is excellent for \"largest balances per account\" **only** if `amount_units` really orders numerically. If it is text, the index is fast and the answer is wrong.\n\nSize matters too. Large numeric or text keys make the index heavier:\n\n```mermaid\nflowchart TD\n  K[\"larger index keys\"] --> P[\"fewer entries per B-tree page\"]\n  P --> D[\"more pages touched per lookup\"]\n  P --> C[\"lower cache hit rate\"]\n  K --> W[\"writes update more bytes\"]\n```\n\nA 78-digit key is therefore not free: it costs pages, writes and cache on every index that carries it. That is one more reason the ladder starts at the smallest exact type that fits.",
+            "ru": "Индекс — это не переключатель «сделать быстрее». Он хранит ключи в порядке, заданном **типом колонки и её operator class** — набором правил сравнения, которые индекс использует для этого типа. Числовая колонка сравнивается численно; текстовая — по collation.\n\nПоэтому составной индекс `(account_id, amount_units)` отлично подходит для «самых больших балансов по аккаунту» **только** если `amount_units` действительно упорядочен численно. Если это текст, индекс быстрый, а ответ неверный.\n\nРазмер тоже важен. Большие числовые или текстовые ключи утяжеляют индекс:\n\n```mermaid\nflowchart TD\n  K[\"более крупные ключи индекса\"] --> P[\"меньше записей на странице B-tree\"]\n  P --> D[\"больше страниц на один поиск\"]\n  P --> C[\"ниже cache hit rate\"]\n  K --> W[\"записи обновляют больше байтов\"]\n```\n\nПоэтому ключ на 78 цифр не бесплатен: он стоит страниц, записей и кэша в каждом индексе, где он есть. Ещё одна причина начинать лестницу с наименьшего подходящего точного типа."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The index reproduces the column's ordering — it cannot invent a better one.",
+              "ru": "Индекс воспроизводит порядок колонки — придумать лучший он не может."
+            },
+            "incorrect": {
+              "en": "Only when amount_units orders numerically; a text column would make the index fast and wrong.",
+              "ru": "Только когда amount_units упорядочен численно; текстовая колонка сделала бы индекс быстрым и неверным."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Only when amount_units has sortable numeric semantics",
+                "ru": "Только когда у amount_units есть сортируемая числовая семантика"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Always — indexing both columns is enough",
+                "ru": "Всегда — достаточно проиндексировать обе колонки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "If amount_units is text, the index orders it lexicographically and the \"largest\" rows are the wrong rows.",
+                "ru": "Если amount_units — текст, индекс упорядочит его лексикографически, и «самые большие» строки окажутся не теми."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Only when the table is physically clustered on account_id",
+                "ru": "Только когда таблица физически кластеризована по account_id"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Physical clustering is a separate trade-off; the key's comparison semantics come first.",
+                "ru": "Физическая кластеризация — отдельный trade-off; семантика сравнения ключа важнее."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "indexcost-p1-order-source",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What decides the order in which a B-tree index stores its keys?",
+            "ru": "Что определяет порядок, в котором B-tree индекс хранит свои ключи?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Type plus operator class is the comparison rule the index obeys.",
+              "ru": "Тип плюс operator class — то правило сравнения, которому подчиняется индекс."
+            },
+            "incorrect": {
+              "en": "The column's type and its operator class define the key order.",
+              "ru": "Порядок ключей задают тип колонки и её operator class."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The column's type and its operator class",
+                "ru": "Тип колонки и её operator class"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The order the rows were inserted in",
+                "ru": "Порядок, в котором вставлялись строки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Insertion order is not index order; the key comparison rule is.",
+                "ru": "Порядок вставки — не порядок индекса; порядок задаёт правило сравнения ключей."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The ORDER BY clause of the most recent query",
+                "ru": "ORDER BY последнего выполненного запроса"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A query cannot change how an existing index is ordered.",
+                "ru": "Запрос не может изменить порядок уже существующего индекса."
+              }
+            }
+          ]
+        },
+        {
+          "id": "indexcost-p2-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each indexing fact to its consequence.",
+            "ru": "Соотнеси каждый факт об индексации с его следствием."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Semantics decide correctness; key size decides cost.",
+              "ru": "Семантика определяет корректность; размер ключа — стоимость."
+            },
+            "incorrect": {
+              "en": "The column's type sets the comparison rule, and bigger keys fit fewer per page.",
+              "ru": "Тип колонки задаёт правило сравнения, а более крупные ключи хуже помещаются на страницу."
+            }
+          },
+          "pairs": [
+            {
+              "id": "ic-numeric",
+              "left": {
+                "en": "A numeric column",
+                "ru": "Числовая колонка"
+              },
+              "right": {
+                "en": "Index keys compared numerically",
+                "ru": "Ключи индекса сравниваются численно"
+              }
+            },
+            {
+              "id": "ic-text",
+              "left": {
+                "en": "A text column",
+                "ru": "Текстовая колонка"
+              },
+              "right": {
+                "en": "Index keys compared by collation",
+                "ru": "Ключи индекса сравниваются по collation"
+              }
+            },
+            {
+              "id": "ic-big-keys",
+              "left": {
+                "en": "Larger index keys",
+                "ru": "Более крупные ключи индекса"
+              },
+              "right": {
+                "en": "Fewer entries per B-tree page",
+                "ru": "Меньше записей на странице B-tree"
+              }
+            },
+            {
+              "id": "ic-composite",
+              "left": {
+                "en": "Composite index (account_id, amount_units)",
+                "ru": "Составной индекс (account_id, amount_units)"
+              },
+              "right": {
+                "en": "Top balances per account, if amount_units orders numerically",
+                "ru": "Топ балансов по аккаунту, если amount_units упорядочен численно"
+              }
+            }
+          ]
+        },
+        {
+          "id": "indexcost-p3-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing term.",
+            "ru": "Впиши пропущенный термин."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The operator class is the comparison rule set the index applies to the type.",
+              "ru": "Operator class — набор правил сравнения, который индекс применяет к типу."
+            },
+            "incorrect": {
+              "en": "It is the operator class — the comparison rules the index uses for that column type.",
+              "ru": "Это operator class — правила сравнения, которые индекс использует для типа колонки."
+            }
+          },
+          "text": {
+            "en": "An index stores keys in the order defined by the column's type and its ___ class.",
+            "ru": "Индекс хранит ключи в порядке, заданном типом колонки и её ___ class."
+          },
+          "answers": {
+            "en": [
+              "operator"
+            ],
+            "ru": [
+              "operator"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "constraints-and-binding",
+      "title": {
+        "en": "Constraints and exact binding",
+        "ru": "Ограничения и точная передача значений"
+      },
+      "summary": {
+        "en": "The chosen representation is enforced with CHECK constraints, mirrored by the application's validation, and written through prepared statements as exact values, never through floating-point conversions.",
+        "ru": "Выбранное представление закрепляют CHECK constraints, повторяют в валидации приложения и записывают через prepared statements точными значениями, а не через floating-point преобразования."
+      },
+      "discovery": [
+        {
+          "id": "constraints-d1-spot-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This code writes an exact 18-decimal amount into an exact NUMERIC column. Where is the defect?",
+            "ru": "Этот код записывает точную сумму с 18 decimals в точную колонку NUMERIC. Где дефект?"
+          },
+          "code": "BigDecimal amount = new BigDecimal(\"1.500000000000000000\");\nPreparedStatement ps = conn.prepareStatement(\n        \"INSERT INTO balance (amount) VALUES (?)\");\nps.setDouble(1, amount.doubleValue());\nps.executeUpdate();",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Two halves have to agree, and both are easy to get wrong.\n\n**Binding.** Send exact values through **prepared statements** as `BigDecimal`, as decimal strings derived from `BigInteger`, or as another exact type the driver supports. Any hop through `double` or `float` rounds the value before the database ever sees it — an exact column cannot repair what the client already lost.\n\n```java\nps.setBigDecimal(1, new BigDecimal(\"1.500000000000000000\"));\n```\n\n**Constraints.** Keep the rules next to the representation, so bad data cannot arrive through some other path:\n\n```sql\nALTER TABLE balance\n  ADD CONSTRAINT amount_non_negative CHECK (amount >= 0);\n```\n\nTypical `CHECK` constraints cover non-negative values, the maximum precision, the agreed scale, the canonical text format, and the allowed range of each chunk column. The application's validation must state the same rules, so a value rejected by one side is rejected by the other — otherwise the two disagree and the disagreement is discovered in production.",
+            "ru": "Должны совпасть две половины, и ошибиться легко в обеих.\n\n**Передача значений.** Отправляй точные значения через **prepared statements** как `BigDecimal`, как decimal-строки, полученные из `BigInteger`, или как другой точный тип, поддерживаемый драйвером. Любой заход через `double` или `float` округляет значение до того, как БД его увидит, — точная колонка не восстановит то, что клиент уже потерял.\n\n```java\nps.setBigDecimal(1, new BigDecimal(\"1.500000000000000000\"));\n```\n\n**Ограничения.** Держи правила рядом с представлением, чтобы плохие данные не пришли другим путём:\n\n```sql\nALTER TABLE balance\n  ADD CONSTRAINT amount_non_negative CHECK (amount >= 0);\n```\n\nТипичные `CHECK` constraints покрывают неотрицательность, максимальную precision, согласованный scale, канонический формат текста и допустимый диапазон каждой chunk-колонки. Валидация приложения должна повторять те же правила, чтобы значение, отвергнутое одной стороной, отвергалось и другой, — иначе стороны расходятся, и расхождение обнаруживается в проде."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The value is rounded on the client, before the exact column is involved.",
+              "ru": "Значение округляется на клиенте, ещё до того, как в дело вступает точная колонка."
+            },
+            "incorrect": {
+              "en": "doubleValue() rounds the amount before it reaches the database — bind the BigDecimal itself.",
+              "ru": "doubleValue() округляет сумму до попадания в БД — передавай сам BigDecimal."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "doubleValue() rounds the amount before it ever reaches the database",
+                "ru": "doubleValue() округляет сумму ещё до того, как она попадёт в БД"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The SQL should be built by string concatenation instead",
+                "ru": "SQL следовало бы собрать конкатенацией строк"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Concatenation is worse: it drops parameter binding without fixing exactness.",
+                "ru": "Конкатенация хуже: она теряет привязку параметров и при этом не чинит точность."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "BigDecimal cannot hold 18 decimals",
+                "ru": "BigDecimal не может хранить 18 decimals"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "BigDecimal is arbitrary-precision; the loss happens in the conversion to double.",
+                "ru": "BigDecimal имеет произвольную точность; потеря происходит при преобразовании в double."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "constraints-p1-binding",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which binding keeps an exact 18-decimal amount exact on its way into the database?",
+            "ru": "Какая передача значения сохраняет точность суммы с 18 decimals по пути в БД?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "A decimal string into BigDecimal never passes through a binary float.",
+              "ru": "Decimal-строка в BigDecimal вообще не проходит через двоичный float."
+            },
+            "incorrect": {
+              "en": "Use setBigDecimal with a BigDecimal built from a decimal string; any double conversion rounds.",
+              "ru": "Используй setBigDecimal с BigDecimal из decimal-строки; любое преобразование в double округляет."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "setBigDecimal with a BigDecimal built from a decimal string",
+                "ru": "setBigDecimal с BigDecimal, созданным из decimal-строки"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "setDouble with the value converted to double",
+                "ru": "setDouble со значением, преобразованным в double"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The conversion rounds the value before the database sees it.",
+                "ru": "Преобразование округляет значение до того, как его увидит БД."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "setFloat, because the value is small",
+                "ru": "setFloat, ведь значение небольшое"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "float is even less precise than double; both are inexact.",
+                "ru": "float ещё менее точен, чем double; оба неточны."
+              }
+            }
+          ]
+        },
+        {
+          "id": "constraints-p2-check-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A CHECK constraint can enforce that a stored amount is non-negative and uses the agreed scale.",
+            "ru": "CHECK constraint может гарантировать, что хранимая сумма неотрицательна и использует согласованный scale."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Constraints keep the rules next to the representation, on every write path.",
+              "ru": "Ограничения держат правила рядом с представлением, на каждом пути записи."
+            },
+            "incorrect": {
+              "en": "It can — CHECK constraints cover sign, precision, scale, canonical format and chunk ranges.",
+              "ru": "Может — CHECK constraints покрывают знак, precision, scale, канонический формат и диапазоны chunks."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "constraints-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each production safeguard to what it does.",
+            "ru": "Соотнеси каждую меру защиты в проде с тем, что она делает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The database enforces the shape; the client decides whether the value survives intact.",
+              "ru": "БД закрепляет форму; клиент решает, доедет ли значение неповреждённым."
+            },
+            "incorrect": {
+              "en": "CHECK constraints guard the stored shape; the binding decides whether the value is rounded.",
+              "ru": "CHECK constraints охраняют форму хранения; способ передачи решает, будет ли значение округлено."
+            }
+          },
+          "pairs": [
+            {
+              "id": "cb-non-negative",
+              "left": {
+                "en": "CHECK (amount >= 0)",
+                "ru": "CHECK (amount >= 0)"
+              },
+              "right": {
+                "en": "Rejects negative balances at the database",
+                "ru": "Отвергает отрицательные балансы на стороне БД"
+              }
+            },
+            {
+              "id": "cb-format",
+              "left": {
+                "en": "CHECK on the stored text format",
+                "ru": "CHECK на формат хранимого текста"
+              },
+              "right": {
+                "en": "Keeps stored text canonical",
+                "ru": "Держит хранимый текст каноническим"
+              }
+            },
+            {
+              "id": "cb-bigdecimal",
+              "left": {
+                "en": "setBigDecimal on a prepared statement",
+                "ru": "setBigDecimal на prepared statement"
+              },
+              "right": {
+                "en": "Writes the value without rounding",
+                "ru": "Записывает значение без округления"
+              }
+            },
+            {
+              "id": "cb-setdouble",
+              "left": {
+                "en": "setDouble on a prepared statement",
+                "ru": "setDouble на prepared statement"
+              },
+              "right": {
+                "en": "Rounds the value before it is stored",
+                "ru": "Округляет значение до сохранения"
+              }
+            }
+          ]
+        },
+        {
+          "id": "constraints-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing Java type.",
+            "ru": "Впиши пропущенный Java-тип."
+          },
+          "feedback": {
+            "correct": {
+              "en": "BigDecimal carries the exact digits all the way into the exact column.",
+              "ru": "BigDecimal доносит точные цифры прямо до точной колонки."
+            },
+            "incorrect": {
+              "en": "It is BigDecimal — or an exact decimal string; a double rounds on the way.",
+              "ru": "Это BigDecimal — или точная decimal-строка; double округляет по дороге."
+            }
+          },
+          "text": {
+            "en": "Bind exact amounts through a prepared statement as ___, never as a double.",
+            "ru": "Передавай точные суммы через prepared statement как ___, а не как double."
+          },
+          "answers": {
+            "en": [
+              "BigDecimal",
+              "java.math.BigDecimal"
+            ],
+            "ru": [
+              "BigDecimal",
+              "java.math.BigDecimal"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "end-to-end-decision",
+      "title": {
+        "en": "Putting the decision together",
+        "ru": "Собираем решение целиком"
+      },
+      "summary": {
+        "en": "Requirements, range, exactness, ordering, indexing and constraints combine into one storage decision you can defend.",
+        "ru": "Требования, диапазон, точность, сортировка, индексация и ограничения складываются в одно решение о хранении, которое можно защитить."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "capstone-d1-text-range",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Predict which rows this returns.",
+            "ru": "Предскажи, какие строки это вернёт."
+          },
+          "code": "-- ledger.amount_text is TEXT, covered by a plain B-tree index\n-- stored rows: '9', '10', '100'\nSELECT amount_text FROM ledger\nWHERE amount_text BETWEEN '2' AND '99'\nORDER BY amount_text;",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "The whole topic in one result set. The range is evaluated with text comparison, so `'10'` and `'100'` both start with `'1'`, sort below the lower bound `'2'`, and drop out — even though numerically both belong in `2..99`. Fast index, wrong answer, no error.\n\nThe decision that avoids this runs top to bottom:\n\n```mermaid\nflowchart TD\n  A[\"value requirement\"] --> B{\"fits BIGINT?\"}\n  B -->|yes| C[\"BIGINT\"]\n  B -->|no| D{\"fits exact NUMERIC/DECIMAL in this database?\"}\n  D -->|yes| E[\"NUMERIC/DECIMAL(p, s)\"]\n  D -->|no| F{\"need numeric ranges or ORDER BY?\"}\n  F -->|yes| G[\"canonical raw value + sortable key columns\"]\n  F -->|no| H[\"canonical text or binary\"]\n```\n\nWhichever branch you land on, three things still have to hold: the unit and scale are written down, the index key orders the way the query means, and `CHECK` constraints plus exact binding keep every stored value inside the representation you chose.",
+            "ru": "Вся тема в одном результате. Диапазон вычисляется текстовым сравнением, поэтому `'10'` и `'100'` начинаются с `'1'`, оказываются ниже нижней границы `'2'` и выпадают — хотя численно оба входят в `2..99`. Быстрый индекс, неверный ответ, никакой ошибки.\n\nРешение, которое этого избегает, идёт сверху вниз:\n\n```mermaid\nflowchart TD\n  A[\"требование к значению\"] --> B{\"помещается в BIGINT?\"}\n  B -->|да| C[\"BIGINT\"]\n  B -->|нет| D{\"помещается в точный NUMERIC/DECIMAL этой БД?\"}\n  D -->|да| E[\"NUMERIC/DECIMAL(p, s)\"]\n  D -->|нет| F{\"нужны числовые диапазоны или ORDER BY?\"}\n  F -->|да| G[\"каноническое raw-значение + сортируемые ключевые колонки\"]\n  F -->|нет| H[\"канонический текст или binary\"]\n```\n\nНа какой бы ветке ты ни оказался, должны выполняться три вещи: единица и scale зафиксированы, ключ индекса упорядочен так, как подразумевает запрос, а `CHECK` constraints вместе с точной передачей значений удерживают каждое сохранённое значение внутри выбранного представления."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Text range: '10' and '100' fall below '2', so only '9' survives.",
+              "ru": "Текстовый диапазон: '10' и '100' оказываются ниже '2', поэтому остаётся только '9'."
+            },
+            "incorrect": {
+              "en": "The BETWEEN is text comparison: '10' and '100' start with '1' and sort below '2', leaving only '9'.",
+              "ru": "BETWEEN здесь — текстовое сравнение: '10' и '100' начинаются с '1' и стоят ниже '2', остаётся только '9'."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "'9' only",
+                "ru": "Только '9'"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "'9' and '10'",
+                "ru": "'9' и '10'"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the numeric answer; in text order '10' starts with '1' and falls below the lower bound '2'.",
+                "ru": "Это числовой ответ; в текстовом порядке '10' начинается с '1' и оказывается ниже нижней границы '2'."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "'9', '10' and '100'",
+                "ru": "'9', '10' и '100'"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Both '10' and '100' start with '1', which sorts below '2', so the text range excludes them.",
+                "ru": "И '10', и '100' начинаются с '1', что стоит ниже '2', поэтому текстовый диапазон их исключает."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "No rows",
+                "ru": "Ни одной строки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "'9' does fall inside the text range from '2' to '99'.",
+                "ru": "'9' как раз попадает в текстовый диапазон от '2' до '99'."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "capstone-p1-spot-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This table must hold exact uint256 token balances with 18 decimals and answer \"top balances\" queries. Which description of the defects is correct?",
+            "ru": "Эта таблица должна хранить точные балансы токенов uint256 с 18 decimals и отвечать на запросы «топ балансов». Какое описание дефектов верно?"
+          },
+          "code": "CREATE TABLE token_balance (\n  account_id  BIGINT PRIMARY KEY,\n  balance     DOUBLE PRECISION NOT NULL,\n  amount_text TEXT NOT NULL\n);\nCREATE INDEX token_balance_amount_idx ON token_balance (amount_text);",
+          "codeLang": "sql",
+          "feedback": {
+            "correct": {
+              "en": "Two independent failures: inexact storage and lexicographic ordering.",
+              "ru": "Два независимых провала: неточное хранение и лексикографический порядок."
+            },
+            "incorrect": {
+              "en": "Both columns are wrong: floating point is inexact, and a text index orders lexicographically.",
+              "ru": "Неверны обе колонки: floating point неточен, а текстовый индекс упорядочивает лексикографически."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "balance is inexact because it is floating point, and the index on amount_text orders lexicographically, so \"top balances\" returns the wrong rows",
+                "ru": "balance неточен, потому что это floating point, а индекс по amount_text упорядочивает лексикографически, поэтому «топ балансов» возвращает не те строки"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "balance is fine because DOUBLE PRECISION has a huge range; only the index is wrong",
+                "ru": "balance в порядке, ведь у DOUBLE PRECISION огромный диапазон; неверен только индекс"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Range is not exactness — a floating-point balance is already wrong before any query runs.",
+                "ru": "Диапазон — не точность: баланс во floating point уже неверен ещё до любого запроса."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The index makes amount_text behave numerically, so only balance is wrong",
+                "ru": "Индекс заставляет amount_text вести себя численно, поэтому неверен только balance"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "An index reflects the column's comparison rules; it cannot give text numeric semantics.",
+                "ru": "Индекс отражает правила сравнения колонки; дать тексту числовую семантику он не может."
+              }
+            }
+          ]
+        },
+        {
+          "id": "capstone-p2-predict-units",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Predict the human-readable amount for this row.",
+            "ru": "Предскажи человекочитаемую сумму для этой строки."
+          },
+          "code": "-- amount_units NUMERIC(78, 0) holds base units, display scale is 18\nSELECT amount_units FROM balance WHERE account_id = 3;\n-- returns: 250000000000000000",
+          "codeLang": "sql",
+          "feedback": {
+            "correct": {
+              "en": "250000000000000000 base units at scale 18 is 0.25.",
+              "ru": "250000000000000000 базовых единиц при scale 18 — это 0.25."
+            },
+            "incorrect": {
+              "en": "Shift the decimal point 18 places left: 250000000000000000 becomes 0.25.",
+              "ru": "Сдвинь десятичную точку на 18 позиций влево: 250000000000000000 превращается в 0.25."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "0.25",
+                "ru": "0.25"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "250000000000000000",
+                "ru": "250000000000000000"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the base-unit count; the display scale of 18 still has to be applied.",
+                "ru": "Это количество базовых единиц; display scale 18 ещё нужно применить."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "2.5",
+                "ru": "2.5"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The value has 18 digits, so shifting 18 places gives 0.25, not 2.5.",
+                "ru": "В значении 18 цифр, поэтому сдвиг на 18 позиций даёт 0.25, а не 2.5."
+              }
+            }
+          ]
+        },
+        {
+          "id": "capstone-p3-sort",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the steps of choosing how to store a very large number.",
+            "ru": "Расставь по порядку шаги выбора способа хранения очень большого числа."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Semantics, then unit, then the type ladder, then the guard rails.",
+              "ru": "Семантика, затем единица, затем лестница типов, затем защитные ограждения."
+            },
+            "incorrect": {
+              "en": "Start from the required semantics and the unit, climb the type ladder, and finish with constraints and exact binding.",
+              "ru": "Начни с нужной семантики и единицы, поднимись по лестнице типов и закончи ограничениями и точной передачей значений."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Decide which semantics the queries need: exact arithmetic, ordering, ranges, aggregates",
+                "ru": "Решить, какая семантика нужна запросам: точная арифметика, сортировка, диапазоны, агрегаты"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Fix the unit and scale, for example base units with display scale 18",
+                "ru": "Зафиксировать единицу и scale, например базовые единицы с display scale 18"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "If the value fits int64, use BIGINT",
+                "ru": "Если значение помещается в int64, взять BIGINT"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Otherwise use NUMERIC/DECIMAL(p, s), after checking the target database's precision limit",
+                "ru": "Иначе взять NUMERIC/DECIMAL(p, s), проверив лимит precision целевой БД"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "If it still does not fit and ordering is required, store a canonical raw value plus sortable key columns",
+                "ru": "Если и это не подходит, а сортировка нужна, хранить каноническое raw-значение плюс сортируемые ключевые колонки"
+              }
+            },
+            {
+              "id": "s6",
+              "text": {
+                "en": "Add CHECK constraints and bind exact values through prepared statements",
+                "ru": "Добавить CHECK constraints и передавать точные значения через prepared statements"
+              }
+            }
+          ]
+        },
+        {
+          "id": "capstone-p4-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each storage option for a very large number to the role it plays.",
+            "ru": "Соотнеси каждый вариант хранения очень большого числа с его ролью."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Each rung of the ladder buys a different combination of exactness and ordering.",
+              "ru": "Каждая ступень лестницы даёт своё сочетание точности и сортируемости."
+            },
+            "incorrect": {
+              "en": "BIGINT for int64, NUMERIC(78, 0) for a raw uint256, split columns for ordering beyond that, and never floating point.",
+              "ru": "BIGINT — для int64, NUMERIC(78, 0) — для сырого uint256, разделение на колонки — для сортировки сверх этого, и никакого floating point."
+            }
+          },
+          "pairs": [
+            {
+              "id": "cap-bigint",
+              "left": {
+                "en": "BIGINT",
+                "ru": "BIGINT"
+              },
+              "right": {
+                "en": "Exact storage for a value that fits int64",
+                "ru": "Точное хранение значения, помещающегося в int64"
+              }
+            },
+            {
+              "id": "cap-numeric",
+              "left": {
+                "en": "NUMERIC(78, 0)",
+                "ru": "NUMERIC(78, 0)"
+              },
+              "right": {
+                "en": "The exact raw uint256, where precision 78 is supported",
+                "ru": "Точное сырое uint256 там, где поддерживается precision 78"
+              }
+            },
+            {
+              "id": "cap-split",
+              "left": {
+                "en": "Canonical raw value plus sortable key columns",
+                "ru": "Каноническое raw-значение плюс сортируемые ключевые колонки"
+              },
+              "right": {
+                "en": "Exactness plus numeric ordering beyond the decimal type",
+                "ru": "Точность плюс числовая сортировка за пределами decimal-типа"
+              }
+            },
+            {
+              "id": "cap-binary",
+              "left": {
+                "en": "Fixed-width big-endian binary",
+                "ru": "Binary фиксированной ширины в big-endian"
+              },
+              "right": {
+                "en": "Byte order that matches numeric order for equal-width unsigned values",
+                "ru": "Порядок байтов, совпадающий с числовым для беззнаковых значений равной ширины"
+              }
+            },
+            {
+              "id": "cap-double",
+              "left": {
+                "en": "DOUBLE PRECISION",
+                "ru": "DOUBLE PRECISION"
+              },
+              "right": {
+                "en": "Range without exactness, unusable for balances",
+                "ru": "Диапазон без точности, непригодно для балансов"
+              }
+            }
+          ]
+        },
+        {
+          "id": "capstone-p5-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the three missing numbers.",
+            "ru": "Впиши три пропущенных числа."
+          },
+          "feedback": {
+            "correct": {
+              "en": "78 digits total; scale 0 for base units, scale 18 for the human form.",
+              "ru": "Всего 78 цифр; scale 0 — для базовых единиц, scale 18 — для человеческой формы."
+            },
+            "incorrect": {
+              "en": "A raw uint256 needs up to 78 digits: base units use scale 0, the human 18-decimal form uses scale 18.",
+              "ru": "Сырому uint256 нужно до 78 цифр: базовые единицы используют scale 0, человеческая форма с 18 decimals — scale 18."
+            }
+          },
+          "text": {
+            "en": "A raw uint256 needs up to ___ decimal digits, so base units go into NUMERIC(78, ___) and the human 18-decimal form into NUMERIC(78, ___).",
+            "ru": "Сырому uint256 нужно до ___ десятичных цифр, поэтому базовые единицы кладут в NUMERIC(78, ___), а человеческую форму с 18 decimals — в NUMERIC(78, ___)."
+          },
+          "blanks": [
+            {
+              "en": [
+                "78"
+              ],
+              "ru": [
+                "78"
+              ]
+            },
+            {
+              "en": [
+                "0"
+              ],
+              "ru": [
+                "0"
+              ]
+            },
+            {
+              "en": [
+                "18"
+              ],
+              "ru": [
+                "18"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

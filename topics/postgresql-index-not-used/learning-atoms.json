@@ -1,0 +1,3141 @@
+{
+  "schemaVersion": 1,
+  "topicId": "postgresql-index-not-used",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "index-is-an-option",
+      "title": {
+        "en": "An index is an option, not an order",
+        "ru": "Индекс — это возможность, а не приказ"
+      },
+      "summary": {
+        "en": "The planner compares candidate plans and runs the cheapest estimated one, so an existing index can simply lose.",
+        "ru": "Planner сравнивает возможные планы и выполняет самый дешёвый по оценке, поэтому существующий индекс может просто проиграть."
+      },
+      "discovery": [
+        {
+          "id": "opt-d1-seq-scan-surprise",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "There is a B-tree index on `orders(status)`, but `EXPLAIN` shows a `Seq Scan` for this query. What does that most likely mean?",
+            "ru": "На `orders(status)` есть B-tree индекс, но `EXPLAIN` показывает `Seq Scan` для этого запроса. Что это скорее всего означает?"
+          },
+          "code": "SELECT * FROM orders WHERE status = 'NEW';",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "PostgreSQL does not execute your SQL literally. The **planner** (the query optimizer) builds several possible **plans** for the same query and runs the one whose **estimated cost** is lowest. A `Seq Scan` node means \"read the whole table in physical order\"; an `Index Scan` node means \"walk the index, then fetch the matching rows from the table\".\n\nThe estimate comes from several inputs:\n\n```mermaid\nflowchart TD\n  Q[\"query predicate\"] --> C[\"planner estimates rows and I/O\"]\n  S[\"table and column statistics\"] --> C\n  I[\"available indexes\"] --> C\n  T[\"table size\"] --> C\n  P[\"cost settings\"] --> C\n  C --> D{\"which plan is cheaper?\"}\n  D -->|\"few rows\"| IDX[\"Index Scan\"]\n  D -->|\"many rows\"| SEQ[\"Seq Scan\"]\n```\n\nSo an index is an *option* the planner may take, never an order it must obey. A `Seq Scan` next to an existing index is not a bug — it is a claim that the index was not the cheapest valid path, or that the query did not match the index in a way the planner could use.",
+            "ru": "PostgreSQL не выполняет ваш SQL буквально. **Planner** (оптимизатор запросов) строит несколько возможных **планов** для одного запроса и выполняет тот, у которого ниже **оценочная стоимость**. Узел `Seq Scan` означает «прочитать всю таблицу в физическом порядке»; узел `Index Scan` — «пройти по индексу, затем достать подходящие строки из таблицы».\n\nОценка складывается из нескольких входных данных:\n\n```mermaid\nflowchart TD\n  Q[\"предикат запроса\"] --> C[\"planner оценивает строки и I/O\"]\n  S[\"статистика таблицы и колонок\"] --> C\n  I[\"доступные индексы\"] --> C\n  T[\"размер таблицы\"] --> C\n  P[\"настройки стоимости\"] --> C\n  C --> D{\"какой план дешевле?\"}\n  D -->|\"мало строк\"| IDX[\"Index Scan\"]\n  D -->|\"много строк\"| SEQ[\"Seq Scan\"]\n```\n\nИндекс — это *возможность*, которой planner может воспользоваться, а не приказ. `Seq Scan` при существующем индексе — не баг, а утверждение: индекс не был самым дешёвым корректным путём либо запрос не совпал с индексом так, чтобы planner мог им воспользоваться."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the planner runs the cheapest estimated plan, not the one that has an index.",
+              "ru": "Верно — planner выполняет самый дешёвый по оценке план, а не тот, где есть индекс."
+            },
+            "incorrect": {
+              "en": "A Seq Scan here is a cost decision by the planner, not a broken index.",
+              "ru": "`Seq Scan` здесь — решение planner по стоимости, а не сломанный индекс."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The planner estimated the Seq Scan to be cheaper than using the index",
+                "ru": "Planner оценил Seq Scan как более дешёвый, чем использование индекса"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The index is corrupt and must be rebuilt",
+                "ru": "Индекс повреждён и его надо перестроить"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Corruption is rare; a Seq Scan is an ordinary planner decision.",
+                "ru": "Повреждение — редкость; Seq Scan — обычное решение planner."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "PostgreSQL cannot use a B-tree index on a text column",
+                "ru": "PostgreSQL не может использовать B-tree индекс по текстовой колонке"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "B-tree indexes work on text; the choice is about cost, not column type.",
+                "ru": "B-tree индексы работают по тексту; выбор зависит от стоимости, а не от типа колонки."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "opt-p1-must-use-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In PostgreSQL, if an index matching the query exists, the planner is required to use it.",
+            "ru": "В PostgreSQL, если существует индекс, подходящий запросу, planner обязан его использовать."
+          },
+          "feedback": {
+            "correct": {
+              "en": "An index is a candidate path; the planner picks the cheapest estimated plan.",
+              "ru": "Индекс — лишь возможный путь; planner выбирает самый дешёвый по оценке план."
+            },
+            "incorrect": {
+              "en": "No — nothing forces index usage; the cheapest estimated plan wins.",
+              "ru": "Нет — использование индекса ничем не навязано; выигрывает самый дешёвый по оценке план."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "opt-p2-match-inputs",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each planner input to what it tells the PostgreSQL planner.",
+            "ru": "Соотнеси каждый вход planner с тем, что он сообщает planner в PostgreSQL."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The plan choice is an estimate assembled from all of these.",
+              "ru": "Выбор плана — это оценка, собранная из всех этих данных."
+            },
+            "incorrect": {
+              "en": "Statistics give row counts, indexes give possible paths, size and cost settings give the price.",
+              "ru": "Статистика даёт число строк, индексы — возможные пути, размер и настройки стоимости — цену."
+            }
+          },
+          "pairs": [
+            {
+              "id": "stats",
+              "left": {
+                "en": "Table and column statistics",
+                "ru": "Статистика таблицы и колонок"
+              },
+              "right": {
+                "en": "Estimated number of matching rows",
+                "ru": "Оценочное число подходящих строк"
+              }
+            },
+            {
+              "id": "indexes",
+              "left": {
+                "en": "Available indexes",
+                "ru": "Доступные индексы"
+              },
+              "right": {
+                "en": "Which access paths are possible at all",
+                "ru": "Какие пути доступа вообще возможны"
+              }
+            },
+            {
+              "id": "size",
+              "left": {
+                "en": "Table size",
+                "ru": "Размер таблицы"
+              },
+              "right": {
+                "en": "How expensive reading the whole table is",
+                "ru": "Насколько дорого прочитать таблицу целиком"
+              }
+            },
+            {
+              "id": "settings",
+              "left": {
+                "en": "Cost settings",
+                "ru": "Настройки стоимости"
+              },
+              "right": {
+                "en": "The assumed relative price of random and sequential I/O",
+                "ru": "Предполагаемая относительная цена случайного и последовательного I/O"
+              }
+            }
+          ]
+        },
+        {
+          "id": "opt-p3-fill-seq",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing plan-node name.",
+            "ru": "Впиши пропущенное имя узла плана."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Seq Scan reads the whole table in physical order.",
+              "ru": "Seq Scan читает всю таблицу в физическом порядке."
+            },
+            "incorrect": {
+              "en": "It is Seq Scan — the node that reads the whole table in physical order.",
+              "ru": "Это Seq Scan — узел, который читает всю таблицу в физическом порядке."
+            }
+          },
+          "text": {
+            "en": "Reading a whole PostgreSQL table in physical order appears in a plan as ___ Scan.",
+            "ru": "Чтение всей таблицы PostgreSQL в физическом порядке отображается в плане как ___ Scan."
+          },
+          "blanks": [
+            {
+              "en": [
+                "Seq",
+                "seq",
+                "Sequential",
+                "sequential"
+              ],
+              "ru": [
+                "Seq",
+                "seq",
+                "Sequential",
+                "sequential"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "selectivity",
+      "title": {
+        "en": "Selectivity",
+        "ru": "Селективность"
+      },
+      "summary": {
+        "en": "Selectivity is the share of rows a predicate keeps; a predicate that keeps a large share makes an index unattractive.",
+        "ru": "Селективность — доля строк, которую оставляет предикат; предикат, оставляющий большую долю, делает индекс невыгодным."
+      },
+      "discovery": [
+        {
+          "id": "sel-d1-ninety-percent",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "There is a B-tree index on `orders(status)`. Which plan will PostgreSQL most likely choose for this query?",
+            "ru": "На `orders(status)` есть B-tree индекс. Какой план PostgreSQL скорее всего выберет для этого запроса?"
+          },
+          "code": "-- orders has 5,000,000 rows; 90% of them have status = 'DONE'\nSELECT * FROM orders WHERE status = 'DONE';",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "**Selectivity** is the share of a table's rows that a predicate keeps. `status = 'DONE'` here keeps 90% — that is *low* selectivity (a low-selectivity predicate keeps many rows; a high-selectivity one keeps few).\n\nWhy does low selectivity hurt an index? An index entry only tells PostgreSQL *where* a row lives. The row itself sits in the **heap** — the table's own data pages. So an Index Scan is two steps: walk the index, then fetch each row from the heap, page by page, in whatever order the index dictates.\n\n```mermaid\nflowchart TD\n  P[\"predicate\"] --> R[\"estimated matching rows\"]\n  R -->|\"a small share\"| I[\"Index Scan: few heap pages, worth the detour\"]\n  R -->|\"most of the table\"| S[\"Seq Scan: nearly every heap page is needed anyway\"]\n```\n\nIf almost every heap page must be visited anyway, reading the table straight through in physical order is cheaper than reading index pages *plus* the same heap pages in scattered order. That is why a broad predicate legitimately gets a `Seq Scan`.",
+            "ru": "**Селективность** — доля строк таблицы, которую оставляет предикат. Здесь `status = 'DONE'` оставляет 90% — это *низкая* селективность (низкая селективность оставляет много строк, высокая — мало).\n\nПочему низкая селективность вредит индексу? Запись индекса лишь говорит PostgreSQL, *где* лежит строка. Сама строка находится в **heap** — в страницах данных самой таблицы. Поэтому Index Scan — это два шага: пройти по индексу, а затем достать каждую строку из heap, страница за страницей, в том порядке, который навязывает индекс.\n\n```mermaid\nflowchart TD\n  P[\"предикат\"] --> R[\"оценочное число подходящих строк\"]\n  R -->|\"небольшая доля\"| I[\"Index Scan: мало heap-страниц, обход оправдан\"]\n  R -->|\"почти вся таблица\"| S[\"Seq Scan: почти каждая heap-страница всё равно нужна\"]\n```\n\nЕсли посетить придётся почти каждую heap-страницу, прочитать таблицу подряд в физическом порядке дешевле, чем читать страницы индекса *плюс* те же heap-страницы в разбросанном порядке. Поэтому широкий предикат законно получает `Seq Scan`."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — 90% of rows means nearly every heap page is needed anyway.",
+              "ru": "Верно — 90% строк означает, что почти каждая heap-страница всё равно нужна."
+            },
+            "incorrect": {
+              "en": "A predicate keeping 90% of a table is too broad for an index to pay off.",
+              "ru": "Предикат, оставляющий 90% таблицы, слишком широк, чтобы индекс окупился."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Seq Scan",
+                "ru": "Seq Scan"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Index Scan on the status index",
+                "ru": "Index Scan по индексу на status"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Reading 4.5M rows through the index still visits nearly every table page, in random order.",
+                "ru": "Чтение 4,5 млн строк через индекс всё равно посещает почти каждую страницу таблицы, да ещё в случайном порядке."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Index Only Scan on the status index",
+                "ru": "Index Only Scan по индексу на status"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "`SELECT *` needs columns the index does not hold, and 90% of rows is not selective anyway.",
+                "ru": "`SELECT *` требует колонок, которых нет в индексе, и 90% строк всё равно не селективны."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "sel-p1-broad-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In PostgreSQL, a predicate that matches most rows of a large table is a good fit for a plain B-tree Index Scan.",
+            "ru": "В PostgreSQL предикат, который подходит большинству строк большой таблицы, хорошо подходит для обычного B-tree Index Scan."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A broad predicate needs nearly every heap page, so a sequential read wins.",
+              "ru": "Широкому предикату нужна почти каждая heap-страница, поэтому последовательное чтение выигрывает."
+            },
+            "incorrect": {
+              "en": "No — index access pays off only when few rows, and therefore few heap pages, are needed.",
+              "ru": "Нет — индексный доступ окупается, только когда нужно мало строк и, значит, мало heap-страниц."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "sel-p2-meaning",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does it mean that a predicate has LOW selectivity?",
+            "ru": "Что означает, что у предиката НИЗКАЯ селективность?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Low selectivity = keeps a large share of the rows.",
+              "ru": "Низкая селективность = оставляет большую долю строк."
+            },
+            "incorrect": {
+              "en": "Low selectivity means the predicate keeps MANY rows; keeping few rows is high selectivity.",
+              "ru": "Низкая селективность означает, что предикат оставляет МНОГО строк; мало строк — это высокая селективность."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It keeps a large share of the table's rows",
+                "ru": "Он оставляет большую долю строк таблицы"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It keeps only a handful of rows",
+                "ru": "Он оставляет лишь горстку строк"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is HIGH selectivity — exactly the case where an index pays off.",
+                "ru": "Это ВЫСОКАЯ селективность — как раз случай, когда индекс окупается."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It refers to how many columns the index contains",
+                "ru": "Речь о том, сколько колонок содержит индекс"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Selectivity is about rows kept by a predicate, not about index width.",
+                "ru": "Селективность — про строки, оставленные предикатом, а не про ширину индекса."
+              }
+            }
+          ]
+        },
+        {
+          "id": "sel-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble what low selectivity means.",
+            "ru": "Собери, что означает низкая селективность."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Many rows kept means many heap pages, so Seq Scan can be cheaper.",
+              "ru": "Много оставленных строк — много heap-страниц, поэтому Seq Scan может быть дешевле."
+            },
+            "incorrect": {
+              "en": "Low selectivity means the predicate keeps many rows, not few.",
+              "ru": "Низкая селективность означает, что предикат оставляет много строк, а не мало."
+            }
+          },
+          "tokens": {
+            "en": [
+              "low",
+              "selectivity",
+              "means",
+              "the",
+              "predicate",
+              "keeps",
+              "many",
+              "rows"
+            ],
+            "ru": [
+              "низкая",
+              "селективность",
+              "означает,",
+              "что",
+              "предикат",
+              "оставляет",
+              "много",
+              "строк"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "few",
+              "index"
+            ],
+            "ru": [
+              "мало",
+              "индекс"
+            ]
+          }
+        },
+        {
+          "id": "sel-p4-fill-high",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing word.",
+            "ru": "Впиши пропущенное слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "High selectivity means few rows, few heap fetches, and a winning index.",
+              "ru": "Высокая селективность — мало строк, мало обращений к heap и выигрыш индекса."
+            },
+            "incorrect": {
+              "en": "It is HIGH selectivity: few rows kept is exactly where index access wins.",
+              "ru": "Это ВЫСОКАЯ селективность: мало оставленных строк — как раз где индексный доступ выигрывает."
+            }
+          },
+          "text": {
+            "en": "A predicate that keeps only a tiny share of the rows has ___ selectivity, and that is where index access pays off.",
+            "ru": "Предикат, оставляющий лишь крошечную долю строк, имеет ___ селективность — именно там индексный доступ окупается."
+          },
+          "blanks": [
+            {
+              "en": [
+                "high"
+              ],
+              "ru": [
+                "высокую",
+                "высокая",
+                "high"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "small-tables",
+      "title": {
+        "en": "Small tables",
+        "ru": "Маленькие таблицы"
+      },
+      "summary": {
+        "en": "A table of a few pages is cheaper to read whole than to reach through an index first, so a Seq Scan there is normal.",
+        "ru": "Таблицу из нескольких страниц дешевле прочитать целиком, чем сначала идти через индекс, поэтому Seq Scan там нормален."
+      },
+      "discovery": [
+        {
+          "id": "small-d1-forty-rows",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which plan will PostgreSQL most likely choose here, given the index on `currencies(code)`?",
+            "ru": "Какой план PostgreSQL скорее всего выберет здесь при наличии индекса на `currencies(code)`?"
+          },
+          "code": "-- currencies holds 40 rows on a single heap page\n-- index: CREATE INDEX idx_currencies_code ON currencies (code);\nSELECT * FROM currencies WHERE code = 'EUR';",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "PostgreSQL reads data in fixed-size pages, and cost is essentially counted in pages. A tiny table lives on one or a few heap pages, so a `Seq Scan` costs almost nothing: read those pages, filter in memory, done.\n\nAn index access on the same table has to read the index's own pages *and then* the heap page holding the row:\n\n```mermaid\nflowchart LR\n  A[\"Seq Scan: read 1 heap page\"] --> R[\"result\"]\n  B[\"Index Scan: read index pages\"] --> C[\"then read the same heap page\"] --> R\n```\n\nSo more I/O for the same answer. Note this is a *cost* decision, not a rule: there is no row-count threshold below which indexes are banned. As the table grows, the very same query can flip to an `Index Scan` — which is also why a `Seq Scan` on a small table is never, by itself, evidence of a missing index.",
+            "ru": "PostgreSQL читает данные страницами фиксированного размера, и стоимость по сути считается в страницах. Крошечная таблица живёт на одной-двух heap-страницах, поэтому `Seq Scan` почти ничего не стоит: прочитать эти страницы, отфильтровать в памяти — готово.\n\nИндексному доступу на той же таблице придётся прочитать страницы самого индекса, *а затем* ещё heap-страницу со строкой:\n\n```mermaid\nflowchart LR\n  A[\"Seq Scan: читаем 1 heap-страницу\"] --> R[\"результат\"]\n  B[\"Index Scan: читаем страницы индекса\"] --> C[\"затем читаем ту же heap-страницу\"] --> R\n```\n\nБольше I/O за тот же ответ. Это решение по *стоимости*, а не правило: нет порога по числу строк, ниже которого индексы запрещены. С ростом таблицы тот же запрос может переключиться на `Index Scan` — и поэтому `Seq Scan` на маленькой таблице сам по себе никогда не доказывает отсутствие нужного индекса."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — one page of table beats index pages plus that same page.",
+              "ru": "Верно — одна страница таблицы дешевле страниц индекса плюс той же страницы."
+            },
+            "incorrect": {
+              "en": "The predicate is selective, but a one-page table is still cheaper to read whole.",
+              "ru": "Предикат селективен, но таблицу из одной страницы всё равно дешевле прочитать целиком."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Seq Scan",
+                "ru": "Seq Scan"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Index Scan, because the predicate is very selective",
+                "ru": "Index Scan, потому что предикат очень селективен"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Selectivity is high, but reading index pages plus that one heap page costs more than the page alone.",
+                "ru": "Селективность высокая, но прочитать страницы индекса плюс ту же heap-страницу дороже, чем только страницу."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Index Only Scan, because the index contains `code`",
+                "ru": "Index Only Scan, потому что индекс содержит `code`"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "`SELECT *` needs the other columns, and with a single heap page there is nothing to save.",
+                "ru": "`SELECT *` требует остальных колонок, а при одной heap-странице экономить нечего."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "small-p1-missing-index-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In PostgreSQL, a `Seq Scan` in an EXPLAIN plan always means an index is missing.",
+            "ru": "В PostgreSQL `Seq Scan` в плане EXPLAIN всегда означает, что не хватает индекса."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It can be optimal — for a small table or a broad predicate.",
+              "ru": "Он может быть оптимальным — для маленькой таблицы или широкого предиката."
+            },
+            "incorrect": {
+              "en": "No — a Seq Scan is often the correct choice for a small table or a broad predicate.",
+              "ru": "Нет — Seq Scan часто правильный выбор для маленькой таблицы или широкого предиката."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "small-p2-why",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why can PostgreSQL scan a very small table sequentially even when a selective index exists on it?",
+            "ru": "Почему PostgreSQL может сканировать очень маленькую таблицу последовательно, даже если на ней есть селективный индекс?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Fewer pages read for the same answer.",
+              "ru": "Меньше прочитанных страниц за тот же ответ."
+            },
+            "incorrect": {
+              "en": "Because reading its few pages costs less than reading index pages plus those pages.",
+              "ru": "Потому что прочитать его несколько страниц дешевле, чем страницы индекса плюс те же страницы."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Reading its few pages costs less than reading index pages plus the table pages",
+                "ru": "Прочитать его несколько страниц дешевле, чем страницы индекса плюс страницы таблицы"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "PostgreSQL disables indexes on tables below 1000 rows",
+                "ru": "PostgreSQL отключает индексы на таблицах меньше 1000 строк"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no such threshold; it is a cost comparison, not a rule.",
+                "ru": "Такого порога нет; это сравнение стоимости, а не правило."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Small tables cannot have B-tree indexes",
+                "ru": "На маленьких таблицах не может быть B-tree индексов"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "They can; the index simply is not the cheapest path here.",
+                "ru": "Могут; просто индекс здесь не самый дешёвый путь."
+              }
+            }
+          ]
+        },
+        {
+          "id": "small-p3-fill-heap",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing term.",
+            "ru": "Впиши пропущенный термин."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The index only points into the heap; the row itself is always read from there.",
+              "ru": "Индекс лишь указывает в heap; сама строка всегда читается оттуда."
+            },
+            "incorrect": {
+              "en": "It is the heap — the table's own data pages, which an index access must still read.",
+              "ru": "Это heap — страницы данных самой таблицы, которые индексный доступ всё равно должен прочитать."
+            }
+          },
+          "text": {
+            "en": "PostgreSQL keeps table rows in the ___, so an Index Scan must fetch each matching row from there.",
+            "ru": "PostgreSQL хранит строки таблицы в ___, поэтому Index Scan должен достать каждую подходящую строку оттуда."
+          },
+          "blanks": [
+            {
+              "en": [
+                "heap"
+              ],
+              "ru": [
+                "heap",
+                "heap-е",
+                "куче"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "predicate-wrapping",
+      "title": {
+        "en": "A wrapped column hides the index",
+        "ru": "Обёрнутая колонка скрывает индекс"
+      },
+      "summary": {
+        "en": "A plain B-tree index stores the column's own values, so a function, cast or arithmetic around the column makes the index unusable.",
+        "ru": "Обычный B-tree индекс хранит значения самой колонки, поэтому функция, cast или арифметика вокруг колонки делают индекс непригодным."
+      },
+      "discovery": [
+        {
+          "id": "wrap-d1-lower-email",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This query is slow and never uses `idx_users_email`. What is the defect?",
+            "ru": "Этот запрос медленный и никогда не использует `idx_users_email`. В чём дефект?"
+          },
+          "code": "-- index: CREATE INDEX idx_users_email ON users (email);\nSELECT * FROM users WHERE lower(email) = 'ada@example.com';",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "A B-tree index on `email` stores the values of `email`, sorted. That sorted order is the only thing that makes a seek possible — and it is an order over `email`, not over `lower(email)`. The values the predicate asks about are simply not in the index, so PostgreSQL has to compute `lower(email)` for every row, which means reading every row.\n\n```mermaid\nflowchart LR\n  I[\"index sorted by email: Ada@..., Bob@...\"] --> Q{\"predicate asks about lower(email)\"}\n  Q --> N[\"values not in the index, no seek possible\"]\n```\n\nThe same trap in other clothes: an implicit **cast** on the column (comparing a `varchar` column to a number), and arithmetic such as `WHERE price * 2 > 100`.\n\nTwo fixes:\n\n- Keep the column **bare** on one side — move the computation to the constant side when that is valid (`price > 100 / 2`).\n- Or index the expression itself with an **expression index**: `CREATE INDEX ON users (lower(email));`. Then the indexed values *are* what the predicate asks for.",
+            "ru": "B-tree индекс на `email` хранит отсортированные значения `email`. Именно этот порядок и делает поиск возможным — но это порядок по `email`, а не по `lower(email)`. Значений, о которых спрашивает предикат, в индексе просто нет, поэтому PostgreSQL приходится вычислять `lower(email)` для каждой строки, то есть читать все строки.\n\n```mermaid\nflowchart LR\n  I[\"индекс отсортирован по email: Ada@..., Bob@...\"] --> Q{\"предикат спрашивает про lower(email)\"}\n  Q --> N[\"таких значений в индексе нет, поиск невозможен\"]\n```\n\nТа же ловушка в другой одежде: неявный **cast** на колонке (сравнение `varchar`-колонки с числом) и арифметика вида `WHERE price * 2 > 100`.\n\nДва решения:\n\n- Оставить колонку **чистой** с одной стороны — перенести вычисление на сторону константы, когда это корректно (`price > 100 / 2`).\n- Либо проиндексировать само выражение через **expression index**: `CREATE INDEX ON users (lower(email));`. Тогда в индексе лежат ровно те значения, о которых спрашивает предикат."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the index is on `email`, the predicate is on `lower(email)`.",
+              "ru": "Верно — индекс по `email`, а предикат по `lower(email)`."
+            },
+            "incorrect": {
+              "en": "The function around the column is the blocker: the index holds `email`, not `lower(email)`.",
+              "ru": "Блокирует функция вокруг колонки: индекс хранит `email`, а не `lower(email)`."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The predicate compares `lower(email)`, so the index on the bare `email` column does not match",
+                "ru": "Предикат сравнивает `lower(email)`, поэтому индекс по чистой колонке `email` не подходит"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The index should have been created as UNIQUE",
+                "ru": "Индекс надо было создать как UNIQUE"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Uniqueness does not change whether the index matches the predicate.",
+                "ru": "Уникальность не влияет на то, подходит ли индекс предикату."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The literal on the right must be uppercase",
+                "ru": "Литерал справа должен быть в верхнем регистре"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The constant's case is irrelevant; the function around the column is the problem.",
+                "ru": "Регистр константы не важен; проблема в функции вокруг колонки."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "wrap-p1-which-predicate",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which predicate can a plain B-tree index on `users(email)` support directly?",
+            "ru": "Какой предикат обычный B-tree индекс на `users(email)` может поддержать напрямую?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The column must appear bare on one side of the comparison.",
+              "ru": "Колонка должна стоять чистой с одной стороны сравнения."
+            },
+            "incorrect": {
+              "en": "Only a bare column matches: any function or concatenation around `email` hides the indexed order.",
+              "ru": "Подходит только чистая колонка: любая функция или конкатенация вокруг `email` скрывает индексный порядок."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "`WHERE email = $1`",
+                "ru": "`WHERE email = $1`"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "`WHERE lower(email) = $1`",
+                "ru": "`WHERE lower(email) = $1`"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That needs an expression index on `lower(email)`.",
+                "ru": "Для этого нужен expression index по `lower(email)`."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "`WHERE email || '!' = $1`",
+                "ru": "`WHERE email || '!' = $1`"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Concatenation is a computation on the column, so the sorted index order no longer applies.",
+                "ru": "Конкатенация — вычисление над колонкой, поэтому отсортированный порядок индекса больше не применим."
+              }
+            }
+          ]
+        },
+        {
+          "id": "wrap-p2-match-fixes",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each index-unfriendly predicate to the fix that lets PostgreSQL use an index.",
+            "ru": "Соотнеси каждый неудобный для индекса предикат с решением, которое позволит PostgreSQL использовать индекс."
+          },
+          "reveal": {
+            "en": "All three fixes serve one goal: make the indexed values and the compared values the same thing.\n\n- `lower(col) = ?` — index the expression itself: `CREATE INDEX ON t (lower(col))`.\n- An implicit cast on the column — send the parameter with the column's own type, so no conversion is wrapped around the column.\n- `col * 2 > ?` — rewrite the arithmetic onto the constant side: `col > ? / 2`.\n\nRule of thumb: if the column is not bare on one side of the operator, either the query or the index has to change.",
+            "ru": "Все три решения служат одной цели: сделать так, чтобы проиндексированные значения и сравниваемые значения были одним и тем же.\n\n- `lower(col) = ?` — проиндексировать само выражение: `CREATE INDEX ON t (lower(col))`.\n- Неявный cast на колонке — передавать параметр с типом самой колонки, чтобы вокруг колонки не появлялось преобразование.\n- `col * 2 > ?` — перенести арифметику на сторону константы: `col > ? / 2`.\n\nПравило: если колонка не стоит чистой с одной стороны оператора, менять придётся либо запрос, либо индекс."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Each fix makes the indexed values match the compared values.",
+              "ru": "Каждое решение приводит проиндексированные значения в соответствие сравниваемым."
+            },
+            "incorrect": {
+              "en": "Either index the expression, fix the parameter type, or move the arithmetic to the constant.",
+              "ru": "Либо индексируй выражение, либо исправь тип параметра, либо перенеси арифметику к константе."
+            }
+          },
+          "pairs": [
+            {
+              "id": "func",
+              "left": {
+                "en": "`WHERE lower(col) = $1`",
+                "ru": "`WHERE lower(col) = $1`"
+              },
+              "right": {
+                "en": "Create an expression index on `lower(col)`",
+                "ru": "Создать expression index по `lower(col)`"
+              }
+            },
+            {
+              "id": "cast",
+              "left": {
+                "en": "An implicit cast wrapped around the column",
+                "ru": "Неявный cast, обёрнутый вокруг колонки"
+              },
+              "right": {
+                "en": "Send the parameter with the column's own type",
+                "ru": "Передать параметр с типом самой колонки"
+              }
+            },
+            {
+              "id": "arith",
+              "left": {
+                "en": "`WHERE col * 2 > $1`",
+                "ru": "`WHERE col * 2 > $1`"
+              },
+              "right": {
+                "en": "Rewrite it as `col > $1 / 2` so the column stays bare",
+                "ru": "Переписать как `col > $1 / 2`, чтобы колонка осталась чистой"
+              }
+            }
+          ]
+        },
+        {
+          "id": "wrap-p3-fill-expression",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the index kind.",
+            "ru": "Впиши вид индекса."
+          },
+          "feedback": {
+            "correct": {
+              "en": "An expression index stores the computed values, so the predicate matches.",
+              "ru": "Expression index хранит вычисленные значения, поэтому предикат совпадает."
+            },
+            "incorrect": {
+              "en": "It is an expression index: `CREATE INDEX ON users (lower(email));`.",
+              "ru": "Это expression index: `CREATE INDEX ON users (lower(email));`."
+            }
+          },
+          "text": {
+            "en": "To make `WHERE lower(email) = $1` indexable in PostgreSQL, create an ___ index.",
+            "ru": "Чтобы `WHERE lower(email) = $1` стал индексируемым в PostgreSQL, создай ___ index."
+          },
+          "blanks": [
+            {
+              "en": [
+                "expression"
+              ],
+              "ru": [
+                "expression",
+                "выражения"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pattern-and-operator-classes",
+      "title": {
+        "en": "Pattern search and operator classes",
+        "ru": "Поиск по шаблону и operator class"
+      },
+      "summary": {
+        "en": "A leading wildcard leaves a B-tree nothing to seek on; pattern search needs `text_pattern_ops` or a trigram index.",
+        "ru": "Wildcard в начале не оставляет B-tree ничего, к чему можно перейти; для поиска по шаблону нужны `text_pattern_ops` или trigram-индекс."
+      },
+      "discovery": [
+        {
+          "id": "pat-d1-two-likes",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which of these two queries can a plain B-tree index on `products(name)` help with?",
+            "ru": "Какому из этих двух запросов может помочь обычный B-tree индекс на `products(name)`?"
+          },
+          "code": "-- index: CREATE INDEX idx_products_name ON products (name);\nSELECT * FROM products WHERE name LIKE '%phone';   -- query 1\nSELECT * FROM products WHERE name LIKE 'phone%';   -- query 2",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "A B-tree is a sorted structure, so a search must know the *beginning* of the value to jump to the right place. `LIKE 'phone%'` fixes the beginning, so all matches sit in one contiguous range — a seek. `LIKE '%phone'` fixes only the end, and matching values are scattered all over the sorted order:\n\n```mermaid\nflowchart TD\n  S[\"names sorted: airphone, phonecase, phonedock, zetaphone\"] --> A[\"LIKE 'phone%': one contiguous range, seekable\"]\n  S --> B[\"LIKE '%phone': matches scattered, nothing to seek\"]\n```\n\nTwo more terms:\n\n- An **operator class** is the set of comparison rules an index uses for a column. Pattern matching needs `text_pattern_ops`, which is why a prefix `LIKE` may need an index created with that operator class when the database does not use the default collation. Incompatible **collations** hide the indexed order the same way.\n- A **trigram index** (from the `pg_trgm` extension) indexes short character sequences instead of whole values, so it can serve substring search such as `LIKE '%phone%'`.\n\nAnd if an operator is not supported by the index's operator class at all, the index simply cannot be used for it.",
+            "ru": "B-tree — отсортированная структура, поэтому поиску нужно знать *начало* значения, чтобы перейти в нужное место. `LIKE 'phone%'` задаёт начало, поэтому все совпадения лежат в одном непрерывном диапазоне — это переход. `LIKE '%phone'` задаёт только конец, и подходящие значения разбросаны по всему порядку:\n\n```mermaid\nflowchart TD\n  S[\"имена отсортированы: airphone, phonecase, phonedock, zetaphone\"] --> A[\"LIKE 'phone%': один непрерывный диапазон, переход возможен\"]\n  S --> B[\"LIKE '%phone': совпадения разбросаны, переходить некуда\"]\n```\n\nЕщё два термина:\n\n- **Operator class** — набор правил сравнения, которые индекс использует для колонки. Для сопоставления по шаблону нужен `text_pattern_ops`; поэтому префиксному `LIKE` может понадобиться индекс, созданный с этим operator class, если база использует не стандартную collation. Несовместимые **collation** скрывают индексный порядок точно так же.\n- **Trigram-индекс** (расширение `pg_trgm`) индексирует короткие последовательности символов вместо целых значений, поэтому обслуживает поиск подстроки вида `LIKE '%phone%'`.\n\nА если оператор вообще не поддерживается operator class индекса, индекс для него просто не может быть использован."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — a known prefix is seekable, an unknown one is not.",
+              "ru": "Верно — известный префикс позволяет переход, неизвестный — нет."
+            },
+            "incorrect": {
+              "en": "Only `LIKE 'phone%'`: a leading wildcard leaves no prefix to seek to.",
+              "ru": "Только `LIKE 'phone%'`: wildcard в начале не оставляет префикса для перехода."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Only query 2, `LIKE 'phone%'`",
+                "ru": "Только запрос 2, `LIKE 'phone%'`"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Both of them",
+                "ru": "Оба"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A leading wildcard means no known prefix, so there is nothing to seek to in a sorted index.",
+                "ru": "Wildcard в начале означает, что префикс неизвестен, и переходить в отсортированном индексе некуда."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Only query 1, `LIKE '%phone'`",
+                "ru": "Только запрос 1, `LIKE '%phone'`"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It is the other way round: a fixed beginning is seekable, a fixed ending is not.",
+                "ru": "Наоборот: фиксированное начало позволяет переход, фиксированный конец — нет."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "pat-p1-leading-wildcard-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In PostgreSQL, `WHERE name LIKE '%abc'` can use a plain B-tree index on `name` to seek the matching rows.",
+            "ru": "В PostgreSQL `WHERE name LIKE '%abc'` может использовать обычный B-tree индекс на `name`, чтобы найти подходящие строки переходом."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Without a known prefix the matches are scattered through the sorted order.",
+              "ru": "Без известного префикса совпадения разбросаны по отсортированному порядку."
+            },
+            "incorrect": {
+              "en": "No — a leading wildcard leaves no prefix, so a sorted B-tree cannot seek.",
+              "ru": "Нет — wildcard в начале не оставляет префикса, поэтому отсортированный B-tree не может делать переход."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "pat-p2-substring-index",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which index would you consider in PostgreSQL for substring search such as `name LIKE '%abc%'`?",
+            "ru": "Какой индекс вы рассмотрите в PostgreSQL для поиска подстроки вида `name LIKE '%abc%'`?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Trigram indexes index character sequences, so substrings become searchable.",
+              "ru": "Trigram-индексы индексируют последовательности символов, поэтому подстроки становятся искомыми."
+            },
+            "incorrect": {
+              "en": "A trigram index is the tool for substring search; a plain B-tree cannot seek without a prefix.",
+              "ru": "Для поиска подстроки инструмент — trigram-индекс; обычный B-tree не может делать переход без префикса."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A trigram index",
+                "ru": "Trigram-индекс"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A plain B-tree index on `name`",
+                "ru": "Обычный B-tree индекс на `name`"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A leading wildcard leaves nothing to seek to in sorted order.",
+                "ru": "Wildcard в начале не оставляет ничего, к чему перейти в отсортированном порядке."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A partial index on `name IS NOT NULL`",
+                "ru": "Частичный индекс по `name IS NOT NULL`"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A partial index limits which rows are indexed; it does not make substrings seekable.",
+                "ru": "Частичный индекс ограничивает, какие строки индексируются; он не делает подстроки искомыми."
+              }
+            }
+          ]
+        },
+        {
+          "id": "pat-p3-fill-ops",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two pattern-search tools.",
+            "ru": "Впиши два инструмента поиска по шаблону."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One fixes comparison rules for patterns, the other indexes character sequences.",
+              "ru": "Один задаёт правила сравнения для шаблонов, другой индексирует последовательности символов."
+            },
+            "incorrect": {
+              "en": "They are `text_pattern_ops` (an operator class) and trigram indexes.",
+              "ru": "Это `text_pattern_ops` (operator class) и trigram-индексы."
+            }
+          },
+          "text": {
+            "en": "For text pattern search PostgreSQL offers the ___ operator class and ___ indexes.",
+            "ru": "Для поиска по текстовому шаблону PostgreSQL предлагает operator class ___ и ___ индексы."
+          },
+          "blanks": [
+            {
+              "en": [
+                "text_pattern_ops"
+              ],
+              "ru": [
+                "text_pattern_ops"
+              ]
+            },
+            {
+              "en": [
+                "trigram",
+                "trgm",
+                "pg_trgm"
+              ],
+              "ru": [
+                "trigram",
+                "trgm",
+                "pg_trgm",
+                "триграммные"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "composite-prefix",
+      "title": {
+        "en": "Composite index column order",
+        "ru": "Порядок колонок в составном индексе"
+      },
+      "summary": {
+        "en": "A composite B-tree is sorted by its first column, then the next, so a predicate that skips the leading column cannot seek in it.",
+        "ru": "Составной B-tree отсортирован сначала по первой колонке, затем по следующей, поэтому предикат без ведущей колонки не может искать в нём переходом."
+      },
+      "discovery": [
+        {
+          "id": "comp-d1-second-column",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Can this query seek efficiently in `idx_events`?",
+            "ru": "Может ли этот запрос эффективно искать переходом в `idx_events`?"
+          },
+          "code": "-- index: CREATE INDEX idx_events ON events (tenant_id, created_at);\nSELECT * FROM events WHERE created_at > DATE '2026-07-01';",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "A composite index is sorted by its columns *in order*: first by `tenant_id`, and only within one `tenant_id` by `created_at`:\n\n```\nidx_events entries, in index order:\n  (1, 2026-06-30)\n  (1, 2026-07-29)\n  (2, 2026-06-28)\n  (2, 2026-07-30)\n  (3, 2026-07-31)\n```\n\nWith `tenant_id = 2 AND created_at > '2026-07-01'` you jump to the tenant `2` block and walk a contiguous range — the index does real work. With only `created_at > '2026-07-01'`, the matching entries sit inside *every* tenant block, so there is no range to jump to; the planner has no prefix to seek on and usually prefers a `Seq Scan`.\n\nThat is the **leftmost prefix** rule: an index on `(a, b)` serves `a`, and `a` together with `b`, but not `b` alone. So the same index can be excellent for one query and useless for another — the column order encodes which. If the frequent query filters only by `created_at`, that index is simply the wrong shape for it.",
+            "ru": "Составной индекс отсортирован по своим колонкам *по порядку*: сначала по `tenant_id`, и лишь внутри одного `tenant_id` — по `created_at`:\n\n```\nзаписи idx_events в порядке индекса:\n  (1, 2026-06-30)\n  (1, 2026-07-29)\n  (2, 2026-06-28)\n  (2, 2026-07-30)\n  (3, 2026-07-31)\n```\n\nС `tenant_id = 2 AND created_at > '2026-07-01'` вы переходите к блоку tenant `2` и проходите непрерывный диапазон — индекс реально работает. С одним `created_at > '2026-07-01'` подходящие записи лежат внутри *каждого* блока tenant, и переходить некуда: у planner нет префикса для перехода, и он обычно предпочитает `Seq Scan`.\n\nЭто правило **leftmost prefix**: индекс по `(a, b)` обслуживает `a` и `a` вместе с `b`, но не `b` отдельно. Один и тот же индекс может быть отличным для одного запроса и бесполезным для другого — порядок колонок и решает, для какого. Если частый запрос фильтрует только по `created_at`, форма этого индекса ему просто не подходит."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — no leading column means no contiguous range to seek to.",
+              "ru": "Верно — без ведущей колонки нет непрерывного диапазона для перехода."
+            },
+            "incorrect": {
+              "en": "Being present in the index is not enough: a B-tree seeks only on a leading prefix.",
+              "ru": "Присутствия в индексе недостаточно: B-tree делает переход только по ведущему префиксу."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "No — the index is ordered by `tenant_id` first, so matching rows are scattered across all tenants",
+                "ru": "Нет — индекс упорядочен сначала по `tenant_id`, поэтому подходящие строки разбросаны по всем tenants"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Yes — `created_at` is in the index, so the index applies fully",
+                "ru": "Да — `created_at` есть в индексе, поэтому индекс применим полностью"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Presence is not enough; a B-tree can only seek on a leading prefix of its columns.",
+                "ru": "Присутствия недостаточно; B-tree может делать переход только по ведущему префиксу колонок."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Yes, if we add `ORDER BY created_at` to the query",
+                "ru": "Да, если добавить в запрос `ORDER BY created_at`"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Sorting the output does not change the index's internal ordering.",
+                "ru": "Сортировка результата не меняет внутренний порядок индекса."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "comp-p1-best-predicate",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A PostgreSQL index on `events(tenant_id, created_at)` supports which predicate best?",
+            "ru": "Какой предикат лучше всего поддерживает индекс PostgreSQL по `events(tenant_id, created_at)`?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Equality on the leading column plus a range on the next is the ideal shape.",
+              "ru": "Равенство по ведущей колонке плюс диапазон по следующей — идеальная форма."
+            },
+            "incorrect": {
+              "en": "The leading column must be constrained: `tenant_id = $1 AND created_at > $2`.",
+              "ru": "Ведущая колонка должна быть ограничена: `tenant_id = $1 AND created_at > $2`."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "`WHERE tenant_id = $1 AND created_at > $2`",
+                "ru": "`WHERE tenant_id = $1 AND created_at > $2`"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "`WHERE created_at > $1`",
+                "ru": "`WHERE created_at > $1`"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That skips the leading column, so there is no prefix to seek on.",
+                "ru": "Это пропускает ведущую колонку, поэтому префикса для перехода нет."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "`WHERE created_at > $1 AND status = $2`",
+                "ru": "`WHERE created_at > $1 AND status = $2`"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Neither column is the index's leading column; `status` is not in the index at all.",
+                "ru": "Ни одна из колонок не является ведущей в индексе; `status` в индексе вообще нет."
+              }
+            }
+          ]
+        },
+        {
+          "id": "comp-p2-match-prefix",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "For a PostgreSQL B-tree index on `(a, b)`, match each predicate to what the index can do.",
+            "ru": "Для B-tree индекса PostgreSQL по `(a, b)` соотнеси каждый предикат с тем, что индекс может сделать."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The leftmost prefix decides: `a`, then `a` plus `b`, never `b` alone.",
+              "ru": "Решает leftmost prefix: `a`, затем `a` плюс `b`, но никогда `b` отдельно."
+            },
+            "incorrect": {
+              "en": "An index on `(a, b)` seeks on `a`, or on `a` and `b`, but not on `b` alone.",
+              "ru": "Индекс по `(a, b)` делает переход по `a` или по `a` и `b`, но не по одному `b`."
+            }
+          },
+          "pairs": [
+            {
+              "id": "both",
+              "left": {
+                "en": "`WHERE a = $1 AND b = $2`",
+                "ru": "`WHERE a = $1 AND b = $2`"
+              },
+              "right": {
+                "en": "Seeks using both columns",
+                "ru": "Переход по обеим колонкам"
+              }
+            },
+            {
+              "id": "leading",
+              "left": {
+                "en": "`WHERE a = $1`",
+                "ru": "`WHERE a = $1`"
+              },
+              "right": {
+                "en": "Seeks using the leading column",
+                "ru": "Переход по ведущей колонке"
+              }
+            },
+            {
+              "id": "trailing",
+              "left": {
+                "en": "`WHERE b = $2`",
+                "ru": "`WHERE b = $2`"
+              },
+              "right": {
+                "en": "No leading prefix, so no seek",
+                "ru": "Нет ведущего префикса, поэтому перехода нет"
+              }
+            }
+          ]
+        },
+        {
+          "id": "comp-p3-fill-prefix",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the rule in two words.",
+            "ru": "Назови правило двумя словами."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Leftmost prefix: the leading columns are what a composite B-tree can seek on.",
+              "ru": "Leftmost prefix: составной B-tree может делать переход по ведущим колонкам."
+            },
+            "incorrect": {
+              "en": "It is the leftmost prefix rule — only the leading columns are seekable.",
+              "ru": "Это правило leftmost prefix — переход возможен только по ведущим колонкам."
+            }
+          },
+          "text": {
+            "en": "A composite B-tree index is seekable only through its ___ ___ of columns.",
+            "ru": "Составной B-tree индекс допускает переход только по своему ___ ___ колонок."
+          },
+          "blanks": [
+            {
+              "en": [
+                "leftmost"
+              ],
+              "ru": [
+                "leftmost",
+                "левому"
+              ]
+            },
+            {
+              "en": [
+                "prefix"
+              ],
+              "ru": [
+                "prefix",
+                "префиксу"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "partial-index-implication",
+      "title": {
+        "en": "Partial indexes and implication",
+        "ru": "Частичные индексы и подразумевание"
+      },
+      "summary": {
+        "en": "A partial index holds only the rows matching its WHERE condition, so the planner may use it only when the query implies that condition.",
+        "ru": "Частичный индекс содержит только строки, подходящие его условию WHERE, поэтому planner может использовать его лишь когда запрос подразумевает это условие."
+      },
+      "discovery": [
+        {
+          "id": "part-d1-parameter",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Will the planner be able to use `idx_active` for this prepared query?",
+            "ru": "Сможет ли planner использовать `idx_active` для этого prepared-запроса?"
+          },
+          "code": "-- index: CREATE INDEX idx_active ON orders (customer_id) WHERE status = 'ACTIVE';\nPREPARE q AS SELECT * FROM orders WHERE status = $1 AND customer_id = $2;",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "A **partial index** is created with its own `WHERE` clause and indexes *only* the rows that satisfy it: `CREATE INDEX ... ON orders (customer_id) WHERE status = 'ACTIVE'`. It is smaller and cheaper to maintain, which is exactly why it is useful for a stable, frequently queried subset.\n\nBut because rows outside that subset are simply absent, the planner may use it only when it can **prove** the query's condition *implies* the index's condition:\n\n```mermaid\nflowchart TD\n  T[\"all orders\"] --> P[\"partial index: only status = 'ACTIVE' rows\"]\n  Q1[\"WHERE status = 'ACTIVE'\"] -->|\"implies the index condition\"| P\n  Q2[\"WHERE status = $1\"] -->|\"value unknown when the plan is built\"| X[\"cannot prove it, index skipped\"]\n```\n\nWith a literal `status = 'ACTIVE'` the implication is obvious. With a parameter `status = $1` the value may be unknown when the plan is built, so the proof fails and the index is not considered — even though the columns match perfectly. Matching columns are never enough for a partial index; the condition has to be implied.",
+            "ru": "**Частичный индекс** создаётся со своим `WHERE` и индексирует *только* подходящие ему строки: `CREATE INDEX ... ON orders (customer_id) WHERE status = 'ACTIVE'`. Он меньше и дешевле в обслуживании — именно поэтому полезен для стабильного, часто запрашиваемого подмножества.\n\nНо поскольку строк вне этого подмножества там просто нет, planner может использовать его только когда способен **доказать**, что условие запроса *подразумевает* условие индекса:\n\n```mermaid\nflowchart TD\n  T[\"все заказы\"] --> P[\"частичный индекс: только строки status = 'ACTIVE'\"]\n  Q1[\"WHERE status = 'ACTIVE'\"] -->|\"подразумевает условие индекса\"| P\n  Q2[\"WHERE status = $1\"] -->|\"значение неизвестно при построении плана\"| X[\"доказать нельзя, индекс пропущен\"]\n```\n\nС литералом `status = 'ACTIVE'` подразумевание очевидно. С параметром `status = $1` значение может быть неизвестно при построении плана, поэтому доказательство не проходит и индекс не рассматривается — хотя колонки совпадают идеально. Совпадения колонок для частичного индекса всегда недостаточно; условие должно подразумеваться."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the planner cannot prove `status = $1` implies `status = 'ACTIVE'`.",
+              "ru": "Верно — planner не может доказать, что `status = $1` подразумевает `status = 'ACTIVE'`."
+            },
+            "incorrect": {
+              "en": "Matching columns are not enough: the query condition must imply the index condition.",
+              "ru": "Совпадения колонок недостаточно: условие запроса должно подразумевать условие индекса."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Not necessarily — with a parameter it cannot prove that `status = $1` implies `status = 'ACTIVE'`",
+                "ru": "Не обязательно — с параметром нельзя доказать, что `status = $1` подразумевает `status = 'ACTIVE'`"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Yes — the query filters exactly the columns the index lists",
+                "ru": "Да — запрос фильтрует ровно те колонки, что перечислены в индексе"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "For a partial index the condition must be implied, not just the columns matched.",
+                "ru": "Для частичного индекса должно подразумеваться условие, а не просто совпадать колонки."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Yes, always — a partial index is smaller, so it always wins",
+                "ru": "Да, всегда — частичный индекс меньше, поэтому всегда выигрывает"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Size is irrelevant if the planner cannot prove the needed rows are in the index.",
+                "ru": "Размер не важен, если planner не может доказать, что нужные строки есть в индексе."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "part-p1-columns-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In PostgreSQL, a partial index can be used whenever the query filters on the same columns the index lists.",
+            "ru": "В PostgreSQL частичный индекс можно использовать всегда, когда запрос фильтрует по тем же колонкам, что перечислены в индексе."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The query's condition must also imply the index's WHERE condition.",
+              "ru": "Условие запроса должно ещё и подразумевать условие WHERE индекса."
+            },
+            "incorrect": {
+              "en": "No — the query condition must imply the partial index's condition, or its rows may be missing.",
+              "ru": "Нет — условие запроса должно подразумевать условие частичного индекса, иначе нужных строк там может не быть."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "part-p2-when-usable",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "When can PostgreSQL use a partial index defined as `ON orders (customer_id) WHERE status = 'ACTIVE'`?",
+            "ru": "Когда PostgreSQL может использовать частичный индекс, объявленный как `ON orders (customer_id) WHERE status = 'ACTIVE'`?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Only then are all the rows the query needs guaranteed to be in the index.",
+              "ru": "Только тогда все нужные запросу строки гарантированно есть в индексе."
+            },
+            "incorrect": {
+              "en": "Only when the query's own condition implies `status = 'ACTIVE'`.",
+              "ru": "Только когда собственное условие запроса подразумевает `status = 'ACTIVE'`."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "When the query's condition implies `status = 'ACTIVE'`",
+                "ru": "Когда условие запроса подразумевает `status = 'ACTIVE'`"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "For any value of `status` the query filters on",
+                "ru": "Для любого значения `status`, по которому фильтрует запрос"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Rows with other statuses are not in the index at all.",
+                "ru": "Строк с другими статусами в индексе вообще нет."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Whenever the query filters only on `customer_id`",
+                "ru": "Когда запрос фильтрует только по `customer_id`"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Then the answer may include non-ACTIVE rows, which the index does not contain.",
+                "ru": "Тогда в ответ могут попасть строки не ACTIVE, которых в индексе нет."
+              }
+            }
+          ]
+        },
+        {
+          "id": "part-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the rule that decides whether a partial index can be used.",
+            "ru": "Собери правило, которое решает, можно ли использовать частичный индекс."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Implication, not column overlap, is the test.",
+              "ru": "Проверяется подразумевание, а не совпадение колонок."
+            },
+            "incorrect": {
+              "en": "The query condition must imply the index predicate.",
+              "ru": "Условие запроса должно подразумевать предикат индекса."
+            }
+          },
+          "tokens": {
+            "en": [
+              "the",
+              "query",
+              "condition",
+              "must",
+              "imply",
+              "the",
+              "index",
+              "predicate"
+            ],
+            "ru": [
+              "условие",
+              "запроса",
+              "должно",
+              "подразумевать",
+              "предикат",
+              "индекса"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "columns",
+              "match"
+            ],
+            "ru": [
+              "колонки",
+              "совпадают"
+            ]
+          }
+        },
+        {
+          "id": "part-p4-fill-partial",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the index kind.",
+            "ru": "Впиши вид индекса."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A partial index trades coverage for size — and needs its condition implied.",
+              "ru": "Частичный индекс обменивает охват на размер — и требует, чтобы его условие подразумевалось."
+            },
+            "incorrect": {
+              "en": "It is a partial index: `CREATE INDEX ... WHERE status = 'ACTIVE'`.",
+              "ru": "Это частичный индекс (partial index): `CREATE INDEX ... WHERE status = 'ACTIVE'`."
+            }
+          },
+          "text": {
+            "en": "An index created with its own `WHERE` clause indexes only some rows and is called a ___ index.",
+            "ru": "Индекс, созданный со своим `WHERE`, индексирует только часть строк и называется ___ индексом."
+          },
+          "blanks": [
+            {
+              "en": [
+                "partial"
+              ],
+              "ru": [
+                "partial",
+                "частичным",
+                "частичный"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "statistics",
+      "title": {
+        "en": "Statistics and row estimates",
+        "ru": "Статистика и оценки строк"
+      },
+      "summary": {
+        "en": "The planner prices plans from statistics, so stale or too-weak statistics make it misjudge and reject a good index.",
+        "ru": "Planner оценивает планы по статистике, поэтому устаревшая или слишком слабая статистика заставляет его ошибаться и отвергать хороший индекс."
+      },
+      "discovery": [
+        {
+          "id": "stat-d1-estimate-gap",
+          "type": "predict_output",
+          "prompt": {
+            "en": "This plan ignores an existing index on `customer_id`. What does the gap between `rows=250000` and `actual rows=12` tell you?",
+            "ru": "Этот план игнорирует существующий индекс на `customer_id`. О чём говорит разрыв между `rows=250000` и `actual rows=12`?"
+          },
+          "code": "EXPLAIN ANALYZE SELECT * FROM orders WHERE customer_id = 42;\n\nSeq Scan on orders  (cost=0.00..9270.00 rows=250000 width=64)\n                    (actual rows=12 loops=1)\n  Filter: (customer_id = 42)\n  Rows Removed by Filter: 499988",
+          "codeLang": "text",
+          "reveal": {
+            "en": "**Statistics** are a sampled summary of a table that PostgreSQL keeps for the planner: how many rows it has and how the values in each column are distributed. They are refreshed by **`ANALYZE`** (and by autovacuum's analyze runs). `ANALYZE` never changes your data — only this summary.\n\nIn `EXPLAIN ANALYZE` output the two numbers mean different things:\n\n- `rows=250000` — what the planner **estimated** before running.\n- `actual rows=12` — what the node **really** produced.\n\nA gap of that size is the whole story: the planner believed the predicate would return a quarter of a million rows, priced index access accordingly (many random heap fetches), and picked `Seq Scan`. The plan is a rational answer to a wrong number.\n\nThree ways to give it better numbers:\n\n- Run `ANALYZE` on the table — the usual fix for plain staleness.\n- Raise the **statistics target** of a skewed column, so more detail is collected for it.\n- Add **extended statistics** with `CREATE STATISTICS` for correlated columns (say city and country), which the planner otherwise treats as independent and multiplies their selectivities.\n\nFix estimates before you add another index: the index you already have may be fine.",
+            "ru": "**Статистика** — выборочная сводка таблицы, которую PostgreSQL хранит для planner: сколько в ней строк и как распределены значения в каждой колонке. Её обновляет **`ANALYZE`** (а также analyze внутри autovacuum). `ANALYZE` никогда не меняет ваши данные — только эту сводку.\n\nВ выводе `EXPLAIN ANALYZE` два числа означают разное:\n\n- `rows=250000` — то, что planner **оценил** до запуска.\n- `actual rows=12` — то, что узел **реально** выдал.\n\nРазрыв такого размера объясняет всё: planner считал, что предикат вернёт четверть миллиона строк, оценил индексный доступ соответственно (множество случайных обращений к heap) и выбрал `Seq Scan`. План — разумный ответ на неверное число.\n\nТри способа дать ему числа получше:\n\n- Запустить `ANALYZE` на таблице — обычное лечение простого устаревания.\n- Поднять **statistics target** для перекошенной колонки, чтобы по ней собиралось больше деталей.\n- Добавить **extended statistics** через `CREATE STATISTICS` для коррелированных колонок (например, город и страна), которые planner иначе считает независимыми и перемножает их селективности.\n\nИсправляйте оценки прежде, чем добавлять ещё один индекс: уже имеющийся может быть в порядке."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the estimate is wrong, and the cost model followed it.",
+              "ru": "Верно — оценка неверна, и модель стоимости пошла за ней."
+            },
+            "incorrect": {
+              "en": "`rows=` is the estimate and `actual rows=` is reality; a huge gap points at statistics.",
+              "ru": "`rows=` — оценка, `actual rows=` — реальность; огромный разрыв указывает на статистику."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The planner's row estimate is far too high, so its cost model wrongly favours a Seq Scan",
+                "ru": "Оценка строк у planner сильно завышена, поэтому модель стоимости ошибочно предпочитает Seq Scan"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The query returned 250000 rows and then filtered them down to 12",
+                "ru": "Запрос вернул 250000 строк и затем отфильтровал их до 12"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "`rows=` is only an estimate; the node really produced 12 rows.",
+                "ru": "`rows=` — только оценка; узел реально выдал 12 строк."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The index on `customer_id` is invalid and cannot be used",
+                "ru": "Индекс на `customer_id` невалиден и не может быть использован"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing here says the index is unusable — the estimate is what is wrong.",
+                "ru": "Здесь ничего не говорит о непригодности индекса — неверна именно оценка."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "stat-p1-analyze-data-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Running `ANALYZE` on a PostgreSQL table changes the table's data.",
+            "ru": "Запуск `ANALYZE` на таблице PostgreSQL меняет данные таблицы."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It only refreshes the statistics the planner reads.",
+              "ru": "Он лишь обновляет статистику, которую читает planner."
+            },
+            "incorrect": {
+              "en": "No — `ANALYZE` only refreshes statistics so the planner can estimate better.",
+              "ru": "Нет — `ANALYZE` лишь обновляет статистику, чтобы planner лучше оценивал."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "stat-p2-gap-meaning",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In `EXPLAIN ANALYZE` output, a large gap between `rows=` and `actual rows=` most directly indicates what?",
+            "ru": "О чём наиболее прямо говорит большой разрыв между `rows=` и `actual rows=` в выводе `EXPLAIN ANALYZE`?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "An estimation problem — usually statistics, not the index.",
+              "ru": "Проблему оценки — обычно статистику, а не индекс."
+            },
+            "incorrect": {
+              "en": "It points at a bad row estimate, which comes from stale or too-weak statistics.",
+              "ru": "Он указывает на плохую оценку строк, которая идёт от устаревшей или слишком слабой статистики."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The planner's estimate is wrong, usually because of stale or weak statistics",
+                "ru": "Оценка planner неверна, обычно из-за устаревшей или слабой статистики"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The table needs an additional index",
+                "ru": "Таблице нужен дополнительный индекс"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Fix the estimate first; the existing index may become attractive on its own.",
+                "ru": "Сначала исправьте оценку; существующий индекс может стать выгодным сам собой."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The query returned too many rows to the client",
+                "ru": "Запрос вернул клиенту слишком много строк"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "`rows=` is not a returned count; it is a pre-execution estimate.",
+                "ru": "`rows=` — не число возвращённых строк, а оценка до выполнения."
+              }
+            }
+          ]
+        },
+        {
+          "id": "stat-p3-match-tools",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each PostgreSQL statistics tool to what it does for the planner.",
+            "ru": "Соотнеси каждый инструмент статистики PostgreSQL с тем, что он даёт planner."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Refresh, deepen, or relate — three different estimation problems.",
+              "ru": "Обновить, углубить или связать — три разные проблемы оценки."
+            },
+            "incorrect": {
+              "en": "`ANALYZE` refreshes, the statistics target deepens, `CREATE STATISTICS` relates columns.",
+              "ru": "`ANALYZE` обновляет, statistics target углубляет, `CREATE STATISTICS` связывает колонки."
+            }
+          },
+          "pairs": [
+            {
+              "id": "analyze",
+              "left": {
+                "en": "`ANALYZE`",
+                "ru": "`ANALYZE`"
+              },
+              "right": {
+                "en": "Refreshes a table's statistics",
+                "ru": "Обновляет статистику таблицы"
+              }
+            },
+            {
+              "id": "target",
+              "left": {
+                "en": "Statistics target",
+                "ru": "Statistics target"
+              },
+              "right": {
+                "en": "How much detail is collected for a skewed column",
+                "ru": "Сколько деталей собирается по перекошенной колонке"
+              }
+            },
+            {
+              "id": "extended",
+              "left": {
+                "en": "`CREATE STATISTICS`",
+                "ru": "`CREATE STATISTICS`"
+              },
+              "right": {
+                "en": "Tells the planner that two columns are correlated",
+                "ru": "Сообщает planner, что две колонки коррелированы"
+              }
+            }
+          ]
+        },
+        {
+          "id": "stat-p4-fill-analyze",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the command.",
+            "ru": "Впиши команду."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Cheap, safe, and often the whole fix.",
+              "ru": "Дёшево, безопасно и часто это всё лечение."
+            },
+            "incorrect": {
+              "en": "It is `ANALYZE` — refresh statistics before creating more indexes.",
+              "ru": "Это `ANALYZE` — обнови статистику до создания новых индексов."
+            }
+          },
+          "text": {
+            "en": "If the planner's row estimates are far from the actual rows, run ___ before adding another index.",
+            "ru": "Если оценки строк у planner далеки от actual rows, запусти ___ прежде, чем добавлять ещё индекс."
+          },
+          "blanks": [
+            {
+              "en": [
+                "ANALYZE",
+                "analyze"
+              ],
+              "ru": [
+                "ANALYZE",
+                "analyze"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "index-only-scan-heap",
+      "title": {
+        "en": "Index Only Scan still visits the heap",
+        "ru": "Index Only Scan всё равно ходит в heap"
+      },
+      "summary": {
+        "en": "Under MVCC an Index Only Scan must check row visibility, so it reads heap tuples for pages the visibility map does not mark all-visible.",
+        "ru": "При MVCC Index Only Scan должен проверять видимость строк, поэтому читает heap tuples для страниц, не отмеченных в visibility map как all-visible."
+      },
+      "discovery": [
+        {
+          "id": "ios-d1-heap-fetches",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The node says `Index Only Scan`, yet `Heap Fetches` is 1200. Is that possible, and why?",
+            "ru": "Узел называется `Index Only Scan`, но `Heap Fetches` равно 1200. Возможно ли это и почему?"
+          },
+          "code": "Index Only Scan using idx_orders_customer on orders\n  (actual rows=1200 loops=1)\n  Index Cond: (customer_id = 42)\n  Heap Fetches: 1200",
+          "codeLang": "text",
+          "reveal": {
+            "en": "The name `Index Only Scan` means all the **columns** the query needs are available in the index — it does not promise the table is never touched.\n\nPostgreSQL uses **MVCC**: several versions of a row can exist at once, and each transaction sees only the versions visible in its own snapshot. An index entry does not carry that visibility information, so PostgreSQL needs another source for it: the **visibility map**, a small per-page bitmap marking pages whose row versions are visible to every transaction.\n\n```mermaid\nflowchart TD\n  E[\"index entry matches\"] --> V{\"page marked all-visible?\"}\n  V -->|yes| I[\"answer from the index alone\"]\n  V -->|no| H[\"read the heap tuple to check visibility\"]\n```\n\nWhen the page is not marked all-visible — typically because it was modified recently — the engine fetches the heap tuple anyway just to decide whether the row counts. `Heap Fetches` counts exactly those trips. So a high `Heap Fetches` explains why an index-only plan is slower than its name suggests.",
+            "ru": "Название `Index Only Scan` означает, что все нужные запросу **колонки** доступны в индексе — но не обещает, что таблицу не тронут.\n\nPostgreSQL использует **MVCC**: одновременно могут существовать несколько версий строки, и каждая транзакция видит только версии, попадающие в её снапшот. Запись индекса не несёт информации о видимости, поэтому PostgreSQL нужен другой источник: **visibility map** — небольшой битмап по страницам, отмечающий страницы, версии строк которых видимы всем транзакциям.\n\n```mermaid\nflowchart TD\n  E[\"запись индекса подошла\"] --> V{\"страница отмечена как all-visible?\"}\n  V -->|да| I[\"отвечаем только из индекса\"]\n  V -->|нет| H[\"читаем heap tuple, чтобы проверить видимость\"]\n```\n\nЕсли страница не отмечена как all-visible — обычно потому, что её недавно изменяли — движок всё равно достаёт heap tuple, только чтобы решить, учитывать ли строку. `Heap Fetches` считает ровно такие обращения. Поэтому высокий `Heap Fetches` объясняет, почему index-only план медленнее, чем обещает его название."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — visibility, not columns, is what sends it to the heap.",
+              "ru": "Верно — в heap его отправляет видимость, а не колонки."
+            },
+            "incorrect": {
+              "en": "\"Index only\" is about columns; MVCC visibility can still require heap access.",
+              "ru": "«Index only» — про колонки; видимость при MVCC всё равно может требовать обращения к heap."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Yes — PostgreSQL still had to check row visibility in the heap",
+                "ru": "Да — PostgreSQL всё равно пришлось проверять видимость строк в heap"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "No — an Index Only Scan never reads the table, so the plan is misreported",
+                "ru": "Нет — Index Only Scan никогда не читает таблицу, значит план показан неверно"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The name means all needed columns come from the index, not that the heap is never touched.",
+                "ru": "Название означает, что все нужные колонки берутся из индекса, а не что heap не трогают."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Yes — the index was missing some of the selected columns",
+                "ru": "Да — в индексе не хватало части выбранных колонок"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Then the node would not be an Index Only Scan at all.",
+                "ru": "Тогда узел вообще не был бы Index Only Scan."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "ios-p1-never-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "An `Index Only Scan` in PostgreSQL never touches the table's heap.",
+            "ru": "`Index Only Scan` в PostgreSQL никогда не обращается к heap таблицы."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It may still read heap tuples for MVCC visibility checks.",
+              "ru": "Он всё равно может читать heap tuples для проверок видимости при MVCC."
+            },
+            "incorrect": {
+              "en": "No — visibility checks can send it to the heap; `Heap Fetches` counts them.",
+              "ru": "Нет — проверки видимости могут отправить его в heap; `Heap Fetches` их считает."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "ios-p2-heap-fetches-meaning",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does the `Heap Fetches` counter under a PostgreSQL `Index Only Scan` mean?",
+            "ru": "Что означает счётчик `Heap Fetches` под узлом `Index Only Scan` в PostgreSQL?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Each fetch is a visibility check the index could not answer.",
+              "ru": "Каждое обращение — проверка видимости, на которую индекс не смог ответить."
+            },
+            "incorrect": {
+              "en": "It counts rows checked in the heap because their page was not marked all-visible.",
+              "ru": "Он считает строки, проверенные в heap, потому что их страница не отмечена как all-visible."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "How many rows had to be checked in the heap because their page was not marked all-visible",
+                "ru": "Сколько строк пришлось проверить в heap, потому что их страница не отмечена как all-visible"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "How many rows the node returned",
+                "ru": "Сколько строк вернул узел"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Returned rows are `actual rows=`; heap fetches are visibility trips.",
+                "ru": "Возвращённые строки — это `actual rows=`; heap fetches — обращения ради видимости."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "How many index pages were read",
+                "ru": "Сколько страниц индекса было прочитано"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Page reads show up in the buffer counters, not in `Heap Fetches`.",
+                "ru": "Чтения страниц видны в счётчиках буферов, а не в `Heap Fetches`."
+              }
+            }
+          ]
+        },
+        {
+          "id": "ios-p3-fill-vismap",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the structure in two words.",
+            "ru": "Назови структуру двумя словами."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The visibility map is what lets a scan skip the heap.",
+              "ru": "Именно visibility map позволяет сканированию не ходить в heap."
+            },
+            "incorrect": {
+              "en": "It is the visibility map — the per-page bitmap of all-visible pages.",
+              "ru": "Это visibility map — битмап по страницам, отмечающий all-visible страницы."
+            }
+          },
+          "text": {
+            "en": "An Index Only Scan can skip the heap only when the ___ ___ marks the page as all-visible.",
+            "ru": "Index Only Scan может не ходить в heap только когда ___ ___ отмечает страницу как all-visible."
+          },
+          "blanks": [
+            {
+              "en": [
+                "visibility"
+              ],
+              "ru": [
+                "visibility"
+              ]
+            },
+            {
+              "en": [
+                "map"
+              ],
+              "ru": [
+                "map",
+                "карта"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "prepared-generic-plan",
+      "title": {
+        "en": "Prepared statements and generic plans",
+        "ru": "Prepared statements и generic plans"
+      },
+      "summary": {
+        "en": "A prepared statement may run a generic plan chosen for any parameter value, which can differ from the custom plan a literal gets.",
+        "ru": "Prepared statement может выполнять generic plan, выбранный для любого значения параметра, и он может отличаться от custom plan для литерала."
+      },
+      "discovery": [
+        {
+          "id": "prep-d1-rare-value",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "With a literal `'FAILED'` this query uses the index, but the prepared version does a `Seq Scan`. What is the most likely reason?",
+            "ru": "С литералом `'FAILED'` этот запрос использует индекс, а prepared-версия делает `Seq Scan`. Какова наиболее вероятная причина?"
+          },
+          "code": "-- 99% of orders have status = 'DONE'; 0.1% have status = 'FAILED'\n-- index: CREATE INDEX idx_orders_status ON orders (status);\nPREPARE q AS SELECT * FROM orders WHERE status = $1;\nEXECUTE q('FAILED');",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "A prepared statement can be planned in two ways:\n\n- A **custom plan** is built for the *actual* parameter values of this execution. It can use the fact that `'FAILED'` is rare and pick an index.\n- A **generic plan** is built once, knowing nothing about the value, and reused for every execution. It has to be acceptable for *any* value, so it works from an average estimate.\n\n```mermaid\nflowchart TD\n  P[\"PREPARE ... WHERE status = $1\"] --> C[\"custom plan: uses this value, index for a rare one\"]\n  P --> G[\"generic plan: average estimate for any value\"]\n  G --> S[\"Seq Scan, safe on average, wrong for a rare value\"]\n```\n\nOn a **skewed** column the average is dominated by `'DONE'` (99% of rows), so the generic plan sensibly assumes \"most of the table\" and picks a `Seq Scan` — which is a poor plan for `'FAILED'`. This is also the mechanism behind a partial index being skipped for `status = $1`: with no known value there is nothing to prove the implication with.\n\nPractical consequence for diagnosis: check how the application sends the query. Reproducing it with literals in a console may give you a plan the application never gets.",
+            "ru": "Prepared statement можно спланировать двумя способами:\n\n- **Custom plan** строится под *фактические* значения параметров этого выполнения. Он может учесть, что `'FAILED'` — редкое значение, и выбрать индекс.\n- **Generic plan** строится один раз, ничего не зная о значении, и переиспользуется для всех выполнений. Он должен быть приемлем для *любого* значения, поэтому опирается на среднюю оценку.\n\n```mermaid\nflowchart TD\n  P[\"PREPARE ... WHERE status = $1\"] --> C[\"custom plan: учитывает значение, индекс для редкого\"]\n  P --> G[\"generic plan: средняя оценка для любого значения\"]\n  G --> S[\"Seq Scan, безопасно в среднем, плохо для редкого значения\"]\n```\n\nНа **перекошенной** колонке среднее определяется значением `'DONE'` (99% строк), поэтому generic plan разумно исходит из «почти всей таблицы» и берёт `Seq Scan` — плохой план для `'FAILED'`. Это же механизм стоит за пропуском частичного индекса при `status = $1`: без известного значения подразумевание доказывать нечем.\n\nПрактический вывод для диагностики: проверяйте, как запрос отправляет приложение. Воспроизведение с литералами в консоли может дать план, которого приложение никогда не получает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — a value-blind generic plan optimizes for the average case.",
+              "ru": "Верно — generic plan, не знающий значения, оптимизируется под средний случай."
+            },
+            "incorrect": {
+              "en": "The plan, not the index, is the difference: a generic plan ignores the rare value.",
+              "ru": "Разница в плане, а не в индексе: generic plan не учитывает редкое значение."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The prepared statement is running a generic plan built for any value of `$1`",
+                "ru": "Prepared statement выполняет generic plan, построенный для любого значения `$1`"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Prepared statements cannot use indexes",
+                "ru": "Prepared statements не могут использовать индексы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "They can; the question is which plan was chosen, not what is allowed.",
+                "ru": "Могут; вопрос в том, какой план выбран, а не что разрешено."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The index does not cover the `status` column",
+                "ru": "Индекс не покрывает колонку `status`"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It does — the version with a literal value used it.",
+                "ru": "Покрывает — версия с литералом его использовала."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "prep-p1-literal-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Testing a slow query with literal values always reproduces the plan the application's prepared statement gets.",
+            "ru": "Тест медленного запроса с литеральными значениями всегда воспроизводит план, который получает prepared statement приложения."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A generic plan can differ from the plan a literal value produces.",
+              "ru": "Generic plan может отличаться от плана, который даёт литеральное значение."
+            },
+            "incorrect": {
+              "en": "No — the application may run a generic plan, planned without knowing the value.",
+              "ru": "Нет — приложение может выполнять generic plan, построенный без знания значения."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "prep-p2-match-plans",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each PostgreSQL prepared-statement term to its meaning.",
+            "ru": "Соотнеси каждый термин prepared statements в PostgreSQL с его значением."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Value-aware versus value-blind planning, and where they diverge.",
+              "ru": "Планирование со знанием значения против планирования без него — и где они расходятся."
+            },
+            "incorrect": {
+              "en": "Custom = planned per value, generic = planned once for any value; skew makes them differ.",
+              "ru": "Custom — план под значение, generic — один план для любого значения; расходятся из-за перекоса."
+            }
+          },
+          "pairs": [
+            {
+              "id": "custom",
+              "left": {
+                "en": "Custom plan",
+                "ru": "Custom plan"
+              },
+              "right": {
+                "en": "Planned with the actual parameter values",
+                "ru": "Строится с фактическими значениями параметров"
+              }
+            },
+            {
+              "id": "generic",
+              "left": {
+                "en": "Generic plan",
+                "ru": "Generic plan"
+              },
+              "right": {
+                "en": "Planned once, acceptable for any parameter value",
+                "ru": "Строится один раз и приемлем для любого значения параметра"
+              }
+            },
+            {
+              "id": "skew",
+              "left": {
+                "en": "A skewed column",
+                "ru": "Перекошенная колонка"
+              },
+              "right": {
+                "en": "Where the two plans differ the most",
+                "ru": "Там, где эти два плана различаются сильнее всего"
+              }
+            }
+          ]
+        },
+        {
+          "id": "prep-p3-fill-generic",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the plan kind.",
+            "ru": "Впиши вид плана."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A generic plan trades per-value precision for reuse.",
+              "ru": "Generic plan обменивает точность под значение на переиспользование."
+            },
+            "incorrect": {
+              "en": "It is a generic plan — built once, without knowing the parameter value.",
+              "ru": "Это generic plan — построен один раз, без знания значения параметра."
+            }
+          },
+          "text": {
+            "en": "In PostgreSQL, a plan built once without knowing the parameter value is called a ___ plan.",
+            "ru": "В PostgreSQL план, построенный один раз без знания значения параметра, называется ___ plan."
+          },
+          "blanks": [
+            {
+              "en": [
+                "generic"
+              ],
+              "ru": [
+                "generic",
+                "обобщённым",
+                "обобщенным"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cost-settings",
+      "title": {
+        "en": "Cost settings and physical reality",
+        "ru": "Настройки стоимости и физическая реальность"
+      },
+      "summary": {
+        "en": "`random_page_cost`, `effective_cache_size`, bloat and index-to-table correlation all shift the estimated price of index access.",
+        "ru": "`random_page_cost`, `effective_cache_size`, bloat и корреляция индекса с таблицей меняют оценочную цену индексного доступа."
+      },
+      "discovery": [
+        {
+          "id": "cost-d1-random-page",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which PostgreSQL setting most directly states the price the planner assumes for reading one page in random order?",
+            "ru": "Какая настройка PostgreSQL наиболее прямо задаёт цену, которую planner считает за чтение одной страницы в случайном порядке?"
+          },
+          "reveal": {
+            "en": "The planner's costs are not measured, they are computed from constants that describe the machine. Two matter most here:\n\n- `random_page_cost` — the assumed price of fetching a page in random order (which is what an Index Scan does to the heap) relative to a sequential read. Raise it and every index plan looks more expensive; lower it and index plans win more often.\n- `effective_cache_size` — how much memory the planner should assume is caching data. A larger value makes repeated random access look cheaper, so index plans become more attractive.\n\nPhysical reality shifts the real price too:\n\n```mermaid\nflowchart TD\n  I[\"estimated price of index access\"] --> A[\"random_page_cost\"]\n  I --> B[\"effective_cache_size\"]\n  I --> C[\"table bloat: dead space enlarges a scan\"]\n  I --> D[\"correlation: index order vs physical row order\"]\n```\n\n**Bloat** is dead space left in a table, which makes a full scan bigger than the live data suggests. **Correlation** is how closely the index's order matches the physical order of rows: a well-correlated index reads the heap almost sequentially, so its access is genuinely cheap, while an uncorrelated one jumps all over the table. Caching does the same from the other side. Two servers with identical schema, data and query can therefore pick different plans, legitimately.",
+            "ru": "Стоимости planner не измеряются, а вычисляются из констант, описывающих машину. Здесь важнее всего две:\n\n- `random_page_cost` — предполагаемая цена чтения страницы в случайном порядке (именно так Index Scan обращается к heap) относительно последовательного чтения. Поднимите её — и все индексные планы станут выглядеть дороже; опустите — индексные планы будут выигрывать чаще.\n- `effective_cache_size` — сколько памяти planner должен считать доступной для кеширования данных. Большее значение делает повторный случайный доступ дешевле, и индексные планы становятся привлекательнее.\n\nФизическая реальность тоже меняет настоящую цену:\n\n```mermaid\nflowchart TD\n  I[\"оценочная цена индексного доступа\"] --> A[\"random_page_cost\"]\n  I --> B[\"effective_cache_size\"]\n  I --> C[\"bloat таблицы: мёртвое место увеличивает сканирование\"]\n  I --> D[\"корреляция: порядок индекса против физического порядка строк\"]\n```\n\n**Bloat** — это мёртвое место в таблице, из-за которого полное сканирование больше, чем следует из объёма живых данных. **Корреляция** — насколько порядок индекса совпадает с физическим порядком строк: хорошо коррелированный индекс читает heap почти последовательно, и его доступ действительно дёшев, а некоррелированный прыгает по всей таблице. Кеширование действует с той же стороны. Поэтому два сервера с одинаковой схемой, данными и запросом могут законно выбрать разные планы."
+          },
+          "feedback": {
+            "correct": {
+              "en": "`random_page_cost` is the per-page price of random access.",
+              "ru": "`random_page_cost` — цена случайного доступа за страницу."
+            },
+            "incorrect": {
+              "en": "It is `random_page_cost` — the assumed price of one random page read.",
+              "ru": "Это `random_page_cost` — предполагаемая цена одного случайного чтения страницы."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "`random_page_cost`",
+                "ru": "`random_page_cost`"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "`effective_cache_size`",
+                "ru": "`effective_cache_size`"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That tells the planner how much memory likely caches data, not the per-page random price.",
+                "ru": "Она говорит planner, сколько памяти вероятно кеширует данные, а не цену случайной страницы."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The column's statistics target",
+                "ru": "Statistics target колонки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That controls how much detail ANALYZE collects, not the price of a page read.",
+                "ru": "Он управляет тем, сколько деталей собирает ANALYZE, а не ценой чтения страницы."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cost-p1-high-random",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does a high `random_page_cost` do to the planner's view of an Index Scan in PostgreSQL?",
+            "ru": "Что высокий `random_page_cost` делает с оценкой Index Scan у planner в PostgreSQL?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Index access is random access, so its estimated price rises.",
+              "ru": "Индексный доступ — случайный доступ, поэтому его оценочная цена растёт."
+            },
+            "incorrect": {
+              "en": "It makes index plans look more expensive, so Seq Scan wins more often.",
+              "ru": "Он делает индексные планы дороже на вид, поэтому Seq Scan выигрывает чаще."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It makes index plans look more expensive",
+                "ru": "Делает индексные планы дороже на вид"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It makes index plans look cheaper",
+                "ru": "Делает индексные планы дешевле на вид"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Lowering it makes them cheaper; raising it prices random heap fetches higher.",
+                "ru": "Дешевле их делает снижение; повышение делает случайные обращения к heap дороже."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — it only affects sequential scans",
+                "ru": "Ничего — она влияет только на последовательные сканирования"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It is precisely the random-access price, which is what index plans pay.",
+                "ru": "Это как раз цена случайного доступа, которую и платят индексные планы."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cost-p2-match-factors",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each factor to how it affects the cost of index access in PostgreSQL.",
+            "ru": "Соотнеси каждый фактор с тем, как он влияет на стоимость индексного доступа в PostgreSQL."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two settings and two physical facts, all pricing the same access path.",
+              "ru": "Две настройки и два физических факта — все они оценивают один и тот же путь доступа."
+            },
+            "incorrect": {
+              "en": "random_page_cost prices random reads, effective_cache_size assumes caching, bloat enlarges scans, correlation aligns index and heap order.",
+              "ru": "random_page_cost задаёт цену случайных чтений, effective_cache_size предполагает кеширование, bloat увеличивает сканирование, корреляция согласует порядок индекса и heap."
+            }
+          },
+          "pairs": [
+            {
+              "id": "rpc",
+              "left": {
+                "en": "`random_page_cost`",
+                "ru": "`random_page_cost`"
+              },
+              "right": {
+                "en": "Assumed price of one random page read",
+                "ru": "Предполагаемая цена одного случайного чтения страницы"
+              }
+            },
+            {
+              "id": "ecs",
+              "left": {
+                "en": "`effective_cache_size`",
+                "ru": "`effective_cache_size`"
+              },
+              "right": {
+                "en": "How much memory the planner assumes caches data",
+                "ru": "Сколько памяти planner считает кеширующей данные"
+              }
+            },
+            {
+              "id": "bloat",
+              "left": {
+                "en": "Table bloat",
+                "ru": "Bloat таблицы"
+              },
+              "right": {
+                "en": "Dead space that makes a full scan bigger",
+                "ru": "Мёртвое место, из-за которого полное сканирование больше"
+              }
+            },
+            {
+              "id": "corr",
+              "left": {
+                "en": "Correlation",
+                "ru": "Корреляция"
+              },
+              "right": {
+                "en": "How closely index order matches physical row order",
+                "ru": "Насколько порядок индекса совпадает с физическим порядком строк"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cost-p3-fill-rpc",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the setting name.",
+            "ru": "Впиши имя настройки."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Together with effective_cache_size it decides how attractive index access looks.",
+              "ru": "Вместе с effective_cache_size она решает, насколько привлекательным выглядит индексный доступ."
+            },
+            "incorrect": {
+              "en": "It is `random_page_cost`, the relative price of a random page read.",
+              "ru": "Это `random_page_cost` — относительная цена случайного чтения страницы."
+            }
+          },
+          "text": {
+            "en": "Two PostgreSQL settings that shift the estimated price of index access are ___ and `effective_cache_size`.",
+            "ru": "Две настройки PostgreSQL, меняющие оценочную цену индексного доступа, — ___ и `effective_cache_size`."
+          },
+          "blanks": [
+            {
+              "en": [
+                "random_page_cost"
+              ],
+              "ru": [
+                "random_page_cost"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "explain-evidence",
+      "title": {
+        "en": "Evidence from EXPLAIN",
+        "ru": "Факты из EXPLAIN"
+      },
+      "summary": {
+        "en": "`EXPLAIN (ANALYZE, BUFFERS)` gives estimated versus actual rows, `Rows Removed by Filter`, heap fetches, loops and buffer reads.",
+        "ru": "`EXPLAIN (ANALYZE, BUFFERS)` даёт estimated против actual rows, `Rows Removed by Filter`, heap fetches, loops и чтения буферов."
+      },
+      "discovery": [
+        {
+          "id": "expl-d1-sort-checks",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the steps of reading the plan of a query that ignores your index.",
+            "ru": "Расставь по порядку шаги чтения плана запроса, который игнорирует ваш индекс."
+          },
+          "reveal": {
+            "en": "Diagnosis starts with evidence, not with `CREATE INDEX`. The three parts of the command do different jobs:\n\n- `EXPLAIN` alone prints the plan and its **estimates**, without running the query.\n- `ANALYZE` actually **executes** the query and adds real row counts and timings. It really runs, so use it when that is safe.\n- `BUFFERS` adds how many **pages** each node read or found already cached — the I/O the node truly did.\n\nWhat to read on the node that touches the table:\n\n```mermaid\nflowchart TD\n  N[\"table access node\"] --> A[\"rows= vs actual rows=: is the estimate right?\"]\n  N --> B[\"Rows Removed by Filter: how much was read and thrown away\"]\n  N --> C[\"Heap Fetches: visibility trips of an Index Only Scan\"]\n  N --> D[\"loops: per-loop numbers are averages, multiply them\"]\n  N --> E[\"buffers: pages actually read\"]\n```\n\n**Rows Removed by Filter** is the sharpest of these: a large number means the access path brought far more rows than the query needed, which is exactly the symptom a better predicate or index would remove. And **loops** is the classic trap — a node inside a nested loop reports averages per loop, so a small number multiplied by thousands of loops is not small.",
+            "ru": "Диагностика начинается с фактов, а не с `CREATE INDEX`. Три части команды делают разное:\n\n- `EXPLAIN` сам по себе печатает план и его **оценки**, не выполняя запрос.\n- `ANALYZE` действительно **выполняет** запрос и добавляет реальные числа строк и времена. Он реально запускается, поэтому используйте его, когда это безопасно.\n- `BUFFERS` добавляет, сколько **страниц** каждый узел прочитал или нашёл в кеше — реальный I/O узла.\n\nЧто смотреть на узле, который обращается к таблице:\n\n```mermaid\nflowchart TD\n  N[\"узел доступа к таблице\"] --> A[\"rows= против actual rows=: верна ли оценка?\"]\n  N --> B[\"Rows Removed by Filter: сколько прочитано и выброшено\"]\n  N --> C[\"Heap Fetches: обращения к heap ради видимости в Index Only Scan\"]\n  N --> D[\"loops: числа на цикл — средние, их надо умножать\"]\n  N --> E[\"buffers: реально прочитанные страницы\"]\n```\n\n**Rows Removed by Filter** — самый показательный: большое значение означает, что путь доступа принёс гораздо больше строк, чем нужно запросу; именно этот симптом убирает лучший предикат или индекс. А **loops** — классическая ловушка: узел внутри nested loop показывает средние значения на один цикл, поэтому маленькое число, умноженное на тысячи циклов, уже не маленькое."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Evidence first: the real plan, then estimates, then counters, then I/O.",
+              "ru": "Сначала факты: реальный план, затем оценки, затем счётчики, затем I/O."
+            },
+            "incorrect": {
+              "en": "Run the plan, find the table access node, compare estimate with actual, then read the counters and buffers.",
+              "ru": "Запусти план, найди узел доступа к таблице, сравни оценку с actual, затем читай счётчики и буферы."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Run `EXPLAIN (ANALYZE, BUFFERS)` when it is safe to execute the query",
+                "ru": "Запустить `EXPLAIN (ANALYZE, BUFFERS)`, когда выполнять запрос безопасно"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Find the node that accesses the table in question",
+                "ru": "Найти узел, который обращается к нужной таблице"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Compare its estimated rows with its actual rows",
+                "ru": "Сравнить его estimated rows с actual rows"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Check `Rows Removed by Filter`, `Heap Fetches` and `loops`",
+                "ru": "Проверить `Rows Removed by Filter`, `Heap Fetches` и `loops`"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "Read the buffer counters to see the I/O the node really did",
+                "ru": "Прочитать счётчики буферов, чтобы увидеть реальный I/O узла"
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "expl-p1-buffers",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does adding `BUFFERS` to `EXPLAIN (ANALYZE, BUFFERS)` give you in PostgreSQL?",
+            "ru": "Что даёт добавление `BUFFERS` в `EXPLAIN (ANALYZE, BUFFERS)` в PostgreSQL?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Page counts turn a cost guess into measured I/O.",
+              "ru": "Счётчики страниц превращают догадку о стоимости в измеренный I/O."
+            },
+            "incorrect": {
+              "en": "It reports how many pages each node read or found cached.",
+              "ru": "Он сообщает, сколько страниц каждый узел прочитал или нашёл в кеше."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "How many pages each node read or found already cached",
+                "ru": "Сколько страниц каждый узел прочитал или нашёл в кеше"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The estimated cost of the query only",
+                "ru": "Только оценочную стоимость запроса"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Estimated cost is printed by plain `EXPLAIN`; BUFFERS reports real page counts.",
+                "ru": "Оценочную стоимость печатает обычный `EXPLAIN`; BUFFERS сообщает реальные счётчики страниц."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The list of indexes the planner considered and rejected",
+                "ru": "Список индексов, которые planner рассмотрел и отверг"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "EXPLAIN shows the chosen plan, not the rejected candidates.",
+                "ru": "EXPLAIN показывает выбранный план, а не отвергнутых кандидатов."
+              }
+            }
+          ]
+        },
+        {
+          "id": "expl-p2-analyze-runs-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "`EXPLAIN ANALYZE` only estimates a query in PostgreSQL; it does not execute it.",
+            "ru": "`EXPLAIN ANALYZE` в PostgreSQL только оценивает запрос и не выполняет его."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It executes the query — that is where actual rows and timings come from.",
+              "ru": "Он выполняет запрос — оттуда и берутся actual rows и времена."
+            },
+            "incorrect": {
+              "en": "No — `ANALYZE` really runs the query; plain `EXPLAIN` is the estimate-only form.",
+              "ru": "Нет — `ANALYZE` реально выполняет запрос; только оценку даёт обычный `EXPLAIN`."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "expl-p3-match-counters",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each PostgreSQL plan counter to what it reports.",
+            "ru": "Соотнеси каждый счётчик плана PostgreSQL с тем, что он сообщает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Estimate, reality, waste, and visibility trips — four different questions.",
+              "ru": "Оценка, реальность, лишняя работа и обращения ради видимости — четыре разных вопроса."
+            },
+            "incorrect": {
+              "en": "`rows=` estimates, `actual rows=` measures, `Rows Removed by Filter` counts waste, `Heap Fetches` counts visibility checks.",
+              "ru": "`rows=` оценивает, `actual rows=` измеряет, `Rows Removed by Filter` считает лишнюю работу, `Heap Fetches` — проверки видимости."
+            }
+          },
+          "pairs": [
+            {
+              "id": "est",
+              "left": {
+                "en": "`rows=`",
+                "ru": "`rows=`"
+              },
+              "right": {
+                "en": "The planner's estimate before execution",
+                "ru": "Оценка planner до выполнения"
+              }
+            },
+            {
+              "id": "act",
+              "left": {
+                "en": "`actual rows=`",
+                "ru": "`actual rows=`"
+              },
+              "right": {
+                "en": "What the node really produced",
+                "ru": "Что узел реально выдал"
+              }
+            },
+            {
+              "id": "removed",
+              "left": {
+                "en": "`Rows Removed by Filter`",
+                "ru": "`Rows Removed by Filter`"
+              },
+              "right": {
+                "en": "Rows read and then thrown away",
+                "ru": "Строки, прочитанные и затем выброшенные"
+              }
+            },
+            {
+              "id": "fetches",
+              "left": {
+                "en": "`Heap Fetches`",
+                "ru": "`Heap Fetches`"
+              },
+              "right": {
+                "en": "Visibility checks in the heap during an Index Only Scan",
+                "ru": "Проверки видимости в heap во время Index Only Scan"
+              }
+            }
+          ]
+        },
+        {
+          "id": "expl-p4-fill-options",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two EXPLAIN options.",
+            "ru": "Впиши две опции EXPLAIN."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One adds real row counts, the other real page counts.",
+              "ru": "Одна добавляет реальные числа строк, другая — реальные счётчики страниц."
+            },
+            "incorrect": {
+              "en": "They are ANALYZE (real rows and timings) and BUFFERS (pages read).",
+              "ru": "Это ANALYZE (реальные строки и времена) и BUFFERS (прочитанные страницы)."
+            }
+          },
+          "text": {
+            "en": "To see both real row counts and per-node I/O, run EXPLAIN (___, ___).",
+            "ru": "Чтобы увидеть и реальные числа строк, и I/O по узлам, запусти EXPLAIN (___, ___)."
+          },
+          "blanks": [
+            {
+              "en": [
+                "ANALYZE",
+                "analyze"
+              ],
+              "ru": [
+                "ANALYZE",
+                "analyze"
+              ]
+            },
+            {
+              "en": [
+                "BUFFERS",
+                "buffers"
+              ],
+              "ru": [
+                "BUFFERS",
+                "buffers"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "safe-remediation",
+      "title": {
+        "en": "Safe remediation in production",
+        "ru": "Безопасное исправление в production"
+      },
+      "summary": {
+        "en": "Fix in order of cost — evidence, predicate shape, statistics, selectivity — and never force a plan in production.",
+        "ru": "Исправляй по возрастанию цены — факты, форма предиката, статистика, селективность — и никогда не форсируй план в production."
+      },
+      "discovery": [
+        {
+          "id": "safe-d1-first-action",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A production query ignores its index and is slow. What is your first action?",
+            "ru": "Продакшн-запрос игнорирует свой индекс и работает медленно. Каково ваше первое действие?"
+          },
+          "reveal": {
+            "en": "Work from cheap and reversible to expensive and permanent:\n\n```mermaid\nflowchart TD\n  A[\"index is not used\"] --> B{\"predicate matches the index?\"}\n  B -->|no| C[\"rewrite the predicate or add an expression / operator-class index\"]\n  B -->|yes| D{\"estimated rows close to actual?\"}\n  D -->|no| E[\"run ANALYZE or improve statistics\"]\n  D -->|yes| F{\"predicate selective enough?\"}\n  F -->|no| G[\"Seq Scan is probably correct, leave it\"]\n  F -->|yes| H[\"check composite order, partial predicate, generic plan, cost settings\"]\n```\n\nThree production rules come with this:\n\n- **`enable_seqscan = off` is an experiment, not a fix.** Setting it in your own session tells you whether an index plan is even possible; leaving it on in production removes the planner's judgement everywhere.\n- **Every index costs writes and storage.** Each `INSERT`, `UPDATE` and `DELETE` maintains it, so adding indexes blindly slows the write path and may still not win the read.\n- **Use real workload evidence**: slow-query logs, `pg_stat_statements`, a safe `EXPLAIN (ANALYZE, BUFFERS)`, and before/after measurements. Also confirm whether the query arrives as a prepared statement, since its plan can differ from your literal-value test.\n\nAnd accept the boring outcomes: sometimes the fix is `ANALYZE`, sometimes a SQL rewrite, sometimes leaving the `Seq Scan` exactly where it is.",
+            "ru": "Двигайтесь от дешёвого и обратимого к дорогому и постоянному:\n\n```mermaid\nflowchart TD\n  A[\"индекс не используется\"] --> B{\"предикат совпадает с индексом?\"}\n  B -->|нет| C[\"переписать предикат или добавить expression / operator-class index\"]\n  B -->|да| D{\"оценка строк близка к actual?\"}\n  D -->|нет| E[\"запустить ANALYZE или улучшить статистику\"]\n  D -->|да| F{\"предикат достаточно селективен?\"}\n  F -->|нет| G[\"Seq Scan скорее всего верен, оставить как есть\"]\n  F -->|да| H[\"проверить порядок составного индекса, предикат partial, generic plan, настройки стоимости\"]\n```\n\nК этому идут три продакшн-правила:\n\n- **`enable_seqscan = off` — эксперимент, а не исправление.** Установка в своей сессии показывает, возможен ли индексный план вообще; оставленная в production, она лишает planner права решать везде.\n- **Каждый индекс стоит записей и хранилища.** Каждый `INSERT`, `UPDATE` и `DELETE` его обслуживает, поэтому слепое добавление индексов замедляет запись и может так и не выиграть чтение.\n- **Опирайтесь на факты реальной нагрузки**: slow-query logs, `pg_stat_statements`, безопасный `EXPLAIN (ANALYZE, BUFFERS)` и измерения до/после. Ещё проверьте, не приходит ли запрос как prepared statement — его план может отличаться от вашего теста с литералом.\n\nИ принимайте скучные исходы: иногда лечение — это `ANALYZE`, иногда переписывание SQL, а иногда — оставить `Seq Scan` там, где он и есть."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Evidence first — the plan tells you which of the causes you actually have.",
+              "ru": "Сначала факты — план покажет, какая из причин у вас действительно."
+            },
+            "incorrect": {
+              "en": "Start by measuring: `EXPLAIN (ANALYZE, BUFFERS)` before changing anything.",
+              "ru": "Начните с измерения: `EXPLAIN (ANALYZE, BUFFERS)` прежде, чем что-то менять."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Collect evidence with `EXPLAIN (ANALYZE, BUFFERS)` and compare estimates with actual rows",
+                "ru": "Собрать факты через `EXPLAIN (ANALYZE, BUFFERS)` и сравнить оценки с actual rows"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Set `enable_seqscan = off` in the server configuration",
+                "ru": "Выставить `enable_seqscan = off` в конфигурации сервера"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is a one-session diagnostic experiment, never a production fix.",
+                "ru": "Это диагностический эксперимент в одной сессии, а не продакшн-исправление."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Create a second index on the same column",
+                "ru": "Создать второй индекс по той же колонке"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Adding indexes blindly costs writes and storage and may still not be used.",
+                "ru": "Слепое добавление индексов стоит записей и хранилища и может так и не использоваться."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "safe-p1-seqscan-off-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Setting `enable_seqscan = off` is an acceptable permanent fix for a PostgreSQL query that ignores an index.",
+            "ru": "Выставить `enable_seqscan = off` — приемлемое постоянное исправление для запроса PostgreSQL, который игнорирует индекс."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It is a diagnostic experiment: it shows whether an index plan is possible at all.",
+              "ru": "Это диагностический эксперимент: он показывает, возможен ли индексный план вообще."
+            },
+            "incorrect": {
+              "en": "No — it is a local experiment, not a tuning strategy; it disables the planner's judgement.",
+              "ru": "Нет — это локальный эксперимент, а не стратегия настройки; он отключает решение planner."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "safe-p2-index-cost",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What is the cost of adding another index to a busy PostgreSQL table?",
+            "ru": "Чего стоит добавление ещё одного индекса на нагруженную таблицу PostgreSQL?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Reads may get faster, but every write maintains the new index.",
+              "ru": "Чтения могут ускориться, но каждая запись обслуживает новый индекс."
+            },
+            "incorrect": {
+              "en": "Slower `INSERT`/`UPDATE`/`DELETE` and more storage — indexes are not free.",
+              "ru": "Более медленные `INSERT`/`UPDATE`/`DELETE` и больше хранилища — индексы не бесплатны."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Slower `INSERT`, `UPDATE` and `DELETE`, plus extra storage",
+                "ru": "Более медленные `INSERT`, `UPDATE` и `DELETE` плюс дополнительное хранилище"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Slower `SELECT` for every query on the table",
+                "ru": "Более медленный `SELECT` для каждого запроса к таблице"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Reads are not slowed by an extra index; the write path and storage pay for it.",
+                "ru": "Дополнительный индекс не замедляет чтения; платят путь записи и хранилище."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — an index is free once it has been created",
+                "ru": "Ничего — индекс бесплатен, как только создан"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Every write must maintain it, and it occupies storage permanently.",
+                "ru": "Каждая запись должна его обслуживать, и он постоянно занимает хранилище."
+              }
+            }
+          ]
+        },
+        {
+          "id": "safe-p3-sort-checks",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the checks to run before adding or changing an index in production.",
+            "ru": "Расставь по порядку проверки, которые нужно сделать до добавления или изменения индекса в production."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Cheapest and most reversible first; a new index is the last resort.",
+              "ru": "Сначала самое дешёвое и обратимое; новый индекс — последнее средство."
+            },
+            "incorrect": {
+              "en": "Plan, then predicate shape, then statistics, then selectivity, and only then a targeted index.",
+              "ru": "Сначала план, потом форма предиката, потом статистика, потом селективность, и только затем точечный индекс."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Get the real plan with `EXPLAIN (ANALYZE, BUFFERS)`",
+                "ru": "Получить реальный план через `EXPLAIN (ANALYZE, BUFFERS)`"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Check whether the predicate shape can match an index at all",
+                "ru": "Проверить, может ли форма предиката вообще совпасть с индексом"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Compare estimated with actual rows and run `ANALYZE` if they diverge",
+                "ru": "Сравнить estimated и actual rows и запустить `ANALYZE`, если они расходятся"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Judge whether the predicate is selective enough for index access to win",
+                "ru": "Оценить, достаточно ли селективен предикат, чтобы индексный доступ выиграл"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "Only then add a targeted index and measure before and after",
+                "ru": "Только затем добавить точечный индекс и измерить до и после"
+              }
+            }
+          ]
+        },
+        {
+          "id": "safe-p4-fill-order",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill the two cheap checks that come before a new index.",
+            "ru": "Впиши две дешёвые проверки, которые идут до нового индекса."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Statistics and predicate shape are free; an index is a permanent cost.",
+              "ru": "Статистика и форма предиката бесплатны; индекс — постоянные расходы."
+            },
+            "incorrect": {
+              "en": "Run `ANALYZE` first, and confirm the predicate is index-friendly before creating anything.",
+              "ru": "Сначала запусти `ANALYZE` и убедись, что предикат дружит с индексом, прежде чем что-то создавать."
+            }
+          },
+          "text": {
+            "en": "Before creating another index, run ___ to refresh statistics and check that the predicate is ___-friendly.",
+            "ru": "Перед созданием ещё одного индекса запусти ___, чтобы обновить статистику, и проверь, что предикат дружит с ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "ANALYZE",
+                "analyze"
+              ],
+              "ru": [
+                "ANALYZE",
+                "analyze"
+              ]
+            },
+            {
+              "en": [
+                "index"
+              ],
+              "ru": [
+                "индексом",
+                "index",
+                "индексами"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "putting-it-together",
+      "title": {
+        "en": "Putting it together",
+        "ru": "Собираем всё вместе"
+      },
+      "summary": {
+        "en": "Two questions decide everything: CAN the index be used (predicate shape) and SHOULD it be used (estimates and selectivity).",
+        "ru": "Всё решают два вопроса: МОЖЕТ ли индекс быть использован (форма предиката) и СТОИТ ли его использовать (оценки и селективность)."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "cap-d1-two-blockers",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Statistics are fresh and the table is huge. Which plan will PostgreSQL choose, and why?",
+            "ru": "Статистика свежая, таблица огромная. Какой план выберет PostgreSQL и почему?"
+          },
+          "code": "-- events: 20,000,000 rows, freshly ANALYZEd\n-- index: CREATE INDEX idx_events ON events (tenant_id, created_at);\nSELECT * FROM events\nWHERE date_trunc('day', created_at) = DATE '2026-07-01';",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "Two independent blockers stack up here: the predicate skips the index's leading column `tenant_id`, *and* it wraps `created_at` in `date_trunc()`. Either one alone would be enough to rule the index out.\n\nThat is the whole topic in one shape — every cause falls into one of two questions:\n\n```mermaid\nflowchart TD\n  Q[\"query predicate\"] --> M{\"CAN an index be used? matching shape\"}\n  M -->|\"no: function, cast, leading wildcard, wrong prefix, unimplied partial condition\"| R[\"rewrite the predicate, or add an expression / partial / operator-class index\"]\n  M -->|yes| E{\"SHOULD it be used? estimated rows close to actual\"}\n  E -->|no| A[\"ANALYZE, statistics target, extended statistics\"]\n  E -->|yes| S{\"selective enough?\"}\n  S -->|no| G[\"Seq Scan is correct, leave it\"]\n  S -->|yes| C[\"look at generic plans, cost settings, heap fetches\"]\n```\n\n**CAN** is a matching question, answered by looking at the SQL and the index definition. **SHOULD** is a cost question, answered by comparing `rows=` with `actual rows=` and judging selectivity. In an interview, name both branches and then the fix that belongs to the branch you are in — that is the difference between \"PostgreSQL ignores my index\" and a diagnosis.",
+            "ru": "Здесь складываются два независимых блокера: предикат пропускает ведущую колонку индекса `tenant_id`, *и* он оборачивает `created_at` в `date_trunc()`. Любого одного из них хватило бы, чтобы исключить индекс.\n\nЭто вся тема в одной форме — каждая причина попадает в один из двух вопросов:\n\n```mermaid\nflowchart TD\n  Q[\"предикат запроса\"] --> M{\"МОЖЕТ ли индекс быть использован? совпадение формы\"}\n  M -->|\"нет: функция, cast, wildcard в начале, не тот префикс, неподразумеваемое условие partial\"| R[\"переписать предикат или добавить expression / partial / operator-class index\"]\n  M -->|да| E{\"СТОИТ ли его использовать? оценка близка к actual\"}\n  E -->|нет| A[\"ANALYZE, statistics target, extended statistics\"]\n  E -->|да| S{\"достаточно селективно?\"}\n  S -->|нет| G[\"Seq Scan верен, оставить\"]\n  S -->|да| C[\"смотреть generic plans, настройки стоимости, heap fetches\"]\n```\n\n**МОЖЕТ** — вопрос совпадения, отвечается по SQL и определению индекса. **СТОИТ** — вопрос стоимости, отвечается сравнением `rows=` с `actual rows=` и оценкой селективности. На собеседовании назовите обе ветки, а затем решение, относящееся к вашей ветке — это и есть разница между «PostgreSQL игнорирует мой индекс» и диагнозом."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — two blockers at once: no leading prefix and a wrapped column.",
+              "ru": "Верно — сразу два блокера: нет ведущего префикса и обёрнутая колонка."
+            },
+            "incorrect": {
+              "en": "Both the missing leading column and the function around `created_at` rule the index out.",
+              "ru": "И отсутствие ведущей колонки, и функция вокруг `created_at` исключают индекс."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Seq Scan — the leading column is missing AND the predicate wraps `created_at` in a function",
+                "ru": "Seq Scan — нет ведущей колонки И предикат оборачивает `created_at` в функцию"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Index Scan on `idx_events`, because `created_at` is the second column of the index",
+                "ru": "Index Scan по `idx_events`, потому что `created_at` — вторая колонка индекса"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Two separate problems block it: no leading prefix to seek on, and a function around the column.",
+                "ru": "Мешают две отдельные проблемы: нет ведущего префикса для перехода и функция вокруг колонки."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Index Only Scan, because the filtered column is in the index",
+                "ru": "Index Only Scan, потому что фильтруемая колонка есть в индексе"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "`SELECT *` needs columns outside the index, and neither the prefix nor the bare-column requirement is met.",
+                "ru": "`SELECT *` требует колонок вне индекса, и не выполнены ни требование префикса, ни требование чистой колонки."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cap-p1-spot-wrapped-prepared",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "Why will this prepared statement never use `idx_users_email`, no matter how rare the value is?",
+            "ru": "Почему этот prepared statement никогда не использует `idx_users_email`, каким бы редким ни было значение?"
+          },
+          "code": "-- users: 8,000,000 rows, freshly ANALYZEd\n-- index: CREATE INDEX idx_users_email ON users (email);\nPREPARE find AS SELECT * FROM users WHERE lower(email) = lower($1);",
+          "codeLang": "sql",
+          "feedback": {
+            "correct": {
+              "en": "A wrapped column is a matching problem: no statistics or plan choice can rescue it.",
+              "ru": "Обёрнутая колонка — проблема совпадения: ни статистика, ни выбор плана её не спасут."
+            },
+            "incorrect": {
+              "en": "`lower(email)` is not what the index stores, so the index cannot match the predicate at all.",
+              "ru": "`lower(email)` — не то, что хранит индекс, поэтому индекс вообще не может совпасть с предикатом."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The predicate wraps the column in `lower()`, so the index on the bare `email` column does not match",
+                "ru": "Предикат оборачивает колонку в `lower()`, поэтому индекс по чистой колонке `email` не подходит"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Because a prepared statement is always executed with a generic plan",
+                "ru": "Потому что prepared statement всегда выполняется с generic plan"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A generic plan can pick a worse plan, but here even a custom plan could not use this index.",
+                "ru": "Generic plan может выбрать план хуже, но здесь даже custom plan не смог бы использовать этот индекс."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Because the index would have to be UNIQUE to answer an equality predicate",
+                "ru": "Потому что индекс должен быть UNIQUE, чтобы отвечать на предикат равенства"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Uniqueness is a constraint, not a requirement for index usage.",
+                "ru": "Уникальность — это ограничение, а не требование для использования индекса."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p2-fresh-stats-broad",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Statistics are fresh and the column is bare. What will the plan show?",
+            "ru": "Статистика свежая, колонка чистая. Что покажет план?"
+          },
+          "code": "-- orders: 3,000,000 rows; 40% of them have status = 'DONE'\n-- index: CREATE INDEX idx_orders_status ON orders (status);\nANALYZE orders;\nEXPLAIN SELECT * FROM orders WHERE status = 'DONE';",
+          "codeLang": "sql",
+          "feedback": {
+            "correct": {
+              "en": "Matching is necessary but not sufficient — selectivity still decides.",
+              "ru": "Совпадение необходимо, но недостаточно — решает всё равно селективность."
+            },
+            "incorrect": {
+              "en": "A predicate keeping 40% of a large table loses on cost even with a perfect index and fresh statistics.",
+              "ru": "Предикат, оставляющий 40% большой таблицы, проигрывает по стоимости даже с идеальным индексом и свежей статистикой."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Seq Scan — a predicate keeping 40% of the rows is not selective enough for index access to win",
+                "ru": "Seq Scan — предикат, оставляющий 40% строк, недостаточно селективен, чтобы индексный доступ выиграл"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Index Scan — the statistics are fresh and the predicate matches the index exactly",
+                "ru": "Index Scan — статистика свежая, и предикат точно совпадает с индексом"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Matching is only the CAN question; at 40% selectivity the index still loses on cost.",
+                "ru": "Совпадение — только вопрос МОЖЕТ; при селективности 40% индекс всё равно проигрывает по стоимости."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Index Only Scan — `status` is fully covered by the index",
+                "ru": "Index Only Scan — `status` полностью покрыт индексом"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "`SELECT *` needs columns outside the index, and 40% of rows is not selective anyway.",
+                "ru": "`SELECT *` требует колонок вне индекса, и 40% строк всё равно не селективны."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p3-sort-triage",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the full triage of an \"index exists but is not used\" report in PostgreSQL.",
+            "ru": "Расставь по порядку полную диагностику жалобы «индекс есть, но не используется» в PostgreSQL."
+          },
+          "reveal": {
+            "en": "The order is not arbitrary — it goes from free and certain to expensive and speculative.\n\n1. The plan is the only source of truth about which node reads the table.\n2. Predicate shape is a *matching* question you can answer by reading SQL: a wrapped column, a leading wildcard, a missing leading index column or an unimplied partial condition rules the index out no matter what the data looks like.\n3. Estimates come next because a wrong row count invalidates every cost conclusion after it, and `ANALYZE` is cheap.\n4. Only with trustworthy numbers can you judge selectivity — and a broad predicate means the `Seq Scan` was right all along.\n5. What remains (composite order, generic plans, cost settings, heap fetches) are the narrower causes, and only then is a new index justified — measured before and after.",
+            "ru": "Порядок не случаен — он идёт от бесплатного и достоверного к дорогому и предположительному.\n\n1. План — единственный источник истины о том, какой узел читает таблицу.\n2. Форма предиката — вопрос *совпадения*, на который отвечают чтением SQL: обёрнутая колонка, wildcard в начале, отсутствие ведущей колонки индекса или неподразумеваемое условие partial исключают индекс независимо от данных.\n3. Оценки идут следом, потому что неверное число строк обесценивает все последующие выводы о стоимости, а `ANALYZE` дёшев.\n4. Только с надёжными числами можно судить о селективности — и широкий предикат означает, что `Seq Scan` был прав с самого начала.\n5. Остальное (порядок составного индекса, generic plans, настройки стоимости, heap fetches) — более узкие причины, и лишь затем оправдан новый индекс, с измерением до и после."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Free and certain first, expensive and permanent last.",
+              "ru": "Сначала бесплатное и достоверное, в конце — дорогое и постоянное."
+            },
+            "incorrect": {
+              "en": "Plan, then predicate shape, then estimates, then selectivity, then the narrow causes and a measured index.",
+              "ru": "План, потом форма предиката, потом оценки, потом селективность, потом узкие причины и измеренный индекс."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Confirm with `EXPLAIN (ANALYZE, BUFFERS)` which node reads the table",
+                "ru": "Установить через `EXPLAIN (ANALYZE, BUFFERS)`, какой узел читает таблицу"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Check that the column is bare and matches the index's leading columns",
+                "ru": "Проверить, что колонка чистая и совпадает с ведущими колонками индекса"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Compare estimated with actual rows; run `ANALYZE` if they diverge",
+                "ru": "Сравнить estimated и actual rows; запустить `ANALYZE`, если они расходятся"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Judge selectivity: if the predicate keeps most rows, accept the `Seq Scan`",
+                "ru": "Оценить селективность: если предикат оставляет большинство строк, принять `Seq Scan`"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "Otherwise inspect composite order, partial implication, generic plans and cost settings, then add a measured index",
+                "ru": "Иначе изучить порядок составного индекса, подразумевание partial, generic plans и настройки стоимости, затем добавить измеренный индекс"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p4-match-symptoms",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each PostgreSQL symptom to the mechanism behind it.",
+            "ru": "Соотнеси каждый симптом в PostgreSQL с механизмом, который за ним стоит."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Each symptom names its own branch: shape, cost, statistics or visibility.",
+              "ru": "Каждый симптом указывает на свою ветку: форма, стоимость, статистика или видимость."
+            },
+            "incorrect": {
+              "en": "Broad predicate = selectivity, wrapped column = shape, missing prefix = composite order, estimate gap = statistics, heap fetches = visibility map.",
+              "ru": "Широкий предикат — селективность, обёрнутая колонка — форма, нет префикса — порядок составного индекса, разрыв оценки — статистика, heap fetches — visibility map."
+            }
+          },
+          "pairs": [
+            {
+              "id": "broad",
+              "left": {
+                "en": "The predicate keeps 40% of a large table",
+                "ru": "Предикат оставляет 40% большой таблицы"
+              },
+              "right": {
+                "en": "Low selectivity, so a Seq Scan can be cheaper",
+                "ru": "Низкая селективность, поэтому Seq Scan может быть дешевле"
+              }
+            },
+            {
+              "id": "wrapped",
+              "left": {
+                "en": "`WHERE lower(email) = $1` with an index on `email`",
+                "ru": "`WHERE lower(email) = $1` при индексе на `email`"
+              },
+              "right": {
+                "en": "Wrapped column, needs an expression index",
+                "ru": "Обёрнутая колонка, нужен expression index"
+              }
+            },
+            {
+              "id": "prefix",
+              "left": {
+                "en": "Index on `(tenant_id, created_at)`, query filters only `created_at`",
+                "ru": "Индекс по `(tenant_id, created_at)`, запрос фильтрует только `created_at`"
+              },
+              "right": {
+                "en": "No leading prefix to seek on",
+                "ru": "Нет ведущего префикса для перехода"
+              }
+            },
+            {
+              "id": "estimate",
+              "left": {
+                "en": "`rows=250000` next to `actual rows=12`",
+                "ru": "`rows=250000` рядом с `actual rows=12`"
+              },
+              "right": {
+                "en": "Bad estimate, run `ANALYZE`",
+                "ru": "Плохая оценка, запустить `ANALYZE`"
+              }
+            },
+            {
+              "id": "fetches",
+              "left": {
+                "en": "`Index Only Scan` with high `Heap Fetches`",
+                "ru": "`Index Only Scan` с большим `Heap Fetches`"
+              },
+              "right": {
+                "en": "Pages not marked all-visible, so the heap is checked",
+                "ru": "Страницы не отмечены как all-visible, поэтому heap проверяется"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p5-fill-answer",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill the key parts of the 60-second answer.",
+            "ru": "Впиши ключевые части 60-секундного ответа."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Shape decides whether the index CAN be used; cost decides whether it SHOULD be.",
+              "ru": "Форма решает, МОЖЕТ ли индекс быть использован; стоимость — СТОИТ ли."
+            },
+            "incorrect": {
+              "en": "The predicate must match the index shape, the plan must be the cheapest by estimate, and a wrong estimate is fixed by ANALYZE.",
+              "ru": "Предикат должен совпадать с формой индекса, план должен быть самым дешёвым по оценке, а неверная оценка лечится ANALYZE."
+            }
+          },
+          "text": {
+            "en": "PostgreSQL uses an index only if the predicate ___ the index shape and that plan is the ___ one by estimated cost; if the row estimate is far from reality, run ___.",
+            "ru": "PostgreSQL использует индекс только если предикат ___ форме индекса и этот план ___ по оценочной стоимости; если оценка строк далека от реальности, запусти ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "matches",
+                "fits",
+                "match"
+              ],
+              "ru": [
+                "соответствует",
+                "подходит",
+                "matches"
+              ]
+            },
+            {
+              "en": [
+                "cheapest",
+                "lowest"
+              ],
+              "ru": [
+                "самый дешёвый",
+                "самый дешевый",
+                "дешевле всех",
+                "cheapest"
+              ]
+            },
+            {
+              "en": [
+                "ANALYZE",
+                "analyze"
+              ],
+              "ru": [
+                "ANALYZE",
+                "analyze"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

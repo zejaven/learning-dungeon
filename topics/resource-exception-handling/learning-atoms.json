@@ -1,0 +1,2645 @@
+{
+  "schemaVersion": 1,
+  "topicId": "resource-exception-handling",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "resource-must-be-closed",
+      "title": {
+        "en": "Resources that must be closed",
+        "ru": "Ресурсы, которые нужно закрывать"
+      },
+      "summary": {
+        "en": "Files, sockets, database connections and streams hold handles outside the heap that only close() releases.",
+        "ru": "Файлы, сокеты, соединения с базой и stream держат handle вне heap, которые освобождает только close()."
+      },
+      "discovery": [
+        {
+          "id": "must-close-d1-leak",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "This method runs thousands of times per minute and never calls close(). What is the likely consequence?",
+            "ru": "Этот метод выполняется тысячи раз в минуту и никогда не вызывает close(). Каково вероятное последствие?"
+          },
+          "code": "InputStream in = Files.newInputStream(path);\nint b = in.read();\nreturn b;              // no close() anywhere",
+          "codeLang": "java",
+          "reveal": {
+            "en": "A **resource** is an object that holds something outside the Java heap: an OS file handle, a network socket, a pooled database connection, an open stream. Garbage collection reclaims memory — it does **not** release those handles. Only `close()` does.\n\n```mermaid\nsequenceDiagram\n  participant C as \"Code\"\n  participant R as \"Resource\"\n  C->>R: open()\n  C->>R: work()\n  C->>R: close()\n```\n\nThat is why a forgotten `close()` becomes a production incident rather than a merely slow program: open files exhaust the process's file descriptors, database connections starve the connection pool, and sockets stay around far longer than the request that created them.",
+            "ru": "**Ресурс** — это объект, который держит что-то за пределами Java heap: handle файла в ОС, сетевой сокет, соединение с базой из пула, открытый stream. Сборка мусора освобождает память, но **не** эти handle. Их освобождает только `close()`.\n\n```mermaid\nsequenceDiagram\n  participant C as \"Код\"\n  participant R as \"Ресурс\"\n  C->>R: open()\n  C->>R: работа()\n  C->>R: close()\n```\n\nИменно поэтому забытый `close()` превращается в продакшен-инцидент, а не просто в медленную программу: открытые файлы исчерпывают file descriptors процесса, соединения с базой занимают весь пул, а сокеты живут гораздо дольше запроса, который их создал."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — unreleased handles accumulate until the OS limit is hit.",
+              "ru": "Верно — неосвобождённые handle копятся, пока не упрутся в лимит ОС."
+            },
+            "incorrect": {
+              "en": "Handles are not freed by garbage collection, so they accumulate until descriptors run out.",
+              "ru": "Handle не освобождаются сборщиком мусора, поэтому копятся, пока не кончатся дескрипторы."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The process runs out of file descriptors",
+                "ru": "У процесса кончаются file descriptors"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The stream is closed automatically when the method returns",
+                "ru": "Stream закроется автоматически при выходе из метода"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing closes a plain local variable; automatic closing requires try-with-resources.",
+                "ru": "Обычную локальную переменную никто не закрывает; автозакрытие даёт только try-with-resources."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Garbage collection releases the file handle",
+                "ru": "Сборка мусора освободит handle файла"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "GC reclaims heap memory only; OS handles are released by close().",
+                "ru": "GC освобождает только память в heap; handle ОС освобождает close()."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "must-close-p1-gc-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Garbage collection alone is enough to release an open file handle in Java.",
+            "ru": "Сборки мусора самой по себе достаточно, чтобы освободить открытый handle файла в Java."
+          },
+          "feedback": {
+            "correct": {
+              "en": "GC frees heap memory; the OS handle is released only by close().",
+              "ru": "GC освобождает память в heap; handle ОС освобождает только close()."
+            },
+            "incorrect": {
+              "en": "No — GC only reclaims memory; the handle stays open until close() is called.",
+              "ru": "Нет — GC освобождает только память; handle остаётся открытым, пока не вызван close()."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "must-close-p2-symptom",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which production symptom is typical of leaked database connections?",
+            "ru": "Какой продакшен-симптом характерен для утечки соединений с базой данных?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Unreturned connections stay checked out, so the pool has none left to hand over.",
+              "ru": "Невозвращённые соединения остаются занятыми, и пулу нечего выдавать."
+            },
+            "incorrect": {
+              "en": "Leaked connections are never returned to the pool, so the pool starves.",
+              "ru": "Утёкшие соединения не возвращаются в пул, и пул истощается."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The connection pool starves and requests wait for a free connection",
+                "ru": "Пул соединений истощается, и запросы ждут свободное соединение"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "SQL queries start returning wrong rows",
+                "ru": "SQL-запросы начинают возвращать неправильные строки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A leak is about unreleased handles, not about query correctness.",
+                "ru": "Утечка — это про неосвобождённые handle, а не про корректность запросов."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The application fails to compile",
+                "ru": "Приложение перестаёт компилироваться"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A missing close() compiles fine; the failure shows up only at runtime.",
+                "ru": "Пропущенный close() компилируется нормально; сбой проявляется только во время выполнения."
+              }
+            }
+          ]
+        },
+        {
+          "id": "must-close-p3-match-leaks",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each leaked resource to what it exhausts.",
+            "ru": "Соотнеси утёкший ресурс с тем, что он исчерпывает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Each resource type ties up a different limited pool of handles.",
+              "ru": "Каждый вид ресурса занимает свой ограниченный набор handle."
+            },
+            "incorrect": {
+              "en": "Files exhaust descriptors, connections exhaust the pool, sockets outlive their request.",
+              "ru": "Файлы исчерпывают дескрипторы, соединения — пул, сокеты живут дольше своего запроса."
+            }
+          },
+          "pairs": [
+            {
+              "id": "file",
+              "left": {
+                "en": "Unclosed file",
+                "ru": "Незакрытый файл"
+              },
+              "right": {
+                "en": "The process's file descriptors",
+                "ru": "File descriptors процесса"
+              }
+            },
+            {
+              "id": "connection",
+              "left": {
+                "en": "Unclosed database connection",
+                "ru": "Незакрытое соединение с базой"
+              },
+              "right": {
+                "en": "The connection pool",
+                "ru": "Пул соединений"
+              }
+            },
+            {
+              "id": "socket",
+              "left": {
+                "en": "Unclosed socket",
+                "ru": "Незакрытый сокет"
+              },
+              "right": {
+                "en": "Stays open long after the request ends",
+                "ru": "Остаётся открытым долго после конца запроса"
+              }
+            }
+          ]
+        },
+        {
+          "id": "must-close-p4-fill-close",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing method name.",
+            "ru": "Впиши имя пропущенного метода."
+          },
+          "feedback": {
+            "correct": {
+              "en": "close() is the only thing that hands an OS or pool handle back.",
+              "ru": "close() — единственное, что возвращает handle обратно в ОС или в пул."
+            },
+            "incorrect": {
+              "en": "It is close(): the method that releases a resource's handle.",
+              "ru": "Это close(): метод, который освобождает handle ресурса."
+            }
+          },
+          "text": {
+            "en": "A file, socket or database connection is released by calling its ___() method.",
+            "ru": "Файл, сокет или соединение с базой освобождается вызовом метода ___()."
+          },
+          "answers": {
+            "en": [
+              "close"
+            ],
+            "ru": [
+              "close"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "try-with-resources",
+      "title": {
+        "en": "try-with-resources",
+        "ru": "try-with-resources"
+      },
+      "summary": {
+        "en": "A resource declared in the try (...) header is closed by Java automatically after the block.",
+        "ru": "Ресурс, объявленный в заголовке try (...), Java закрывает автоматически после блока."
+      },
+      "discovery": [
+        {
+          "id": "twr-d1-return-inside",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The method returns from inside the try block. When, if ever, is `in` closed?",
+            "ru": "Метод возвращает значение изнутри блока try. Когда — и будет ли вообще — закрыт `in`?"
+          },
+          "code": "try (InputStream in = Files.newInputStream(path)) {\n    return in.read();\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "This is **try-with-resources**: a `try` statement whose parentheses declare a resource. Java creates the resource, runs the body, and then calls `close()` on it for you.\n\n```mermaid\nflowchart LR\n  D[\"try (Resource r = ...)\"] --> B[\"run the body\"]\n  B --> C[\"Java calls r.close()\"]\n  C --> E[\"leave the statement\"]\n```\n\nThe compiler expands this into code similar to a careful `try/finally` — but it also gets the tricky exception rules right, which hand-written `try/finally` usually does not. The practical effect: cleanup is written once, next to the thing being opened, and cannot be forgotten on any exit path.",
+            "ru": "Это **try-with-resources**: оператор `try`, в скобках которого объявлен ресурс. Java создаёт ресурс, выполняет тело, а затем сама вызывает у него `close()`.\n\n```mermaid\nflowchart LR\n  D[\"try (Resource r = ...)\"] --> B[\"выполнить тело\"]\n  B --> C[\"Java вызывает r.close()\"]\n  C --> E[\"выйти из оператора\"]\n```\n\nКомпилятор разворачивает это в код, похожий на аккуратный `try/finally`, но при этом правильно обрабатывает сложные правила исключений, чего рукописный `try/finally` обычно не делает. Практический эффект: очистка написана один раз, рядом с открытием, и её нельзя забыть ни на одном пути выхода."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The close happens before the method actually returns.",
+              "ru": "Закрытие происходит до того, как метод действительно вернёт значение."
+            },
+            "incorrect": {
+              "en": "Java closes a header-declared resource on every exit path, including return.",
+              "ru": "Java закрывает объявленный в заголовке ресурс на любом пути выхода, включая return."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Java closes it automatically before the method returns",
+                "ru": "Java закроет его автоматически до возврата из метода"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Never — the return statement skips the closing",
+                "ru": "Никогда — оператор return пропускает закрытие"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "An early return does not skip it; the resource is closed on that path too.",
+                "ru": "Ранний return его не пропускает; на этом пути ресурс тоже закрывается."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Only if the body throws an exception",
+                "ru": "Только если тело выбросит исключение"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Closing is unconditional, not limited to the failure path.",
+                "ru": "Закрытие безусловно, а не только на пути с ошибкой."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "twr-p1-manual-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In try-with-resources you must still call close() yourself at the end of the try block.",
+            "ru": "В try-with-resources нужно всё равно самому вызвать close() в конце блока try."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Java calls close() for you — that is the whole point of the construct.",
+              "ru": "Java вызывает close() сама — в этом весь смысл конструкции."
+            },
+            "incorrect": {
+              "en": "No — Java calls close() automatically for a header-declared resource.",
+              "ru": "Нет — Java автоматически вызывает close() для ресурса из заголовка."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "twr-p2-where-declare",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Where must a resource be declared so that Java closes it automatically?",
+            "ru": "Где нужно объявить ресурс, чтобы Java закрыла его автоматически?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Only the parentheses of the try header give automatic closing.",
+              "ru": "Автоматическое закрытие даёт только объявление в скобках заголовка try."
+            },
+            "incorrect": {
+              "en": "It must be declared inside the try (...) header; anywhere else it is an ordinary variable.",
+              "ru": "Он должен быть объявлен в заголовке try (...); в любом другом месте это обычная переменная."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "In the try (...) header",
+                "ru": "В заголовке try (...)"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "As the first statement inside the try block",
+                "ru": "Первой строкой внутри блока try"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A variable inside the block is ordinary — nothing closes it for you.",
+                "ru": "Переменная внутри блока обычная — её никто за вас не закроет."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "In the catch block",
+                "ru": "В блоке catch"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "catch handles failures; it never declares an auto-closed resource.",
+                "ru": "catch обрабатывает ошибки; он не объявляет автозакрываемый ресурс."
+              }
+            }
+          ]
+        },
+        {
+          "id": "twr-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble what try-with-resources does.",
+            "ru": "Собери, что делает try-with-resources."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Declared in the header, closed by Java when the block ends.",
+              "ru": "Объявлен в заголовке — закрывается Java по окончании блока."
+            },
+            "incorrect": {
+              "en": "try-with-resources closes the declared resource automatically after the block.",
+              "ru": "try-with-resources автоматически закрывает объявленный ресурс после блока."
+            }
+          },
+          "tokens": {
+            "en": [
+              "try-with-resources",
+              "closes",
+              "the",
+              "declared",
+              "resource",
+              "automatically",
+              "after",
+              "the",
+              "block"
+            ],
+            "ru": [
+              "try-with-resources",
+              "автоматически",
+              "закрывает",
+              "объявленный",
+              "ресурс",
+              "после",
+              "блока"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "never",
+              "manually"
+            ],
+            "ru": [
+              "никогда",
+              "вручную"
+            ]
+          }
+        },
+        {
+          "id": "twr-p4-fill-header",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the rule.",
+            "ru": "Дополни правило."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Declaration in the try header is what buys the automatic close() call.",
+              "ru": "Объявление в заголовке try и даёт автоматический вызов close()."
+            },
+            "incorrect": {
+              "en": "Declare the resource in the try (...) header and Java calls close() for you.",
+              "ru": "Объяви ресурс в заголовке try (...), и Java сама вызовет close()."
+            }
+          },
+          "text": {
+            "en": "Declare the resource in the ___ (...) header, and Java calls ___() for you.",
+            "ru": "Объяви ресурс в заголовке ___ (...), и Java сама вызовет ___()."
+          },
+          "blanks": [
+            {
+              "en": [
+                "try"
+              ],
+              "ru": [
+                "try"
+              ]
+            },
+            {
+              "en": [
+                "close"
+              ],
+              "ru": [
+                "close"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "autocloseable-requirement",
+      "title": {
+        "en": "What may go in the header",
+        "ru": "Что можно поместить в заголовок"
+      },
+      "summary": {
+        "en": "Only a class implementing AutoCloseable or Closeable can be used as a try-with-resources resource.",
+        "ru": "В try-with-resources можно использовать только класс, реализующий AutoCloseable или Closeable."
+      },
+      "discovery": [
+        {
+          "id": "ac-req-d1-spot-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This code does not compile. What is wrong with it?",
+            "ru": "Этот код не компилируется. Что с ним не так?"
+          },
+          "code": "class Handle {\n    void close() { }\n}\n\ntry (Handle h = new Handle()) {\n    use(h);\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "`try-with-resources` works with objects whose class implements **`AutoCloseable`** or **`Closeable`**. `AutoCloseable` is an interface with a single method, `close()`; `Closeable` (from `java.io`) extends it.\n\nHaving a method merely *named* `close()` is not enough. The compiler generates the cleanup call through the interface type, so the type must actually declare that it is closeable:\n\n```java\nclass Handle implements AutoCloseable {\n    @Override public void close() { }\n}\n```\n\nThis is why almost everything in the JDK you are expected to close — `InputStream`, `Connection`, `Socket`, `Scanner` — implements one of those two interfaces.",
+            "ru": "`try-with-resources` работает с объектами, класс которых реализует **`AutoCloseable`** или **`Closeable`**. `AutoCloseable` — интерфейс с единственным методом `close()`; `Closeable` (из `java.io`) его расширяет.\n\nПросто метода с *именем* `close()` недостаточно. Компилятор генерирует вызов очистки через тип интерфейса, поэтому тип должен явно заявить, что он закрываемый:\n\n```java\nclass Handle implements AutoCloseable {\n    @Override public void close() { }\n}\n```\n\nИменно поэтому почти всё в JDK, что положено закрывать — `InputStream`, `Connection`, `Socket`, `Scanner` — реализует один из этих двух интерфейсов."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The type, not the method name, is what makes something a resource.",
+              "ru": "Ресурсом делает тип, а не имя метода."
+            },
+            "incorrect": {
+              "en": "A try-with-resources resource must implement AutoCloseable or Closeable.",
+              "ru": "Ресурс try-with-resources должен реализовывать AutoCloseable или Closeable."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Handle does not implement AutoCloseable, so it cannot be a resource",
+                "ru": "Handle не реализует AutoCloseable, поэтому не может быть ресурсом"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "close() must be declared public static",
+                "ru": "close() должен быть объявлен public static"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "close() is an instance method; the missing piece is the interface, not a modifier.",
+                "ru": "close() — метод экземпляра; не хватает интерфейса, а не модификатора."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A resource must be a field, not a local variable",
+                "ru": "Ресурс должен быть полем, а не локальной переменной"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The header always declares a local variable; that part is correct here.",
+                "ru": "В заголовке всегда объявляется локальная переменная; здесь это как раз правильно."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "ac-req-p1-name-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Any class with a public close() method can be used in a try-with-resources header.",
+            "ru": "Любой класс с публичным методом close() можно использовать в заголовке try-with-resources."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The class must implement AutoCloseable or Closeable, not just own the method name.",
+              "ru": "Класс должен реализовывать AutoCloseable или Closeable, а не просто иметь метод с таким именем."
+            },
+            "incorrect": {
+              "en": "No — the type must implement AutoCloseable or Closeable; the method name alone is not enough.",
+              "ru": "Нет — тип должен реализовывать AutoCloseable или Closeable; одного имени метода мало."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "ac-req-p2-requirement",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What must a class do for its instances to be usable in a try-with-resources header?",
+            "ru": "Что должен делать класс, чтобы его экземпляры можно было использовать в заголовке try-with-resources?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Implementing the interface is what lets the compiler generate the close() call.",
+              "ru": "Реализация интерфейса и позволяет компилятору сгенерировать вызов close()."
+            },
+            "incorrect": {
+              "en": "It must implement AutoCloseable or Closeable.",
+              "ru": "Он должен реализовывать AutoCloseable или Closeable."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Implement AutoCloseable or Closeable",
+                "ru": "Реализовать AutoCloseable или Closeable"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Override finalize()",
+                "ru": "Переопределить finalize()"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "try-with-resources never looks at finalize(); it calls close() through the interface.",
+                "ru": "try-with-resources не смотрит на finalize(); он вызывает close() через интерфейс."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Be declared final",
+                "ru": "Быть объявленным final"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "final has nothing to do with it; the requirement is the closeable interface.",
+                "ru": "final здесь ни при чём; требуется именно закрываемый интерфейс."
+              }
+            }
+          ]
+        },
+        {
+          "id": "ac-req-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the requirement for a try-with-resources resource.",
+            "ru": "Собери требование к ресурсу try-with-resources."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The interface is the contract the compiler relies on.",
+              "ru": "Интерфейс — это контракт, на который опирается компилятор."
+            },
+            "incorrect": {
+              "en": "A resource must implement AutoCloseable or Closeable.",
+              "ru": "Ресурс должен реализовывать AutoCloseable или Closeable."
+            }
+          },
+          "tokens": {
+            "en": [
+              "a",
+              "resource",
+              "must",
+              "implement",
+              "AutoCloseable",
+              "or",
+              "Closeable"
+            ],
+            "ru": [
+              "ресурс",
+              "должен",
+              "реализовывать",
+              "AutoCloseable",
+              "или",
+              "Closeable"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "finalize()",
+              "extend"
+            ],
+            "ru": [
+              "finalize()",
+              "наследовать"
+            ]
+          }
+        },
+        {
+          "id": "ac-req-p4-fill-interface",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the interface name.",
+            "ru": "Впиши имя интерфейса."
+          },
+          "feedback": {
+            "correct": {
+              "en": "AutoCloseable is the general interface; Closeable extends it.",
+              "ru": "AutoCloseable — общий интерфейс; Closeable его расширяет."
+            },
+            "incorrect": {
+              "en": "It is AutoCloseable — the single-method interface try-with-resources requires.",
+              "ru": "Это AutoCloseable — интерфейс с одним методом, который требует try-with-resources."
+            }
+          },
+          "text": {
+            "en": "A try-with-resources resource must implement the ___ interface (or Closeable, which extends it).",
+            "ru": "Ресурс try-with-resources должен реализовывать интерфейс ___ (или Closeable, который его расширяет)."
+          },
+          "answers": {
+            "en": [
+              "AutoCloseable",
+              "autocloseable"
+            ],
+            "ru": [
+              "AutoCloseable",
+              "autocloseable"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "close-always-runs",
+      "title": {
+        "en": "close() always runs",
+        "ru": "close() выполняется всегда"
+      },
+      "summary": {
+        "en": "Java closes the resource whether the body completes normally, throws, or exits early with return.",
+        "ru": "Java закрывает ресурс и при нормальном завершении тела, и при исключении, и при раннем return."
+      },
+      "discovery": [
+        {
+          "id": "always-d1-predict",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Res.close() prints \"closed\". The body throws. What is printed before the exception leaves the method?",
+            "ru": "Res.close() печатает \"closed\". Тело выбрасывает исключение. Что напечатается до того, как исключение покинет метод?"
+          },
+          "code": "try (Res r = new Res()) {          // close() prints \"closed\"\n    System.out.println(\"work\");\n    throw new IllegalStateException(\"boom\");\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Java closes the resource on **every** exit path from the try statement:\n\n- the body completes normally,\n- the body throws an exception,\n- the body exits early with `return`.\n\n```mermaid\nflowchart TD\n  B[\"try body\"] --> N[\"normal end\"]\n  B --> T[\"throws\"]\n  B --> R[\"early return\"]\n  N --> C[\"close()\"]\n  T --> C\n  R --> C\n```\n\nOn the failure path the ordering matters: the resource is closed **before** the exception reaches any `catch`. By the time you are handling the failure, the file or connection has already been released — which is exactly why try-with-resources cannot leak a resource the way a forgotten manual `close()` can.",
+            "ru": "Java закрывает ресурс на **любом** пути выхода из оператора try:\n\n- тело завершилось нормально,\n- тело выбросило исключение,\n- тело вышло раньше через `return`.\n\n```mermaid\nflowchart TD\n  B[\"тело try\"] --> N[\"нормальный конец\"]\n  B --> T[\"исключение\"]\n  B --> R[\"ранний return\"]\n  N --> C[\"close()\"]\n  T --> C\n  R --> C\n```\n\nНа пути с ошибкой важен порядок: ресурс закрывается **до** того, как исключение дойдёт до любого `catch`. К моменту обработки ошибки файл или соединение уже освобождены — именно поэтому try-with-resources не может допустить утечку так, как забытый ручной `close()`."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The body runs, then the resource is closed, and only then the exception propagates.",
+              "ru": "Тело выполняется, затем ресурс закрывается, и только потом исключение идёт дальше."
+            },
+            "incorrect": {
+              "en": "An exception does not skip the close: \"work\" prints, then \"closed\".",
+              "ru": "Исключение не пропускает закрытие: печатается \"work\", затем \"closed\"."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "work, then closed",
+                "ru": "work, затем closed"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Only work — the exception skips the close",
+                "ru": "Только work — исключение пропускает закрытие"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Closing is not skipped on the failure path; it is exactly the path it protects.",
+                "ru": "На пути с ошибкой закрытие не пропускается; именно этот путь оно и защищает."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "closed, then work",
+                "ru": "closed, затем work"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The resource is created and used first; close() comes after the body.",
+                "ru": "Сначала ресурс создаётся и используется; close() идёт после тела."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "always-p1-return-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "An early return from a try-with-resources body skips the automatic close().",
+            "ru": "Ранний return из тела try-with-resources пропускает автоматический close()."
+          },
+          "feedback": {
+            "correct": {
+              "en": "return is just another exit path, and every exit path closes the resource.",
+              "ru": "return — просто ещё один путь выхода, а на каждом пути ресурс закрывается."
+            },
+            "incorrect": {
+              "en": "No — the resource is closed on every exit path, including return.",
+              "ru": "Нет — ресурс закрывается на любом пути выхода, включая return."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "always-p2-when-closed",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A try-with-resources body throws an exception. When is the resource closed?",
+            "ru": "Тело try-with-resources выбрасывает исключение. Когда закрывается ресурс?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Closing happens first, so the handler never runs with the resource still open.",
+              "ru": "Закрытие происходит первым, поэтому обработчик не работает с ещё открытым ресурсом."
+            },
+            "incorrect": {
+              "en": "The resource is closed before the exception reaches the catch block.",
+              "ru": "Ресурс закрывается до того, как исключение дойдёт до блока catch."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Before the exception reaches the catch block",
+                "ru": "До того, как исключение дойдёт до блока catch"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "After the catch block has finished handling it",
+                "ru": "После того, как блок catch закончит его обрабатывать"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Closing precedes catch — the handler already sees a released resource.",
+                "ru": "Закрытие предшествует catch — обработчик уже видит освобождённый ресурс."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Not at all — a thrown exception cancels the close",
+                "ru": "Вообще нет — выброшенное исключение отменяет закрытие"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "An exception never cancels the close; that would reintroduce leaks.",
+                "ru": "Исключение никогда не отменяет закрытие; иначе вернулись бы утечки."
+              }
+            }
+          ]
+        },
+        {
+          "id": "always-p3-sort-failure-path",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order what happens when a try-with-resources body throws.",
+            "ru": "Расставь по порядку, что происходит, когда тело try-with-resources выбрасывает исключение."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Create, fail, close, then handle — cleanup always precedes handling.",
+              "ru": "Создать, упасть, закрыть, потом обработать — очистка всегда предшествует обработке."
+            },
+            "incorrect": {
+              "en": "The resource is created, the body throws, close() runs, and only then catch sees the exception.",
+              "ru": "Ресурс создаётся, тело выбрасывает исключение, выполняется close(), и только потом catch видит исключение."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "The resource is created in the try header",
+                "ru": "Ресурс создаётся в заголовке try"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "The body runs and throws an exception",
+                "ru": "Тело выполняется и выбрасывает исключение"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Java calls close() on the resource",
+                "ru": "Java вызывает close() у ресурса"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "The exception reaches the catch block",
+                "ru": "Исключение доходит до блока catch"
+              }
+            }
+          ]
+        },
+        {
+          "id": "always-p4-fill-return",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing keyword.",
+            "ru": "Впиши пропущенное ключевое слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "All three exit paths close the resource: normal end, exception, and return.",
+              "ru": "Ресурс закрывается на всех трёх путях выхода: нормальный конец, исключение и return."
+            },
+            "incorrect": {
+              "en": "It is return — the third exit path that still closes the resource.",
+              "ru": "Это return — третий путь выхода, на котором ресурс всё равно закрывается."
+            }
+          },
+          "text": {
+            "en": "try-with-resources closes the resource on a normal end, on an exception, and on an early ___.",
+            "ru": "try-with-resources закрывает ресурс при нормальном завершении, при исключении и при раннем ___."
+          },
+          "answers": {
+            "en": [
+              "return"
+            ],
+            "ru": [
+              "return"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "body-exception-primary",
+      "title": {
+        "en": "The body exception stays primary",
+        "ru": "Исключение тела остаётся основным"
+      },
+      "summary": {
+        "en": "If the try body throws and close() succeeds, the body's exception is the one that reaches the caller.",
+        "ru": "Если тело try выбрасывает исключение, а close() отрабатывает нормально, до вызывающего доходит исключение тела."
+      },
+      "discovery": [
+        {
+          "id": "primary-d1-predict",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Res.close() completes normally. What does this print?",
+            "ru": "Res.close() отрабатывает нормально. Что напечатает этот код?"
+          },
+          "code": "try (Res r = new Res()) {          // close() succeeds\n    throw new IllegalStateException(\"body failed\");\n} catch (Exception e) {\n    System.out.println(e.getMessage());\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "When the body fails, that failure is the **primary exception** — the one that propagates and that the caller catches. Java closes the resource on the way out, but a successful `close()` leaves no trace in the exception at all.\n\n```mermaid\nflowchart LR\n  T[\"body throws\"] --> K[\"remember as primary\"]\n  K --> C[\"close() succeeds\"]\n  C --> P[\"primary reaches catch\"]\n```\n\nThis rule exists because the real failure is almost always in the *work*, not in the cleanup. If a database write fails, the stack trace and the log line should point at the failed write — that is what an on-call engineer needs. Cleanup is bookkeeping; it must never take the headline away from the actual business failure.",
+            "ru": "Когда падает тело, именно этот сбой становится **основным исключением (primary exception)** — тем, что распространяется дальше и что ловит вызывающий код. Java закрывает ресурс по пути наружу, но успешный `close()` вообще не оставляет следа в исключении.\n\n```mermaid\nflowchart LR\n  T[\"тело выбрасывает\"] --> K[\"запомнить как основное\"]\n  K --> C[\"close() успешен\"]\n  C --> P[\"основное доходит до catch\"]\n```\n\nПравило существует потому, что настоящий сбой почти всегда в *работе*, а не в очистке. Если запись в базу упала, стектрейс и строка лога должны указывать на упавшую запись — именно это нужно дежурному инженеру. Очистка — это бухгалтерия; она не должна отбирать заголовок у реального бизнес-сбоя."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The body's exception propagates untouched.",
+              "ru": "Исключение тела распространяется без изменений."
+            },
+            "incorrect": {
+              "en": "A successful close() changes nothing: the body's exception is what reaches catch.",
+              "ru": "Успешный close() ничего не меняет: до catch доходит исключение тела."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "body failed",
+                "ru": "body failed"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing — closing the resource swallows the exception",
+                "ru": "Ничего — закрытие ресурса проглатывает исключение"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Closing never swallows an exception; it happens on the way out and lets it continue.",
+                "ru": "Закрытие никогда не проглатывает исключение; оно происходит по пути наружу и пропускает его дальше."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "null",
+                "ru": "null"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The original message survives; the exception object is not replaced.",
+                "ru": "Исходное сообщение сохраняется; объект исключения не подменяется."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "primary-p1-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In try-with-resources, if the body throws and close() succeeds, the caller sees the body's exception.",
+            "ru": "В try-with-resources, если тело выбрасывает исключение, а close() успешен, вызывающий видит исключение тела."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The body failure is the primary exception and propagates unchanged.",
+              "ru": "Сбой тела — основное исключение, оно распространяется без изменений."
+            },
+            "incorrect": {
+              "en": "It does — the body failure is primary and reaches the caller unchanged.",
+              "ru": "Видит — сбой тела основной и доходит до вызывающего без изменений."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "primary-p2-which-primary",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In try-with-resources, which exception is called the primary exception when the try body fails?",
+            "ru": "В try-with-resources какое исключение называют основным (primary), когда падает тело try?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The work failure outranks any cleanup failure.",
+              "ru": "Сбой работы важнее любого сбоя очистки."
+            },
+            "incorrect": {
+              "en": "The primary exception is the one thrown by the try body.",
+              "ru": "Основное исключение — то, что выбросило тело try."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The one thrown by the try body",
+                "ru": "То, что выбросило тело try"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The one thrown by close()",
+                "ru": "То, что выбросил close()"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A cleanup failure never outranks the body failure that came first.",
+                "ru": "Сбой очистки никогда не важнее сбоя тела, который случился раньше."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Always an IOException, whichever failed",
+                "ru": "Всегда IOException, что бы ни упало"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The type is whatever was thrown; nothing converts it to IOException.",
+                "ru": "Тип — тот, что был выброшен; никто не превращает его в IOException."
+              }
+            }
+          ]
+        },
+        {
+          "id": "primary-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the rule for a failing try-with-resources body.",
+            "ru": "Собери правило для падающего тела try-with-resources."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Cleanup still happens, but the work failure keeps the headline.",
+              "ru": "Очистка всё равно происходит, но заголовок остаётся за сбоем работы."
+            },
+            "incorrect": {
+              "en": "The body exception stays primary and the resource is still closed.",
+              "ru": "Исключение тела остаётся основным, и ресурс всё равно закрывается."
+            }
+          },
+          "tokens": {
+            "en": [
+              "the",
+              "body",
+              "exception",
+              "stays",
+              "primary",
+              "and",
+              "the",
+              "resource",
+              "is",
+              "still",
+              "closed"
+            ],
+            "ru": [
+              "исключение",
+              "тела",
+              "остаётся",
+              "основным",
+              "и",
+              "ресурс",
+              "всё",
+              "равно",
+              "закрывается"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "discarded",
+              "leaked"
+            ],
+            "ru": [
+              "отбрасывается",
+              "утекает"
+            ]
+          }
+        },
+        {
+          "id": "primary-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing term.",
+            "ru": "Впиши пропущенный термин."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Primary means it is the exception that propagates to the caller.",
+              "ru": "Основное — значит именно оно распространяется до вызывающего кода."
+            },
+            "incorrect": {
+              "en": "It is the primary exception — the one that reaches the caller.",
+              "ru": "Это основное (primary) исключение — то, что доходит до вызывающего кода."
+            }
+          },
+          "text": {
+            "en": "When a try-with-resources body throws, its exception is the ___ exception.",
+            "ru": "Когда тело try-with-resources выбрасывает исключение, оно становится ___ исключением."
+          },
+          "answers": {
+            "en": [
+              "primary"
+            ],
+            "ru": [
+              "основным",
+              "primary"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "close-only-failure",
+      "title": {
+        "en": "When only close() fails",
+        "ru": "Когда падает только close()"
+      },
+      "summary": {
+        "en": "If the try body succeeds but close() throws, the close exception is the one the caller catches.",
+        "ru": "Если тело try успешно, а close() выбрасывает исключение, вызывающий ловит именно исключение close."
+      },
+      "discovery": [
+        {
+          "id": "close-only-d1-predict",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Res.close() throws IOException(\"flush failed\"). What does this print?",
+            "ru": "Res.close() выбрасывает IOException(\"flush failed\"). Что напечатает этот код?"
+          },
+          "code": "try (Res r = new Res()) {          // close() throws IOException(\"flush failed\")\n    System.out.println(\"work done\");\n} catch (Exception e) {\n    System.out.println(\"caught: \" + e.getMessage());\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "If nothing failed in the body, there is no primary exception to protect — so the failure thrown by `close()` becomes the exception the caller catches.\n\nThis is not a theoretical case. A **buffered** stream keeps written bytes in memory and flushes them to the file or socket at the end, inside `close()`. So a disk-full or broken-pipe error can only surface *there*: the body \"succeeded\" only in the sense that it handed bytes to a buffer.\n\n```mermaid\nflowchart LR\n  B[\"body succeeds\"] --> C[\"close() throws\"]\n  C --> K[\"close exception reaches catch\"]\n```\n\nThe practical lesson: never treat a clean body as proof the write landed. If your code must know that the data was persisted, it has to handle the exception from `close()` too.",
+            "ru": "Если в теле ничего не упало, защищать нечего — основного исключения нет, поэтому пойманным становится сбой, который выбросил `close()`.\n\nЭто не теоретический случай. **Буферизованный** stream держит записанные байты в памяти и сбрасывает их в файл или сокет в конце, внутри `close()`. Поэтому ошибка «диск переполнен» или «сломанный pipe» может проявиться только *там*: тело «отработало успешно» лишь в том смысле, что передало байты в буфер.\n\n```mermaid\nflowchart LR\n  B[\"тело успешно\"] --> C[\"close() выбрасывает\"]\n  C --> K[\"исключение close доходит до catch\"]\n```\n\nПрактический вывод: чистое тело не доказывает, что запись дошла. Если коду важно знать, что данные сохранены, он обязан обработать и исключение из `close()`."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The body prints first, then the close failure is caught.",
+              "ru": "Сначала печатает тело, затем ловится сбой close."
+            },
+            "incorrect": {
+              "en": "The body runs and prints, and then close() throws — that exception is the one caught.",
+              "ru": "Тело выполняется и печатает, затем close() выбрасывает — именно это исключение и ловится."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "work done, then caught: flush failed",
+                "ru": "work done, затем caught: flush failed"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "work done only — a close() failure is never reported",
+                "ru": "только work done — сбой close() никогда не сообщается"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A close() failure is not hidden; with no body exception it becomes the caught one.",
+                "ru": "Сбой close() не прячется; при отсутствии исключения тела он и становится пойманным."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "caught: flush failed only",
+                "ru": "только caught: flush failed"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The body ran to completion first, so its println already produced output.",
+                "ru": "Тело сначала полностью отработало, поэтому его println уже напечатал вывод."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "close-only-p1-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In try-with-resources, if the body completes normally and close() throws, no exception reaches the caller.",
+            "ru": "В try-with-resources, если тело завершилось нормально, а close() выбросил исключение, до вызывающего ничего не доходит."
+          },
+          "feedback": {
+            "correct": {
+              "en": "With no body failure, the close() failure is what propagates.",
+              "ru": "Раз сбоя тела нет, распространяется сбой close()."
+            },
+            "incorrect": {
+              "en": "No — the close() exception propagates and is the one the caller catches.",
+              "ru": "Нет — исключение close() распространяется, и именно его ловит вызывающий."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "close-only-p2-what-caught",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A try-with-resources body finishes normally, but close() throws IOException. What does the caller see?",
+            "ru": "Тело try-with-resources завершилось нормально, но close() выбросил IOException. Что видит вызывающий код?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Nothing outranks it, so the close failure becomes the caught exception.",
+              "ru": "Ничего важнее нет, поэтому сбой close становится пойманным исключением."
+            },
+            "incorrect": {
+              "en": "The caller sees the IOException thrown by close().",
+              "ru": "Вызывающий видит IOException, выброшенный из close()."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The IOException thrown by close()",
+                "ru": "IOException, выброшенный из close()"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing — close() failures are always suppressed",
+                "ru": "Ничего — сбои close() всегда становятся suppressed"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Suppression needs a primary exception to attach to; here there is none.",
+                "ru": "Для suppression нужно основное исключение, к которому прикрепиться; здесь его нет."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A RuntimeException wrapping the close failure",
+                "ru": "RuntimeException, обёрнутый вокруг сбоя close"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing wraps it; the original exception from close() propagates as it is.",
+                "ru": "Никто его не оборачивает; исходное исключение из close() распространяется как есть."
+              }
+            }
+          ]
+        },
+        {
+          "id": "close-only-p3-match-outcomes",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "In try-with-resources, match each situation to what the caller catches.",
+            "ru": "Соотнеси ситуацию в try-with-resources с тем, что ловит вызывающий код."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Whoever fails is reported; if both succeed there is nothing to report.",
+              "ru": "Сообщается о том, кто упал; если оба успешны, сообщать не о чем."
+            },
+            "incorrect": {
+              "en": "Body failure wins over cleanup; a lone close() failure is caught; two successes throw nothing.",
+              "ru": "Сбой тела важнее очистки; одиночный сбой close() ловится; при двух успехах ничего не выбрасывается."
+            }
+          },
+          "pairs": [
+            {
+              "id": "body-only",
+              "left": {
+                "en": "Body throws, close() succeeds",
+                "ru": "Тело выбрасывает, close() успешен"
+              },
+              "right": {
+                "en": "The body's exception",
+                "ru": "Исключение тела"
+              }
+            },
+            {
+              "id": "close-only",
+              "left": {
+                "en": "Body succeeds, close() throws",
+                "ru": "Тело успешно, close() выбрасывает"
+              },
+              "right": {
+                "en": "The close() exception",
+                "ru": "Исключение close()"
+              }
+            },
+            {
+              "id": "neither",
+              "left": {
+                "en": "Body succeeds, close() succeeds",
+                "ru": "Тело успешно, close() успешен"
+              },
+              "right": {
+                "en": "No exception at all",
+                "ru": "Никакого исключения"
+              }
+            }
+          ]
+        },
+        {
+          "id": "close-only-p4-fill-buffered",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing word.",
+            "ru": "Впиши пропущенное слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That is why a clean body is no proof the bytes actually landed.",
+              "ru": "Поэтому чистое тело не доказывает, что байты действительно дошли."
+            },
+            "incorrect": {
+              "en": "It is a buffered stream: it writes its pending bytes at the end, inside close().",
+              "ru": "Это буферизованный stream: он записывает оставшиеся байты в конце, внутри close()."
+            }
+          },
+          "text": {
+            "en": "A ___ stream can fail inside close(), because its pending bytes are written at the end.",
+            "ru": "___ stream может упасть внутри close(), потому что оставшиеся байты записываются в конце."
+          },
+          "answers": {
+            "en": [
+              "buffered"
+            ],
+            "ru": [
+              "буферизованный",
+              "буферизированный",
+              "buffered"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "suppressed-exceptions",
+      "title": {
+        "en": "Suppressed exceptions",
+        "ru": "Suppressed exceptions"
+      },
+      "summary": {
+        "en": "If the body throws and close() also throws, the body exception stays primary and the close failure is attached as suppressed.",
+        "ru": "Если тело выбрасывает исключение и close() тоже, исключение тела остаётся основным, а сбой close прикрепляется как suppressed."
+      },
+      "discovery": [
+        {
+          "id": "suppressed-d1-predict",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Both the body and close() throw. What does this print?",
+            "ru": "И тело, и close() выбрасывают исключения. Что напечатает этот код?"
+          },
+          "code": "try (Res r = new Res()) {          // close() throws IOException(\"close failed\")\n    throw new IllegalStateException(\"body failed\");\n} catch (Exception e) {\n    System.out.println(e.getMessage() + \" / \" + e.getSuppressed().length);\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "When both fail, Java keeps the **body** exception as primary and **attaches** the close failure to it as a **suppressed exception**, readable through `Throwable.getSuppressed()`.\n\n```mermaid\nflowchart TD\n  A{\"body throws?\"} -->|no| C[\"close resources\"]\n  A -->|yes| D[\"remember primary exception\"]\n  D --> E[\"close resources\"]\n  E --> F{\"close throws?\"}\n  F -->|yes| G[\"attach close failure as suppressed\"]\n  F -->|no| H[\"throw primary exception\"]\n  G --> H\n```\n\n**Suppressed does not mean ignored or lost.** It means stapled to the primary exception — printed in the stack trace under a `Suppressed:` line and reachable in code. The rule exists so a cleanup failure cannot hide the original problem: the primary exception explains the failed operation, the suppressed one explains the cleanup side effect. Good logging shows both.",
+            "ru": "Когда падают оба, Java оставляет исключение **тела** основным и **прикрепляет** к нему сбой закрытия как **suppressed exception**, доступное через `Throwable.getSuppressed()`.\n\n```mermaid\nflowchart TD\n  A{\"тело выбрасывает?\"} -->|нет| C[\"закрыть ресурсы\"]\n  A -->|да| D[\"запомнить основное исключение\"]\n  D --> E[\"закрыть ресурсы\"]\n  E --> F{\"close выбрасывает?\"}\n  F -->|да| G[\"прикрепить сбой close как suppressed\"]\n  F -->|нет| H[\"выбросить основное исключение\"]\n  G --> H\n```\n\n**Suppressed не значит «проигнорировано» или «потеряно».** Это значит «приколото к основному исключению» — печатается в стектрейсе строкой `Suppressed:` и доступно из кода. Правило существует, чтобы сбой очистки не мог скрыть исходную проблему: основное исключение объясняет упавшую операцию, suppressed — побочный сбой очистки. Хороший лог показывает оба."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Body exception primary, close failure attached as one suppressed entry.",
+              "ru": "Исключение тела основное, сбой close прикреплён как одна suppressed-запись."
+            },
+            "incorrect": {
+              "en": "The body exception stays primary and the close failure is attached as suppressed.",
+              "ru": "Исключение тела остаётся основным, а сбой close прикрепляется как suppressed."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "body failed / 1",
+                "ru": "body failed / 1"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "close failed / 1",
+                "ru": "close failed / 1"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The close failure is the attached one, not the primary; the body failure keeps the headline.",
+                "ru": "Сбой close — прикреплённый, а не основной; заголовок остаётся за сбоем тела."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "body failed / 0",
+                "ru": "body failed / 0"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The close failure is not discarded — it is recorded in getSuppressed().",
+                "ru": "Сбой close не отбрасывается — он записан в getSuppressed()."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "suppressed-p1-discarded-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A suppressed exception in Java is discarded and cannot be inspected afterwards.",
+            "ru": "Suppressed exception в Java отбрасывается, и его нельзя потом посмотреть."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It is attached to the primary exception and readable via getSuppressed().",
+              "ru": "Оно прикреплено к основному исключению и доступно через getSuppressed()."
+            },
+            "incorrect": {
+              "en": "No — suppressed means attached to the primary exception, not thrown away.",
+              "ru": "Нет — suppressed значит «прикреплено к основному исключению», а не выброшено."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "suppressed-p2-when-created",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "When does try-with-resources create a suppressed exception?",
+            "ru": "Когда try-with-resources создаёт suppressed exception?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Suppression needs a primary exception to attach the close failure to.",
+              "ru": "Для suppression нужно основное исключение, к которому прикрепить сбой close."
+            },
+            "incorrect": {
+              "en": "Only when the body throws AND close() also throws — otherwise there is nothing to attach to.",
+              "ru": "Только когда тело выбрасывает И close() тоже — иначе прикреплять не к чему."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "When the body throws and close() also throws",
+                "ru": "Когда тело выбрасывает исключение и close() тоже"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Whenever close() throws, no matter what the body did",
+                "ru": "Всегда, когда close() выбрасывает, независимо от тела"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "If the body succeeded, the close failure is the primary exception, not a suppressed one.",
+                "ru": "Если тело отработало успешно, сбой close становится основным исключением, а не suppressed."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Whenever the try statement has no catch block",
+                "ru": "Всегда, когда у оператора try нет блока catch"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Suppression depends on which failures happened, not on the presence of catch.",
+                "ru": "Suppression зависит от того, какие сбои случились, а не от наличия catch."
+              }
+            }
+          ]
+        },
+        {
+          "id": "suppressed-p3-sort-both-fail",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order what Java does when a try-with-resources body throws and close() throws too.",
+            "ru": "Расставь по порядку, что делает Java, когда тело try-with-resources выбрасывает исключение и close() тоже."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Remember, close, attach, propagate — nothing is lost along the way.",
+              "ru": "Запомнить, закрыть, прикрепить, отдать дальше — ничего не теряется по пути."
+            },
+            "incorrect": {
+              "en": "The body exception is remembered as primary, close() runs and fails, and its failure is attached as suppressed.",
+              "ru": "Исключение тела запоминается как основное, close() выполняется и падает, а его сбой прикрепляется как suppressed."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "The body throws — Java remembers it as the primary exception",
+                "ru": "Тело выбрасывает исключение — Java запоминает его как основное"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Java calls close() on the resource",
+                "ru": "Java вызывает close() у ресурса"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "close() throws its own exception",
+                "ru": "close() выбрасывает своё исключение"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "The close failure is attached to the primary as suppressed",
+                "ru": "Сбой close прикрепляется к основному как suppressed"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "The primary exception propagates to the caller",
+                "ru": "Основное исключение уходит к вызывающему коду"
+              }
+            }
+          ]
+        },
+        {
+          "id": "suppressed-p4-fill-getsuppressed",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing method name.",
+            "ru": "Впиши имя пропущенного метода."
+          },
+          "feedback": {
+            "correct": {
+              "en": "getSuppressed() returns the cleanup failures attached to the primary exception.",
+              "ru": "getSuppressed() возвращает сбои очистки, прикреплённые к основному исключению."
+            },
+            "incorrect": {
+              "en": "It is Throwable.getSuppressed() — the array of attached cleanup failures.",
+              "ru": "Это Throwable.getSuppressed() — массив прикреплённых сбоев очистки."
+            }
+          },
+          "text": {
+            "en": "Read the attached cleanup failures with Throwable.___().",
+            "ru": "Прочитать прикреплённые сбои очистки можно через Throwable.___()."
+          },
+          "answers": {
+            "en": [
+              "getSuppressed",
+              "getsuppressed"
+            ],
+            "ru": [
+              "getSuppressed",
+              "getsuppressed"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "reverse-close-order",
+      "title": {
+        "en": "Closing several resources",
+        "ru": "Закрытие нескольких ресурсов"
+      },
+      "summary": {
+        "en": "Several resources declared in one try header are closed in reverse declaration order.",
+        "ru": "Несколько ресурсов, объявленных в одном заголовке try, закрываются в порядке, обратном объявлению."
+      },
+      "discovery": [
+        {
+          "id": "reverse-d1-jdbc",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In what order does Java close c, ps and rs at the end of this block?",
+            "ru": "В каком порядке Java закроет c, ps и rs в конце этого блока?"
+          },
+          "code": "try (Connection c = dataSource.getConnection();\n     PreparedStatement ps = c.prepareStatement(sql);\n     ResultSet rs = ps.executeQuery()) {\n    // use rs\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Java closes resources in **reverse declaration order**: last declared, first closed.\n\n```mermaid\nflowchart LR\n  O[\"open: c -> ps -> rs\"] --> B[\"body\"]\n  B --> X[\"close: rs -> ps -> c\"]\n```\n\nThe reason is dependency. Later resources are usually built *from* earlier ones: a `ResultSet` comes from a `PreparedStatement`, which comes from a `Connection`. Closing the `Connection` first would leave the statement and result set holding a dead connection, and their own `close()` calls could then fail or misbehave.\n\nReverse order guarantees that each resource is released while everything it depends on is still alive — the same reason you unstack a pile of trays from the top.",
+            "ru": "Java закрывает ресурсы в порядке, **обратном объявлению**: объявленный последним закрывается первым.\n\n```mermaid\nflowchart LR\n  O[\"открытие: c -> ps -> rs\"] --> B[\"тело\"]\n  B --> X[\"закрытие: rs -> ps -> c\"]\n```\n\nПричина — зависимости. Более поздние ресурсы обычно построены *из* более ранних: `ResultSet` получается из `PreparedStatement`, а тот — из `Connection`. Если закрыть `Connection` первым, statement и result set останутся с мёртвым соединением, и их собственные вызовы `close()` могут упасть или отработать неверно.\n\nОбратный порядок гарантирует, что каждый ресурс освобождается, пока всё, от чего он зависит, ещё живо — по той же причине стопку подносов разбирают сверху."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Last declared, first closed — dependants go before their dependencies.",
+              "ru": "Объявлен последним — закрыт первым: зависимые уходят раньше своих зависимостей."
+            },
+            "incorrect": {
+              "en": "Resources close in reverse declaration order, so rs, then ps, then c.",
+              "ru": "Ресурсы закрываются в обратном порядке объявления: rs, затем ps, затем c."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "rs, then ps, then c",
+                "ru": "rs, затем ps, затем c"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "c, then ps, then rs",
+                "ru": "c, затем ps, затем rs"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is declaration order; closing is the reverse of it.",
+                "ru": "Это порядок объявления; закрытие идёт в обратном ему порядке."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "In an unspecified order",
+                "ru": "В неопределённом порядке"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The order is strictly defined: reverse of declaration.",
+                "ru": "Порядок строго определён: обратный объявлению."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "reverse-p1-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Multiple resources in one try-with-resources header are closed in the order they were declared.",
+            "ru": "Несколько ресурсов в одном заголовке try-with-resources закрываются в порядке их объявления."
+          },
+          "feedback": {
+            "correct": {
+              "en": "They close in reverse declaration order, so dependants go first.",
+              "ru": "Они закрываются в обратном порядке объявления, поэтому зависимые уходят первыми."
+            },
+            "incorrect": {
+              "en": "No — they close in reverse declaration order: last declared, first closed.",
+              "ru": "Нет — они закрываются в обратном порядке объявления: объявленный последним закрывается первым."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "reverse-p2-why",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why does try-with-resources close resources in reverse declaration order?",
+            "ru": "Почему try-with-resources закрывает ресурсы в порядке, обратном объявлению?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Each resource is released while everything it depends on is still open.",
+              "ru": "Каждый ресурс освобождается, пока всё, от чего он зависит, ещё открыто."
+            },
+            "incorrect": {
+              "en": "Because later resources usually depend on earlier ones and must be released first.",
+              "ru": "Потому что более поздние ресурсы обычно зависят от более ранних и должны освобождаться первыми."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Later resources usually depend on earlier ones",
+                "ru": "Более поздние ресурсы обычно зависят от более ранних"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Reverse order is faster to execute",
+                "ru": "Обратный порядок выполняется быстрее"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Speed is not the reason; correctness of dependencies is.",
+                "ru": "Дело не в скорости, а в корректности зависимостей."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It matches the order of the catch blocks",
+                "ru": "Он совпадает с порядком блоков catch"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "catch blocks are unrelated to close ordering.",
+                "ru": "Блоки catch не связаны с порядком закрытия."
+              }
+            }
+          ]
+        },
+        {
+          "id": "reverse-p3-sort-jdbc",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "A try header declares Connection, then PreparedStatement, then ResultSet. Order the close() calls.",
+            "ru": "В заголовке try объявлены Connection, затем PreparedStatement, затем ResultSet. Расставь вызовы close() по порядку."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The dependant ResultSet is released while its statement and connection are still open.",
+              "ru": "Зависимый ResultSet освобождается, пока его statement и соединение ещё открыты."
+            },
+            "incorrect": {
+              "en": "Reverse declaration order: ResultSet, then PreparedStatement, then Connection.",
+              "ru": "Обратный порядок объявления: ResultSet, затем PreparedStatement, затем Connection."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Close the ResultSet",
+                "ru": "Закрыть ResultSet"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Close the PreparedStatement",
+                "ru": "Закрыть PreparedStatement"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Close the Connection",
+                "ru": "Закрыть Connection"
+              }
+            }
+          ]
+        },
+        {
+          "id": "reverse-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing word.",
+            "ru": "Впиши пропущенное слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Reverse order matches dependencies: dependants are released first.",
+              "ru": "Обратный порядок отражает зависимости: зависимые освобождаются первыми."
+            },
+            "incorrect": {
+              "en": "It is reverse: the last resource declared is the first one closed.",
+              "ru": "Это обратный порядок: объявленный последним ресурс закрывается первым."
+            }
+          },
+          "text": {
+            "en": "Resources declared in one try header are closed in ___ declaration order.",
+            "ru": "Ресурсы, объявленные в одном заголовке try, закрываются в ___ объявлению порядке."
+          },
+          "answers": {
+            "en": [
+              "reverse"
+            ],
+            "ru": [
+              "обратном",
+              "обратном порядке",
+              "reverse"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "finally-vs-twr",
+      "title": {
+        "en": "Where finally still fits",
+        "ru": "Где всё ещё нужен finally"
+      },
+      "summary": {
+        "en": "Resources are closed before any finally block runs; finally is for cleanup that is not an AutoCloseable resource.",
+        "ru": "Ресурсы закрываются до выполнения блока finally; finally нужен для очистки, которая не является ресурсом AutoCloseable."
+      },
+      "discovery": [
+        {
+          "id": "finally-d1-predict",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Res.close() prints \"closed\". What is the printed order?",
+            "ru": "Res.close() печатает \"closed\". Каков порядок вывода?"
+          },
+          "code": "try (Res r = new Res()) {          // close() prints \"closed\"\n    System.out.println(\"work\");\n} finally {\n    System.out.println(\"finally\");\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "A try-with-resources statement can still have `catch` and `finally` blocks — but the resource is closed **first**, before either of them runs.\n\n```mermaid\nflowchart LR\n  B[\"try body\"] --> C[\"close() the resources\"]\n  C --> K[\"catch, if it applies\"]\n  K --> F[\"finally\"]\n```\n\nSo `finally` is no longer the place for resource cleanup. What it is still good for:\n\n- cleanup of things that are **not** `AutoCloseable` and cannot be wrapped;\n- small side effects: restoring a flag you flipped, restoring a thread name, decrementing a counter, logging the end of an operation.\n\nThe rule of thumb: if the thing has a `close()` behind `AutoCloseable`, put it in the header; everything else goes in `finally`.",
+            "ru": "У оператора try-with-resources по-прежнему могут быть блоки `catch` и `finally`, но ресурс закрывается **первым**, до того как выполнится любой из них.\n\n```mermaid\nflowchart LR\n  B[\"тело try\"] --> C[\"close() ресурсов\"]\n  C --> K[\"catch, если подходит\"]\n  K --> F[\"finally\"]\n```\n\nПоэтому `finally` больше не место для очистки ресурсов. Для чего он всё ещё хорош:\n\n- очистка того, что **не** является `AutoCloseable` и что нельзя обернуть;\n- небольшие побочные действия: вернуть на место флаг, который ты переключил, восстановить имя потока, уменьшить счётчик, записать в лог конец операции.\n\nПравило: если у объекта есть `close()` через `AutoCloseable` — помещай его в заголовок; всё остальное идёт в `finally`."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Body, then close, then finally.",
+              "ru": "Тело, затем закрытие, затем finally."
+            },
+            "incorrect": {
+              "en": "The resource is closed before finally runs, so the order is work, closed, finally.",
+              "ru": "Ресурс закрывается до выполнения finally, поэтому порядок: work, closed, finally."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "work, closed, finally",
+                "ru": "work, closed, finally"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "work, finally, closed",
+                "ru": "work, finally, closed"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Closing does not wait for finally; it happens before the finally block.",
+                "ru": "Закрытие не ждёт finally; оно происходит до блока finally."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "closed, work, finally",
+                "ru": "closed, work, finally"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The resource is used by the body first; close() comes after the body.",
+                "ru": "Сначала ресурс используется телом; close() идёт после тела."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "finally-p1-order-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In a try-with-resources statement with a finally block, the resource is closed before finally runs.",
+            "ru": "В операторе try-with-resources с блоком finally ресурс закрывается до выполнения finally."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Closing comes first, then catch and finally.",
+              "ru": "Сначала закрытие, потом catch и finally."
+            },
+            "incorrect": {
+              "en": "It is — resource closing happens before catch and before finally.",
+              "ru": "Да — закрытие ресурса происходит до catch и до finally."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "finally-p2-when-use",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "When is a finally block still the right choice instead of try-with-resources?",
+            "ru": "Когда блок finally всё ещё правильный выбор вместо try-with-resources?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "finally covers cleanup that has no close() to call.",
+              "ru": "finally покрывает очистку, у которой нечего вызывать через close()."
+            },
+            "incorrect": {
+              "en": "Use finally for cleanup that is not an AutoCloseable resource, such as restoring a flag.",
+              "ru": "Используй finally для очистки, которая не является ресурсом AutoCloseable — например, восстановления флага."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "For cleanup that is not an AutoCloseable resource, such as restoring a flag",
+                "ru": "Для очистки, не являющейся ресурсом AutoCloseable — например, восстановления флага"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "For closing a database connection",
+                "ru": "Для закрытия соединения с базой данных"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A Connection is AutoCloseable — it belongs in the try header, not in finally.",
+                "ru": "Connection — AutoCloseable, ему место в заголовке try, а не в finally."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "For catching checked exceptions",
+                "ru": "Для перехвата checked exceptions"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Catching is the job of catch; finally only guarantees code runs.",
+                "ru": "Перехват — задача catch; finally лишь гарантирует выполнение кода."
+              }
+            }
+          ]
+        },
+        {
+          "id": "finally-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the ordering rule for try-with-resources and finally.",
+            "ru": "Собери правило порядка для try-with-resources и finally."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Cleanup of resources is already done by the time finally starts.",
+              "ru": "К началу finally очистка ресурсов уже сделана."
+            },
+            "incorrect": {
+              "en": "Resources are closed before the finally block runs.",
+              "ru": "Ресурсы закрываются до того, как выполнится блок finally."
+            }
+          },
+          "tokens": {
+            "en": [
+              "resources",
+              "are",
+              "closed",
+              "before",
+              "the",
+              "finally",
+              "block",
+              "runs"
+            ],
+            "ru": [
+              "ресурсы",
+              "закрываются",
+              "до",
+              "выполнения",
+              "блока",
+              "finally"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "after",
+              "never"
+            ],
+            "ru": [
+              "после",
+              "никогда"
+            ]
+          }
+        },
+        {
+          "id": "finally-p4-fill-before",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing word.",
+            "ru": "Впиши пропущенное слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That is why finally is no longer the place for resource cleanup.",
+              "ru": "Поэтому finally больше не место для очистки ресурсов."
+            },
+            "incorrect": {
+              "en": "It is before: the resource is already closed when finally starts.",
+              "ru": "Это «до»: к началу finally ресурс уже закрыт."
+            }
+          },
+          "text": {
+            "en": "With try-with-resources, the resource is closed ___ the finally block runs.",
+            "ru": "При try-with-resources ресурс закрывается ___ того, как выполнится блок finally."
+          },
+          "answers": {
+            "en": [
+              "before"
+            ],
+            "ru": [
+              "до",
+              "раньше"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "autocloseable-vs-closeable",
+      "title": {
+        "en": "AutoCloseable vs Closeable",
+        "ru": "AutoCloseable против Closeable"
+      },
+      "summary": {
+        "en": "AutoCloseable.close() is declared throws Exception; Closeable extends it and narrows close() to throws IOException.",
+        "ru": "AutoCloseable.close() объявлен throws Exception; Closeable расширяет его и сужает close() до throws IOException."
+      },
+      "discovery": [
+        {
+          "id": "ac-vs-c-d1-throws",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A class implements AutoCloseable. What may its close() method declare in a throws clause?",
+            "ru": "Класс реализует AutoCloseable. Что его метод close() может объявить в throws?"
+          },
+          "code": "class Res implements AutoCloseable {\n    @Override public void close() throws ??? { }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Both interfaces work with try-with-resources; the difference is the exception contract of `close()`.\n\n- **`AutoCloseable.close()`** is declared `throws Exception`. An implementation may throw **any** checked exception — and you must handle or declare it like any other checked exception.\n- **`Closeable`** (from `java.io`) extends `AutoCloseable` and **narrows** `close()` to `throws IOException`. That is what I/O types need, and it is far easier for callers: they can write `catch (IOException e)` instead of `catch (Exception e)`.\n\n```mermaid\nflowchart BT\n  C[\"Closeable: close() throws IOException\"] -->|extends| A[\"AutoCloseable: close() throws Exception\"]\n```\n\nSo the practical difference is the width of the contract: `AutoCloseable` is the general one, usable by anything that needs cleanup (a JDBC `Connection`, a lock handle); `Closeable` is the narrower I/O-specific one.",
+            "ru": "Оба интерфейса работают с try-with-resources; разница — в контракте исключений у `close()`.\n\n- **`AutoCloseable.close()`** объявлен как `throws Exception`. Реализация может выбросить **любое** checked exception — и его нужно обработать или объявить, как любое другое checked exception.\n- **`Closeable`** (из `java.io`) расширяет `AutoCloseable` и **сужает** `close()` до `throws IOException`. Это то, что нужно типам ввода-вывода, и это гораздо удобнее вызывающему коду: можно написать `catch (IOException e)` вместо `catch (Exception e)`.\n\n```mermaid\nflowchart BT\n  C[\"Closeable: close() throws IOException\"] -->|extends| A[\"AutoCloseable: close() throws Exception\"]\n```\n\nПрактическая разница — в ширине контракта: `AutoCloseable` общий, подходит всему, что требует очистки (JDBC `Connection`, lock-подобный handle); `Closeable` — более узкий, специфичный для ввода-вывода."
+          },
+          "feedback": {
+            "correct": {
+              "en": "AutoCloseable.close() is declared throws Exception — the widest contract.",
+              "ru": "AutoCloseable.close() объявлен throws Exception — самый широкий контракт."
+            },
+            "incorrect": {
+              "en": "AutoCloseable.close() is declared throws Exception, so any checked exception is allowed.",
+              "ru": "AutoCloseable.close() объявлен throws Exception, поэтому допустимо любое checked exception."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Exception — any checked exception is allowed",
+                "ru": "Exception — допустимо любое checked exception"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing — close() cannot throw checked exceptions",
+                "ru": "Ничего — close() не может выбрасывать checked exceptions"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It can: AutoCloseable declares close() as throws Exception.",
+                "ru": "Может: AutoCloseable объявляет close() как throws Exception."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Only IOException",
+                "ru": "Только IOException"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "IOException is Closeable's narrower contract, not AutoCloseable's.",
+                "ru": "IOException — более узкий контракт Closeable, а не AutoCloseable."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "ac-vs-c-p1-checked-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "AutoCloseable.close() cannot throw checked exceptions.",
+            "ru": "AutoCloseable.close() не может выбрасывать checked exceptions."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It is declared throws Exception, so checked exceptions are allowed.",
+              "ru": "Он объявлен throws Exception, поэтому checked exceptions допустимы."
+            },
+            "incorrect": {
+              "en": "No — it is declared throws Exception; you must handle or declare that like any checked exception.",
+              "ru": "Нет — он объявлен throws Exception; это нужно обработать или объявить, как любое checked exception."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "ac-vs-c-p2-difference",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does Closeable change compared to AutoCloseable?",
+            "ru": "Что меняет Closeable по сравнению с AutoCloseable?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Closeable narrows the close() contract to IOException.",
+              "ru": "Closeable сужает контракт close() до IOException."
+            },
+            "incorrect": {
+              "en": "Closeable extends AutoCloseable and narrows close() to throws IOException.",
+              "ru": "Closeable расширяет AutoCloseable и сужает close() до throws IOException."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It narrows close() to throw IOException",
+                "ru": "Он сужает close() до выбрасывания IOException"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It is what makes close() run automatically",
+                "ru": "Именно он заставляет close() выполняться автоматически"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Both interfaces work with try-with-resources; automatic closing is not exclusive to Closeable.",
+                "ru": "С try-with-resources работают оба интерфейса; автозакрытие не эксклюзив Closeable."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It forbids close() from throwing anything at all",
+                "ru": "Он вообще запрещает close() что-либо выбрасывать"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It narrows the contract to IOException rather than removing it.",
+                "ru": "Он сужает контракт до IOException, а не убирает его."
+              }
+            }
+          ]
+        },
+        {
+          "id": "ac-vs-c-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each closeable interface to its close() contract.",
+            "ru": "Соотнеси каждый закрываемый интерфейс с контрактом его close()."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Same automatic closing, different width of the throws clause.",
+              "ru": "Автозакрытие одинаковое, разная ширина throws."
+            },
+            "incorrect": {
+              "en": "AutoCloseable.close() throws Exception, Closeable.close() throws IOException, and both work in a try header.",
+              "ru": "AutoCloseable.close() throws Exception, Closeable.close() throws IOException, и оба работают в заголовке try."
+            }
+          },
+          "pairs": [
+            {
+              "id": "auto",
+              "left": {
+                "en": "AutoCloseable.close()",
+                "ru": "AutoCloseable.close()"
+              },
+              "right": {
+                "en": "Declared throws Exception",
+                "ru": "Объявлен throws Exception"
+              }
+            },
+            {
+              "id": "closeable",
+              "left": {
+                "en": "Closeable.close()",
+                "ru": "Closeable.close()"
+              },
+              "right": {
+                "en": "Declared throws IOException",
+                "ru": "Объявлен throws IOException"
+              }
+            },
+            {
+              "id": "both",
+              "left": {
+                "en": "Both interfaces",
+                "ru": "Оба интерфейса"
+              },
+              "right": {
+                "en": "Usable in a try-with-resources header",
+                "ru": "Можно использовать в заголовке try-with-resources"
+              }
+            }
+          ]
+        },
+        {
+          "id": "ac-vs-c-p4-fill-throws",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two exception types.",
+            "ru": "Впиши два типа исключений."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Closeable is the narrower, I/O-specific version of the same idea.",
+              "ru": "Closeable — более узкая, специфичная для ввода-вывода версия той же идеи."
+            },
+            "incorrect": {
+              "en": "AutoCloseable.close() throws Exception; Closeable narrows it to IOException.",
+              "ru": "AutoCloseable.close() throws Exception; Closeable сужает это до IOException."
+            }
+          },
+          "text": {
+            "en": "AutoCloseable.close() is declared throws ___; Closeable narrows it to throws ___.",
+            "ru": "AutoCloseable.close() объявлен throws ___; Closeable сужает это до throws ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "Exception",
+                "exception"
+              ],
+              "ru": [
+                "Exception",
+                "exception"
+              ]
+            },
+            {
+              "en": [
+                "IOException",
+                "ioexception"
+              ],
+              "ru": [
+                "IOException",
+                "ioexception"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "resource-handling-together",
+      "title": {
+        "en": "Putting resource handling together",
+        "ru": "Собираем обработку ресурсов вместе"
+      },
+      "summary": {
+        "en": "One statement: reverse close order, the body exception as primary, close failures attached as suppressed, and finally last.",
+        "ru": "Один оператор: обратный порядок закрытия, исключение тела как основное, сбои close как suppressed и finally в конце."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "cap-d1-two-resources-both-fail",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The body throws, and BOTH close() calls throw as well. What does this print?",
+            "ru": "Тело выбрасывает исключение, и ОБА вызова close() тоже выбрасывают. Что напечатает этот код?"
+          },
+          "code": "// A.close() throws IOException(\"A close failed\")\n// B.close() throws IOException(\"B close failed\")\ntry (A a = new A(); B b = new B()) {\n    throw new IllegalStateException(\"body failed\");\n} catch (Exception e) {\n    System.out.println(e.getMessage() + \" suppressed=\" + e.getSuppressed().length);\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Every rule of the topic fires at once here:\n\n```mermaid\nflowchart TD\n  D[\"declare a, then b\"] --> W[\"run the body\"]\n  W --> P[\"body throws: remember as primary\"]\n  P --> CB[\"close b (reverse order)\"]\n  CB --> CA[\"close a\"]\n  CA --> S[\"attach each close failure as suppressed\"]\n  S --> T[\"throw the primary exception\"]\n  T --> F[\"catch, then finally\"]\n```\n\n1. The body failure is the **primary** exception, so `getMessage()` is `body failed`.\n2. Both resources are still closed, in **reverse declaration order**: `b` first, then `a`.\n3. Neither close failure replaces the primary and neither is lost — each is **attached as suppressed**, so `getSuppressed()` has **2** entries.\n\nThat is the whole design in one line: the work failure keeps the headline, cleanup still happens, and nothing is silently dropped.",
+            "ru": "Здесь срабатывают сразу все правила темы:\n\n```mermaid\nflowchart TD\n  D[\"объявляем a, затем b\"] --> W[\"выполняем тело\"]\n  W --> P[\"тело выбрасывает: запоминаем как основное\"]\n  P --> CB[\"закрываем b (обратный порядок)\"]\n  CB --> CA[\"закрываем a\"]\n  CA --> S[\"прикрепляем каждый сбой close как suppressed\"]\n  S --> T[\"выбрасываем основное исключение\"]\n  T --> F[\"catch, затем finally\"]\n```\n\n1. Сбой тела — **основное** исключение, поэтому `getMessage()` даёт `body failed`.\n2. Оба ресурса всё равно закрываются, в **обратном порядке объявления**: сначала `b`, затем `a`.\n3. Ни один сбой close не подменяет основное исключение и ни один не теряется — каждый **прикрепляется как suppressed**, поэтому в `getSuppressed()` **2** записи.\n\nЭто весь замысел одной строкой: заголовок остаётся за сбоем работы, очистка всё равно происходит, и ничего не пропадает молча."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Primary from the body, both close failures attached.",
+              "ru": "Основное — из тела, оба сбоя close прикреплены."
+            },
+            "incorrect": {
+              "en": "The body exception stays primary, and each of the two close failures is attached as suppressed.",
+              "ru": "Исключение тела остаётся основным, и каждый из двух сбоев close прикрепляется как suppressed."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "body failed suppressed=2",
+                "ru": "body failed suppressed=2"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "body failed suppressed=1",
+                "ru": "body failed suppressed=1"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Both resources are closed and both fail, so two failures get attached, not one.",
+                "ru": "Закрываются оба ресурса и оба падают, поэтому прикрепляются два сбоя, а не один."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "B close failed suppressed=1",
+                "ru": "B close failed suppressed=1"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A close failure never replaces a body exception; the body failure stays primary.",
+                "ru": "Сбой close никогда не подменяет исключение тела; основным остаётся сбой тела."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cap-p1-body-ok-close-fails",
+          "type": "predict_output",
+          "prompt": {
+            "en": "In this try-with-resources block, Res.close() succeeds and C.close() throws IOException(\"close failed\"). What does it print?",
+            "ru": "В этом блоке try-with-resources Res.close() успешен, а C.close() выбрасывает IOException(\"close failed\"). Что напечатает код?"
+          },
+          "code": "try (Res r = new Res(); C c = new C()) {\n    System.out.println(\"work\");\n} catch (Exception e) {\n    System.out.println(\"caught: \" + e.getMessage());\n}",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "With no body failure, the close() failure becomes the caught exception.",
+              "ru": "Раз сбоя тела нет, пойманным становится сбой close()."
+            },
+            "incorrect": {
+              "en": "The body runs and prints, and then the close() failure is the exception caught.",
+              "ru": "Тело выполняется и печатает, а затем ловится сбой close()."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "work, then caught: close failed",
+                "ru": "work, затем caught: close failed"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "work only — the close failure is suppressed",
+                "ru": "только work — сбой close становится suppressed"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Suppression requires a primary exception; the body succeeded, so there is none.",
+                "ru": "Для suppression нужно основное исключение; тело отработало успешно, значит его нет."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "caught: close failed only",
+                "ru": "только caught: close failed"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The body ran to completion first, so \"work\" is printed before the failure.",
+                "ru": "Тело сначала полностью отработало, поэтому \"work\" печатается до сбоя."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p2-spot-leak",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "What resource problem does this code have?",
+            "ru": "Какая проблема с ресурсами есть в этом коде?"
+          },
+          "code": "Connection c = dataSource.getConnection();\ntry (PreparedStatement ps = c.prepareStatement(sql);\n     ResultSet rs = ps.executeQuery()) {\n    read(rs);\n} finally {\n    log.info(\"query done\");\n}",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "Only header-declared resources are closed; the Connection is left open.",
+              "ru": "Закрываются только ресурсы из заголовка; Connection остаётся открытым."
+            },
+            "incorrect": {
+              "en": "The Connection is created outside the try header, so nothing ever closes it — the pool leaks.",
+              "ru": "Connection создан вне заголовка try, поэтому его никто не закрывает — пул утекает."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The Connection is created outside the try header, so it is never closed",
+                "ru": "Connection создан вне заголовка try, поэтому он никогда не закрывается"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The ResultSet is closed before the PreparedStatement, which is the wrong order",
+                "ru": "ResultSet закрывается раньше PreparedStatement, а это неправильный порядок"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That order is correct: reverse declaration order releases the dependant ResultSet first.",
+                "ru": "Этот порядок правильный: обратный порядок объявления освобождает зависимый ResultSet первым."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The finally block prevents the resources from being closed",
+                "ru": "Блок finally мешает закрытию ресурсов"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Resources are closed before finally runs; a finally block cannot block that.",
+                "ru": "Ресурсы закрываются до выполнения finally; блок finally этому помешать не может."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p3-sort-full-flow",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the complete try-with-resources flow when the body throws and a close() throws too.",
+            "ru": "Расставь по порядку весь ход try-with-resources, когда тело выбрасывает исключение и close() тоже."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Create, run, remember, close in reverse, attach, then hand over to catch and finally.",
+              "ru": "Создать, выполнить, запомнить, закрыть в обратном порядке, прикрепить, затем отдать в catch и finally."
+            },
+            "incorrect": {
+              "en": "Resources are created in declaration order and closed in reverse, and the close failure is attached before catch runs.",
+              "ru": "Ресурсы создаются в порядке объявления и закрываются в обратном, а сбой close прикрепляется до выполнения catch."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Create the resources in declaration order",
+                "ru": "Создать ресурсы в порядке объявления"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Run the try body",
+                "ru": "Выполнить тело try"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Remember the body's exception as the primary one",
+                "ru": "Запомнить исключение тела как основное"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Close the resources in reverse declaration order",
+                "ru": "Закрыть ресурсы в обратном порядке объявления"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "Attach each close() failure to the primary as suppressed",
+                "ru": "Прикрепить каждый сбой close() к основному как suppressed"
+              }
+            },
+            {
+              "id": "s6",
+              "text": {
+                "en": "Run the matching catch block, then finally",
+                "ru": "Выполнить подходящий блок catch, затем finally"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p4-match-outcomes",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "In try-with-resources, match each situation to the resulting behaviour.",
+            "ru": "Соотнеси каждую ситуацию в try-with-resources с итоговым поведением."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Body failure outranks cleanup, a lone close failure propagates, and nothing is ever dropped.",
+              "ru": "Сбой тела важнее очистки, одиночный сбой close распространяется, и ничего не теряется."
+            },
+            "incorrect": {
+              "en": "Body wins over cleanup; a lone close failure is caught; both failing means suppression; several resources close in reverse.",
+              "ru": "Тело важнее очистки; одиночный сбой close ловится; падение обоих даёт suppression; несколько ресурсов закрываются в обратном порядке."
+            }
+          },
+          "pairs": [
+            {
+              "id": "body-fails",
+              "left": {
+                "en": "Body throws, close() succeeds",
+                "ru": "Тело выбрасывает, close() успешен"
+              },
+              "right": {
+                "en": "The body's exception propagates",
+                "ru": "Распространяется исключение тела"
+              }
+            },
+            {
+              "id": "close-fails",
+              "left": {
+                "en": "Body succeeds, close() throws",
+                "ru": "Тело успешно, close() выбрасывает"
+              },
+              "right": {
+                "en": "The close() exception propagates",
+                "ru": "Распространяется исключение close()"
+              }
+            },
+            {
+              "id": "both-fail",
+              "left": {
+                "en": "Body throws and close() throws",
+                "ru": "Тело выбрасывает и close() выбрасывает"
+              },
+              "right": {
+                "en": "Body exception primary, close failure suppressed",
+                "ru": "Исключение тела основное, сбой close как suppressed"
+              }
+            },
+            {
+              "id": "many",
+              "left": {
+                "en": "Several resources in one header",
+                "ru": "Несколько ресурсов в одном заголовке"
+              },
+              "right": {
+                "en": "Closed in reverse declaration order",
+                "ru": "Закрываются в обратном порядке объявления"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p5-fill-summary",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill the key parts of the 60-second answer.",
+            "ru": "Впиши ключевые части 60-секундного ответа."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That is the interview answer in one line: the interface, the order, and the suppression rule.",
+              "ru": "Это ответ для собеседования в одну строку: интерфейс, порядок и правило suppression."
+            },
+            "incorrect": {
+              "en": "The resource implements AutoCloseable, resources close in reverse order, and a close failure becomes a suppressed exception.",
+              "ru": "Ресурс реализует AutoCloseable, ресурсы закрываются в обратном порядке, а сбой close становится suppressed exception."
+            }
+          },
+          "text": {
+            "en": "A try-with-resources resource must implement ___; several resources close in ___ declaration order; if the body and close() both throw, the close failure is attached as a ___ exception.",
+            "ru": "Ресурс try-with-resources должен реализовывать ___; несколько ресурсов закрываются в ___ объявлению порядке; если тело и close() падают оба, сбой close прикрепляется как ___ exception."
+          },
+          "blanks": [
+            {
+              "en": [
+                "AutoCloseable",
+                "autocloseable"
+              ],
+              "ru": [
+                "AutoCloseable",
+                "autocloseable"
+              ]
+            },
+            {
+              "en": [
+                "reverse"
+              ],
+              "ru": [
+                "обратном",
+                "reverse"
+              ]
+            },
+            {
+              "en": [
+                "suppressed"
+              ],
+              "ru": [
+                "suppressed",
+                "подавленное"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

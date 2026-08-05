@@ -1,0 +1,2936 @@
+{
+  "schemaVersion": 1,
+  "topicId": "jdk-dynamic-proxy-vs-cglib",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "proxy-in-front",
+      "title": {
+        "en": "Why there is a proxy at all",
+        "ru": "Зачем вообще нужен proxy"
+      },
+      "summary": {
+        "en": "Spring AOP puts a proxy object in front of the target bean; advice runs there, around the real method.",
+        "ru": "Spring AOP ставит proxy перед target bean; advice выполняется в proxy, вокруг реального метода."
+      },
+      "discovery": [
+        {
+          "id": "proxy-front-d1-what-is-injected",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A bean is advised by Spring AOP. Another bean injects it and calls a method. What does the call reach FIRST?",
+            "ru": "Bean обёрнут Spring AOP. Другой bean инжектит его и вызывает метод. Куда вызов попадает ПЕРВЫМ?"
+          },
+          "reveal": {
+            "en": "Spring AOP works by **proxying**. Three words to keep apart:\n\n- **target** — your real bean, the object that holds the actual method body.\n- **proxy** — a stand-in object that other beans receive instead of the target.\n- **advice** — the extra behaviour (transaction, logging, caching, metrics) that must run before or after the real method.\n\n```mermaid\nflowchart LR\n  C[\"caller bean\"] --> P[\"proxy\"]\n  P --> A[\"advice: transaction, logging, cache\"]\n  A --> T[\"target bean: the real method\"]\n```\n\nThe proxy is the **only** place advice lives; your compiled class is never modified. That is why the whole topic reduces to two questions: how is that proxy object built, and does the call actually go through it?",
+            "ru": "Spring AOP работает через **proxy**. Три термина, которые важно различать:\n\n- **target** — ваш настоящий bean, объект с реальным телом метода.\n- **proxy** — объект-заместитель, который другие bean получают вместо target.\n- **advice** — дополнительное поведение (transaction, logging, caching, metrics), которое должно выполниться до или после реального метода.\n\n```mermaid\nflowchart LR\n  C[\"вызывающий bean\"] --> P[\"proxy\"]\n  P --> A[\"advice: transaction, logging, cache\"]\n  A --> T[\"target bean: реальный метод\"]\n```\n\nProxy — **единственное** место, где живёт advice; ваш скомпилированный класс не меняется. Поэтому вся тема сводится к двум вопросам: как построен этот proxy и действительно ли вызов идёт через него."          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the caller holds a proxy, not the target itself.",
+              "ru": "Верно — вызывающий держит proxy, а не сам target."
+            },
+            "incorrect": {
+              "en": "The call reaches a proxy first; the real bean sits behind it.",
+              "ru": "Вызов сначала попадает в proxy; настоящий bean находится за ним."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A proxy object standing in front of the real bean",
+                "ru": "Proxy, стоящий перед настоящим bean"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The real bean — Spring rewrote its method body in place",
+                "ru": "Настоящий bean — Spring переписал тело его метода на месте"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Spring AOP does not modify your class in place; it puts a separate object in front of it.",
+                "ru": "Spring AOP не изменяет ваш класс на месте; он ставит перед ним отдельный объект."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A fresh copy of the bean created for this call",
+                "ru": "Новая копия bean, созданная для этого вызова"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "No copy is made per call: one proxy stands in front of one target bean.",
+                "ru": "Копия на каждый вызов не создаётся: один proxy стоит перед одним target bean."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "proxy-front-p1-where-advice-runs",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In Spring AOP, where does advice such as a transaction or logging actually run?",
+            "ru": "Где в Spring AOP реально выполняется advice — например transaction или logging?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Advice belongs to the proxy and wraps the call to the target.",
+              "ru": "Advice принадлежит proxy и оборачивает вызов target."
+            },
+            "incorrect": {
+              "en": "It runs in the proxy that wraps the target bean, not inside the target's own code.",
+              "ru": "Он выполняется в proxy, который оборачивает target bean, а не внутри кода самого target."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "In the proxy that wraps the target bean",
+                "ru": "В proxy, который оборачивает target bean"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Inside the target method's own body",
+                "ru": "Внутри тела самого метода target"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The target's body stays your untouched code; advice lives in the proxy around it.",
+                "ru": "Тело target остаётся вашим неизменённым кодом; advice живёт в proxy вокруг него."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "In the calling bean, before it invokes the method",
+                "ru": "В вызывающем bean, до обращения к методу"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The caller only invokes the proxy; it does not run advice itself.",
+                "ru": "Вызывающий лишь обращается к proxy; сам он advice не выполняет."
+              }
+            }
+          ]
+        },
+        {
+          "id": "proxy-front-p2-rewrite-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Spring AOP adds advice by modifying the target class's own method body.",
+            "ru": "Spring AOP добавляет advice, изменяя тело метода в самом target class."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The target stays untouched; the proxy in front of it carries the advice.",
+              "ru": "Target остаётся неизменным; advice несёт proxy перед ним."
+            },
+            "incorrect": {
+              "en": "No — the target class is untouched; advice lives in the proxy in front of it.",
+              "ru": "Нет — target class не меняется; advice живёт в proxy перед ним."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "proxy-front-p3-match-terms",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each Spring AOP term to what it means.",
+            "ru": "Соотнеси каждый термин Spring AOP с его значением."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Caller talks to the proxy, the proxy runs advice, the target holds the real code.",
+              "ru": "Вызывающий обращается к proxy, proxy выполняет advice, target хранит реальный код."
+            },
+            "incorrect": {
+              "en": "target = the real bean, proxy = the stand-in in front of it, advice = the wrapped-in behaviour.",
+              "ru": "target — настоящий bean, proxy — заместитель перед ним, advice — добавленное поведение."
+            }
+          },
+          "pairs": [
+            {
+              "id": "target",
+              "left": {
+                "en": "target",
+                "ru": "target"
+              },
+              "right": {
+                "en": "The real bean holding the method body",
+                "ru": "Настоящий bean с телом метода"
+              }
+            },
+            {
+              "id": "proxy",
+              "left": {
+                "en": "proxy",
+                "ru": "proxy"
+              },
+              "right": {
+                "en": "The stand-in object callers actually get",
+                "ru": "Объект-заместитель, который получают вызывающие"
+              }
+            },
+            {
+              "id": "advice",
+              "left": {
+                "en": "advice",
+                "ru": "advice"
+              },
+              "right": {
+                "en": "Behaviour run before or after the real method",
+                "ru": "Поведение, выполняемое до или после реального метода"
+              }
+            }
+          ]
+        },
+        {
+          "id": "proxy-front-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing word.",
+            "ru": "Впиши пропущенное слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Advice can only run where the proxy is; the target itself is never rewritten.",
+              "ru": "Advice может выполниться только там, где есть proxy; сам target не переписывается."
+            },
+            "incorrect": {
+              "en": "It is a proxy: Spring AOP places one in front of the target bean.",
+              "ru": "Это proxy: Spring AOP ставит его перед target bean."
+            }
+          },
+          "text": {
+            "en": "Spring AOP places a ___ in front of the target bean so advice can run around the call.",
+            "ru": "Spring AOP ставит ___ перед target bean, чтобы advice выполнялся вокруг вызова."
+          },
+          "blanks": [
+            {
+              "en": [
+                "proxy"
+              ],
+              "ru": [
+                "proxy",
+                "прокси"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jdk-dynamic-proxy",
+      "title": {
+        "en": "JDK dynamic proxy: interface-based",
+        "ru": "JDK dynamic proxy: на основе interface"
+      },
+      "summary": {
+        "en": "A JDK dynamic proxy implements the target's interface and forwards every call through an InvocationHandler.",
+        "ru": "JDK dynamic proxy реализует interface target и передаёт каждый вызов через InvocationHandler."
+      },
+      "discovery": [
+        {
+          "id": "jdk-d1-what-object",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Spring builds a JDK dynamic proxy for this bean. What kind of object is that proxy?",
+            "ru": "Spring создаёт JDK dynamic proxy для этого bean. Что это за объект?"
+          },
+          "code": "public interface OrderService {\n    void place(long id);\n}\n\npublic class OrderServiceImpl implements OrderService {\n    public void place(long id) { /* ... */ }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "A **JDK dynamic proxy** is **interface-based**. Spring generates a class that implements the same interface as the target, so the proxy and the target are *siblings* — both are an `OrderService`, but the proxy does **not** extend `OrderServiceImpl`.\n\n```mermaid\nclassDiagram\n  class OrderService\n  class OrderServiceImpl\n  class JdkProxy\n  OrderService <|.. OrderServiceImpl\n  OrderService <|.. JdkProxy\n  JdkProxy --> OrderServiceImpl : delegates\n```\n\nEvery interface call that arrives at the proxy is handed to an **`InvocationHandler`** — a single callback that receives the method and its arguments. The handler is where advice runs, and it then invokes the same method on the target:\n\n```\ncaller -> proxy.place(7) -> InvocationHandler -> advice -> target.place(7)\n```\n\nWhy this style works without touching the class: the proxy only has to honour the interface contract, so nothing needs to be subclassed.",
+            "ru": "**JDK dynamic proxy** основан на **interface**. Spring генерирует класс, реализующий тот же interface, что и target, поэтому proxy и target — *соседи*: оба являются `OrderService`, но proxy **не** наследует `OrderServiceImpl`.\n\n```mermaid\nclassDiagram\n  class OrderService\n  class OrderServiceImpl\n  class JdkProxy\n  OrderService <|.. OrderServiceImpl\n  OrderService <|.. JdkProxy\n  JdkProxy --> OrderServiceImpl : делегирует\n```\n\nКаждый вызов interface-метода, дошедший до proxy, передаётся в **`InvocationHandler`** — единый callback, получающий метод и его аргументы. Именно в handler выполняется advice, после чего он вызывает тот же метод у target:\n\n```\nвызывающий -> proxy.place(7) -> InvocationHandler -> advice -> target.place(7)\n```\n\nПочему такой способ работает, не трогая класс: proxy достаточно соблюсти контракт interface, наследование не нужно."          },
+          "feedback": {
+            "correct": {
+              "en": "Right — same interface, separate object, calls forwarded to the target.",
+              "ru": "Верно — тот же interface, отдельный объект, вызовы передаются target."
+            },
+            "incorrect": {
+              "en": "It is a separate object implementing OrderService that forwards calls to the target.",
+              "ru": "Это отдельный объект, реализующий OrderService и передающий вызовы target."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A separate object that implements OrderService and forwards calls to the target",
+                "ru": "Отдельный объект, который реализует OrderService и передаёт вызовы target"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A subclass of OrderServiceImpl with its methods overridden",
+                "ru": "Подкласс OrderServiceImpl с переопределёнными методами"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A JDK dynamic proxy never extends the target class; it implements the same interface instead.",
+                "ru": "JDK dynamic proxy никогда не наследует target class; вместо этого он реализует тот же interface."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The same OrderServiceImpl instance with advice fields added",
+                "ru": "Тот же экземпляр OrderServiceImpl с добавленными полями advice"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The target instance is never modified; the proxy is a different object placed in front of it.",
+                "ru": "Экземпляр target не изменяется; proxy — другой объект, поставленный перед ним."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "jdk-p1-handler",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Through what does a JDK dynamic proxy route each interface call?",
+            "ru": "Через что JDK dynamic proxy направляет каждый вызов interface-метода?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "One InvocationHandler receives every interface call, runs advice and delegates.",
+              "ru": "Один InvocationHandler получает каждый interface-вызов, выполняет advice и делегирует."
+            },
+            "incorrect": {
+              "en": "Through an InvocationHandler — the callback a JDK dynamic proxy delegates to.",
+              "ru": "Через InvocationHandler — callback, которому делегирует JDK dynamic proxy."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "An InvocationHandler",
+                "ru": "InvocationHandler"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "An overridden method in a generated subclass",
+                "ru": "Переопределённый метод в сгенерированном подклассе"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is class-based proxying; a JDK proxy delegates through a handler instead.",
+                "ru": "Это class-based proxying; JDK proxy вместо этого делегирует через handler."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The target's constructor",
+                "ru": "Конструктор target"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "No constructor runs per call; the handler receives the call and delegates to the existing target.",
+                "ru": "Конструктор на каждый вызов не запускается; handler получает вызов и делегирует существующему target."
+              }
+            }
+          ]
+        },
+        {
+          "id": "jdk-p2-needs-interface-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A JDK dynamic proxy can be created for a bean whose class implements no interface.",
+            "ru": "JDK dynamic proxy можно создать для bean, класс которого не реализует ни одного interface."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It is interface-based: with no interface there is nothing for the proxy to implement.",
+              "ru": "Он основан на interface: если interface нет, proxy нечего реализовывать."
+            },
+            "incorrect": {
+              "en": "No — a JDK dynamic proxy needs an existing interface to implement.",
+              "ru": "Нет — JDK dynamic proxy нужен существующий interface, который он реализует."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "jdk-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble what a JDK dynamic proxy does with the target's type.",
+            "ru": "Собери, что JDK dynamic proxy делает с типом target."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It implements the interface; it does not extend the target class.",
+              "ru": "Он реализует interface; он не наследует target class."
+            },
+            "incorrect": {
+              "en": "A JDK proxy implements the target's interface — it never subclasses the target's class.",
+              "ru": "JDK proxy реализует interface target — он никогда не наследует его class."
+            }
+          },
+          "tokens": {
+            "en": [
+              "a",
+              "JDK",
+              "proxy",
+              "implements",
+              "the",
+              "target's",
+              "interface"
+            ],
+            "ru": [
+              "JDK",
+              "proxy",
+              "реализует",
+              "interface",
+              "target"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "extends",
+              "subclass"
+            ],
+            "ru": [
+              "наследует",
+              "subclass"
+            ]
+          }
+        },
+        {
+          "id": "jdk-p4-sort-call",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order what happens when a caller invokes an interface method on a JDK dynamic proxy.",
+            "ru": "Расставь по порядку, что происходит, когда вызывающий обращается к interface-методу на JDK dynamic proxy."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Proxy, handler, advice, target — the handler is the hinge of the whole call.",
+              "ru": "Proxy, handler, advice, target — handler является осью всего вызова."
+            },
+            "incorrect": {
+              "en": "The proxy hands the call to its InvocationHandler, which runs advice and then invokes the target.",
+              "ru": "Proxy передаёт вызов своему InvocationHandler, который выполняет advice и затем вызывает target."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "The caller invokes the interface method on the proxy",
+                "ru": "Вызывающий обращается к interface-методу на proxy"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "The proxy passes the method and arguments to its InvocationHandler",
+                "ru": "Proxy передаёт метод и аргументы своему InvocationHandler"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "The handler runs the advice",
+                "ru": "Handler выполняет advice"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "The handler invokes the same method on the target bean",
+                "ru": "Handler вызывает тот же метод у target bean"
+              }
+            }
+          ]
+        },
+        {
+          "id": "jdk-p5-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the definition of a JDK dynamic proxy.",
+            "ru": "Дополни определение JDK dynamic proxy."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Interface-based plus one delegating callback: that is the whole JDK proxy.",
+              "ru": "Основа — interface плюс один делегирующий callback: это и есть JDK proxy."
+            },
+            "incorrect": {
+              "en": "It is interface-based and delegates through an InvocationHandler.",
+              "ru": "Он основан на interface и делегирует через InvocationHandler."
+            }
+          },
+          "text": {
+            "en": "A JDK dynamic proxy is ___-based: it implements the target's interface and delegates through an ___.",
+            "ru": "JDK dynamic proxy основан на ___: он реализует interface target и делегирует через ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "interface"
+              ],
+              "ru": [
+                "interface",
+                "интерфейсе",
+                "интерфейс"
+              ]
+            },
+            {
+              "en": [
+                "InvocationHandler"
+              ],
+              "ru": [
+                "InvocationHandler"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cglib-subclass-proxy",
+      "title": {
+        "en": "CGLIB proxy: class-based",
+        "ru": "CGLIB proxy: на основе class"
+      },
+      "summary": {
+        "en": "A CGLIB proxy generates a runtime subclass of the target class and overrides its methods so advice can wrap the call.",
+        "ru": "CGLIB proxy генерирует в рантайме подкласс target class и переопределяет его методы, чтобы advice обернул вызов."
+      },
+      "discovery": [
+        {
+          "id": "cglib-d1-what-object",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "This bean implements no interface, so Spring proxies it with CGLIB. What does CGLIB create?",
+            "ru": "Этот bean не реализует interface, поэтому Spring проксирует его через CGLIB. Что создаёт CGLIB?"
+          },
+          "code": "@Service\npublic class PaymentService {   // no interface\n    public void pay(long amount) { /* ... */ }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "A **CGLIB proxy** is **class-based**. At runtime it generates a **subclass** of the target class and **overrides** the eligible methods, so advice can run around each call before delegating to the original implementation.\n\n```mermaid\nclassDiagram\n  class PaymentService\n  class CglibProxy\n  PaymentService <|-- CglibProxy : extends at runtime\n```\n\nTwo consequences worth remembering:\n\n- No interface is required — the class itself is the type being proxied. This is the only option for a plain concrete bean.\n- The proxy **is** a `PaymentService`, because a subclass is an instance of its superclass. So it can be injected or cast to the concrete class.\n\nOverriding is also the mechanism's weak spot: whatever cannot be overridden cannot be advised — the atoms about `final` come back to exactly this.",
+            "ru": "**CGLIB proxy** основан на **class**. В рантайме он генерирует **подкласс** target class и **переопределяет** подходящие методы, чтобы advice выполнялся вокруг каждого вызова перед делегированием в исходную реализацию.\n\n```mermaid\nclassDiagram\n  class PaymentService\n  class CglibProxy\n  PaymentService <|-- CglibProxy : наследует в рантайме\n```\n\nДва следствия, которые стоит запомнить:\n\n- Interface не нужен — проксируется сам class. Для обычного конкретного bean это единственный вариант.\n- Proxy **является** `PaymentService`, потому что подкласс — экземпляр своего суперкласса. Поэтому его можно инжектить или приводить к конкретному классу.\n\nПереопределение — и слабое место этого механизма: то, что нельзя переопределить, нельзя и обернуть advice — атомы про `final` вернутся именно к этому."          },
+          "feedback": {
+            "correct": {
+              "en": "Right — a generated subclass with overridden methods.",
+              "ru": "Верно — сгенерированный подкласс с переопределёнными методами."
+            },
+            "incorrect": {
+              "en": "CGLIB generates a runtime subclass of the class and overrides its methods.",
+              "ru": "CGLIB генерирует в рантайме подкласс этого класса и переопределяет его методы."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A runtime subclass of PaymentService that overrides pay()",
+                "ru": "Подкласс PaymentService в рантайме, переопределяющий pay()"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "An object implementing a newly invented PaymentService interface",
+                "ru": "Объект, реализующий заново придуманный interface PaymentService"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Proxying never invents interfaces; a class-based proxy subclasses the class itself.",
+                "ru": "Proxy никогда не придумывает interface; class-based proxy наследует сам class."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A rewritten PaymentService.class file on disk",
+                "ru": "Перезаписанный файл PaymentService.class на диске"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The generated subclass exists only at runtime; your compiled class file is unchanged.",
+                "ru": "Сгенерированный подкласс существует только в рантайме; ваш скомпилированный class-файл не меняется."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cglib-p1-mechanism",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "How does a CGLIB proxy insert advice into a method call?",
+            "ru": "Как CGLIB proxy вставляет advice в вызов метода?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Overriding in a generated subclass is the whole interception mechanism.",
+              "ru": "Переопределение в сгенерированном подклассе — и есть весь механизм перехвата."
+            },
+            "incorrect": {
+              "en": "By overriding the method in a generated subclass of the target class.",
+              "ru": "Переопределяя метод в сгенерированном подклассе target class."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "By overriding the method in a generated subclass",
+                "ru": "Переопределяя метод в сгенерированном подклассе"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "By implementing the method from an interface",
+                "ru": "Реализуя метод из interface"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is what an interface-based JDK proxy does; CGLIB overrides instead.",
+                "ru": "Так делает JDK proxy на основе interface; CGLIB вместо этого переопределяет."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "By editing the target class's source code",
+                "ru": "Изменяя исходный код target class"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing is edited: a subclass is generated at runtime.",
+                "ru": "Ничего не изменяется: подкласс генерируется в рантайме."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cglib-p2-instance-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A CGLIB proxy is an instance of the target class, because it is a subclass of it.",
+            "ru": "CGLIB proxy является экземпляром target class, поскольку он его подкласс."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That is why a class-based proxy can be injected by the concrete type.",
+              "ru": "Поэтому class-based proxy можно инжектить по конкретному типу."
+            },
+            "incorrect": {
+              "en": "It is true — CGLIB generates a subclass, so the proxy IS an instance of that class.",
+              "ru": "Это правда — CGLIB генерирует подкласс, поэтому proxy ЯВЛЯЕТСЯ экземпляром этого класса."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "cglib-p3-match-styles",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each proxy building block to its description.",
+            "ru": "Соотнеси каждый элемент построения proxy с его описанием."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Interface-based implements a type; class-based extends a type.",
+              "ru": "Interface-based реализует тип; class-based наследует тип."
+            },
+            "incorrect": {
+              "en": "JDK proxy implements the interface, CGLIB extends the class, InvocationHandler is the JDK proxy's callback.",
+              "ru": "JDK proxy реализует interface, CGLIB наследует class, InvocationHandler — callback JDK proxy."
+            }
+          },
+          "pairs": [
+            {
+              "id": "jdk",
+              "left": {
+                "en": "JDK dynamic proxy",
+                "ru": "JDK dynamic proxy"
+              },
+              "right": {
+                "en": "Interface-based: implements the target's interface",
+                "ru": "На основе interface: реализует interface target"
+              }
+            },
+            {
+              "id": "cglib",
+              "left": {
+                "en": "CGLIB proxy",
+                "ru": "CGLIB proxy"
+              },
+              "right": {
+                "en": "Class-based: generates a subclass of the target class",
+                "ru": "На основе class: генерирует подкласс target class"
+              }
+            },
+            {
+              "id": "handler",
+              "left": {
+                "en": "InvocationHandler",
+                "ru": "InvocationHandler"
+              },
+              "right": {
+                "en": "The callback a JDK dynamic proxy routes calls through",
+                "ru": "Callback, через который JDK dynamic proxy направляет вызовы"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cglib-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the definition of a CGLIB proxy.",
+            "ru": "Дополни определение CGLIB proxy."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Class-based means: generate a subclass and override the methods.",
+              "ru": "На основе class означает: сгенерировать подкласс и переопределить методы."
+            },
+            "incorrect": {
+              "en": "It is class-based: it generates a runtime subclass of the target class.",
+              "ru": "Он основан на class: он генерирует в рантайме подкласс target class."
+            }
+          },
+          "text": {
+            "en": "A CGLIB proxy is ___-based: it generates a runtime ___ of the target class and overrides its methods.",
+            "ru": "CGLIB proxy основан на ___: он генерирует в рантайме ___ target class и переопределяет его методы."
+          },
+          "blanks": [
+            {
+              "en": [
+                "class"
+              ],
+              "ru": [
+                "class",
+                "классе",
+                "класс"
+              ]
+            },
+            {
+              "en": [
+                "subclass"
+              ],
+              "ru": [
+                "subclass",
+                "подкласс"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "how-spring-chooses",
+      "title": {
+        "en": "How Spring picks the proxy",
+        "ru": "Как Spring выбирает proxy"
+      },
+      "summary": {
+        "en": "With an interface, plain Spring AOP traditionally uses a JDK proxy; without one CGLIB is the only option; Spring Boot commonly enables class-based proxies by default.",
+        "ru": "При наличии interface обычный Spring AOP традиционно берёт JDK proxy; без interface возможен только CGLIB; Spring Boot часто включает class-based proxies по умолчанию."
+      },
+      "discovery": [
+        {
+          "id": "choose-d1-plain-spring",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A bean implements an interface and plain Spring AOP is used with no extra options. Which proxy is traditionally created?",
+            "ru": "Bean реализует interface, используется обычный Spring AOP без дополнительных настроек. Какой proxy традиционно создаётся?"
+          },
+          "reveal": {
+            "en": "The choice comes down to what the proxy can be built from:\n\n```mermaid\nflowchart LR\n  A[\"Bean has interface?\"] -->|yes| B[\"JDK dynamic proxy\"]\n  A -->|no| C[\"CGLIB proxy\"]\n  D[\"Spring Boot: class-based by default\"] --> C\n```\n\n- **Interface available, plain Spring AOP** → a JDK dynamic proxy is the traditional default.\n- **No interface** → there is nothing to implement, so a class-based CGLIB proxy is the only possibility.\n- **Spring Boot** commonly enables class-based proxies by default, so many Boot applications run on CGLIB *even when interfaces exist*.\n\nThat last point is the one that surprises people: \"my bean has an interface, so it must be a JDK proxy\" is not a safe assumption in a Boot app.",
+            "ru": "Выбор сводится к тому, из чего можно построить proxy:\n\n```mermaid\nflowchart LR\n  A[\"У bean есть interface?\"] -->|да| B[\"JDK dynamic proxy\"]\n  A -->|нет| C[\"CGLIB proxy\"]\n  D[\"Spring Boot: class-based по умолчанию\"] --> C\n```\n\n- **Interface есть, обычный Spring AOP** → традиционный default это JDK dynamic proxy.\n- **Interface нет** → реализовывать нечего, поэтому единственный вариант — class-based CGLIB proxy.\n- **Spring Boot** часто включает class-based proxies по умолчанию, поэтому многие Boot-приложения работают на CGLIB, *даже когда interfaces есть*.\n\nИменно последний пункт удивляет: «у моего bean есть interface, значит это JDK proxy» — небезопасное предположение в Boot-приложении."          },
+          "feedback": {
+            "correct": {
+              "en": "With an interface available, plain Spring AOP traditionally uses the JDK proxy.",
+              "ru": "При наличии interface обычный Spring AOP традиционно использует JDK proxy."
+            },
+            "incorrect": {
+              "en": "The traditional plain-Spring default with an interface is a JDK dynamic proxy.",
+              "ru": "Традиционный default обычного Spring при наличии interface — JDK dynamic proxy."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A JDK dynamic proxy",
+                "ru": "JDK dynamic proxy"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A CGLIB proxy",
+                "ru": "CGLIB proxy"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "CGLIB is required when there is no interface; with one, plain Spring AOP prefers the JDK proxy.",
+                "ru": "CGLIB нужен, когда interface нет; при его наличии обычный Spring AOP предпочитает JDK proxy."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "No proxy — the interface already provides indirection",
+                "ru": "Никакой — interface сам даёт нужный уровень косвенности"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "An interface advises nothing by itself; a proxy object is still created to hold the advice.",
+                "ru": "Interface сам по себе ничего не оборачивает; proxy всё равно создаётся, чтобы держать advice."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "choose-p1-no-interface",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A Spring bean's class implements no interface. Which proxy can Spring use for it?",
+            "ru": "Класс Spring bean не реализует ни одного interface. Какой proxy Spring может для него использовать?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Without an interface, subclassing the class is the only way to proxy it.",
+              "ru": "Без interface единственный способ проксировать — наследовать class."
+            },
+            "incorrect": {
+              "en": "Only a class-based CGLIB proxy: a JDK proxy would have no interface to implement.",
+              "ru": "Только class-based CGLIB proxy: JDK proxy было бы нечего реализовывать."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A class-based CGLIB proxy",
+                "ru": "Class-based CGLIB proxy"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A JDK dynamic proxy",
+                "ru": "JDK dynamic proxy"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A JDK proxy has no interface to implement here, so it cannot be built.",
+                "ru": "Здесь JDK proxy нечего реализовывать, поэтому его нельзя построить."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Either one, Spring picks at random",
+                "ru": "Любой, Spring выбирает случайно"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The choice is never random, and without an interface only the class-based proxy is possible.",
+                "ru": "Выбор никогда не случаен, а без interface возможен только class-based proxy."
+              }
+            }
+          ]
+        },
+        {
+          "id": "choose-p2-boot-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In a Spring Boot application, a bean that implements an interface always gets a JDK dynamic proxy.",
+            "ru": "В приложении Spring Boot bean, реализующий interface, всегда получает JDK dynamic proxy."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Spring Boot commonly enables class-based proxying, so such beans often run on CGLIB.",
+              "ru": "Spring Boot часто включает class-based proxying, поэтому такие bean нередко работают на CGLIB."
+            },
+            "incorrect": {
+              "en": "No — Boot commonly enables class-based proxies, so CGLIB is used even when interfaces exist.",
+              "ru": "Нет — Boot часто включает class-based proxies, поэтому CGLIB используется даже при наличии interfaces."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "choose-p3-match-cases",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each situation to the proxy Spring uses.",
+            "ru": "Соотнеси каждую ситуацию с proxy, который использует Spring."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Interface plus plain defaults means JDK; no interface or Boot defaults mean CGLIB.",
+              "ru": "Interface плюс обычные настройки — JDK; отсутствие interface или настройки Boot — CGLIB."
+            },
+            "incorrect": {
+              "en": "Interface + plain Spring AOP → JDK proxy; no interface → CGLIB; Boot defaults → CGLIB anyway.",
+              "ru": "Interface + обычный Spring AOP → JDK proxy; без interface → CGLIB; настройки Boot → всё равно CGLIB."
+            }
+          },
+          "pairs": [
+            {
+              "id": "iface-plain",
+              "left": {
+                "en": "Interface present, plain Spring AOP defaults",
+                "ru": "Interface есть, обычные настройки Spring AOP"
+              },
+              "right": {
+                "en": "JDK dynamic proxy",
+                "ru": "JDK dynamic proxy"
+              }
+            },
+            {
+              "id": "no-iface",
+              "left": {
+                "en": "No interface at all",
+                "ru": "Interface нет вообще"
+              },
+              "right": {
+                "en": "CGLIB proxy — the only option",
+                "ru": "CGLIB proxy — единственный вариант"
+              }
+            },
+            {
+              "id": "boot",
+              "left": {
+                "en": "Spring Boot default configuration",
+                "ru": "Конфигурация Spring Boot по умолчанию"
+              },
+              "right": {
+                "en": "Class-based CGLIB proxy even when interfaces exist",
+                "ru": "Class-based CGLIB proxy даже при наличии interfaces"
+              }
+            }
+          ]
+        },
+        {
+          "id": "choose-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing proxy type.",
+            "ru": "Впиши пропущенный тип proxy."
+          },
+          "feedback": {
+            "correct": {
+              "en": "No interface leaves only the class to subclass.",
+              "ru": "Без interface остаётся только наследовать class."
+            },
+            "incorrect": {
+              "en": "It is CGLIB: a class-based proxy is the only option without an interface.",
+              "ru": "Это CGLIB: без interface возможен только class-based proxy."
+            }
+          },
+          "text": {
+            "en": "A Spring bean whose class implements no interface can only be proxied by ___.",
+            "ru": "Spring bean, класс которого не реализует interface, можно проксировать только через ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "CGLIB"
+              ],
+              "ru": [
+                "CGLIB"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "proxy-target-class",
+      "title": {
+        "en": "proxyTargetClass=true",
+        "ru": "proxyTargetClass=true"
+      },
+      "summary": {
+        "en": "proxyTargetClass=true forces class-based proxying even when the bean implements an interface.",
+        "ru": "proxyTargetClass=true принудительно включает class-based proxying, даже если bean реализует interface."
+      },
+      "discovery": [
+        {
+          "id": "ptc-d1-forced",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The bean implements an interface, but the AOP configuration sets proxyTargetClass=true. Which proxy does Spring create?",
+            "ru": "Bean реализует interface, но в конфигурации AOP задано proxyTargetClass=true. Какой proxy создаст Spring?"
+          },
+          "code": "public interface PaymentApi {\n    void pay(long amount);\n}\n\n@Service\npublic class PaymentService implements PaymentApi {\n    public void pay(long amount) { /* ... */ }\n}\n\n// AOP configuration: proxyTargetClass = true",
+          "codeLang": "java",
+          "reveal": {
+            "en": "`proxyTargetClass=true` **forces class-based proxying**. The flag wins over interface availability: even with `PaymentApi` present, Spring builds a CGLIB subclass proxy.\n\nWhy would you want that? Because a class-based proxy **is** a `PaymentService`, so code that injects or casts to the concrete class keeps working. Interface-based proxying would break exactly that code.\n\n```mermaid\nflowchart LR\n  F[\"proxyTargetClass=true\"] --> C[\"class-based CGLIB proxy\"]\n  C --> G[\"proxy is an instance of the class\"]\n  C --> L[\"CGLIB subclassing limits apply\"]\n```\n\nThe price is that you opt into CGLIB's limits: the proxy has to be able to **extend the class** and **override the method** it advises. The next atoms show what that rules out. Note that Spring Boot commonly turns this style on by default, so many applications are already there without setting the flag by hand.",
+            "ru": "`proxyTargetClass=true` **принудительно включает class-based proxying**. Флаг перевешивает наличие interface: даже при существующем `PaymentApi` Spring строит CGLIB-подкласс.\n\nЗачем это нужно? Потому что class-based proxy **является** `PaymentService`, поэтому код, который инжектит или приводит к конкретному классу, продолжает работать. Interface-based proxy сломал бы именно такой код.\n\n```mermaid\nflowchart LR\n  F[\"proxyTargetClass=true\"] --> C[\"class-based CGLIB proxy\"]\n  C --> G[\"proxy является экземпляром класса\"]\n  C --> L[\"действуют ограничения наследования CGLIB\"]\n```\n\nЦена — согласие на ограничения CGLIB: proxy должен уметь **наследовать class** и **переопределить метод**, который он оборачивает. Следующие атомы покажут, что это исключает. Заметьте, что Spring Boot часто включает этот стиль по умолчанию, поэтому многие приложения уже там и без ручной установки флага."          },
+          "feedback": {
+            "correct": {
+              "en": "The flag forces the class-based style regardless of the interface.",
+              "ru": "Флаг принудительно включает class-based стиль независимо от interface."
+            },
+            "incorrect": {
+              "en": "proxyTargetClass=true forces a class-based CGLIB proxy, interface or not.",
+              "ru": "proxyTargetClass=true принудительно включает class-based CGLIB proxy, есть interface или нет."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A class-based CGLIB proxy",
+                "ru": "Class-based CGLIB proxy"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A JDK dynamic proxy, because the interface exists",
+                "ru": "JDK dynamic proxy, потому что interface существует"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The flag forces class-based proxying; it overrides the interface-based preference.",
+                "ru": "Флаг принудительно включает class-based proxying; он перевешивает предпочтение interface-based."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Both — one per injection point",
+                "ru": "Оба — по одному на каждую точку инъекции"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "One proxy is created per advised bean, never two of different styles.",
+                "ru": "На один обёрнутый bean создаётся один proxy, а не два разных стиля."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "ptc-p1-what-it-does",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does proxyTargetClass=true do in a Spring application?",
+            "ru": "Что делает proxyTargetClass=true в приложении Spring?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "It selects the class-based (CGLIB) proxy style for advised beans.",
+              "ru": "Он выбирает class-based (CGLIB) стиль proxy для обёрнутых bean."
+            },
+            "incorrect": {
+              "en": "It forces class-based (CGLIB) proxying instead of interface-based proxying.",
+              "ru": "Он принудительно включает class-based (CGLIB) proxying вместо interface-based."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Forces class-based (CGLIB) proxying",
+                "ru": "Принудительно включает class-based (CGLIB) proxying"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Turns proxying off for the bean",
+                "ru": "Отключает proxying для bean"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It changes the proxy style; it never disables proxying.",
+                "ru": "Он меняет стиль proxy; он не отключает proxying."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Makes the target class final",
+                "ru": "Делает target class final"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It changes nothing about the target class; it only selects the proxy style.",
+                "ru": "Он ничего не меняет в target class; он лишь выбирает стиль proxy."
+              }
+            }
+          ]
+        },
+        {
+          "id": "ptc-p2-boot-default",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which proxying style does Spring Boot commonly enable by default?",
+            "ru": "Какой стиль proxying Spring Boot часто включает по умолчанию?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Class-based, which is why so many Boot beans are CGLIB proxies.",
+              "ru": "Class-based — поэтому столько bean в Boot являются CGLIB proxy."
+            },
+            "incorrect": {
+              "en": "Class-based proxying, so CGLIB is used even for beans that implement interfaces.",
+              "ru": "Class-based proxying, поэтому CGLIB используется даже для bean с interfaces."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Class-based (CGLIB) proxying",
+                "ru": "Class-based (CGLIB) proxying"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Interface-based JDK proxying for every bean",
+                "ru": "Interface-based JDK proxying для каждого bean"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is closer to the traditional plain-Spring default, not Boot's common default.",
+                "ru": "Это ближе к традиционному default обычного Spring, а не к обычному default в Boot."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "No proxying until proxyTargetClass=true is set",
+                "ru": "Никакого proxying, пока не задан proxyTargetClass=true"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Advised beans are proxied either way; the flag only chooses the style.",
+                "ru": "Обёрнутые bean проксируются в любом случае; флаг лишь выбирает стиль."
+              }
+            }
+          ]
+        },
+        {
+          "id": "ptc-p3-overrides-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "proxyTargetClass=true produces a class-based proxy even when the bean implements an interface.",
+            "ru": "proxyTargetClass=true даёт class-based proxy, даже когда bean реализует interface."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The flag wins over interface availability — that is its whole purpose.",
+              "ru": "Флаг перевешивает наличие interface — в этом весь его смысл."
+            },
+            "incorrect": {
+              "en": "It is true — the flag forces class-based proxying whether an interface exists or not.",
+              "ru": "Это правда — флаг включает class-based proxying независимо от наличия interface."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "ptc-p4-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble what proxyTargetClass=true does.",
+            "ru": "Собери, что делает proxyTargetClass=true."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Forced class-based proxying, with CGLIB's limits attached.",
+              "ru": "Принудительный class-based proxying — вместе с ограничениями CGLIB."
+            },
+            "incorrect": {
+              "en": "It forces class-based proxying; the interface is no longer what decides.",
+              "ru": "Он принудительно включает class-based proxying; interface больше не решает."
+            }
+          },
+          "tokens": {
+            "en": [
+              "proxyTargetClass=true",
+              "forces",
+              "class-based",
+              "proxying"
+            ],
+            "ru": [
+              "proxyTargetClass=true",
+              "принудительно",
+              "включает",
+              "class-based",
+              "proxying"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "interface-based",
+              "disables"
+            ],
+            "ru": [
+              "interface-based",
+              "отключает"
+            ]
+          }
+        },
+        {
+          "id": "ptc-p5-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing setting name.",
+            "ru": "Впиши имя пропущенной настройки."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It is the switch that picks the class-based style explicitly.",
+              "ru": "Это переключатель, который явно выбирает class-based стиль."
+            },
+            "incorrect": {
+              "en": "It is proxyTargetClass: setting it to true forces class-based proxying.",
+              "ru": "Это proxyTargetClass: значение true принудительно включает class-based proxying."
+            }
+          },
+          "text": {
+            "en": "Setting ___=true forces class-based proxying even when the bean implements an interface.",
+            "ru": "Настройка ___=true принудительно включает class-based proxying, даже когда bean реализует interface."
+          },
+          "blanks": [
+            {
+              "en": [
+                "proxyTargetClass"
+              ],
+              "ru": [
+                "proxyTargetClass"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jdk-proxy-interface-only",
+      "title": {
+        "en": "A JDK proxy exposes interface methods only",
+        "ru": "JDK proxy показывает только interface-методы"
+      },
+      "summary": {
+        "en": "A JDK dynamic proxy is not an instance of the concrete class, so class-only methods are missing and a cast to that class fails.",
+        "ru": "JDK dynamic proxy не является экземпляром конкретного класса, поэтому его собственных методов нет, а приведение к этому классу падает."
+      },
+      "discovery": [
+        {
+          "id": "iface-only-d1-inject-class",
+          "type": "predict_output",
+          "prompt": {
+            "en": "A JDK dynamic proxy was created for AuditService. Predict what happens with this injection.",
+            "ru": "Для AuditService создан JDK dynamic proxy. Предскажи, что произойдёт с этой инъекцией."
+          },
+          "code": "public interface AuditApi {\n    void log(String message);\n}\n\n@Service\npublic class AuditService implements AuditApi {\n    public void log(String message) { /* ... */ }\n    public void flush() { /* only on the class */ }\n}\n\n@Service\npublic class Reporter {\n    @Autowired\n    AuditService audit;   // concrete class, JDK dynamic proxying in use\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "An interface-based proxy is a **sibling** of the target, not a subclass. It implements `AuditApi`; it does **not** extend `AuditService`.\n\n```mermaid\nclassDiagram\n  class AuditApi\n  class AuditService\n  class JdkProxy\n  AuditApi <|.. AuditService\n  AuditApi <|.. JdkProxy\n```\n\nTwo consequences follow directly:\n\n- `proxy instanceof AuditService` is **false**, so assigning or casting the proxy to `AuditService` fails with a **`ClassCastException`** — the object genuinely is not of that type.\n- Methods that exist only on the class, like `flush()`, are not part of `AuditApi`, so the proxy does not expose them at all.\n\nThe fix is to depend on the interface (`AuditApi audit;`) — or to use class-based proxying so the proxy really is an `AuditService`.",
+            "ru": "Interface-based proxy — **сосед** target, а не подкласс. Он реализует `AuditApi`; он **не** наследует `AuditService`.\n\n```mermaid\nclassDiagram\n  class AuditApi\n  class AuditService\n  class JdkProxy\n  AuditApi <|.. AuditService\n  AuditApi <|.. JdkProxy\n```\n\nИз этого напрямую следуют два вывода:\n\n- `proxy instanceof AuditService` даёт **false**, поэтому присваивание или приведение proxy к `AuditService` падает с **`ClassCastException`** — объект действительно не этого типа.\n- Методы, которые есть только у класса, например `flush()`, не входят в `AuditApi`, поэтому proxy их вообще не показывает.\n\nЛечится зависимостью от interface (`AuditApi audit;`) — или переходом на class-based proxying, чтобы proxy действительно был `AuditService`."          },
+          "feedback": {
+            "correct": {
+              "en": "The proxy is an AuditApi, not an AuditService — the types do not match.",
+              "ru": "Proxy является AuditApi, а не AuditService — типы не совпадают."
+            },
+            "incorrect": {
+              "en": "The JDK proxy implements the interface only, so it cannot be assigned to AuditService.",
+              "ru": "JDK proxy реализует только interface, поэтому его нельзя присвоить в AuditService."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It fails: the proxy implements AuditApi but is not an AuditService",
+                "ru": "Падает: proxy реализует AuditApi, но не является AuditService"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It works, and flush() is available and advised",
+                "ru": "Работает, и flush() доступен и обёрнут advice"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A JDK proxy only carries the interface's methods; flush() is not part of AuditApi.",
+                "ru": "JDK proxy несёт только методы interface; flush() не входит в AuditApi."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It works, but flush() runs without advice",
+                "ru": "Работает, но flush() выполняется без advice"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The injection itself cannot succeed: the proxy is not of type AuditService at all.",
+                "ru": "Сама инъекция не может пройти: proxy вообще не имеет тип AuditService."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "iface-only-p1-why-cast-fails",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why can a JDK-proxied Spring bean not be cast to its concrete class?",
+            "ru": "Почему bean с JDK proxy нельзя привести к его конкретному классу?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The proxy is a sibling type: same interface, different class.",
+              "ru": "Proxy — соседний тип: тот же interface, другой class."
+            },
+            "incorrect": {
+              "en": "Because the proxy implements the interface only and is not a subclass of that class.",
+              "ru": "Потому что proxy реализует только interface и не является подклассом этого класса."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The proxy implements the interface only; it is not a subclass of that class",
+                "ru": "Proxy реализует только interface; он не является подклассом этого класса"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The cast needs a qualifier annotation to resolve the bean",
+                "ru": "Для приведения нужна аннотация-qualifier, чтобы найти bean"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It is a type problem, not a bean-resolution problem; no qualifier can change the proxy's type.",
+                "ru": "Это проблема типа, а не поиска bean; никакой qualifier не изменит тип proxy."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "JDK proxies hide the target's public methods for security",
+                "ru": "JDK proxy скрывает публичные методы target из соображений безопасности"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing is hidden for security: the proxy simply is not of that class's type.",
+                "ru": "Ничего не скрывается ради безопасности: proxy просто не имеет типа этого класса."
+              }
+            }
+          ]
+        },
+        {
+          "id": "iface-only-p2-exposes-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A JDK dynamic proxy exposes methods that exist only on the target's concrete class.",
+            "ru": "JDK dynamic proxy показывает методы, которые есть только в конкретном классе target."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Only the interface's methods are visible through an interface-based proxy.",
+              "ru": "Через interface-based proxy видны только методы interface."
+            },
+            "incorrect": {
+              "en": "No — it exposes interface methods only; class-only methods are unreachable through it.",
+              "ru": "Нет — он показывает только interface-методы; методы самого класса через него недоступны."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "iface-only-p3-spot-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "Interface-based JDK proxying is in use and this application fails to start. What is the defect?",
+            "ru": "Используется interface-based JDK proxying, и приложение не запускается. В чём дефект?"
+          },
+          "code": "public interface InvoiceApi {\n    void send(long id);\n}\n\n@Service\npublic class InvoiceService implements InvoiceApi {\n    public void send(long id) { /* ... */ }\n}\n\n@Service\npublic class Billing {\n    @Autowired\n    InvoiceService invoices;\n}",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "Depend on the interface, and the interface-based proxy fits the field.",
+              "ru": "Зависите от interface — и interface-based proxy подходит под поле."
+            },
+            "incorrect": {
+              "en": "Billing must depend on InvoiceApi: the JDK proxy is not an InvoiceService.",
+              "ru": "Billing должен зависеть от InvoiceApi: JDK proxy не является InvoiceService."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The field should be of type InvoiceApi — the JDK proxy is not an InvoiceService",
+                "ru": "Поле должно иметь тип InvoiceApi — JDK proxy не является InvoiceService"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "@Autowired is missing on the field",
+                "ru": "На поле отсутствует @Autowired"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The annotation is present; the declared type is what cannot be satisfied.",
+                "ru": "Аннотация есть; проблема в объявленном типе, который нельзя удовлетворить."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "send() must be declared final so it can be intercepted",
+                "ru": "send() нужно объявить final, чтобы его можно было перехватить"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "final never helps interception, and it is unrelated to this type mismatch.",
+                "ru": "final никогда не помогает перехвату и не связан с этим несовпадением типов."
+              }
+            }
+          ]
+        },
+        {
+          "id": "iface-only-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the exception class.",
+            "ru": "Впиши класс исключения."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The proxy is not of that type, so the cast cannot succeed.",
+              "ru": "Proxy не имеет этого типа, поэтому приведение не может пройти."
+            },
+            "incorrect": {
+              "en": "It is a ClassCastException: the interface-based proxy is not an instance of that class.",
+              "ru": "Это ClassCastException: interface-based proxy не является экземпляром этого класса."
+            }
+          },
+          "text": {
+            "en": "Casting a JDK-proxied bean to its concrete class throws ___.",
+            "ru": "Приведение bean с JDK proxy к его конкретному классу бросает ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "ClassCastException"
+              ],
+              "ru": [
+                "ClassCastException"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "final-method-unadvised",
+      "title": {
+        "en": "A final method is not advised",
+        "ru": "Final-метод не получает advice"
+      },
+      "summary": {
+        "en": "A CGLIB proxy inserts advice by overriding a method, so a final method silently runs unadvised.",
+        "ru": "CGLIB proxy вставляет advice через переопределение метода, поэтому final-метод молча выполняется без advice."
+      },
+      "discovery": [
+        {
+          "id": "final-method-d1-predict",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Another bean calls reportService.save(report) through the class-based proxy. Predict what happens to the transaction.",
+            "ru": "Другой bean вызывает reportService.save(report) через class-based proxy. Предскажи, что будет с transaction."
+          },
+          "code": "@Service\npublic class ReportService {          // class-based (CGLIB) proxy, no interface\n    @Transactional\n    public final void save(Report report) { /* ... */ }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "A class-based proxy inserts advice by **overriding** the method in its generated subclass. `final` means \"cannot be overridden\", so there is no place to put the advice — the call goes straight to the original implementation.\n\n```mermaid\nflowchart LR\n  P[\"CGLIB subclass proxy\"] -->|overrides a normal method| A[\"advice runs\"]\n  P -->|cannot override a final method| S[\"advice skipped\"]\n```\n\nThe dangerous part is that **nothing fails loudly**. The annotation is still there and still readable, the application starts, the method runs — only the transaction, cache or log never happens. \"The annotation is visible, so the advice must run\" is exactly the wrong intuition: visibility of the annotation is not the mechanism, overriding is.",
+            "ru": "Class-based proxy вставляет advice, **переопределяя** метод в сгенерированном подклассе. `final` означает «нельзя переопределить», поэтому advice некуда поместить — вызов идёт прямо в исходную реализацию.\n\n```mermaid\nflowchart LR\n  P[\"CGLIB subclass proxy\"] -->|переопределяет обычный метод| A[\"advice выполняется\"]\n  P -->|не может переопределить final-метод| S[\"advice пропущен\"]\n```\n\nОпасность в том, что **ничего не падает громко**. Аннотация на месте и читается, приложение стартует, метод работает — просто transaction, cache или log не выполняются. «Аннотация видна, значит advice сработает» — ровно неверная интуиция: механизм не в видимости аннотации, а в переопределении."          },
+          "feedback": {
+            "correct": {
+              "en": "No override means no advice: the method runs bare.",
+              "ru": "Нет переопределения — нет advice: метод выполняется без обёртки."
+            },
+            "incorrect": {
+              "en": "The method runs without the transaction: CGLIB cannot override a final method.",
+              "ru": "Метод выполняется без transaction: CGLIB не может переопределить final-метод."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The method runs without the transaction advice",
+                "ru": "Метод выполняется без transaction advice"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The transaction is applied as usual, because the annotation is present",
+                "ru": "Transaction применяется как обычно, потому что аннотация присутствует"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The annotation is only a marker; the proxy must override the method to insert advice.",
+                "ru": "Аннотация — лишь маркер; чтобы вставить advice, proxy должен переопределить метод."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Startup fails with an error about the annotation",
+                "ru": "Запуск падает с ошибкой про аннотацию"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing fails loudly — the advice is silently skipped, which is what makes this trap dangerous.",
+                "ru": "Ничего не падает громко — advice молча пропускается, чем и опасна эта ловушка."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "final-method-p1-why",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why can a CGLIB proxy not advise a final method?",
+            "ru": "Почему CGLIB proxy не может обернуть advice final-метод?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Interception is an override, and final forbids overriding.",
+              "ru": "Перехват — это переопределение, а final его запрещает."
+            },
+            "incorrect": {
+              "en": "Because advice is inserted by overriding the method, and a final method cannot be overridden.",
+              "ru": "Потому что advice вставляется через переопределение метода, а final-метод переопределить нельзя."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Advice is inserted by overriding the method, and a final method cannot be overridden",
+                "ru": "Advice вставляется через переопределение метода, а final-метод переопределить нельзя"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Annotations are ignored on final methods",
+                "ru": "На final-методах аннотации игнорируются"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The annotation is read normally; the obstacle is that the method cannot be overridden.",
+                "ru": "Аннотация читается нормально; препятствие в том, что метод нельзя переопределить."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Final methods are static and have no instance to proxy",
+                "ru": "Final-методы статические, и проксировать нечего"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "final and static are different modifiers; here the issue is purely overriding.",
+                "ru": "final и static — разные модификаторы; здесь дело именно в переопределении."
+              }
+            }
+          ]
+        },
+        {
+          "id": "final-method-p2-annotation-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A final @Transactional method still gets its transaction, because Spring can see the annotation.",
+            "ru": "Final-метод с @Transactional всё равно получает transaction, потому что Spring видит аннотацию."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Seeing the annotation is not enough; the proxy still has to override the method.",
+              "ru": "Увидеть аннотацию недостаточно; proxy всё равно должен переопределить метод."
+            },
+            "incorrect": {
+              "en": "No — a class-based proxy cannot override a final method, so the advice never runs.",
+              "ru": "Нет — class-based proxy не может переопределить final-метод, поэтому advice не выполняется."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "final-method-p3-spot-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "Caching never happens for price(id), although the application starts fine. What is the defect?",
+            "ru": "Кэширование для price(id) не работает, хотя приложение стартует нормально. В чём дефект?"
+          },
+          "code": "@Service\npublic class PriceService {           // class-based (CGLIB) proxy, no interface\n    @Cacheable(\"prices\")\n    public final BigDecimal price(long id) {\n        return load(id);\n    }\n}",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "Drop final and the generated subclass can override price(), so the cache advice runs.",
+              "ru": "Уберите final — и сгенерированный подкласс сможет переопределить price(), тогда cache advice сработает."
+            },
+            "incorrect": {
+              "en": "price() is final, so the CGLIB subclass cannot override it and the caching advice never runs.",
+              "ru": "price() объявлен final, поэтому подкласс CGLIB не может его переопределить и cache advice не выполняется."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "price() is final, so the generated subclass cannot override it and the advice is skipped",
+                "ru": "price() объявлен final, поэтому сгенерированный подкласс не может его переопределить и advice пропускается"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "@Cacheable only works on methods declared in an interface",
+                "ru": "@Cacheable работает только на методах, объявленных в interface"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Class-based proxying advises class methods fine — as long as they can be overridden.",
+                "ru": "Class-based proxying нормально оборачивает методы класса — если их можно переопределить."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The cache name must match the method name",
+                "ru": "Имя кэша должно совпадать с именем метода"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The cache name is arbitrary; the final modifier is what blocks the advice.",
+                "ru": "Имя кэша произвольно; advice блокирует именно модификатор final."
+              }
+            }
+          ]
+        },
+        {
+          "id": "final-method-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the rule with the missing keyword and verb.",
+            "ru": "Дополни правило пропущенным ключевым словом и глаголом."
+          },
+          "feedback": {
+            "correct": {
+              "en": "No override point, no advice — and no error either.",
+              "ru": "Нет точки переопределения — нет advice, и ошибки тоже нет."
+            },
+            "incorrect": {
+              "en": "A method declared final cannot be overridden, so a class-based proxy cannot advise it.",
+              "ru": "Метод, объявленный final, нельзя переопределить, поэтому class-based proxy не может его обернуть."
+            }
+          },
+          "text": {
+            "en": "A CGLIB proxy advises a method by overriding it, so a method declared ___ cannot be ___ and runs unadvised.",
+            "ru": "CGLIB proxy оборачивает метод через переопределение, поэтому метод, объявленный ___, нельзя ___ и он работает без advice."
+          },
+          "blanks": [
+            {
+              "en": [
+                "final"
+              ],
+              "ru": [
+                "final"
+              ]
+            },
+            {
+              "en": [
+                "overridden",
+                "override"
+              ],
+              "ru": [
+                "переопределить",
+                "override"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "final-class-blocks-cglib",
+      "title": {
+        "en": "A final class blocks CGLIB entirely",
+        "ru": "Final-класс полностью блокирует CGLIB"
+      },
+      "summary": {
+        "en": "CGLIB must subclass the target, so a final class cannot be proxied at all — unlike a final method, which only loses its own advice.",
+        "ru": "CGLIB должен наследовать target, поэтому final-класс нельзя проксировать вообще — в отличие от final-метода, который лишь теряет свой advice."
+      },
+      "discovery": [
+        {
+          "id": "final-class-d1-predict",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Class-based proxying is in use and this bean must be advised. Predict what happens.",
+            "ru": "Используется class-based proxying, и этот bean должен быть обёрнут. Предскажи, что произойдёт."
+          },
+          "code": "@Service\npublic final class PaymentService {   // final, no interface\n    @Transactional\n    public void pay(long amount) { /* ... */ }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "A class-based proxy **is** a subclass, so it can only exist if the class can be extended. `final` forbids subclassing, so the proxy cannot be built at all — this failure is loud, unlike the silent final-method case.\n\n```mermaid\nflowchart LR\n  F[\"final class\"] --> X[\"CGLIB cannot subclass it\"]\n  X --> N[\"no proxy can be created\"]\n  M[\"final method\"] --> Y[\"proxy exists, method not overridden\"]\n  Y --> U[\"that call runs unadvised\"]\n```\n\nTwo ways out:\n\n- **Add an interface** and let an interface-based JDK proxy implement it — nothing has to be subclassed then.\n- **Drop the `final` modifier** so the class can be extended.\n\nThis is also why Kotlin code often needs Spring's `all-open` plugin with proxy-based features: without it, the classes and methods a subclass proxy would have to extend and override are closed to subclassing.",
+            "ru": "Class-based proxy **является** подклассом, поэтому он может существовать только если класс можно наследовать. `final` запрещает наследование, поэтому proxy вообще не построить — и этот отказ громкий, в отличие от молчаливого случая с final-методом.\n\n```mermaid\nflowchart LR\n  F[\"final class\"] --> X[\"CGLIB не может его наследовать\"]\n  X --> N[\"proxy создать нельзя\"]\n  M[\"final method\"] --> Y[\"proxy есть, метод не переопределён\"]\n  Y --> U[\"этот вызов идёт без advice\"]\n```\n\nДва выхода:\n\n- **Добавить interface**, чтобы его реализовал interface-based JDK proxy — тогда наследовать ничего не нужно.\n- **Убрать модификатор `final`**, чтобы класс можно было наследовать.\n\nПоэтому же код на Kotlin со proxy-based возможностями Spring часто требует plugin `all-open`: без него классы и методы, которые подкласс-proxy должен наследовать и переопределять, закрыты для наследования."          },
+          "feedback": {
+            "correct": {
+              "en": "No subclass is possible, so no class-based proxy is possible.",
+              "ru": "Подкласс невозможен, значит невозможен и class-based proxy."
+            },
+            "incorrect": {
+              "en": "Proxy creation fails: CGLIB cannot subclass a final class.",
+              "ru": "Создание proxy падает: CGLIB не может наследовать final-класс."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Proxy creation fails: CGLIB cannot subclass a final class",
+                "ru": "Создание proxy падает: CGLIB не может наследовать final-класс"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Spring silently falls back to a JDK dynamic proxy",
+                "ru": "Spring молча переключается на JDK dynamic proxy"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no interface here, so a JDK dynamic proxy is not possible either.",
+                "ru": "Здесь нет interface, поэтому JDK dynamic proxy тоже невозможен."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The proxy is created, but pay() runs unadvised",
+                "ru": "Proxy создаётся, но pay() выполняется без advice"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the final-method case; a final class blocks the subclass itself, so there is no proxy.",
+                "ru": "Это случай final-метода; final-класс блокирует сам подкласс, поэтому proxy нет."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "final-class-p1-difference",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "For a CGLIB proxy, what is the difference between a final class and a final method?",
+            "ru": "В чём для CGLIB proxy разница между final-классом и final-методом?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "One blocks the proxy, the other blocks one method's advice.",
+              "ru": "Одно блокирует proxy, другое — advice одного метода."
+            },
+            "incorrect": {
+              "en": "A final class blocks proxy creation entirely; a final method leaves the proxy in place but unadvised.",
+              "ru": "Final-класс полностью блокирует создание proxy; final-метод оставляет proxy, но без advice."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A final class blocks the proxy entirely; a final method leaves the proxy in place but unadvised",
+                "ru": "Final-класс полностью блокирует proxy; final-метод оставляет proxy, но без advice"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Both only skip advice for a single method",
+                "ru": "И то и другое лишь пропускает advice для одного метода"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A final class cannot be subclassed at all, so there is no proxy to skip anything.",
+                "ru": "Final-класс нельзя наследовать вообще, поэтому нет и proxy, который что-то пропускает."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Both stop the application from starting",
+                "ru": "И то и другое не даёт приложению запуститься"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The final-method case starts fine and fails silently at runtime; only the final class breaks proxy creation.",
+                "ru": "Случай final-метода стартует нормально и молча ломается в рантайме; создание proxy ломает только final-класс."
+              }
+            }
+          ]
+        },
+        {
+          "id": "final-class-p2-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "CGLIB can proxy a final class as long as none of its methods are final.",
+            "ru": "CGLIB может проксировать final-класс, если ни один его метод не объявлен final."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The class itself has to be extendable before any method matters.",
+              "ru": "Сначала класс должен быть наследуемым, только потом важны методы."
+            },
+            "incorrect": {
+              "en": "No — a final class cannot be subclassed, so no class-based proxy can be created for it.",
+              "ru": "Нет — final-класс нельзя наследовать, поэтому class-based proxy для него не создать."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "final-class-p3-kotlin",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why does Kotlin code often need Spring's all-open plugin for proxy-based Spring features?",
+            "ru": "Почему коду на Kotlin для proxy-based возможностей Spring часто нужен plugin all-open от Spring?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "A subclass proxy needs an extendable class and overridable methods.",
+              "ru": "Подкласс-proxy нужен наследуемый класс и переопределяемые методы."
+            },
+            "incorrect": {
+              "en": "It opens classes and methods so a class-based subclass proxy can be created and can override them.",
+              "ru": "Он открывает классы и методы, чтобы можно было создать class-based подкласс-proxy и переопределить их."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It opens classes and methods so a subclass proxy can extend and override them",
+                "ru": "Он открывает классы и методы, чтобы подкласс-proxy мог их наследовать и переопределить"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It adds an interface to every class so JDK proxies work",
+                "ru": "Он добавляет interface каждому классу, чтобы работали JDK proxy"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The plugin adds no interfaces; it removes the obstacle to subclassing.",
+                "ru": "Plugin не добавляет interfaces; он убирает препятствие для наследования."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It allows advice on private methods",
+                "ru": "Он разрешает advice на private-методах"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Private methods stay outside the proxy; the plugin is about subclassing, not visibility.",
+                "ru": "Private-методы остаются вне proxy; plugin про наследование, а не про видимость."
+              }
+            }
+          ]
+        },
+        {
+          "id": "final-class-p4-match-obstacles",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each situation to its proxying outcome.",
+            "ru": "Соотнеси каждую ситуацию с её результатом при проксировании."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Final class kills the proxy, final method kills one advice, no interface kills the JDK option.",
+              "ru": "Final-класс убивает proxy, final-метод — один advice, отсутствие interface — вариант JDK."
+            },
+            "incorrect": {
+              "en": "final class → no proxy; final method → unadvised call; no interface → no JDK proxy; forced flag → CGLIB.",
+              "ru": "final class → нет proxy; final method → вызов без advice; нет interface → нет JDK proxy; флаг → CGLIB."
+            }
+          },
+          "pairs": [
+            {
+              "id": "final-class",
+              "left": {
+                "en": "final class, no interface",
+                "ru": "final-класс, без interface"
+              },
+              "right": {
+                "en": "No proxy can be created",
+                "ru": "Proxy создать нельзя"
+              }
+            },
+            {
+              "id": "final-method",
+              "left": {
+                "en": "final method on a proxied class",
+                "ru": "final-метод в проксируемом классе"
+              },
+              "right": {
+                "en": "Proxy exists, that method runs unadvised",
+                "ru": "Proxy есть, но этот метод работает без advice"
+              }
+            },
+            {
+              "id": "no-interface",
+              "left": {
+                "en": "No interface at all",
+                "ru": "Interface нет вообще"
+              },
+              "right": {
+                "en": "A JDK dynamic proxy is impossible",
+                "ru": "JDK dynamic proxy невозможен"
+              }
+            },
+            {
+              "id": "forced",
+              "left": {
+                "en": "Interface plus proxyTargetClass=true",
+                "ru": "Interface плюс proxyTargetClass=true"
+              },
+              "right": {
+                "en": "Class-based CGLIB proxy",
+                "ru": "Class-based CGLIB proxy"
+              }
+            }
+          ]
+        },
+        {
+          "id": "final-class-p5-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing word for the fix.",
+            "ru": "Впиши пропущенное слово для решения."
+          },
+          "feedback": {
+            "correct": {
+              "en": "With an interface, nothing has to be subclassed at all.",
+              "ru": "С interface наследовать вообще ничего не нужно."
+            },
+            "incorrect": {
+              "en": "Add an interface: then an interface-based JDK dynamic proxy can be used instead.",
+              "ru": "Добавьте interface: тогда вместо этого можно использовать interface-based JDK dynamic proxy."
+            }
+          },
+          "text": {
+            "en": "To proxy a final class, add an ___ so a JDK dynamic proxy becomes possible.",
+            "ru": "Чтобы проксировать final-класс, добавьте ___, и тогда станет возможен JDK dynamic proxy."
+          },
+          "blanks": [
+            {
+              "en": [
+                "interface"
+              ],
+              "ru": [
+                "interface",
+                "интерфейс"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "proxy-boundary",
+      "title": {
+        "en": "The shared proxy boundary",
+        "ru": "Общая граница proxy"
+      },
+      "summary": {
+        "en": "Advice runs only when a call enters through the proxy, so self-invocation, private methods, static methods and constructor calls stay unadvised with either proxy type.",
+        "ru": "Advice выполняется только когда вызов входит через proxy, поэтому self-invocation, private- и static-методы и вызовы конструктора остаются без advice при любом типе proxy."
+      },
+      "discovery": [
+        {
+          "id": "boundary-d1-self-call",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Another bean calls invoiceService.handle(id) through the proxy. Does save(id) run inside a transaction?",
+            "ru": "Другой bean вызывает invoiceService.handle(id) через proxy. Выполнится ли save(id) внутри transaction?"
+          },
+          "code": "@Service\npublic class InvoiceService {\n    public void handle(long id) {\n        this.save(id);            // internal call\n    }\n\n    @Transactional\n    public void save(long id) { /* ... */ }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Advice lives in the proxy, so it can only run for a call that **enters through the proxy**. That line is the **proxy boundary**.\n\nHere the caller enters through the proxy for `handle(id)`, but `this.save(id)` is a **self-invocation**: an internal call on the target object itself. It never leaves the object, so it never touches the proxy, so `@Transactional` has no effect on it.\n\n```mermaid\nflowchart LR\n  C[\"other bean\"] --> P[\"proxy: advice runs\"]\n  P --> T[\"target: handle\"]\n  T -.->|internal this-call skips the proxy| S[\"target: save without advice\"]\n```\n\nThe same boundary explains private methods, static methods and constructor calls: none of them arrive through the proxy. And crucially, this is **identical for both proxy types** — a JDK proxy and a CGLIB proxy both hold their advice in the proxy object, so switching the proxy style changes nothing here.",
+            "ru": "Advice живёт в proxy, поэтому он может выполниться только для вызова, который **входит через proxy**. Эта линия и есть **граница proxy**.\n\nЗдесь вызывающий входит через proxy для `handle(id)`, но `this.save(id)` — это **self-invocation**: внутренний вызов на самом объекте target. Он не выходит за пределы объекта, значит не касается proxy, значит `@Transactional` на него не действует.\n\n```mermaid\nflowchart LR\n  C[\"другой bean\"] --> P[\"proxy: advice выполняется\"]\n  P --> T[\"target: handle\"]\n  T -.->|внутренний this-вызов минует proxy| S[\"target: save без advice\"]\n```\n\nЭта же граница объясняет private-методы, static-методы и вызовы конструктора: ни один из них не приходит через proxy. И главное — для **обоих типов proxy это одинаково**: и JDK proxy, и CGLIB proxy держат advice в объекте-proxy, поэтому смена стиля здесь ничего не меняет."          },
+          "feedback": {
+            "correct": {
+              "en": "The internal call never reaches the proxy, so no advice applies.",
+              "ru": "Внутренний вызов не доходит до proxy, поэтому advice не применяется."
+            },
+            "incorrect": {
+              "en": "No transaction: this.save(id) never passes the proxy, whichever proxy type is used.",
+              "ru": "Никакой transaction: this.save(id) не проходит через proxy, каким бы ни был его тип."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "No — the internal this.save(id) call never leaves the object, so it never passes the proxy",
+                "ru": "Нет — внутренний вызов this.save(id) не выходит за пределы объекта и не проходит через proxy"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Yes — the annotation applies wherever the method is called from",
+                "ru": "Да — аннотация действует, откуда бы метод ни вызывали"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The annotation only tells the proxy what to do; a call that skips the proxy skips the advice.",
+                "ru": "Аннотация лишь говорит proxy, что делать; вызов, минующий proxy, минует и advice."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Yes, if the proxy is CGLIB instead of a JDK dynamic proxy",
+                "ru": "Да, если proxy — CGLIB, а не JDK dynamic proxy"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Switching the proxy type does not help: the internal call reaches neither proxy.",
+                "ru": "Смена типа proxy не помогает: внутренний вызов не доходит ни до одного из них."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "boundary-p1-which-call",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In a proxy-based Spring application, which call actually gets advice?",
+            "ru": "В приложении Spring с proxy какой вызов реально получает advice?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Only calls that enter through the proxy are advised.",
+              "ru": "Advice получают только вызовы, входящие через proxy."
+            },
+            "incorrect": {
+              "en": "A call from another bean through the injected proxy — that is the only path advice sits on.",
+              "ru": "Вызов из другого bean через инжектированный proxy — только на этом пути стоит advice."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A call from another bean through the injected proxy",
+                "ru": "Вызов из другого bean через инжектированный proxy"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "An internal this.method() call inside the target",
+                "ru": "Внутренний вызов this.method() внутри target"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That call goes straight to the target's own method, bypassing the proxy.",
+                "ru": "Такой вызов идёт прямо в собственный метод target, минуя proxy."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A call to a private method of the target",
+                "ru": "Вызов private-метода target"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A private method is not reachable through the proxy, so it cannot be advised.",
+                "ru": "Private-метод недостижим через proxy, поэтому его нельзя обернуть advice."
+              }
+            }
+          ]
+        },
+        {
+          "id": "boundary-p2-switch-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Switching from a JDK dynamic proxy to a CGLIB proxy fixes self-invocation.",
+            "ru": "Переключение с JDK dynamic proxy на CGLIB proxy исправляет self-invocation."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Both types keep advice in the proxy, and an internal call reaches neither.",
+              "ru": "Оба типа держат advice в proxy, а внутренний вызов не доходит ни до одного."
+            },
+            "incorrect": {
+              "en": "No — an internal this.method() call bypasses the proxy whichever style is used.",
+              "ru": "Нет — внутренний вызов this.method() минует proxy при любом стиле."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "boundary-p3-never-intercept",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which of these can proxy-based Spring advice never intercept?",
+            "ru": "Что из этого proxy-based advice в Spring перехватить не может?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "A private method is never exposed through the proxy.",
+              "ru": "Private-метод никогда не виден через proxy."
+            },
+            "incorrect": {
+              "en": "A private method call inside the target: it never arrives through the proxy.",
+              "ru": "Вызов private-метода внутри target: он не приходит через proxy."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A private method call inside the target",
+                "ru": "Вызов private-метода внутри target"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A public interface method called from another bean",
+                "ru": "Публичный interface-метод, вызванный из другого bean"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That call enters through the proxy, so it is advised.",
+                "ru": "Такой вызов входит через proxy, поэтому получает advice."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A public class method called from another bean under class-based proxying",
+                "ru": "Публичный метод класса, вызванный из другого bean при class-based proxying"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A class-based proxy overrides that method, so the call is advised.",
+                "ru": "Class-based proxy переопределяет такой метод, поэтому вызов получает advice."
+              }
+            }
+          ]
+        },
+        {
+          "id": "boundary-p4-sort-self-call",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order what happens when another bean calls handle(), which internally calls this.save().",
+            "ru": "Расставь по порядку, что происходит, когда другой bean вызывает handle(), а тот внутри вызывает this.save()."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The first call crosses the proxy boundary; the internal one never does.",
+              "ru": "Первый вызов пересекает границу proxy; внутренний — никогда."
+            },
+            "incorrect": {
+              "en": "The caller hits the proxy, advice runs for handle(), then the internal this.save() bypasses the proxy.",
+              "ru": "Вызывающий попадает в proxy, advice выполняется для handle(), затем внутренний this.save() минует proxy."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "The caller invokes handle() on the proxy",
+                "ru": "Вызывающий обращается к handle() на proxy"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "The proxy runs the advice for handle() and delegates to the target",
+                "ru": "Proxy выполняет advice для handle() и делегирует target"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Inside the target, this.save() calls the target's own method directly",
+                "ru": "Внутри target вызов this.save() идёт прямо в собственный метод target"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "save()'s advice is skipped, because that call never passed the proxy",
+                "ru": "Advice для save() пропускается, потому что этот вызов не прошёл через proxy"
+              }
+            }
+          ]
+        },
+        {
+          "id": "boundary-p5-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the name of this situation.",
+            "ru": "Впиши название этой ситуации."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It is the classic proxy-boundary trap, identical for both proxy types.",
+              "ru": "Это классическая ловушка границы proxy, одинаковая для обоих типов."
+            },
+            "incorrect": {
+              "en": "It is called self-invocation: an internal this.method() call that bypasses the proxy.",
+              "ru": "Это называется self-invocation: внутренний вызов this.method(), минующий proxy."
+            }
+          },
+          "text": {
+            "en": "An internal this.method() call bypasses the proxy and loses its advice; this is called ___.",
+            "ru": "Внутренний вызов this.method() минует proxy и теряет advice; это называется ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "self-invocation",
+                "self invocation"
+              ],
+              "ru": [
+                "self-invocation",
+                "self invocation",
+                "самовызов"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "limits-side-by-side",
+      "title": {
+        "en": "Which limit belongs to which proxy",
+        "ru": "Какое ограничение у какого proxy"
+      },
+      "summary": {
+        "en": "The JDK proxy's limit is interface-only exposure, CGLIB's limit is no subclassing of final, and the proxy boundary is shared by both.",
+        "ru": "Ограничение JDK proxy — видны только interface-методы, ограничение CGLIB — нельзя наследовать final, а граница proxy общая для обоих."
+      },
+      "discovery": [
+        {
+          "id": "limits-d1-cglib-better",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "\"CGLIB is always the better choice.\" Is that true?",
+            "ru": "«CGLIB всегда лучше». Так ли это?"
+          },
+          "reveal": {
+            "en": "Neither type dominates — they fail in different places:\n\n| | JDK dynamic proxy | CGLIB proxy |\n| --- | --- | --- |\n| Built from | the target's interface | a subclass of the target class |\n| Requires | an interface to exist | a non-final class, non-final methods |\n| Exposes | interface methods only | the class's methods too |\n| Cast to the concrete class | fails with ClassCastException | works, the proxy is a subclass |\n\nAnd one limit is **shared**: advice only runs for calls that enter through the proxy, so self-invocation, private methods, static methods and constructor calls are unadvised in both styles. Switching the style never fixes those.\n\nSo the real question is never \"which is better\", but \"what does this bean look like\": is there an interface, is the class extendable, and does the calling code depend on the concrete class?",
+            "ru": "Ни один тип не лучше во всём — они ломаются в разных местах:\n\n| | JDK dynamic proxy | CGLIB proxy |\n| --- | --- | --- |\n| Строится из | interface target | подкласса target class |\n| Требует | существующего interface | не-final класс и не-final методы |\n| Показывает | только interface-методы | ещё и методы класса |\n| Приведение к конкретному классу | падает с ClassCastException | работает, proxy — подкласс |\n\nА одно ограничение **общее**: advice выполняется только для вызовов, входящих через proxy, поэтому self-invocation, private- и static-методы и вызовы конструктора остаются без advice в обоих стилях. Смена стиля этого не исправляет.\n\nПоэтому настоящий вопрос не «что лучше», а «как выглядит этот bean»: есть ли interface, можно ли наследовать класс и зависит ли вызывающий код от конкретного класса."          },
+          "feedback": {
+            "correct": {
+              "en": "It solves the no-interface case but brings its own limits.",
+              "ru": "Он решает случай без interface, но приносит свои ограничения."
+            },
+            "incorrect": {
+              "en": "No — it enables class-based proxying but adds subclassing limits and removes no proxy-boundary behaviour.",
+              "ru": "Нет — он включает class-based proxying, но добавляет ограничения наследования и не отменяет поведение границы proxy."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "No — it enables class-based proxying, but adds subclassing limits and removes no proxy-boundary behaviour",
+                "ru": "Нет — он включает class-based proxying, но добавляет ограничения наследования и не отменяет поведение границы proxy"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Yes — it can proxy everything a JDK proxy can, and more",
+                "ru": "Да — он может проксировать всё, что JDK proxy, и даже больше"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It cannot proxy a final class or advise a final method — cases an interface-based proxy sidesteps.",
+                "ru": "Он не может проксировать final-класс или обернуть final-метод — случаи, которые interface-based proxy обходит."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Yes — it is the only type that honours advice annotations",
+                "ru": "Да — только он учитывает аннотации advice"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Both types honour the same advice configuration; they differ in how the proxy object is built.",
+                "ru": "Оба типа учитывают одну и ту же конфигурацию advice; они различаются тем, как строится объект-proxy."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "limits-p1-jdk-only",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which limitation belongs to the JDK dynamic proxy and NOT to CGLIB?",
+            "ru": "Какое ограничение относится к JDK dynamic proxy, а НЕ к CGLIB?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "An interface-based proxy can only carry the interface's methods.",
+              "ru": "Interface-based proxy может нести только методы interface."
+            },
+            "incorrect": {
+              "en": "Only the target's interface methods are exposed — a class-based proxy exposes the class's methods too.",
+              "ru": "Показываются только interface-методы target — class-based proxy показывает и методы класса."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Only the target's interface methods are exposed",
+                "ru": "Показываются только interface-методы target"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A final class cannot be proxied",
+                "ru": "Final-класс нельзя проксировать"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is CGLIB's limit: it needs to subclass the class.",
+                "ru": "Это ограничение CGLIB: ему нужно наследовать class."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Self-invocation is not advised",
+                "ru": "Self-invocation не получает advice"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That one is shared by both proxy types.",
+                "ru": "Это ограничение общее для обоих типов proxy."
+              }
+            }
+          ]
+        },
+        {
+          "id": "limits-p2-cglib-only",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which limitation belongs to CGLIB and NOT to the JDK dynamic proxy?",
+            "ru": "Какое ограничение относится к CGLIB, а НЕ к JDK dynamic proxy?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Interception by overriding is exactly what final forbids.",
+              "ru": "Перехват через переопределение — именно то, что запрещает final."
+            },
+            "incorrect": {
+              "en": "A final method cannot be overridden, so a class-based proxy cannot advise it.",
+              "ru": "Final-метод нельзя переопределить, поэтому class-based proxy не может его обернуть."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A final method cannot be overridden, so it cannot be advised",
+                "ru": "Final-метод нельзя переопределить, поэтому его нельзя обернуть advice"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The target must implement an interface",
+                "ru": "Target обязан реализовать interface"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the JDK proxy's requirement; CGLIB works without any interface.",
+                "ru": "Это требование JDK proxy; CGLIB работает и без interface."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Advice runs only for calls entering through the proxy",
+                "ru": "Advice выполняется только для вызовов, входящих через proxy"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Both proxy types share that boundary.",
+                "ru": "Эту границу разделяют оба типа proxy."
+              }
+            }
+          ]
+        },
+        {
+          "id": "limits-p3-match-limits",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each limitation to the proxy type it belongs to.",
+            "ru": "Соотнеси каждое ограничение с типом proxy, к которому оно относится."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two private limits, one type-related trap, one boundary shared by both.",
+              "ru": "Два личных ограничения, одна ловушка типов и одна общая граница."
+            },
+            "incorrect": {
+              "en": "Interface requirement and cast failure are JDK-side; final class is CGLIB-side; self-invocation is shared.",
+              "ru": "Требование interface и падение приведения — на стороне JDK; final-класс — на стороне CGLIB; self-invocation общий."
+            }
+          },
+          "pairs": [
+            {
+              "id": "needs-iface",
+              "left": {
+                "en": "Requires an existing interface",
+                "ru": "Требует существующего interface"
+              },
+              "right": {
+                "en": "JDK dynamic proxy only",
+                "ru": "Только JDK dynamic proxy"
+              }
+            },
+            {
+              "id": "final-class",
+              "left": {
+                "en": "Cannot subclass a final class",
+                "ru": "Не может наследовать final-класс"
+              },
+              "right": {
+                "en": "CGLIB proxy only",
+                "ru": "Только CGLIB proxy"
+              }
+            },
+            {
+              "id": "cast",
+              "left": {
+                "en": "Cannot be cast to the target's concrete class",
+                "ru": "Нельзя привести к конкретному классу target"
+              },
+              "right": {
+                "en": "JDK dynamic proxy only",
+                "ru": "Только JDK dynamic proxy"
+              }
+            },
+            {
+              "id": "self",
+              "left": {
+                "en": "Self-invocation stays unadvised",
+                "ru": "Self-invocation остаётся без advice"
+              },
+              "right": {
+                "en": "Both proxy types",
+                "ru": "Оба типа proxy"
+              }
+            }
+          ]
+        },
+        {
+          "id": "limits-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the trade-off in one line.",
+            "ru": "Дополни компромисс в одну строку."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One is limited by the type it implements, the other by what it can override.",
+              "ru": "Одного ограничивает тип, который он реализует, другого — то, что он может переопределить."
+            },
+            "incorrect": {
+              "en": "A JDK proxy exposes only interface methods; a CGLIB proxy cannot override final methods.",
+              "ru": "JDK proxy показывает только interface-методы; CGLIB proxy не может переопределить final-методы."
+            }
+          },
+          "text": {
+            "en": "A JDK dynamic proxy exposes only ___ methods; a CGLIB proxy cannot override ___ methods.",
+            "ru": "JDK dynamic proxy показывает только ___-методы; CGLIB proxy не может переопределить ___-методы."
+          },
+          "blanks": [
+            {
+              "en": [
+                "interface"
+              ],
+              "ru": [
+                "interface",
+                "интерфейсные"
+              ]
+            },
+            {
+              "en": [
+                "final"
+              ],
+              "ru": [
+                "final"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "proxy-choice-capstone",
+      "title": {
+        "en": "Putting it together",
+        "ru": "Собираем всё вместе"
+      },
+      "summary": {
+        "en": "The interface and proxyTargetClass decide the proxy type; the type decides the exposed methods and the final limits; and advice runs only for calls entering through the proxy.",
+        "ru": "Interface и proxyTargetClass решают тип proxy; тип решает, какие методы видны и какие действуют ограничения final; а advice выполняется только для вызовов, входящих через proxy."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "cap-d1-final-and-self-call",
+          "type": "predict_output",
+          "prompt": {
+            "en": "A caller injects ReportApi and calls run(id). Predict whether audit(id) runs inside a transaction.",
+            "ru": "Вызывающий инжектит ReportApi и вызывает run(id). Предскажи, выполнится ли audit(id) внутри transaction."
+          },
+          "code": "public interface ReportApi {\n    void run(long id);\n}\n\n@Service\npublic class ReportService implements ReportApi {\n    public void run(long id) {\n        this.audit(id);\n    }\n\n    @Transactional\n    public final void audit(long id) { /* ... */ }\n}\n\n// AOP configuration: proxyTargetClass = true",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Two independent mechanisms both remove the advice here, which is why the answer is \"no\" twice over:\n\n1. `proxyTargetClass = true` forces a **class-based** proxy. That proxy advises by overriding — and `audit()` is `final`, so it cannot be overridden.\n2. `this.audit(id)` is a **self-invocation**. Even if `audit()` were not final, that internal call would never pass the proxy.\n\n```mermaid\nflowchart TD\n  A[\"interface present and class-based not forced?\"] -->|yes| J[\"JDK proxy: interface methods only\"]\n  A -->|no| C[\"CGLIB proxy: runtime subclass\"]\n  J --> B[\"advice runs only for calls entering through the proxy\"]\n  C --> B\n  C --> F[\"final class or final method: cannot be advised\"]\n```\n\nThat is the whole topic in one picture: the interface and `proxyTargetClass` pick the proxy style, the style decides which methods are reachable and what `final` breaks, and the proxy boundary applies to both styles regardless.",
+            "ru": "Здесь advice убирают сразу два независимых механизма — поэтому ответ «нет» дважды:\n\n1. `proxyTargetClass = true` принудительно включает **class-based** proxy. Такой proxy оборачивает через переопределение — а `audit()` объявлен `final`, значит переопределить его нельзя.\n2. `this.audit(id)` — это **self-invocation**. Даже если бы `audit()` не был final, этот внутренний вызов не прошёл бы через proxy.\n\n```mermaid\nflowchart TD\n  A[\"interface есть и class-based не форсирован?\"] -->|да| J[\"JDK proxy: только interface-методы\"]\n  A -->|нет| C[\"CGLIB proxy: подкласс в рантайме\"]\n  J --> B[\"advice только для вызовов, входящих через proxy\"]\n  C --> B\n  C --> F[\"final class или final method: обернуть нельзя\"]\n```\n\nЭто вся тема на одной картинке: interface и `proxyTargetClass` выбирают стиль proxy, стиль определяет, какие методы достижимы и что ломает `final`, а граница proxy действует в обоих стилях одинаково."          },
+          "feedback": {
+            "correct": {
+              "en": "Two reasons at once: an unoverridable final method and a call that skips the proxy.",
+              "ru": "Сразу две причины: непереопределяемый final-метод и вызов, минующий proxy."
+            },
+            "incorrect": {
+              "en": "No transaction: audit() is final so it cannot be overridden, and the internal call skips the proxy anyway.",
+              "ru": "Никакой transaction: audit() объявлен final и не может быть переопределён, а внутренний вызов всё равно минует proxy."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "No, for two reasons: audit() is final so the class-based proxy cannot override it, and this.audit(id) never passes the proxy",
+                "ru": "Нет, по двум причинам: audit() объявлен final, поэтому class-based proxy не может его переопределить, и this.audit(id) не проходит через proxy"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Yes — proxyTargetClass=true lets the class-based proxy override every method",
+                "ru": "Да — proxyTargetClass=true позволяет class-based proxy переопределить любой метод"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A final method cannot be overridden, and an internal call would skip the proxy anyway.",
+                "ru": "Final-метод переопределить нельзя, а внутренний вызов всё равно минует proxy."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "No — only because the caller injected the interface instead of the class",
+                "ru": "Нет — только потому, что вызывающий инжектил interface, а не класс"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The injected type is fine here; the final modifier and the self-invocation are what remove the advice.",
+                "ru": "Инжектированный тип здесь ни при чём; advice убирают модификатор final и self-invocation."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cap-p1-forced-class-injection",
+          "type": "predict_output",
+          "prompt": {
+            "en": "With proxyTargetClass=true, predict what happens to this injection of the concrete class.",
+            "ru": "При proxyTargetClass=true предскажи, что произойдёт с этой инъекцией конкретного класса."
+          },
+          "code": "public interface AuditApi {\n    void log(String message);\n}\n\n@Service\npublic class AuditService implements AuditApi {\n    public void log(String message) { /* ... */ }\n    public void flush() { /* only on the class */ }\n}\n\n@Service\npublic class Reporter {\n    @Autowired\n    AuditService audit;\n}\n\n// AOP configuration: proxyTargetClass = true",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "A class-based proxy is a subclass, so the concrete type fits.",
+              "ru": "Class-based proxy — подкласс, поэтому конкретный тип подходит."
+            },
+            "incorrect": {
+              "en": "It works: the CGLIB proxy is a subclass of AuditService, so it can be injected by that type.",
+              "ru": "Работает: CGLIB proxy является подклассом AuditService, поэтому его можно инжектить по этому типу."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It works: the CGLIB proxy is a subclass of AuditService, so the field type matches",
+                "ru": "Работает: CGLIB proxy является подклассом AuditService, поэтому тип поля совпадает"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It fails: a proxy can never be injected by the concrete class",
+                "ru": "Падает: proxy никогда нельзя инжектить по конкретному классу"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Only an interface-based proxy cannot; a class-based proxy IS an instance of the class.",
+                "ru": "Не может только interface-based proxy; class-based proxy ЯВЛЯЕТСЯ экземпляром класса."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It works, but only the interface's methods can be advised",
+                "ru": "Работает, но advice можно обернуть только методы interface"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A class-based proxy overrides eligible class methods too, not only the interface's.",
+                "ru": "Class-based proxy переопределяет и подходящие методы класса, не только методы interface."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p2-spot-final-class",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This bean fails to get a proxy at startup. What is the defect?",
+            "ru": "Для этого bean proxy не создаётся при запуске. В чём дефект?"
+          },
+          "code": "public interface CacheApi {\n    String load(String key);\n}\n\n@Service\npublic final class CacheService implements CacheApi {\n    @Cacheable(\"keys\")\n    public String load(String key) { /* ... */ }\n}\n\n// AOP configuration: proxyTargetClass = true",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "Forced class-based proxying needs a subclass, and a final class refuses to be one.",
+              "ru": "Форсированный class-based proxying требует подкласс, а final-класс им быть не может."
+            },
+            "incorrect": {
+              "en": "proxyTargetClass=true demands a subclass proxy, but the class is final; without the flag a JDK proxy could use CacheApi.",
+              "ru": "proxyTargetClass=true требует подкласс-proxy, но класс объявлен final; без флага JDK proxy мог бы использовать CacheApi."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "proxyTargetClass=true demands a subclass, but CacheService is final — dropping the flag would let a JDK proxy use CacheApi",
+                "ru": "proxyTargetClass=true требует подкласс, но CacheService объявлен final — без флага JDK proxy мог бы использовать CacheApi"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "@Cacheable cannot be placed on a method that implements an interface method",
+                "ru": "@Cacheable нельзя ставить на метод, реализующий метод interface"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The annotation placement is fine; the final class plus forced class-based proxying is the problem.",
+                "ru": "С размещением аннотации всё нормально; проблема в final-классе плюс форсированном class-based proxying."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The interface CacheApi must be declared final as well",
+                "ru": "Interface CacheApi тоже нужно объявить final"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Interfaces are never final; finality on the class is exactly what blocks subclassing.",
+                "ru": "Interfaces никогда не бывают final; наследование блокирует именно final у класса."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p3-sort-pipeline",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order how Spring builds and applies an AOP proxy for a bean.",
+            "ru": "Расставь по порядку, как Spring строит и применяет AOP proxy для bean."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Choose the style, build the proxy, inject it, advise calls that cross it — and skip what cannot cross.",
+              "ru": "Выбрать стиль, построить proxy, инжектить его, обернуть проходящие вызовы — и пропустить то, что не проходит."
+            },
+            "incorrect": {
+              "en": "First the style is decided, then the proxy is built and injected, then advice runs for calls entering through it.",
+              "ru": "Сначала выбирается стиль, затем proxy строится и инжектится, затем advice выполняется для входящих через него вызовов."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Decide the style: class-based if proxyTargetClass=true or there is no interface, otherwise interface-based",
+                "ru": "Выбрать стиль: class-based, если proxyTargetClass=true или interface нет, иначе interface-based"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Build the proxy: implement the interface, or generate a subclass overriding the methods",
+                "ru": "Построить proxy: реализовать interface или сгенерировать подкласс с переопределёнными методами"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Inject the proxy where the bean is required, using a type the proxy actually has",
+                "ru": "Инжектить proxy туда, где нужен bean, по типу, который у proxy действительно есть"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Run the advice for every call that enters through the proxy",
+                "ru": "Выполнять advice для каждого вызова, входящего через proxy"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "Skip the advice for final methods and for internal this.method() calls",
+                "ru": "Пропускать advice для final-методов и для внутренних вызовов this.method()"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p4-match-scenarios",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each bean situation to its proxying outcome.",
+            "ru": "Соотнеси каждую ситуацию с bean с результатом проксирования."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The shape of the bean plus the configuration fully determines the outcome.",
+              "ru": "Форма bean плюс конфигурация полностью определяют результат."
+            },
+            "incorrect": {
+              "en": "No interface → CGLIB; forced flag → CGLIB anyway; plain interface → JDK proxy; final class → no proxy; internal call → no advice.",
+              "ru": "Нет interface → CGLIB; флаг → всё равно CGLIB; обычный interface → JDK proxy; final-класс → нет proxy; внутренний вызов → нет advice."
+            }
+          },
+          "pairs": [
+            {
+              "id": "no-iface",
+              "left": {
+                "en": "No interface, non-final class",
+                "ru": "Без interface, не-final класс"
+              },
+              "right": {
+                "en": "CGLIB subclass proxy",
+                "ru": "CGLIB proxy через подкласс"
+              }
+            },
+            {
+              "id": "forced",
+              "left": {
+                "en": "Interface plus proxyTargetClass=true",
+                "ru": "Interface плюс proxyTargetClass=true"
+              },
+              "right": {
+                "en": "CGLIB proxy even though the interface exists",
+                "ru": "CGLIB proxy, хотя interface существует"
+              }
+            },
+            {
+              "id": "plain-iface",
+              "left": {
+                "en": "Interface, plain Spring AOP defaults",
+                "ru": "Interface, обычные настройки Spring AOP"
+              },
+              "right": {
+                "en": "JDK dynamic proxy exposing interface methods only",
+                "ru": "JDK dynamic proxy, показывающий только interface-методы"
+              }
+            },
+            {
+              "id": "final-class",
+              "left": {
+                "en": "final class, no interface",
+                "ru": "final-класс, без interface"
+              },
+              "right": {
+                "en": "No proxy can be created",
+                "ru": "Proxy создать нельзя"
+              }
+            },
+            {
+              "id": "self-call",
+              "left": {
+                "en": "Internal this.method() call",
+                "ru": "Внутренний вызов this.method()"
+              },
+              "right": {
+                "en": "Advice is skipped whichever proxy is used",
+                "ru": "Advice пропускается при любом proxy"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p5-fill-answer",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill the key parts of the interview answer.",
+            "ru": "Впиши ключевые части ответа для собеседования."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Interface-based with a handler versus class-based with a subclass — plus final as the class-based limit.",
+              "ru": "Interface-based с handler против class-based с подклассом — плюс final как ограничение class-based."
+            },
+            "incorrect": {
+              "en": "JDK: interface-based, delegates through an InvocationHandler. CGLIB: class-based, cannot override final methods.",
+              "ru": "JDK: основан на interface, делегирует через InvocationHandler. CGLIB: основан на class, не может переопределить final-методы."
+            }
+          },
+          "text": {
+            "en": "A JDK dynamic proxy is ___-based and delegates through an ___; a CGLIB proxy is ___-based and cannot override a ___ method.",
+            "ru": "JDK dynamic proxy основан на ___ и делегирует через ___; CGLIB proxy основан на ___ и не может переопределить ___-метод."
+          },
+          "blanks": [
+            {
+              "en": [
+                "interface"
+              ],
+              "ru": [
+                "interface",
+                "интерфейсе"
+              ]
+            },
+            {
+              "en": [
+                "InvocationHandler"
+              ],
+              "ru": [
+                "InvocationHandler"
+              ]
+            },
+            {
+              "en": [
+                "class"
+              ],
+              "ru": [
+                "class",
+                "классе"
+              ]
+            },
+            {
+              "en": [
+                "final"
+              ],
+              "ru": [
+                "final"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

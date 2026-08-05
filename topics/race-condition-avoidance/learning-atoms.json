@@ -1,0 +1,3044 @@
+{
+  "schemaVersion": 1,
+  "topicId": "race-condition-avoidance",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "race-condition-basics",
+      "title": {
+        "en": "What a race condition is",
+        "ru": "Что такое состояние гонки"
+      },
+      "summary": {
+        "en": "A race condition is a bug where the result depends on the timing of threads touching the same mutable state.",
+        "ru": "Состояние гонки — ошибка, при которой результат зависит от тайминга потоков, трогающих одно и то же изменяемое состояние."
+      },
+      "discovery": [
+        {
+          "id": "basics-d1-two-threads-count",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Two threads each add 1000 to the same counter. Predict the printed value.",
+            "ru": "Два потока прибавляют по 1000 к одному счётчику. Предскажи напечатанное значение."
+          },
+          "code": "int[] counter = {0};\nRunnable task = () -> {\n    for (int i = 0; i < 1000; i++) counter[0]++;\n};\nThread t1 = new Thread(task);\nThread t2 = new Thread(task);\nt1.start(); t2.start();\nt1.join(); t2.join();\nSystem.out.println(counter[0]);",
+          "codeLang": "java",
+          "reveal": {
+            "en": "A **race condition** is a bug where the *result* of a program depends on the *timing* of two or more threads touching the same mutable state. Having two threads is not the problem — the problem is that a shared value is updated without coordination.\n\n```mermaid\nsequenceDiagram\n  participant T1 as Thread 1\n  participant C as Shared counter\n  participant T2 as Thread 2\n  T1->>C: read 0\n  T2->>C: read 0\n  T1->>C: write 1\n  T2->>C: write 1\n  Note over C: final value is 1, not 2\n```\n\nBoth threads read `0`, both compute `1`, both write `1` — one increment is silently lost. That is why the loop can print anything between 1000 and 2000: how many updates are lost depends on how the two threads happen to interleave on that particular run. The same program, the same input, a different answer.",
+            "ru": "**Состояние гонки (race condition)** — ошибка, при которой *результат* программы зависит от *тайминга* двух или более потоков, трогающих одно и то же изменяемое состояние. Проблема не в том, что потоков двое, — а в том, что общее значение обновляется без координации.\n\n```mermaid\nsequenceDiagram\n  participant T1 as Thread 1\n  participant C as Общий counter\n  participant T2 as Thread 2\n  T1->>C: read 0\n  T2->>C: read 0\n  T1->>C: write 1\n  T2->>C: write 1\n  Note over C: итоговое значение 1, а не 2\n```\n\nОба потока читают `0`, оба вычисляют `1`, оба записывают `1` — один инкремент молча теряется. Поэтому цикл может напечатать что угодно от 1000 до 2000: сколько обновлений потеряется, зависит от того, как именно потоки переплелись в этом конкретном запуске. Та же программа, те же данные — другой ответ."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the count depends on the interleaving, so it varies per run.",
+              "ru": "Верно — результат зависит от переплетения потоков и меняется от запуска к запуску."
+            },
+            "incorrect": {
+              "en": "Increments can be lost, so the result varies between 1000 and 2000.",
+              "ru": "Инкременты могут теряться, поэтому результат колеблется между 1000 и 2000."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Some value between 1000 and 2000, different on different runs",
+                "ru": "Какое-то значение между 1000 и 2000, разное в разных запусках"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Always 2000",
+                "ru": "Всегда 2000"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That would need every increment to complete before the next one starts — nothing guarantees that.",
+                "ru": "Для этого каждый инкремент должен завершаться до начала следующего — а это ничем не гарантировано."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Always 1000",
+                "ru": "Всегда 1000"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Losing an update is possible, not guaranteed; most increments still land.",
+                "ru": "Потеря обновления возможна, но не обязательна; большинство инкрементов проходит."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "basics-p1-varies-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A program with a race condition can print a different result on different runs, with no change to the code or the input.",
+            "ru": "Программа с состоянием гонки может печатать разный результат в разных запусках без изменения кода и входных данных."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Timing-dependent results are the defining symptom of a race condition.",
+              "ru": "Зависимость результата от тайминга — определяющий симптом состояния гонки."
+            },
+            "incorrect": {
+              "en": "It can — the result depends on how threads interleave, which changes from run to run.",
+              "ru": "Может — результат зависит от переплетения потоков, а оно меняется от запуска к запуску."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "basics-p2-describe",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which statement best describes a race condition?",
+            "ru": "Какое утверждение лучше всего описывает состояние гонки?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The defect is that correctness depends on timing the program does not control.",
+              "ru": "Дефект в том, что корректность зависит от тайминга, который программа не контролирует."
+            },
+            "incorrect": {
+              "en": "A race condition means the result depends on how threads happen to interleave.",
+              "ru": "Состояние гонки означает, что результат зависит от того, как переплелись потоки."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The result depends on how two threads happen to interleave",
+                "ru": "Результат зависит от того, как переплелись два потока"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Two threads run at the same instant on different cores",
+                "ru": "Два потока выполняются одновременно на разных ядрах"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Running in parallel is not a bug by itself; the bug is the uncoordinated shared update.",
+                "ru": "Параллельное выполнение само по себе не ошибка; ошибка — несогласованное общее обновление."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The program runs slower because threads compete for the CPU",
+                "ru": "Программа работает медленнее, потому что потоки конкурируют за процессор"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is a performance effect; a race condition is a correctness bug.",
+                "ru": "Это эффект производительности; состояние гонки — ошибка корректности."
+              }
+            }
+          ]
+        },
+        {
+          "id": "basics-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble what a race condition depends on.",
+            "ru": "Собери, от чего зависит состояние гонки."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Nothing in the language orders two threads for you — timing decides the outcome.",
+              "ru": "Язык сам по себе не упорядочивает потоки — исход решает тайминг."
+            },
+            "incorrect": {
+              "en": "In a race condition the result depends on thread timing, not on the compiler or the machine.",
+              "ru": "В состоянии гонки результат зависит от тайминга потоков, а не от компилятора или машины."
+            }
+          },
+          "tokens": {
+            "en": [
+              "the",
+              "result",
+              "depends",
+              "on",
+              "thread",
+              "timing"
+            ],
+            "ru": [
+              "результат",
+              "зависит",
+              "от",
+              "тайминга",
+              "потоков"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "compiler",
+              "version"
+            ],
+            "ru": [
+              "версии",
+              "компилятора"
+            ]
+          }
+        },
+        {
+          "id": "basics-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the definition of a race condition.",
+            "ru": "Дополни определение состояния гонки."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Timing plus shared mutable state is the whole definition.",
+              "ru": "Тайминг плюс общее изменяемое состояние — вот всё определение."
+            },
+            "incorrect": {
+              "en": "It is timing and mutable: the result depends on the timing of threads touching shared mutable state.",
+              "ru": "Это тайминг и изменяемое: результат зависит от тайминга потоков, трогающих общее изменяемое состояние."
+            }
+          },
+          "text": {
+            "en": "A race condition appears when the result depends on the ___ of threads that touch the same ___ state.",
+            "ru": "Состояние гонки возникает, когда результат зависит от ___ потоков, которые трогают одно и то же ___ состояние."
+          },
+          "blanks": [
+            {
+              "en": [
+                "timing"
+              ],
+              "ru": [
+                "тайминга",
+                "тайминг",
+                "timing"
+              ]
+            },
+            {
+              "en": [
+                "mutable"
+              ],
+              "ru": [
+                "изменяемое",
+                "изменяемого"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "shared-mutable-state",
+      "title": {
+        "en": "The two ingredients",
+        "ru": "Два ингредиента"
+      },
+      "summary": {
+        "en": "A race needs shared mutable state plus a non-atomic operation on it; remove either ingredient and the race is gone.",
+        "ru": "Гонке нужны общее изменяемое состояние плюс неатомарная операция над ним; убери любой ингредиент — и гонки нет."
+      },
+      "discovery": [
+        {
+          "id": "ingredients-d1-which-method",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Two threads call both methods on the SAME Counter instance. Which method can produce a wrong result?",
+            "ru": "Два потока вызывают оба метода на ОДНОМ экземпляре Counter. Какой метод может дать неверный результат?"
+          },
+          "code": "class Counter {\n    private int total = 0;\n\n    void addLocal(int n) {\n        int sum = n + 1;      // local variable only\n    }\n\n    void addShared(int n) {\n        total += n;           // touches the field\n    }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "A race needs exactly two ingredients. Remove either one and it disappears:\n\n1. **Shared mutable state** — data that more than one thread can reach *and* change. A field of an object both threads hold is shared. A **local variable** is not: each thread gets its own copy on its own call stack, so no other thread can even see it.\n2. **A non-atomic operation** on that state. An operation is **atomic** when other threads can never observe it half-done: it either has not happened yet or is fully finished.\n\n`total += n` fails both tests — `total` is a field of the shared object, and `+=` is not atomic. `int sum = n + 1` touches only a local variable; run it on a thousand threads and it is still safe.\n\nShared data that is only *read* is safe too: if nothing changes, there is nothing to lose.",
+            "ru": "Гонке нужны ровно два ингредиента. Уберите любой — и она исчезает:\n\n1. **Общее изменяемое состояние** — данные, до которых может дотянуться *и* которые может изменить больше одного потока. Поле объекта, который держат оба потока, — общее. **Локальная переменная** — нет: у каждого потока своя копия в собственном стеке вызовов, другой поток её даже не видит.\n2. **Неатомарная операция** над этим состоянием. Операция **атомарна**, когда другие потоки никогда не видят её выполненной наполовину: она либо ещё не произошла, либо полностью завершена.\n\n`total += n` проваливает оба теста — `total` является полем общего объекта, а `+=` не атомарен. `int sum = n + 1` трогает только локальную переменную; запусти хоть на тысяче потоков — всё равно безопасно.\n\nОбщие данные, которые только *читают*, тоже безопасны: если ничего не меняется, терять нечего."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Only the shared field can be corrupted; the local variable belongs to one thread.",
+              "ru": "Испортиться может только общее поле; локальная переменная принадлежит одному потоку."
+            },
+            "incorrect": {
+              "en": "Only addShared: it updates a shared field, while addLocal touches a per-thread local variable.",
+              "ru": "Только addShared: он меняет общее поле, а addLocal трогает локальную переменную своего потока."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Only addShared",
+                "ru": "Только addShared"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Only addLocal",
+                "ru": "Только addLocal"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A local variable lives on one thread's stack; no other thread can see or change it.",
+                "ru": "Локальная переменная живёт в стеке одного потока; другой поток её не видит и не меняет."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Both, because both run on two threads",
+                "ru": "Оба, потому что оба выполняются в двух потоках"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Two threads alone are not a bug — only shared mutable state can be corrupted.",
+                "ru": "Два потока сами по себе не ошибка — испортиться может только общее изменяемое состояние."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "Neither, because each body is a single statement",
+                "ru": "Ни один, потому что в каждом теле по одной инструкции"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Being one statement in the source does not make an update indivisible at runtime.",
+                "ru": "Одна инструкция в исходнике не делает обновление неделимым во время выполнения."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "ingredients-p1-local-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A local variable declared inside a method can be corrupted by another thread.",
+            "ru": "Локальная переменная, объявленная внутри метода, может быть испорчена другим потоком."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Each thread gets its own copy on its own call stack, so it is not shared at all.",
+              "ru": "У каждого потока своя копия в собственном стеке вызовов, так что она вообще не общая."
+            },
+            "incorrect": {
+              "en": "No — a local variable lives on one thread's stack and is invisible to the others.",
+              "ru": "Нет — локальная переменная живёт в стеке одного потока и невидима остальным."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "ingredients-p2-combination",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which combination does a race condition require?",
+            "ru": "Какая комбинация нужна для состояния гонки?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Both ingredients must be present; removing either one removes the race.",
+              "ru": "Нужны оба ингредиента; убрать любой — и гонки не будет."
+            },
+            "incorrect": {
+              "en": "It takes shared MUTABLE state plus a NON-ATOMIC operation on it.",
+              "ru": "Нужно общее ИЗМЕНЯЕМОЕ состояние плюс НЕАТОМАРНАЯ операция над ним."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Shared mutable state and a non-atomic operation on it",
+                "ru": "Общее изменяемое состояние и неатомарная операция над ним"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Two threads and any shared data",
+                "ru": "Два потока и любые общие данные"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Shared data that is only read can never race — something must change.",
+                "ru": "Общие данные только для чтения гоняться не могут — что-то должно меняться."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A slow method and a fast machine",
+                "ru": "Медленный метод и быстрая машина"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Speed changes how often a race shows up, not whether the code has one.",
+                "ru": "Скорость меняет частоту проявления гонки, а не наличие её в коде."
+              }
+            }
+          ]
+        },
+        {
+          "id": "ingredients-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the two ingredients of a race condition.",
+            "ru": "Собери два ингредиента состояния гонки."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Every fix in this topic attacks one of these two ingredients.",
+              "ru": "Любое исправление в этой теме бьёт по одному из этих двух ингредиентов."
+            },
+            "incorrect": {
+              "en": "The two ingredients are shared mutable state plus a non-atomic operation.",
+              "ru": "Два ингредиента — общее изменяемое состояние плюс неатомарная операция."
+            }
+          },
+          "tokens": {
+            "en": [
+              "shared",
+              "mutable",
+              "state",
+              "plus",
+              "a",
+              "non-atomic",
+              "operation"
+            ],
+            "ru": [
+              "общее",
+              "изменяемое",
+              "состояние",
+              "плюс",
+              "неатомарная",
+              "операция"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "sorted",
+              "data"
+            ],
+            "ru": [
+              "отсортированные",
+              "данные"
+            ]
+          }
+        },
+        {
+          "id": "ingredients-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing words.",
+            "ru": "Впиши два пропущенных слова."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Shared plus non-atomic — that is the interview formula.",
+              "ru": "Общее плюс неатомарная — вот формула для собеседования."
+            },
+            "incorrect": {
+              "en": "A race needs SHARED mutable state and a NON-ATOMIC operation on it.",
+              "ru": "Гонке нужно ОБЩЕЕ изменяемое состояние и НЕАТОМАРНАЯ операция над ним."
+            }
+          },
+          "text": {
+            "en": "A race needs ___ mutable state and a ___ operation on it.",
+            "ru": "Гонке нужно ___ изменяемое состояние и ___ операция над ним."
+          },
+          "blanks": [
+            {
+              "en": [
+                "shared"
+              ],
+              "ru": [
+                "общее",
+                "разделяемое",
+                "shared"
+              ]
+            },
+            {
+              "en": [
+                "non-atomic",
+                "nonatomic"
+              ],
+              "ru": [
+                "неатомарная",
+                "non-atomic"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "compound-operation",
+      "title": {
+        "en": "count++ is three steps",
+        "ru": "count++ — это три шага"
+      },
+      "summary": {
+        "en": "count++ is a compound read-modify-write, so two threads can read the same value and one update is lost.",
+        "ru": "count++ — составной read-modify-write, поэтому два потока могут прочитать одно значение и одно обновление потеряется."
+      },
+      "discovery": [
+        {
+          "id": "compound-d1-one-bump",
+          "type": "predict_output",
+          "prompt": {
+            "en": "count starts at 0 and two threads each call bump() exactly once. Predict the printed value.",
+            "ru": "count равен 0, и два потока вызывают bump() ровно по одному разу. Предскажи напечатанное значение."
+          },
+          "code": "class Counter {\n    int count = 0;\n    void bump() { count++; }\n}\n\n// two threads each call counter.bump() once, then:\nSystem.out.println(counter.count);",
+          "codeLang": "java",
+          "reveal": {
+            "en": "`count++` looks like one action, but it is a **compound operation** — three separate steps with gaps between them where another thread can run:\n\n```\ncount++   ==   int tmp = count;   // 1. read\n               tmp = tmp + 1;    // 2. compute\n               count = tmp;      // 3. write\n```\n\nThis shape has a name: **read-modify-write**. If both threads perform step 1 before either reaches step 3, they read the same `0`, both compute `1`, and the second write simply overwrites the first. That is a **lost update**, and the printed value is `1` instead of `2`.\n\nIt is not guaranteed to happen — if the threads do not overlap, you get `2`. That is exactly what makes the bug so unpleasant.\n\nThe same shape hides in `balance -= amount`, `list.size() + 1`, and in nearly every counter, cache, rate limiter and inventory reservation.",
+            "ru": "`count++` выглядит как одно действие, но это **compound operation** (составная операция) — три отдельных шага, между которыми может вклиниться другой поток:\n\n```\ncount++   ==   int tmp = count;   // 1. read\n               tmp = tmp + 1;    // 2. compute\n               count = tmp;      // 3. write\n```\n\nУ такой формы есть название: **read-modify-write**. Если оба потока выполнят шаг 1 до того, как кто-то дойдёт до шага 3, они прочитают один и тот же `0`, оба вычислят `1`, и вторая запись просто затрёт первую. Это **потерянное обновление (lost update)**, и напечатается `1` вместо `2`.\n\nЭто не обязано произойти — если потоки не пересеклись, получится `2`. Именно поэтому такая ошибка так неприятна.\n\nТа же форма прячется в `balance -= amount`, `list.size() + 1` и почти в каждом счётчике, кэше, rate limiter и резервировании товара."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Both outcomes are possible: an overlap loses one increment, no overlap keeps both.",
+              "ru": "Возможны оба исхода: при пересечении один инкремент теряется, без него — оба сохраняются."
+            },
+            "incorrect": {
+              "en": "count++ is read, compute, write — an overlap gives 1, no overlap gives 2.",
+              "ru": "count++ — это read, compute, write: при пересечении будет 1, без него 2."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "1 or 2, depending on the timing",
+                "ru": "1 или 2, в зависимости от тайминга"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Always 2",
+                "ru": "Всегда 2"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Only if the increments never overlap — nothing in the code enforces that.",
+                "ru": "Только если инкременты не пересекутся — но в коде это ничем не обеспечено."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Always 1",
+                "ru": "Всегда 1"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Losing the update is possible, not certain; often both increments land.",
+                "ru": "Потеря обновления возможна, но не обязательна; часто оба инкремента проходят."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "compound-p1-atomic-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In Java, count++ on a shared field is a single indivisible operation.",
+            "ru": "В Java count++ на общем поле — единая неделимая операция."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It is read, compute, write — another thread can run between those steps.",
+              "ru": "Это read, compute, write — между шагами может вклиниться другой поток."
+            },
+            "incorrect": {
+              "en": "No — count++ is a compound read-modify-write of three separate steps.",
+              "ru": "Нет — count++ это составной read-modify-write из трёх отдельных шагов."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "compound-p2-spot-counter",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This class is documented as thread-safe. Where is the defect?",
+            "ru": "Этот класс задокументирован как потокобезопасный. Где дефект?"
+          },
+          "code": "class Counter {\n    private int count = 0;\n\n    public void increment() {\n        count++;\n    }\n\n    public synchronized int get() {\n        return count;\n    }\n}",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "The read is guarded but the read-modify-write is not, so increments can be lost.",
+              "ru": "Чтение защищено, а read-modify-write — нет, поэтому инкременты могут теряться."
+            },
+            "incorrect": {
+              "en": "increment() is unguarded: count++ is a read-modify-write that two threads can interleave.",
+              "ru": "increment() не защищён: count++ — это read-modify-write, который два потока могут переплести."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "increment() is unguarded, so concurrent count++ calls can lose updates",
+                "ru": "increment() не защищён, поэтому конкурентные count++ могут терять обновления"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "get() should not be synchronized, because reading is always safe",
+                "ru": "get() не должен быть synchronized, ведь чтение всегда безопасно"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Guarding the read is not the bug; the unguarded read-modify-write is.",
+                "ru": "Защита чтения — не ошибка; ошибка — незащищённый read-modify-write."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "count should be static so that all threads share it",
+                "ru": "count должен быть static, чтобы все потоки его разделяли"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Wider sharing is the opposite of a fix — it exposes the field to even more callers.",
+                "ru": "Более широкое разделение — противоположность исправлению: поле откроется ещё большему числу вызывающих."
+              }
+            }
+          ]
+        },
+        {
+          "id": "compound-p3-sort-steps",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the three steps hidden inside count++.",
+            "ru": "Расставь по порядку три шага, спрятанных внутри count++."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Read, compute, write — and another thread may run in either gap.",
+              "ru": "Read, compute, write — и в любом промежутке может вклиниться другой поток."
+            },
+            "incorrect": {
+              "en": "The order is: read the current value, compute value + 1, write the result back.",
+              "ru": "Порядок такой: прочитать текущее значение, вычислить значение + 1, записать результат обратно."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Read the current value of count",
+                "ru": "Прочитать текущее значение count"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Compute that value plus one",
+                "ru": "Вычислить это значение плюс один"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Write the new value back into count",
+                "ru": "Записать новое значение обратно в count"
+              }
+            }
+          ]
+        },
+        {
+          "id": "compound-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the first and last of the three hidden steps.",
+            "ru": "Назови первый и последний из трёх скрытых шагов."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Read-modify-write is the shape to look for in any shared update.",
+              "ru": "Read-modify-write — форма, которую нужно искать в любом общем обновлении."
+            },
+            "incorrect": {
+              "en": "The steps are read, modify, write — the gaps between them are where the race lives.",
+              "ru": "Шаги такие: read, modify, write — гонка живёт в промежутках между ними."
+            }
+          },
+          "text": {
+            "en": "count++ hides three steps: ___, modify, ___.",
+            "ru": "count++ прячет три шага: ___, изменить, ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "read"
+              ],
+              "ru": [
+                "read",
+                "прочитать",
+                "чтение"
+              ]
+            },
+            {
+              "en": [
+                "write"
+              ],
+              "ru": [
+                "write",
+                "записать",
+                "запись"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "remove-sharing-first",
+      "title": {
+        "en": "Do not share at all",
+        "ru": "Вообще не делить состояние"
+      },
+      "summary": {
+        "en": "The strongest fix is to remove the sharing: local variables, immutable objects, thread confinement, message passing.",
+        "ru": "Самое надёжное исправление — убрать совместное использование: локальные переменные, immutable objects, thread confinement, message passing."
+      },
+      "discovery": [
+        {
+          "id": "nosharing-d1-where-counter",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A request handler needs a temporary counter while processing ONE request. Where should that counter live so that a race is impossible?",
+            "ru": "Обработчику запроса нужен временный счётчик на время обработки ОДНОГО запроса. Где он должен жить, чтобы гонка была невозможна?"
+          },
+          "reveal": {
+            "en": "The strongest fix is not a better lock — it is **no sharing at all**. If no other thread can reach the data, there is nothing to coordinate.\n\n```mermaid\nflowchart TD\n  A[\"shared mutable state?\"] -->|no| B[\"no race is possible\"]\n  A -->|yes| C[\"it has to be protected\"]\n```\n\nFour ways to remove the sharing:\n\n- **Local variables** — they live on the calling thread's own stack, so no other thread can see them.\n- **Immutable objects** — objects whose fields never change after construction. Nothing to update means nothing to race over.\n- **Thread confinement / request-scoped data** — each thread or each request gets its own instance instead of everyone using one shared object.\n- **Message passing** — threads send copies of data to each other instead of writing into the same object.\n\nAn instance field of a shared handler is the opposite: every request that reaches that handler touches the same field. A `static` field is worse still — every thread in the whole process can reach it.",
+            "ru": "Самое надёжное исправление — не лучший lock, а **отсутствие совместного использования**. Если другой поток не может дотянуться до данных, координировать нечего.\n\n```mermaid\nflowchart TD\n  A[\"общее изменяемое состояние?\"] -->|нет| B[\"гонка невозможна\"]\n  A -->|да| C[\"его нужно защищать\"]\n```\n\nЧетыре способа убрать совместное использование:\n\n- **Локальные переменные** — живут в собственном стеке вызывающего потока, другие потоки их не видят.\n- **Immutable objects** — объекты, поля которых не меняются после создания. Нечего обновлять — не за что и гоняться.\n- **Thread confinement / request-scoped data** — у каждого потока или каждого запроса свой экземпляр вместо одного общего объекта на всех.\n- **Message passing** — потоки пересылают друг другу копии данных вместо записи в один объект.\n\nПоле экземпляра общего обработчика — противоположность: каждый запрос, дошедший до этого обработчика, трогает одно и то же поле. Поле `static` ещё хуже — до него дотянется любой поток процесса."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A local variable is not shared at all, so no coordination is needed.",
+              "ru": "Локальная переменная вообще не общая, поэтому координация не нужна."
+            },
+            "incorrect": {
+              "en": "In a local variable: it lives on one thread's stack and no other thread can reach it.",
+              "ru": "В локальной переменной: она живёт в стеке одного потока, и другие потоки до неё не дотянутся."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "In a local variable inside the method",
+                "ru": "В локальной переменной внутри метода"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "In an instance field of the handler shared by all requests",
+                "ru": "В поле экземпляра обработчика, общего для всех запросов"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is precisely the shared mutable state a race needs.",
+                "ru": "Это ровно то общее изменяемое состояние, которое нужно гонке."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "In a static field of the handler class",
+                "ru": "В static-поле класса обработчика"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "static is the widest possible sharing — every thread in the process reaches it.",
+                "ru": "static — максимально широкое разделение: до него дотянется любой поток процесса."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "nosharing-p1-never-races",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which of these can NEVER take part in a race condition?",
+            "ru": "Что из этого НИКОГДА не может участвовать в состоянии гонки?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "No mutation means no lost update, however many threads read it.",
+              "ru": "Нет изменения — нет потерянного обновления, сколько бы потоков ни читало."
+            },
+            "incorrect": {
+              "en": "An immutable object cannot change after construction, so there is nothing to race over.",
+              "ru": "Immutable object не меняется после создания, поэтому гоняться не за что."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "An immutable object shared by many threads",
+                "ru": "Immutable object, общий для многих потоков"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A shared HashMap that threads write to",
+                "ru": "Общий HashMap, в который потоки пишут"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Writing into a shared map is shared mutable state by definition.",
+                "ru": "Запись в общий map — по определению общее изменяемое состояние."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A shared int field that threads increment",
+                "ru": "Общее int-поле, которое потоки инкрементируют"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the classic racing counter.",
+                "ru": "Это классический счётчик с гонкой."
+              }
+            }
+          ]
+        },
+        {
+          "id": "nosharing-p2-match-techniques",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each technique to how it removes the sharing.",
+            "ru": "Соотнеси каждый приём с тем, как он убирает совместное использование."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Four different ways to make sure two threads never touch the same mutable data.",
+              "ru": "Четыре разных способа добиться того, чтобы два потока не трогали одни изменяемые данные."
+            },
+            "incorrect": {
+              "en": "Local = own stack, immutable = never changes, confinement = one thread, messages = copies.",
+              "ru": "Локальная — свой стек, immutable — не меняется, confinement — один поток, сообщения — копии."
+            }
+          },
+          "pairs": [
+            {
+              "id": "local",
+              "left": {
+                "en": "A local variable",
+                "ru": "Локальная переменная"
+              },
+              "right": {
+                "en": "Lives on one thread's own call stack",
+                "ru": "Живёт в собственном стеке вызовов одного потока"
+              }
+            },
+            {
+              "id": "immutable",
+              "left": {
+                "en": "An immutable object",
+                "ru": "Immutable object"
+              },
+              "right": {
+                "en": "Cannot change after it is created",
+                "ru": "Не может измениться после создания"
+              }
+            },
+            {
+              "id": "confinement",
+              "left": {
+                "en": "Thread confinement",
+                "ru": "Thread confinement"
+              },
+              "right": {
+                "en": "Only one thread ever touches the data",
+                "ru": "Данные трогает только один поток"
+              }
+            },
+            {
+              "id": "messages",
+              "left": {
+                "en": "Message passing",
+                "ru": "Message passing"
+              },
+              "right": {
+                "en": "Threads send copies instead of sharing one object",
+                "ru": "Потоки шлют копии вместо общего объекта"
+              }
+            }
+          ]
+        },
+        {
+          "id": "nosharing-p3-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the strongest fix.",
+            "ru": "Дополни самое надёжное исправление."
+          },
+          "feedback": {
+            "correct": {
+              "en": "No sharing means no lock to write and no lock for a future caller to forget.",
+              "ru": "Нет разделения — нет lock, который надо писать и который будущий вызывающий может забыть."
+            },
+            "incorrect": {
+              "en": "Do not SHARE mutable state at all — use local variables or IMMUTABLE objects.",
+              "ru": "Вообще не ДЕЛИТЬ изменяемое состояние — использовать локальные переменные или IMMUTABLE объекты."
+            }
+          },
+          "text": {
+            "en": "The strongest fix is to not ___ mutable state at all: use local variables or ___ objects.",
+            "ru": "Самое надёжное исправление — вообще не ___ изменяемое состояние: использовать локальные переменные или ___ объекты."
+          },
+          "blanks": [
+            {
+              "en": [
+                "share"
+              ],
+              "ru": [
+                "делить",
+                "разделять",
+                "share"
+              ]
+            },
+            {
+              "en": [
+                "immutable"
+              ],
+              "ru": [
+                "immutable",
+                "неизменяемые"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "clear-ownership",
+      "title": {
+        "en": "One owner at a time",
+        "ru": "Один владелец в момент времени"
+      },
+      "summary": {
+        "en": "Design so that one thread, actor, executor task or database transaction owns a piece of mutable state at a time.",
+        "ru": "Проектируй так, чтобы куском изменяемого состояния в конкретный момент владел один thread, actor, executor task или транзакция БД."
+      },
+      "discovery": [
+        {
+          "id": "ownership-d1-order-queue",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A pool of threads processes orders from a queue, and each order has a mutable draft object. What makes this safe without any lock?",
+            "ru": "Пул потоков обрабатывает заказы из очереди, и у каждого заказа есть изменяемый черновик. Что делает это безопасным без всякого lock?"
+          },
+          "reveal": {
+            "en": "**Ownership** means that at any moment exactly one actor is allowed to change a given piece of mutable state. It is a design rule rather than a language feature — but when it holds, no lock is needed at all, because the state is never actually shared.\n\n```mermaid\nflowchart LR\n  W1[\"task 1\"] --> A[\"order A draft\"]\n  W2[\"task 2\"] --> B[\"order B draft\"]\n```\n\nAn owner can be one thread, one actor, one executor task, or one database transaction. A thread pool is perfectly safe when each submitted task owns its own data: many threads run at once, but two tasks never touch the same object.\n\nOwnership breaks the moment two tasks can hold the same mutable object at the same time — then you are back to needing a lock or an atomic API.",
+            "ru": "**Владение (ownership)** означает, что в любой момент менять конкретный кусок изменяемого состояния разрешено ровно одному действующему лицу. Это правило проектирования, а не возможность языка, — но когда оно соблюдается, lock не нужен вовсе, потому что состояние фактически не является общим.\n\n```mermaid\nflowchart LR\n  W1[\"задача 1\"] --> A[\"черновик заказа A\"]\n  W2[\"задача 2\"] --> B[\"черновик заказа B\"]\n```\n\nВладельцем может быть один thread, один actor, одна executor task или одна транзакция базы данных. Пул потоков совершенно безопасен, когда каждая отправленная задача владеет своими данными: потоков много, но две задачи никогда не трогают один объект.\n\nВладение ломается в тот момент, когда две задачи могут одновременно держать один изменяемый объект — тогда снова нужен lock или атомарный API."
+          },
+          "feedback": {
+            "correct": {
+              "en": "If only one task can reach a draft, the draft is not shared mutable state.",
+              "ru": "Если до черновика может дотянуться только одна задача, он не является общим изменяемым состоянием."
+            },
+            "incorrect": {
+              "en": "Exactly one task owns an order at a time, so no two threads ever touch the same draft.",
+              "ru": "Заказом в момент времени владеет ровно одна задача, поэтому два потока не трогают один черновик."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Exactly one task owns an order at a time, so no two threads touch the same draft",
+                "ru": "Заказом в момент времени владеет ровно одна задача, и два потока не трогают один черновик"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Every thread keeps a reference to every order so that none is missed",
+                "ru": "Каждый поток держит ссылку на каждый заказ, чтобы ни один не потерялся"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Handing the same mutable draft to many threads is exactly the sharing to avoid.",
+                "ru": "Раздать один изменяемый черновик многим потокам — это ровно то разделение, которого надо избежать."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The pool runs the tasks fast enough that they do not overlap",
+                "ru": "Пул выполняет задачи достаточно быстро, чтобы они не пересекались"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Speed is timing, and timing is never a safety guarantee.",
+                "ru": "Скорость — это тайминг, а тайминг никогда не является гарантией безопасности."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "ownership-p1-not-owner",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which of these is NOT a single owner of a piece of mutable state?",
+            "ru": "Что из этого НЕ является единственным владельцем куска изменяемого состояния?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Many threads holding one mutable object is shared state, not ownership.",
+              "ru": "Много потоков с одним изменяемым объектом — это общее состояние, а не владение."
+            },
+            "incorrect": {
+              "en": "When every pool thread holds the same object, nobody owns it — that is plain sharing.",
+              "ru": "Когда каждый поток пула держит один и тот же объект, им никто не владеет — это обычное разделение."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Every thread in a pool holding a reference to the same mutable object",
+                "ru": "Каждый поток пула держит ссылку на один и тот же изменяемый объект"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "One executor task working on its own data",
+                "ru": "Одна executor task, работающая со своими данными"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A task owning its own data is exactly the ownership rule.",
+                "ru": "Задача, владеющая своими данными, — это ровно правило владения."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "One database transaction changing its rows",
+                "ru": "Одна транзакция базы данных, меняющая свои строки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A transaction owning the rows it changes is the database version of the same rule.",
+                "ru": "Транзакция, владеющая изменяемыми строками, — это то же правило на уровне базы данных."
+              }
+            }
+          ]
+        },
+        {
+          "id": "ownership-p2-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the ownership rule.",
+            "ru": "Собери правило владения."
+          },
+          "feedback": {
+            "correct": {
+              "en": "When it holds, the state is never really shared, so no lock is needed.",
+              "ru": "Когда оно соблюдается, состояние фактически не общее, и lock не нужен."
+            },
+            "incorrect": {
+              "en": "Clear ownership means only one owner changes the state at a time.",
+              "ru": "Ясное владение означает, что состояние в один момент меняет только один владелец."
+            }
+          },
+          "tokens": {
+            "en": [
+              "only",
+              "one",
+              "owner",
+              "changes",
+              "the",
+              "state",
+              "at",
+              "a",
+              "time"
+            ],
+            "ru": [
+              "только",
+              "один",
+              "владелец",
+              "меняет",
+              "состояние",
+              "в",
+              "один",
+              "момент"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "never",
+              "waits"
+            ],
+            "ru": [
+              "никогда",
+              "ждёт"
+            ]
+          }
+        },
+        {
+          "id": "ownership-p3-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the database-level owner of mutable state.",
+            "ru": "Назови владельца изменяемого состояния на уровне базы данных."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A thread, an actor, an executor task and a transaction are all forms of one owner.",
+              "ru": "Thread, actor, executor task и транзакция — всё это формы одного владельца."
+            },
+            "incorrect": {
+              "en": "It is a transaction: it owns the rows it changes until it finishes.",
+              "ru": "Это транзакция: она владеет изменяемыми строками до своего завершения."
+            }
+          },
+          "text": {
+            "en": "Clear ownership means one thread, one actor, one executor task, or one database ___ changes the state at a time.",
+            "ru": "Ясное владение означает, что состояние в конкретный момент меняет один thread, один actor, одна executor task или одна ___ базы данных."
+          },
+          "blanks": [
+            {
+              "en": [
+                "transaction"
+              ],
+              "ru": [
+                "транзакция",
+                "transaction"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "same-lock-rule",
+      "title": {
+        "en": "The same lock everywhere",
+        "ru": "Один и тот же lock везде"
+      },
+      "summary": {
+        "en": "A lock protects only the code that agrees to use it, so every access path to the same state must take the same lock.",
+        "ru": "Lock защищает только тот код, который согласился его использовать, поэтому все пути доступа к одному состоянию должны брать один lock."
+      },
+      "discovery": [
+        {
+          "id": "samelock-d1-two-locks",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "Both updates sit inside a synchronized block. Why can balance still end up wrong?",
+            "ru": "Оба обновления находятся внутри synchronized-блока. Почему balance всё равно может оказаться неверным?"
+          },
+          "code": "class Wallet {\n    private final Object lockA = new Object();\n    private final Object lockB = new Object();\n    private int balance = 0;\n\n    void deposit(int n)  { synchronized (lockA) { balance += n; } }\n    void withdraw(int n) { synchronized (lockB) { balance -= n; } }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "A **lock** is a token that only one thread can hold at a time. The block of code it guards is the **critical section**: the code that reads and writes the shared state.\n\n```mermaid\nsequenceDiagram\n  participant T1 as Thread 1\n  participant L as Lock\n  participant S as Shared state\n  participant T2 as Thread 2\n  T1->>L: acquire()\n  T1->>S: read and write the state\n  T2->>L: acquire() waits\n  T1->>L: release()\n  L-->>T2: granted\n  T2->>S: reads the latest value\n```\n\nJava offers two ways to take a lock: the `synchronized` keyword and the `ReentrantLock` class. Both do the same job.\n\nThe crucial part: **a lock protects only the code that agrees to use it.** `lockA` and `lockB` are two different tokens, so a thread holding `lockA` never blocks a thread taking `lockB` — both run inside `balance` at the same time and updates are lost. Two different locks on the same data are worth about as much as no lock at all. One shared invariant, one lock, used by every access path.",
+            "ru": "**Lock** — это токен, который в один момент может держать только один поток. Блок кода, который он охраняет, называется **critical section**: это код, читающий и пишущий общее состояние.\n\n```mermaid\nsequenceDiagram\n  participant T1 as Thread 1\n  participant L as Lock\n  participant S as Общее состояние\n  participant T2 as Thread 2\n  T1->>L: acquire()\n  T1->>S: читает и пишет состояние\n  T2->>L: acquire() ждёт\n  T1->>L: release()\n  L-->>T2: доступ выдан\n  T2->>S: читает актуальное значение\n```\n\nВ Java есть два способа взять lock: ключевое слово `synchronized` и класс `ReentrantLock`. Оба делают одно и то же.\n\nСамое важное: **lock защищает только тот код, который согласился его использовать.** `lockA` и `lockB` — два разных токена, поэтому поток, держащий `lockA`, никогда не блокирует поток, берущий `lockB`: оба одновременно работают с `balance`, и обновления теряются. Два разных lock на одних данных стоят примерно столько же, сколько отсутствие lock. Один общий invariant — один lock, используемый всеми путями доступа."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Different lock objects never exclude each other, so both methods run at once.",
+              "ru": "Разные объекты lock не исключают друг друга, поэтому оба метода выполняются одновременно."
+            },
+            "incorrect": {
+              "en": "The two blocks lock different objects, so they never block each other and balance is unprotected.",
+              "ru": "Блоки блокируют разные объекты, поэтому не мешают друг другу, и balance остаётся незащищённым."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The two blocks use different locks, so they never exclude each other",
+                "ru": "Блоки используют разные lock, поэтому не исключают друг друга"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "balance should be declared final",
+                "ru": "balance должен быть объявлен final"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A final int could never be updated at all — that is not a fix for a counter.",
+                "ru": "final int вообще нельзя было бы обновлять — для счётчика это не исправление."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "synchronized works only on whole methods, not on blocks",
+                "ru": "synchronized работает только на целых методах, а не на блоках"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Synchronized blocks are valid Java; the problem is which object they lock.",
+                "ru": "Synchronized-блоки — валидная Java; проблема в том, какой объект они блокируют."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "samelock-p1-two-locks-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Guarding one shared field with two different lock objects gives the same protection as guarding it with one.",
+            "ru": "Защита одного общего поля двумя разными объектами lock даёт ту же защиту, что и одним."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Threads holding different locks never exclude each other — it is nearly no lock at all.",
+              "ru": "Потоки с разными lock не исключают друг друга — это почти как без lock."
+            },
+            "incorrect": {
+              "en": "No — two locks on the same data give no reliable exclusion; every path needs the same lock.",
+              "ru": "Нет — два lock на одних данных не дают надёжного исключения; всем путям нужен один lock."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "samelock-p2-fourth-path",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A field is updated under synchronized (lock) in three methods and read directly, without the lock, in a fourth. What is true?",
+            "ru": "Поле обновляется под synchronized (lock) в трёх методах и читается напрямую, без lock, в четвёртом. Что верно?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "One unguarded access path is enough to break the guarantee for everyone.",
+              "ru": "Одного незащищённого пути доступа достаточно, чтобы сломать гарантию для всех."
+            },
+            "incorrect": {
+              "en": "The unguarded path can observe a half-updated state; locking is a convention every path must follow.",
+              "ru": "Незащищённый путь может увидеть наполовину обновлённое состояние; lock — соглашение, которому обязаны следовать все пути."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The unguarded fourth method breaks the protection for everyone",
+                "ru": "Незащищённый четвёртый метод ломает защиту для всех"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Three guarded methods out of four is enough, because the writes are safe",
+                "ru": "Трёх защищённых методов из четырёх достаточно, ведь записи безопасны"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A lock protects only the code that uses it; the fourth path can read a half-updated state.",
+                "ru": "Lock защищает только использующий его код; четвёртый путь может прочитать полуобновлённое состояние."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The JVM applies the same lock to the fourth method automatically",
+                "ru": "JVM автоматически применит тот же lock к четвёртому методу"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing is automatic — locking is entirely by convention in the code you write.",
+                "ru": "Автоматики нет — блокировка целиком держится на соглашении в написанном коде."
+              }
+            }
+          ]
+        },
+        {
+          "id": "samelock-p3-sort-lock",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order what one thread does around a critical section.",
+            "ru": "Расставь по порядку, что делает поток вокруг critical section."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Acquire, update, release — and only then can another thread enter and see the new value.",
+              "ru": "Acquire, обновление, release — и только потом другой поток войдёт и увидит новое значение."
+            },
+            "incorrect": {
+              "en": "The order is: acquire the lock, update the shared state, release it, then another thread proceeds.",
+              "ru": "Порядок такой: взять lock, обновить общее состояние, отпустить его, затем проходит другой поток."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Acquire the lock",
+                "ru": "Взять lock"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Read and update the shared state",
+                "ru": "Прочитать и обновить общее состояние"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Release the lock",
+                "ru": "Отпустить lock"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "A waiting thread acquires the lock and sees the new value",
+                "ru": "Ожидающий поток берёт lock и видит новое значение"
+              }
+            }
+          ]
+        },
+        {
+          "id": "samelock-p4-fill-tools",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the two ways to take a lock in Java.",
+            "ru": "Назови два способа взять lock в Java."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Both give mutual exclusion; what matters is that every access path uses the same one.",
+              "ru": "Оба дают взаимное исключение; важно, чтобы все пути доступа использовали один и тот же."
+            },
+            "incorrect": {
+              "en": "They are the synchronized keyword and the ReentrantLock class.",
+              "ru": "Это ключевое слово synchronized и класс ReentrantLock."
+            }
+          },
+          "text": {
+            "en": "Two ways to take a lock in Java: the ___ keyword and the ___ class.",
+            "ru": "Два способа взять lock в Java: ключевое слово ___ и класс ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "synchronized"
+              ],
+              "ru": [
+                "synchronized"
+              ]
+            },
+            {
+              "en": [
+                "ReentrantLock"
+              ],
+              "ru": [
+                "ReentrantLock"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "protect-the-invariant",
+      "title": {
+        "en": "Protect the invariant",
+        "ru": "Защищай invariant"
+      },
+      "summary": {
+        "en": "Fields that must always agree belong in ONE protected operation, not one protected line each.",
+        "ru": "Поля, которые всегда должны быть согласованы, должны меняться в ОДНОЙ защищённой операции, а не по строке."
+      },
+      "discovery": [
+        {
+          "id": "invariant-d1-partial-lock",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "balance, lastUpdatedAt and version must always agree with each other. The money field is guarded. What is still broken?",
+            "ru": "balance, lastUpdatedAt и version всегда должны быть согласованы. Денежное поле защищено. Что всё равно сломано?"
+          },
+          "code": "synchronized (lock) {\n    balance = balance - amount;\n}\nlastUpdatedAt = now();\nversion = version + 1;",
+          "codeLang": "java",
+          "reveal": {
+            "en": "An **invariant** is a rule about state that must always hold — for example \"`version` counts how many times `balance` changed, and `lastUpdatedAt` says when\". Fields bound by one invariant have to change **together**.\n\nProtecting only one of them leaves a window in which another thread reads a new `balance` next to an old `version`. Each field is individually plausible, and the object as a whole is nonsense — a package whose delivery label, shelf number and receipt disagree.\n\n```\nsynchronized (lock) {\n    balance = balance - amount;\n    lastUpdatedAt = now();\n    version = version + 1;\n}\n```\n\nThe rule: the protected block covers the **whole invariant**, not just the line that looked dangerous. Ask \"which fields must be consistent with each other?\" and put all of them inside one operation.",
+            "ru": "**Invariant (инвариант)** — правило о состоянии, которое всегда должно выполняться: например, «`version` считает, сколько раз менялся `balance`, а `lastUpdatedAt` говорит когда». Поля, связанные одним invariant, обязаны меняться **вместе**.\n\nЕсли защитить только одно из них, остаётся окно, в котором другой поток читает новый `balance` рядом со старым `version`. По отдельности каждое поле выглядит правдоподобно, а объект в целом бессмыслен — как посылка, у которой наклейка доставки, номер полки и квитанция противоречат друг другу.\n\n```\nsynchronized (lock) {\n    balance = balance - amount;\n    lastUpdatedAt = now();\n    version = version + 1;\n}\n```\n\nПравило: защищённый блок покрывает **весь invariant**, а не только строку, которая показалась опасной. Спроси «какие поля должны быть согласованы между собой?» — и помести их все в одну операцию."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Half the invariant is outside the lock, so readers can see a contradictory object.",
+              "ru": "Половина invariant вне lock, поэтому читатели могут увидеть противоречивый объект."
+            },
+            "incorrect": {
+              "en": "Only part of the invariant is protected: another thread can see a new balance with an old version.",
+              "ru": "Защищена лишь часть invariant: другой поток может увидеть новый balance со старым version."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Only part of the invariant is inside the lock, so a reader can see a new balance with an old version",
+                "ru": "Внутри lock лишь часть invariant, поэтому читатель может увидеть новый balance со старым version"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing — only the balance really matters",
+                "ru": "Ничего — по-настоящему важен только balance"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A correct number next to a stale version is still a contradictory object.",
+                "ru": "Верное число рядом с устаревшим version — всё равно противоречивый объект."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The lock must be released before the subtraction",
+                "ru": "Lock нужно отпустить до вычитания"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Releasing first would leave the update itself unprotected.",
+                "ru": "Если отпустить раньше, само обновление останется незащищённым."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "invariant-p1-separate-blocks-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "If balance and version must always agree, updating each inside its own separate synchronized block is safe.",
+            "ru": "Если balance и version всегда должны быть согласованы, обновлять каждое в своём отдельном synchronized-блоке безопасно."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Between the two blocks another thread sees the fields disagreeing.",
+              "ru": "Между двумя блоками другой поток увидит поля рассогласованными."
+            },
+            "incorrect": {
+              "en": "No — the gap between the blocks exposes a state where balance is new and version is old.",
+              "ru": "Нет — в промежутке между блоками видно состояние, где balance новый, а version старый."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "invariant-p2-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the rule about what a protected block must cover.",
+            "ru": "Собери правило о том, что должен покрывать защищённый блок."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Ask which fields must be consistent with each other, and guard all of them together.",
+              "ru": "Спроси, какие поля должны быть согласованы между собой, и защити их все вместе."
+            },
+            "incorrect": {
+              "en": "The rule is: protect the whole invariant, not just one line.",
+              "ru": "Правило такое: защищай весь invariant, а не одну строку."
+            }
+          },
+          "tokens": {
+            "en": [
+              "protect",
+              "the",
+              "whole",
+              "invariant",
+              "not",
+              "just",
+              "one",
+              "line"
+            ],
+            "ru": [
+              "защищай",
+              "весь",
+              "invariant",
+              "а",
+              "не",
+              "одну",
+              "строку"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "fastest",
+              "field"
+            ],
+            "ru": [
+              "самое",
+              "быстрое"
+            ]
+          }
+        },
+        {
+          "id": "invariant-p3-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the concept.",
+            "ru": "Назови понятие."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Identifying the invariant is what tells you where the protected block must start and end.",
+              "ru": "Определение invariant подсказывает, где защищённый блок должен начинаться и заканчиваться."
+            },
+            "incorrect": {
+              "en": "It is called an invariant — the rule about state that must always hold.",
+              "ru": "Это называется invariant — правило о состоянии, которое всегда должно выполняться."
+            }
+          },
+          "text": {
+            "en": "The set of fields that must always stay consistent with each other is called an ___.",
+            "ru": "Набор полей, которые всегда должны оставаться согласованными между собой, называется ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "invariant"
+              ],
+              "ru": [
+                "invariant",
+                "инвариант",
+                "инвариантом"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "critical-section-scope",
+      "title": {
+        "en": "Keep the critical section small",
+        "ru": "Держи critical section маленькой"
+      },
+      "summary": {
+        "en": "The shared read-modify-write goes inside the critical section; slow network calls, logging and unrelated work stay outside.",
+        "ru": "Общий read-modify-write — внутри critical section; медленные сетевые вызовы, логирование и посторонняя работа — снаружи."
+      },
+      "discovery": [
+        {
+          "id": "scope-d1-slow-lock",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "The shared field total is correctly guarded. What is the remaining problem?",
+            "ru": "Общее поле total защищено правильно. Какая проблема остаётся?"
+          },
+          "code": "synchronized (lock) {\n    int fresh = fetchRateFromNetwork();   // remote call, ~200 ms\n    log.info(\"recalculating for {}\", user);\n    total = total + fresh;\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "A critical section is **correct** when it covers the whole invariant, and **fast** when it covers nothing more. Everything inside runs one thread at a time, so slow work inside quietly turns a parallel program into a serial one.\n\n```\nint fresh = fetchRateFromNetwork();   // slow: keep it OUTSIDE\nlog.info(\"recalculating\");            // I/O: keep it OUTSIDE\nsynchronized (lock) {\n    total = total + fresh;            // only the shared update is INSIDE\n}\n```\n\n**Inside:** the read-modify-write of the shared state and every field of its invariant.\n**Outside:** network and disk calls, logging, and any calculation that does not touch the shared state.\n\nNote what kind of defect this is. The oversized block is still *correct* — it is a throughput problem. But a lock held across a 200 ms remote call is exactly what turns one slow dependency into a stalled service, because every other thread queues behind it.",
+            "ru": "Critical section **корректна**, когда покрывает весь invariant, и **быстра**, когда не покрывает ничего лишнего. Всё внутри выполняется по одному потоку за раз, поэтому медленная работа внутри тихо превращает параллельную программу в последовательную.\n\n```\nint fresh = fetchRateFromNetwork();   // медленно: держим СНАРУЖИ\nlog.info(\"recalculating\");            // I/O: держим СНАРУЖИ\nsynchronized (lock) {\n    total = total + fresh;            // внутри только общее обновление\n}\n```\n\n**Внутри:** read-modify-write общего состояния и все поля его invariant.\n**Снаружи:** сетевые и дисковые вызовы, логирование и любые вычисления, не трогающие общее состояние.\n\nОбрати внимание на тип дефекта. Раздутый блок всё ещё *корректен* — это проблема пропускной способности. Но lock, удерживаемый на время 200-миллисекундного удалённого вызова, — ровно то, что превращает одну медленную зависимость в вставший сервис: все остальные потоки выстраиваются в очередь за ним."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The lock is held across slow I/O, so every other thread queues behind it.",
+              "ru": "Lock удерживается на время медленного I/O, и все остальные потоки ждут в очереди."
+            },
+            "incorrect": {
+              "en": "The network call and the logging run while the lock is held, serializing every other thread.",
+              "ru": "Сетевой вызов и логирование выполняются под удерживаемым lock, выстраивая все потоки в очередь."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The slow network call and the logging run while the lock is held, blocking every other thread",
+                "ru": "Медленный сетевой вызов и логирование выполняются под удерживаемым lock, блокируя все другие потоки"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The lock should be acquired once per statement",
+                "ru": "Lock нужно брать отдельно на каждую инструкцию"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "More lock operations would not help; the fix is doing the slow work outside the block.",
+                "ru": "Больше операций с lock не поможет; исправление — вынести медленную работу за блок."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — a larger critical section is always safer",
+                "ru": "Ничего — чем больше critical section, тем безопаснее"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It stays correct, but it serializes threads that had no reason to wait.",
+                "ru": "Корректность сохраняется, но потоки, которым незачем ждать, выстраиваются в очередь."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "scope-p1-what-inside",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which of these belongs INSIDE a critical section?",
+            "ru": "Что из этого должно быть ВНУТРИ critical section?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Guard the shared update and its invariant — and nothing slower.",
+              "ru": "Защищай общее обновление и его invariant — и ничего более медленного."
+            },
+            "incorrect": {
+              "en": "Only the read-modify-write of the shared state belongs inside; I/O stays outside.",
+              "ru": "Внутри должен быть только read-modify-write общего состояния; I/O остаётся снаружи."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The read-modify-write of the shared field",
+                "ru": "Read-modify-write общего поля"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "An HTTP call to another service",
+                "ru": "HTTP-вызов другого сервиса"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Remote calls are slow and unpredictable; do them before or after the block.",
+                "ru": "Удалённые вызовы медленные и непредсказуемые; делай их до или после блока."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Writing a log line about the operation",
+                "ru": "Запись строки в лог об операции"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Logging is I/O and can wait until the lock is released.",
+                "ru": "Логирование — это I/O, оно может подождать до освобождения lock."
+              }
+            }
+          ]
+        },
+        {
+          "id": "scope-p2-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the lock-scope rule.",
+            "ru": "Собери правило об области действия lock."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Small scope keeps the program parallel while the invariant stays protected.",
+              "ru": "Маленькая область сохраняет параллельность, а invariant остаётся защищённым."
+            },
+            "incorrect": {
+              "en": "The rule is: hold the lock only for the shared update.",
+              "ru": "Правило такое: держи lock только на время общего обновления."
+            }
+          },
+          "tokens": {
+            "en": [
+              "hold",
+              "the",
+              "lock",
+              "only",
+              "for",
+              "the",
+              "shared",
+              "update"
+            ],
+            "ru": [
+              "держи",
+              "lock",
+              "только",
+              "на",
+              "время",
+              "общего",
+              "обновления"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "network",
+              "call"
+            ],
+            "ru": [
+              "сетевого",
+              "вызова"
+            ]
+          }
+        },
+        {
+          "id": "scope-p3-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the scope rule.",
+            "ru": "Дополни правило об области действия."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Small and consistent: the shared update inside, the slow work outside.",
+              "ru": "Маленькая и последовательная: общее обновление внутри, медленная работа снаружи."
+            },
+            "incorrect": {
+              "en": "Keep it SMALL: guard the shared read-modify-write, not the slow NETWORK call.",
+              "ru": "Держи её КОРОТКОЙ: защищай общий read-modify-write, а не медленный СЕТЕВОЙ вызов."
+            }
+          },
+          "text": {
+            "en": "Keep the critical section ___: guard the shared read-modify-write, not the slow ___ call.",
+            "ru": "Держи critical section ___: защищай общий read-modify-write, а не медленный ___ вызов."
+          },
+          "blanks": [
+            {
+              "en": [
+                "small",
+                "short"
+              ],
+              "ru": [
+                "короткой",
+                "маленькой",
+                "небольшой"
+              ]
+            },
+            {
+              "en": [
+                "network"
+              ],
+              "ru": [
+                "сетевой"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "atomic-tools",
+      "title": {
+        "en": "Higher-level atomic tools",
+        "ru": "Высокоуровневые атомарные инструменты"
+      },
+      "summary": {
+        "en": "java.util.concurrent already provides atomic versions of common operations: AtomicInteger.incrementAndGet(), ConcurrentHashMap.putIfAbsent().",
+        "ru": "В java.util.concurrent уже есть атомарные версии частых операций: AtomicInteger.incrementAndGet(), ConcurrentHashMap.putIfAbsent()."
+      },
+      "discovery": [
+        {
+          "id": "atomics-d1-predict",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Two threads each increment an AtomicInteger 1000 times. Predict the printed value.",
+            "ru": "Два потока по 1000 раз инкрементируют AtomicInteger. Предскажи напечатанное значение."
+          },
+          "code": "AtomicInteger counter = new AtomicInteger(0);\nRunnable task = () -> {\n    for (int i = 0; i < 1000; i++) counter.incrementAndGet();\n};\n// two threads run task, then join, then:\nSystem.out.println(counter.get());",
+          "codeLang": "java",
+          "reveal": {
+            "en": "`java.util.concurrent` already contains safe versions of the most common shared operations, so you do not have to write the lock yourself:\n\n- **`AtomicInteger.incrementAndGet()`** performs the whole read-modify-write as **one atomic step** — no other thread can slip between the read and the write, so no update is ever lost.\n- **`ConcurrentHashMap.putIfAbsent(key, value)`** inserts only when the key is missing, atomically.\n- **Concurrent queues** hand work from one thread to another with no hand-written locking.\n\nWhy prefer these to a `synchronized` block? They express the operation directly, there is no lock for a future caller to forget, and every access path gets the guarantee automatically.\n\nTheir limit: they make **one call** atomic. As soon as several fields must change together, you are back to one lock around the whole invariant.",
+            "ru": "В `java.util.concurrent` уже есть безопасные версии самых частых общих операций, так что писать lock вручную не нужно:\n\n- **`AtomicInteger.incrementAndGet()`** выполняет весь read-modify-write как **один атомарный шаг** — никакой поток не вклинится между чтением и записью, поэтому обновления не теряются.\n- **`ConcurrentHashMap.putIfAbsent(key, value)`** атомарно вставляет значение, только если ключа нет.\n- **Concurrent queues** передают работу от потока к потоку без ручной синхронизации.\n\nПочему это лучше `synchronized`-блока? Такие вызовы прямо выражают нужную операцию, нет lock, который будущий вызывающий может забыть взять, и гарантия автоматически распространяется на все пути доступа.\n\nОграничение: они делают атомарным **один вызов**. Как только вместе должны меняться несколько полей, снова нужен один lock вокруг всего invariant."
+          },
+          "feedback": {
+            "correct": {
+              "en": "incrementAndGet() cannot be interrupted mid-update, so every increment counts.",
+              "ru": "incrementAndGet() нельзя прервать посреди обновления, поэтому каждый инкремент учитывается."
+            },
+            "incorrect": {
+              "en": "Always 2000 — incrementAndGet() performs the read-modify-write as one atomic step.",
+              "ru": "Всегда 2000 — incrementAndGet() выполняет read-modify-write как один атомарный шаг."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Always 2000",
+                "ru": "Всегда 2000"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Between 1000 and 2000, varying per run",
+                "ru": "От 1000 до 2000, по-разному в разных запусках"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the plain int++ result; an atomic increment cannot be interrupted mid-update.",
+                "ru": "Это результат обычного int++; атомарный инкремент нельзя прервать посреди обновления."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Always 1000",
+                "ru": "Всегда 1000"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing here overwrites another thread's work — every increment is applied.",
+                "ru": "Здесь ничто не затирает работу другого потока — применяется каждый инкремент."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "atomics-p1-atomic-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "AtomicInteger.incrementAndGet() performs the read, the add and the write as one atomic operation.",
+            "ru": "AtomicInteger.incrementAndGet() выполняет чтение, сложение и запись как одну атомарную операцию."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That is exactly what makes it a safe replacement for a guarded count++.",
+              "ru": "Именно это делает его безопасной заменой защищённого count++."
+            },
+            "incorrect": {
+              "en": "It does — the whole read-modify-write is indivisible, which is the point of the class.",
+              "ru": "Выполняет — весь read-modify-write неделим, в этом и смысл класса."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "atomics-p2-when-better",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "When is AtomicInteger a better choice than a hand-written lock?",
+            "ru": "Когда AtomicInteger лучше, чем написанный вручную lock?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "One atomic call fits when the whole shared operation is that one call.",
+              "ru": "Один атомарный вызов подходит, когда вся общая операция и есть этот вызов."
+            },
+            "incorrect": {
+              "en": "When the entire shared operation is a single numeric update; several fields need one lock instead.",
+              "ru": "Когда вся общая операция — одно числовое обновление; для нескольких полей нужен один lock."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "When the entire shared operation is one numeric update",
+                "ru": "Когда вся общая операция — одно числовое обновление"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "When three fields must change together",
+                "ru": "Когда три поля должны меняться вместе"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "One atomic call cannot span several fields; that invariant needs one lock.",
+                "ru": "Один атомарный вызов не покрывает несколько полей; такому invariant нужен один lock."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "When the method is simply slow",
+                "ru": "Когда метод просто медленный"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Atomics fix a non-atomic shared update, not slowness.",
+                "ru": "Атомики чинят неатомарное общее обновление, а не медлительность."
+              }
+            }
+          ]
+        },
+        {
+          "id": "atomics-p3-match-tools",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each tool to the operation it makes safe.",
+            "ru": "Соотнеси каждый инструмент с операцией, которую он делает безопасной."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Pick the tool that expresses your operation directly; fall back to a lock for custom ones.",
+              "ru": "Бери инструмент, который прямо выражает твою операцию; для нестандартных остаётся lock."
+            },
+            "incorrect": {
+              "en": "Atomic increment, atomic insert-if-missing, thread handoff, and a lock for custom multi-field updates.",
+              "ru": "Атомарный инкремент, атомарная вставка при отсутствии, передача между потоками и lock для своих обновлений."
+            }
+          },
+          "pairs": [
+            {
+              "id": "atomic-int",
+              "left": {
+                "en": "AtomicInteger.incrementAndGet()",
+                "ru": "AtomicInteger.incrementAndGet()"
+              },
+              "right": {
+                "en": "Makes a numeric increment atomic",
+                "ru": "Делает числовой инкремент атомарным"
+              }
+            },
+            {
+              "id": "chm",
+              "left": {
+                "en": "ConcurrentHashMap.putIfAbsent()",
+                "ru": "ConcurrentHashMap.putIfAbsent()"
+              },
+              "right": {
+                "en": "Inserts only if the key is missing, in one call",
+                "ru": "Вставляет одним вызовом, только если ключа нет"
+              }
+            },
+            {
+              "id": "queue",
+              "left": {
+                "en": "A concurrent queue",
+                "ru": "Concurrent queue"
+              },
+              "right": {
+                "en": "Hands work from one thread to another",
+                "ru": "Передаёт работу от одного потока другому"
+              }
+            },
+            {
+              "id": "sync",
+              "left": {
+                "en": "A synchronized block",
+                "ru": "Synchronized-блок"
+              },
+              "right": {
+                "en": "Covers a custom update of several fields",
+                "ru": "Покрывает своё обновление нескольких полей"
+              }
+            }
+          ]
+        },
+        {
+          "id": "atomics-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the two java.util.concurrent tools.",
+            "ru": "Назови два инструмента из java.util.concurrent."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Both express the whole operation in one atomic call, so no lock has to be written.",
+              "ru": "Оба выражают всю операцию одним атомарным вызовом, так что lock писать не нужно."
+            },
+            "incorrect": {
+              "en": "AtomicInteger for the counter, ConcurrentHashMap.putIfAbsent() for the conditional insert.",
+              "ru": "AtomicInteger для счётчика, ConcurrentHashMap.putIfAbsent() для условной вставки."
+            }
+          },
+          "text": {
+            "en": "For a shared counter use ___.incrementAndGet(); to insert into a map only when the key is missing use ConcurrentHashMap.___().",
+            "ru": "Для общего счётчика используй ___.incrementAndGet(); чтобы вставить в map только при отсутствии ключа — ConcurrentHashMap.___()."
+          },
+          "blanks": [
+            {
+              "en": [
+                "AtomicInteger"
+              ],
+              "ru": [
+                "AtomicInteger"
+              ]
+            },
+            {
+              "en": [
+                "putIfAbsent"
+              ],
+              "ru": [
+                "putIfAbsent"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "volatile-not-atomic",
+      "title": {
+        "en": "volatile is not atomicity",
+        "ru": "volatile — это не атомарность"
+      },
+      "summary": {
+        "en": "volatile guarantees visibility of the latest value, but leaves a read-modify-write like count++ interruptible.",
+        "ru": "volatile гарантирует видимость свежего значения, но read-modify-write вроде count++ остаётся прерываемым."
+      },
+      "discovery": [
+        {
+          "id": "volatile-d1-predict",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The counter field is volatile. Two threads each call bump() 1000 times. Predict the printed value.",
+            "ru": "Поле счётчика объявлено volatile. Два потока вызывают bump() по 1000 раз. Предскажи напечатанное значение."
+          },
+          "code": "class Counter {\n    volatile int count = 0;\n    void bump() { count++; }\n}\n\n// two threads each call counter.bump() 1000 times, then:\nSystem.out.println(counter.count);",
+          "codeLang": "java",
+          "reveal": {
+            "en": "`volatile` is about **visibility**, not **atomicity**. These are two different guarantees:\n\n- **Visibility** — a write by one thread becomes visible to the next read of every other thread. Without `volatile`, a thread may keep reading a stale cached copy for a long time.\n- **Atomicity** — an operation can never be observed half-done.\n\n`volatile` gives you the first and none of the second. `count++` is still read, compute, write; `volatile` only promises that the value each thread *reads* is fresh. Two threads can read the same fresh `7`, both compute `8`, and both write `8` — one increment lost, exactly as before.\n\n**Where `volatile` is enough:** a single flag or reference written by one thread and only read by the others, such as `volatile boolean shutdown`.\n**Where it is not:** anything with the read-modify-write shape. For those, use a lock or an atomic class.",
+            "ru": "`volatile` относится к **visibility (видимости)**, а не к **atomicity (атомарности)**. Это две разные гарантии:\n\n- **Visibility** — запись одного потока становится видна при следующем чтении любого другого потока. Без `volatile` поток может долго читать устаревшую закэшированную копию.\n- **Atomicity** — операцию невозможно увидеть выполненной наполовину.\n\n`volatile` даёт первое и ничего из второго. `count++` по-прежнему read, compute, write; `volatile` лишь обещает, что каждый поток *читает* свежее значение. Два потока могут прочитать одну и ту же свежую `7`, оба вычислить `8` и оба записать `8` — один инкремент потерян, ровно как раньше.\n\n**Где `volatile` достаточно:** одиночный флаг или ссылка, которые пишет один поток, а остальные только читают, например `volatile boolean shutdown`.\n**Где нет:** всё, что имеет форму read-modify-write. Там нужен lock или атомарный класс."
+          },
+          "feedback": {
+            "correct": {
+              "en": "volatile refreshes the value each thread reads; it does not merge two writes.",
+              "ru": "volatile обновляет значение, которое читает каждый поток, но не объединяет две записи."
+            },
+            "incorrect": {
+              "en": "volatile fixes visibility only — count++ is still three steps, so updates can still be lost.",
+              "ru": "volatile исправляет только видимость — count++ остаётся тремя шагами, и обновления могут теряться."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Between 1000 and 2000 — updates can still be lost",
+                "ru": "От 1000 до 2000 — обновления всё ещё могут теряться"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Always 2000 — volatile makes count++ atomic",
+                "ru": "Всегда 2000 — volatile делает count++ атомарным"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "volatile guarantees a fresh read, not an indivisible read-modify-write.",
+                "ru": "volatile гарантирует свежее чтение, а не неделимый read-modify-write."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Always 1000 — volatile lets only one thread write",
+                "ru": "Всегда 1000 — volatile разрешает писать только одному потоку"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "volatile never blocks a thread; both threads write freely.",
+                "ru": "volatile никогда не блокирует поток; оба потока пишут свободно."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "volatile-p1-counter-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Declaring a shared counter volatile makes count++ thread-safe.",
+            "ru": "Объявление общего счётчика volatile делает count++ потокобезопасным."
+          },
+          "feedback": {
+            "correct": {
+              "en": "volatile addresses visibility; the compound update still needs a lock or an atomic class.",
+              "ru": "volatile отвечает за видимость; составному обновлению всё ещё нужен lock или атомарный класс."
+            },
+            "incorrect": {
+              "en": "No — volatile fixes visibility, not atomicity, so count++ can still lose updates.",
+              "ru": "Нет — volatile исправляет видимость, а не атомарность, поэтому count++ может терять обновления."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "volatile-p2-guarantee",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does volatile actually guarantee for a field?",
+            "ru": "Что volatile реально гарантирует для поля?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Fresh reads across threads — nothing about indivisibility.",
+              "ru": "Свежие чтения между потоками — и ничего про неделимость."
+            },
+            "incorrect": {
+              "en": "Visibility: a write becomes visible to the next read of any thread. Nothing more.",
+              "ru": "Видимость: запись становится видна при следующем чтении любого потока. Не более того."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Visibility — a write is seen by the next read of any thread",
+                "ru": "Видимость — запись видна при следующем чтении любого потока"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Atomicity of compound updates such as ++",
+                "ru": "Атомарность составных обновлений вроде ++"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Compound updates stay three steps; volatile touches only visibility.",
+                "ru": "Составные обновления остаются тремя шагами; volatile влияет только на видимость."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Mutual exclusion, like a lock",
+                "ru": "Взаимное исключение, как у lock"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "volatile never makes one thread wait for another.",
+                "ru": "volatile никогда не заставляет один поток ждать другой."
+              }
+            }
+          ]
+        },
+        {
+          "id": "volatile-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each Java mechanism to the guarantee it provides.",
+            "ru": "Соотнеси каждый механизм Java с гарантией, которую он даёт."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Three different guarantees — mixing them up is the classic interview trap.",
+              "ru": "Три разные гарантии — их путаница и есть классическая ловушка на собеседовании."
+            },
+            "incorrect": {
+              "en": "volatile = visibility, synchronized = exclusion, AtomicInteger = atomic read-modify-write.",
+              "ru": "volatile — видимость, synchronized — исключение, AtomicInteger — атомарный read-modify-write."
+            }
+          },
+          "pairs": [
+            {
+              "id": "vol",
+              "left": {
+                "en": "volatile",
+                "ru": "volatile"
+              },
+              "right": {
+                "en": "Makes the latest written value visible",
+                "ru": "Делает последнее записанное значение видимым"
+              }
+            },
+            {
+              "id": "syn",
+              "left": {
+                "en": "synchronized",
+                "ru": "synchronized"
+              },
+              "right": {
+                "en": "Lets one thread at a time run a block",
+                "ru": "Пускает в блок по одному потоку за раз"
+              }
+            },
+            {
+              "id": "ai",
+              "left": {
+                "en": "AtomicInteger",
+                "ru": "AtomicInteger"
+              },
+              "right": {
+                "en": "Makes a numeric read-modify-write indivisible",
+                "ru": "Делает числовой read-modify-write неделимым"
+              }
+            }
+          ]
+        },
+        {
+          "id": "volatile-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the guarantee volatile gives and the one it does not.",
+            "ru": "Назови гарантию, которую volatile даёт, и ту, которую нет."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One line worth memorising for the interview.",
+              "ru": "Одна строка, которую стоит запомнить к собеседованию."
+            },
+            "incorrect": {
+              "en": "volatile fixes VISIBILITY, not ATOMICITY.",
+              "ru": "volatile исправляет VISIBILITY, но не ATOMICITY."
+            }
+          },
+          "text": {
+            "en": "volatile fixes ___, not ___.",
+            "ru": "volatile исправляет ___, но не ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "visibility"
+              ],
+              "ru": [
+                "visibility",
+                "видимость"
+              ]
+            },
+            {
+              "en": [
+                "atomicity"
+              ],
+              "ru": [
+                "atomicity",
+                "атомарность"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "check-then-act",
+      "title": {
+        "en": "Thread-safe calls do not compose",
+        "ru": "Потокобезопасные вызовы не складываются"
+      },
+      "summary": {
+        "en": "containsKey() then put() is a check-then-act race; only a single atomic call such as putIfAbsent() closes the gap.",
+        "ru": "containsKey(), а затем put() — это гонка check-then-act; закрыть промежуток может только один атомарный вызов вроде putIfAbsent()."
+      },
+      "discovery": [
+        {
+          "id": "checkact-d1-sessions",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "The map itself is thread-safe. Why can two different Session objects still be created for one id?",
+            "ru": "Сам map потокобезопасен. Почему для одного id всё равно могут быть созданы два разных объекта Session?"
+          },
+          "code": "ConcurrentHashMap<String, Session> sessions = new ConcurrentHashMap<>();\n\nif (!sessions.containsKey(id)) {\n    sessions.put(id, new Session(id));\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "**Check-then-act** is any pair of operations where you look at the state and then act on what you saw: `containsKey()` then `put()`, `if (x == null)` then assign, `if (stock >= n)` then subtract.\n\nEvery individual call on a `ConcurrentHashMap` is atomic — but the *pair* is not, and the gap between the two calls is where the race lives:\n\n```mermaid\nsequenceDiagram\n  participant T1 as Thread 1\n  participant M as Map\n  participant T2 as Thread 2\n  T1->>M: containsKey(id) returns false\n  T2->>M: containsKey(id) returns false\n  T1->>M: put(id, sessionA)\n  T2->>M: put(id, sessionB)\n```\n\nBoth threads saw \"missing\" and both acted, so one session silently replaces the other. The answer `containsKey()` gave was true at the instant of the call and stopped being true immediately afterwards.\n\nThe fix is to make the check and the act **one** call: `sessions.putIfAbsent(id, new Session(id))`. Thread-safe methods do not compose into a thread-safe workflow on their own.",
+            "ru": "**Check-then-act** — любая пара операций, где ты смотришь на состояние, а потом действуешь по увиденному: `containsKey()`, затем `put()`; `if (x == null)`, затем присваивание; `if (stock >= n)`, затем вычитание.\n\nКаждый отдельный вызов `ConcurrentHashMap` атомарен — но *пара* нет, и гонка живёт в промежутке между двумя вызовами:\n\n```mermaid\nsequenceDiagram\n  participant T1 as Thread 1\n  participant M as Map\n  participant T2 as Thread 2\n  T1->>M: containsKey(id) возвращает false\n  T2->>M: containsKey(id) возвращает false\n  T1->>M: put(id, sessionA)\n  T2->>M: put(id, sessionB)\n```\n\nОба потока увидели «нет ключа» и оба подействовали, поэтому одна сессия молча заменила другую. Ответ `containsKey()` был верным в момент вызова и перестал быть верным сразу после него.\n\nИсправление — сделать проверку и действие **одним** вызовом: `sessions.putIfAbsent(id, new Session(id))`. Потокобезопасные методы сами по себе не складываются в потокобезопасный сценарий."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two atomic calls with a gap between them are not one atomic operation.",
+              "ru": "Два атомарных вызова с промежутком между ними не образуют одну атомарную операцию."
+            },
+            "incorrect": {
+              "en": "The check and the act are separate calls; another thread can insert in the gap between them.",
+              "ru": "Проверка и действие — отдельные вызовы; в промежутке между ними может вставить другой поток."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The check and the insert are two calls; another thread can insert between them",
+                "ru": "Проверка и вставка — два вызова; между ними может вставить другой поток"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "ConcurrentHashMap is only safe for reading",
+                "ru": "ConcurrentHashMap безопасен только для чтения"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It is safe for writes too — each single call is atomic.",
+                "ru": "Он безопасен и для записи — каждый отдельный вызов атомарен."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "containsKey() caches its answer and keeps returning a stale value",
+                "ru": "containsKey() кэширует ответ и продолжает возвращать устаревшее значение"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The answer was correct at the moment of the call; it simply stopped being true right after.",
+                "ru": "Ответ был верен в момент вызова; он просто перестал быть верным сразу после."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "checkact-p1-compose-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Calling two thread-safe methods one after another makes the whole sequence thread-safe.",
+            "ru": "Вызов двух потокобезопасных методов подряд делает потокобезопасной всю последовательность."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The gap between the calls is unprotected — that is where another thread acts.",
+              "ru": "Промежуток между вызовами не защищён — именно там действует другой поток."
+            },
+            "incorrect": {
+              "en": "No — thread-safe methods do not compose; the sequence needs one atomic call or one lock.",
+              "ru": "Нет — потокобезопасные методы не складываются; последовательности нужен один атомарный вызов или lock."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "checkact-p2-which-call",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which call collapses a ConcurrentHashMap containsKey() + put() pair into one atomic operation?",
+            "ru": "Какой вызов сворачивает пару containsKey() + put() у ConcurrentHashMap в одну атомарную операцию?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "putIfAbsent() performs the check and the insert as a single indivisible call.",
+              "ru": "putIfAbsent() выполняет проверку и вставку одним неделимым вызовом."
+            },
+            "incorrect": {
+              "en": "It is putIfAbsent(): the check and the insert happen inside one atomic call.",
+              "ru": "Это putIfAbsent(): проверка и вставка происходят внутри одного атомарного вызова."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "putIfAbsent()",
+                "ru": "putIfAbsent()"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "get() followed by put()",
+                "ru": "get(), а затем put()"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the same check-then-act with different method names.",
+                "ru": "Это тот же check-then-act, только другими именами методов."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "clear() before put()",
+                "ru": "clear() перед put()"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Clearing deletes other threads' entries and still leaves a gap before the put.",
+                "ru": "Очистка удалит записи других потоков и всё равно оставит промежуток перед put."
+              }
+            }
+          ]
+        },
+        {
+          "id": "checkact-p3-sort-interleaving",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the interleaving in which a check-then-act on a map creates a duplicate entry.",
+            "ru": "Расставь по порядку переплетение, при котором check-then-act на map создаёт дубликат записи."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Both checks happen before either write, so both threads believe the key is missing.",
+              "ru": "Обе проверки происходят до любой записи, поэтому оба потока считают, что ключа нет."
+            },
+            "incorrect": {
+              "en": "Both threads check first and find nothing, then both write — the second overwrites the first.",
+              "ru": "Сначала проверяют оба и ничего не находят, затем оба пишут — второй затирает первого."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Thread A checks: the key is missing",
+                "ru": "Поток A проверяет: ключа нет"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Thread B checks: the key is missing too",
+                "ru": "Поток B проверяет: ключа тоже нет"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Thread A puts its value",
+                "ru": "Поток A кладёт своё значение"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Thread B puts its value, replacing A's",
+                "ru": "Поток B кладёт своё значение, заменяя значение A"
+              }
+            }
+          ]
+        },
+        {
+          "id": "checkact-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the atomic method name.",
+            "ru": "Впиши имя атомарного метода."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One call instead of two closes the gap the race lived in.",
+              "ru": "Один вызов вместо двух закрывает промежуток, в котором жила гонка."
+            },
+            "incorrect": {
+              "en": "It is putIfAbsent() — the check and the insert become one atomic call.",
+              "ru": "Это putIfAbsent() — проверка и вставка становятся одним атомарным вызовом."
+            }
+          },
+          "text": {
+            "en": "A containsKey()-then-put() check-then-act on a map becomes atomic when replaced by the single call ___().",
+            "ru": "Check-then-act из containsKey() и put() на map становится атомарным, если заменить его одним вызовом ___()."
+          },
+          "blanks": [
+            {
+              "en": [
+                "putIfAbsent"
+              ],
+              "ru": [
+                "putIfAbsent"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "timing-is-not-synchronization",
+      "title": {
+        "en": "Timing tricks are not synchronization",
+        "ru": "Трюки с таймингом — не синхронизация"
+      },
+      "summary": {
+        "en": "sleep and retries only shrink the race window; stress tests, invariant tests, review and metrics are what actually find races.",
+        "ru": "sleep и retry лишь сужают окно гонки; находят гонки stress tests, тесты на invariant, ревью и метрики."
+      },
+      "discovery": [
+        {
+          "id": "timing-d1-sleep-fix",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "A developer added the sleep to fix a race on the shared stock field. What did it achieve?",
+            "ru": "Разработчик добавил sleep, чтобы исправить гонку на общем поле stock. Чего он добился?"
+          },
+          "code": "// stock is a shared field\nvoid reserve() throws InterruptedException {\n    Thread.sleep(50);      // \"gives the other thread time to finish\"\n    stock = stock - 1;\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "`Thread.sleep()`, retries, and code that is \"usually in the right order\" are not synchronization. The JVM and the OS promise nothing about *when* another thread runs, so a sleep only shrinks the window in which the race can happen — it never closes it. The bug is now rarer, which makes it harder to reproduce and easier to ship.\n\nThat is also why races rarely fail in a test: they show up **under load**, on faster machines, or after a harmless-looking refactor changes the timing. A test that runs one thread over three rows will pass forever.\n\nWhat actually finds them:\n\n- **Stress tests** — many threads, many iterations, to force rare interleavings.\n- **Deterministic unit tests around the invariant** — assert that the state stays consistent.\n- **Code review for shared state** — spot the unprotected field before it ever runs.\n- **Production metrics for impossible states** — a negative stock or a duplicate id proves a race already happened.",
+            "ru": "`Thread.sleep()`, retry и код, который «обычно выполняется в нужном порядке», не являются синхронизацией. JVM и ОС ничего не обещают о том, *когда* выполнится другой поток, поэтому sleep лишь сужает окно, в котором возможна гонка, но никогда его не закрывает. Ошибка становится реже — а значит, её труднее воспроизвести и легче выпустить в продакшн.\n\nПоэтому же гонки редко падают в тестах: они проявляются **под нагрузкой**, на более быстрых машинах или после безобидного рефакторинга, меняющего тайминг. Тест, гоняющий один поток по трём строкам, будет проходить вечно.\n\nЧто действительно их находит:\n\n- **Stress tests** — много потоков, много итераций, чтобы вызвать редкие переплетения.\n- **Детерминированные unit-тесты вокруг invariant** — проверяют, что состояние остаётся согласованным.\n- **Code review на общее состояние** — замечает незащищённое поле ещё до запуска.\n- **Production-метрики на невозможные состояния** — отрицательный остаток или дубликат id доказывают, что гонка уже случилась."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The window shrank; the defect stayed. Rarer bugs are harder bugs.",
+              "ru": "Окно сузилось, дефект остался. Более редкая ошибка — более трудная ошибка."
+            },
+            "incorrect": {
+              "en": "Nothing for correctness — sleeping takes no lock, it only makes the race rarer.",
+              "ru": "Для корректности ничего — sleep не берёт lock, он лишь делает гонку более редкой."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Nothing for correctness — the race is only harder to reproduce",
+                "ru": "Для корректности ничего — гонку стало лишь труднее воспроизвести"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It works: 50 ms is longer than the update takes",
+                "ru": "Работает: 50 мс дольше, чем длится обновление"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "No rule says the other thread finishes within any particular time.",
+                "ru": "Нет правила, по которому другой поток обязан уложиться в какое-то время."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The sleeping thread holds an implicit lock on stock",
+                "ru": "Спящий поток удерживает неявный lock на stock"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Sleeping releases the CPU and takes no lock at all.",
+                "ru": "Sleep освобождает процессор и никакого lock не берёт."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "timing-p1-single-thread-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A concurrent method that passes a single-threaded unit test can still contain a race condition.",
+            "ru": "Конкурентный метод, проходящий однопоточный unit-тест, всё ещё может содержать состояние гонки."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One thread never interleaves with itself, so such a test can never expose the bug.",
+              "ru": "Один поток не переплетается сам с собой, поэтому такой тест не способен выявить ошибку."
+            },
+            "incorrect": {
+              "en": "It can — a single-threaded test cannot produce the interleaving the race needs.",
+              "ru": "Может — однопоточный тест не создаёт переплетения, нужного для гонки."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "timing-p2-match-detection",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each practice to what it does about race conditions.",
+            "ru": "Соотнеси каждую практику с тем, что она делает с состояниями гонки."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two of them find the bug before release, two catch it around the invariant.",
+              "ru": "Две находят ошибку до релиза, две ловят её вокруг invariant."
+            },
+            "incorrect": {
+              "en": "Stress tests force interleavings, invariant tests assert consistency, review reads the code, metrics catch it live.",
+              "ru": "Stress-тесты вызывают переплетения, тесты invariant проверяют согласованность, ревью читает код, метрики ловят вживую."
+            }
+          },
+          "pairs": [
+            {
+              "id": "stress",
+              "left": {
+                "en": "Stress test",
+                "ru": "Stress test"
+              },
+              "right": {
+                "en": "Forces rare interleavings with many threads",
+                "ru": "Вызывает редкие переплетения множеством потоков"
+              }
+            },
+            {
+              "id": "invariant-test",
+              "left": {
+                "en": "Unit test around an invariant",
+                "ru": "Unit-тест вокруг invariant"
+              },
+              "right": {
+                "en": "Asserts the state stays consistent",
+                "ru": "Проверяет, что состояние остаётся согласованным"
+              }
+            },
+            {
+              "id": "review",
+              "left": {
+                "en": "Code review for shared state",
+                "ru": "Code review на общее состояние"
+              },
+              "right": {
+                "en": "Finds an unprotected field before it ships",
+                "ru": "Находит незащищённое поле до релиза"
+              }
+            },
+            {
+              "id": "metrics",
+              "left": {
+                "en": "Metrics for impossible states",
+                "ru": "Метрики на невозможные состояния"
+              },
+              "right": {
+                "en": "Shows a race that already happened in production",
+                "ru": "Показывает гонку, которая уже случилась в production"
+              }
+            }
+          ]
+        },
+        {
+          "id": "timing-p3-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the call that only shrinks the race window.",
+            "ru": "Назови вызов, который лишь сужает окно гонки."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It changes timing, and timing is never a guarantee.",
+              "ru": "Он меняет тайминг, а тайминг никогда не является гарантией."
+            },
+            "incorrect": {
+              "en": "It is Thread.sleep() — it delays the thread but takes no lock and orders nothing.",
+              "ru": "Это Thread.sleep() — он задерживает поток, но не берёт lock и ничего не упорядочивает."
+            }
+          },
+          "text": {
+            "en": "Adding Thread.___() before a shared update shrinks the race window but never closes it.",
+            "ru": "Добавление Thread.___() перед общим обновлением сужает окно гонки, но никогда его не закрывает."
+          },
+          "blanks": [
+            {
+              "en": [
+                "sleep"
+              ],
+              "ru": [
+                "sleep"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "avoiding-races-end-to-end",
+      "title": {
+        "en": "Putting it together",
+        "ru": "Собираем всё вместе"
+      },
+      "summary": {
+        "en": "Find the shared mutable state and the non-atomic operation, then remove the sharing, guard the whole invariant with one lock, or use an atomic API — and keep the guarded block small.",
+        "ru": "Найди общее изменяемое состояние и неатомарную операцию, затем убери разделение, защити весь invariant одним lock или возьми атомарный API — и держи защищённый блок маленьким."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "cap-d1-inventory",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Five threads each call reserve(4) once on the same Inventory, which starts with stock = 10. What can the final state be?",
+            "ru": "Пять потоков вызывают reserve(4) по одному разу на одном Inventory, где stock = 10. Каким может оказаться итоговое состояние?"
+          },
+          "code": "class Inventory {\n    private volatile int stock = 10;\n    private int reserved = 0;\n\n    void reserve(int n) {\n        if (stock >= n) {\n            stock = stock - n;\n            reserved = reserved + n;\n        }\n    }\n}\n\n// five threads each call inventory.reserve(4) once",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Three separate defects are stacked in that one method:\n\n1. `if (stock >= n)` followed by `stock = stock - n` is a **check-then-act** — all five threads can pass the check while `stock` is still 10.\n2. `stock` and `reserved` form one **invariant** but are updated as two independent statements, so a reader can see them disagree.\n3. `volatile` gives `stock` only **visibility**; the read-modify-write is still three interruptible steps.\n\nSo `stock` can end up negative while `reserved` claims a different total. One lock around the whole `if` block fixes all three at once, because it makes the check, both updates and the invariant atomic together.\n\n```mermaid\nflowchart TD\n  A[\"shared mutable state?\"] -->|no| B[\"local or immutable data - done\"]\n  A -->|yes| C[\"compound operation?\"]\n  C -->|yes| D[\"one lock around the whole invariant\"]\n  C -->|a single atomic API fits| E[\"AtomicInteger or ConcurrentHashMap\"]\n  D --> F[\"keep the guarded block small\"]\n  E --> F\n```",
+            "ru": "В одном этом методе сложены три отдельных дефекта:\n\n1. `if (stock >= n)` с последующим `stock = stock - n` — это **check-then-act**: все пять потоков могут пройти проверку, пока `stock` ещё равен 10.\n2. `stock` и `reserved` образуют один **invariant**, но обновляются двумя независимыми инструкциями, поэтому читатель может увидеть их рассогласованными.\n3. `volatile` даёт `stock` только **visibility**; read-modify-write остаётся тремя прерываемыми шагами.\n\nВ итоге `stock` может уйти в минус, а `reserved` — показывать другой итог. Один lock вокруг всего блока `if` чинит все три сразу, потому что делает проверку, оба обновления и invariant атомарными вместе.\n\n```mermaid\nflowchart TD\n  A[\"общее изменяемое состояние?\"] -->|нет| B[\"локальные или immutable данные - готово\"]\n  A -->|да| C[\"составная операция?\"]\n  C -->|да| D[\"один lock вокруг всего invariant\"]\n  C -->|подходит атомарный API| E[\"AtomicInteger или ConcurrentHashMap\"]\n  D --> F[\"держи защищённый блок маленьким\"]\n  E --> F\n```"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Check-then-act plus a split invariant plus visibility-only volatile — three defects in five lines.",
+              "ru": "Check-then-act плюс разорванный invariant плюс volatile только для видимости — три дефекта в пяти строках."
+            },
+            "incorrect": {
+              "en": "All five threads can pass the check, so stock can go negative and disagree with reserved.",
+              "ru": "Все пять потоков могут пройти проверку, поэтому stock может уйти в минус и разойтись с reserved."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "stock can end up negative and disagree with reserved",
+                "ru": "stock может оказаться отрицательным и разойтись с reserved"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Exactly two reservations succeed, because volatile makes the method atomic",
+                "ru": "Успешны ровно два резервирования, потому что volatile делает метод атомарным"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "volatile publishes a value; it never makes an if-block indivisible.",
+                "ru": "volatile публикует значение; он никогда не делает блок if неделимым."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "reserved always equals 10 minus stock, because the two lines are adjacent",
+                "ru": "reserved всегда равен 10 минус stock, ведь строки идут подряд"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Adjacent statements are still separate steps; another thread can run between them.",
+                "ru": "Соседние инструкции — всё равно отдельные шаги; между ними может выполниться другой поток."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cap-p1-cache-hits",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "The map is a ConcurrentHashMap. Which shared state in this class can still be corrupted?",
+            "ru": "Map здесь — ConcurrentHashMap. Какое общее состояние в этом классе всё ещё может быть испорчено?"
+          },
+          "code": "class Cache {\n    private final Map<String, Integer> map = new ConcurrentHashMap<>();\n    private int hits = 0;\n\n    Integer lookup(String key) {\n        Integer v = map.get(key);\n        if (v != null) hits++;\n        return v;\n    }\n}",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "A thread-safe collection does not make the plain fields around it thread-safe.",
+              "ru": "Потокобезопасная коллекция не делает потокобезопасными обычные поля вокруг неё."
+            },
+            "incorrect": {
+              "en": "hits is a plain int updated with an unguarded read-modify-write, so counts can be lost.",
+              "ru": "hits — обычный int с незащищённым read-modify-write, поэтому подсчёты могут теряться."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "hits — a plain int field updated with an unguarded read-modify-write",
+                "ru": "hits — обычное int-поле с незащищённым read-modify-write"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "map — ConcurrentHashMap protects put() but not get()",
+                "ru": "map — ConcurrentHashMap защищает put(), но не get()"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Every single ConcurrentHashMap call is atomic, reads included.",
+                "ru": "Каждый отдельный вызов ConcurrentHashMap атомарен, включая чтения."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "key — String keys can be mutated by another thread",
+                "ru": "key — строковые ключи может изменить другой поток"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "String is immutable, so no thread can change it after construction.",
+                "ru": "String неизменяем, поэтому после создания его никто не изменит."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p2-atomic-and-plain",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Two threads each call bump() 1000 times on the same Stats object. Predict the two printed values.",
+            "ru": "Два потока вызывают bump() по 1000 раз на одном объекте Stats. Предскажи два напечатанных значения."
+          },
+          "code": "class Stats {\n    final AtomicInteger a = new AtomicInteger(0);\n    int b = 0;\n    void bump() {\n        a.incrementAndGet();\n        b++;\n    }\n}\n\n// two threads each call stats.bump() 1000 times, then:\nSystem.out.println(stats.a.get() + \" \" + stats.b);",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "The atomic counter is exact; the plain int next to it can lose updates.",
+              "ru": "Атомарный счётчик точен; обычный int рядом с ним может терять обновления."
+            },
+            "incorrect": {
+              "en": "a is always 2000 because incrementAndGet() is atomic; b++ is unguarded and can lose updates.",
+              "ru": "a всегда 2000, потому что incrementAndGet() атомарен; b++ не защищён и может терять обновления."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "2000 and a value that may be below 2000",
+                "ru": "2000 и значение, которое может быть меньше 2000"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "2000 and 2000",
+                "ru": "2000 и 2000"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "b++ is an unguarded read-modify-write on a plain field, so its updates can be lost.",
+                "ru": "b++ — незащищённый read-modify-write обычного поля, его обновления могут теряться."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Both values may be below 2000",
+                "ru": "Оба значения могут быть меньше 2000"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "incrementAndGet() is atomic, so a is exact — only b can drift.",
+                "ru": "incrementAndGet() атомарен, поэтому a точен — «уплыть» может только b."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p3-sort-checklist",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the checklist for removing a race condition, strongest fix first.",
+            "ru": "Расставь по порядку чеклист устранения гонки, начиная с самого надёжного исправления."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Identify, then remove the sharing, then reach for an atomic API, then a lock — and keep it small.",
+              "ru": "Найти, затем убрать разделение, затем взять атомарный API, затем lock — и держать его маленьким."
+            },
+            "incorrect": {
+              "en": "Identify the state, remove the sharing, use an atomic API if it fits, else one lock, kept small.",
+              "ru": "Найти состояние, убрать разделение, взять атомарный API если подходит, иначе один маленький lock."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Find the shared mutable state and the non-atomic operation on it",
+                "ru": "Найти общее изменяемое состояние и неатомарную операцию над ним"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Try to remove the sharing: local variables, immutable objects, a single owner",
+                "ru": "Попробовать убрать разделение: локальные переменные, immutable objects, единственный владелец"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "If it must be shared and one atomic API fits, use AtomicInteger or ConcurrentHashMap",
+                "ru": "Если состояние обязано быть общим и подходит атомарный API — взять AtomicInteger или ConcurrentHashMap"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Otherwise guard the whole invariant with one lock used by every access path",
+                "ru": "Иначе защитить весь invariant одним lock, который используют все пути доступа"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "Keep the guarded block small: no network calls or logging inside",
+                "ru": "Держать защищённый блок маленьким: без сетевых вызовов и логирования внутри"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p4-match-mechanisms",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each mechanism to its role in avoiding race conditions.",
+            "ru": "Соотнеси каждый механизм с его ролью в предотвращении состояний гонки."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Different tools solve different halves of the problem — and volatile solves neither alone.",
+              "ru": "Разные инструменты решают разные половины задачи — а volatile сам по себе не решает ни одной."
+            },
+            "incorrect": {
+              "en": "No sharing, one lock, atomic increment, atomic insert — and volatile only publishes a value.",
+              "ru": "Нет разделения, один lock, атомарный инкремент, атомарная вставка — а volatile лишь публикует значение."
+            }
+          },
+          "pairs": [
+            {
+              "id": "no-share",
+              "left": {
+                "en": "A local variable or immutable object",
+                "ru": "Локальная переменная или immutable object"
+              },
+              "right": {
+                "en": "Removes the sharing entirely",
+                "ru": "Полностью убирает разделение"
+              }
+            },
+            {
+              "id": "one-lock",
+              "left": {
+                "en": "One lock on every access path",
+                "ru": "Один lock на всех путях доступа"
+              },
+              "right": {
+                "en": "Makes a multi-field update exclusive",
+                "ru": "Делает обновление нескольких полей эксклюзивным"
+              }
+            },
+            {
+              "id": "atomic-inc",
+              "left": {
+                "en": "AtomicInteger.incrementAndGet()",
+                "ru": "AtomicInteger.incrementAndGet()"
+              },
+              "right": {
+                "en": "Makes a numeric read-modify-write atomic",
+                "ru": "Делает числовой read-modify-write атомарным"
+              }
+            },
+            {
+              "id": "put-if-absent",
+              "left": {
+                "en": "ConcurrentHashMap.putIfAbsent()",
+                "ru": "ConcurrentHashMap.putIfAbsent()"
+              },
+              "right": {
+                "en": "Replaces a check-then-act pair",
+                "ru": "Заменяет пару check-then-act"
+              }
+            },
+            {
+              "id": "volatile",
+              "left": {
+                "en": "volatile",
+                "ru": "volatile"
+              },
+              "right": {
+                "en": "Only publishes the latest value",
+                "ru": "Только публикует последнее значение"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p5-fill-answer",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill the key parts of the 60-second interview answer.",
+            "ru": "Впиши ключевые части 60-секундного ответа на собеседовании."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two ingredients, three fixes — that is the whole topic in one sentence.",
+              "ru": "Два ингредиента, три исправления — вся тема в одном предложении."
+            },
+            "incorrect": {
+              "en": "Shared MUTABLE state plus a NON-ATOMIC operation; fix it by removing sharing, one LOCK, or an atomic API.",
+              "ru": "Общее ИЗМЕНЯЕМОЕ состояние плюс НЕАТОМАРНАЯ операция; чинится удалением разделения, одним LOCK или атомарным API."
+            }
+          },
+          "text": {
+            "en": "A race needs shared ___ state plus a ___ operation on it; fix it by removing the sharing, guarding the whole invariant with one ___, or using an atomic API.",
+            "ru": "Гонке нужно общее ___ состояние плюс ___ операция над ним; чинится это удалением разделения, защитой всего invariant одним ___ или атомарным API."
+          },
+          "blanks": [
+            {
+              "en": [
+                "mutable"
+              ],
+              "ru": [
+                "изменяемое"
+              ]
+            },
+            {
+              "en": [
+                "non-atomic",
+                "nonatomic",
+                "compound"
+              ],
+              "ru": [
+                "неатомарная",
+                "составная",
+                "non-atomic"
+              ]
+            },
+            {
+              "en": [
+                "lock"
+              ],
+              "ru": [
+                "lock",
+                "замком"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,3362 @@
+{
+  "schemaVersion": 1,
+  "topicId": "long-polling",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "polling-baseline",
+      "title": {
+        "en": "The polling baseline",
+        "ru": "Отправная точка: опрос по таймеру"
+      },
+      "summary": {
+        "en": "A regular handler must answer immediately — even with '200 []' — so the client re-asks on a timer and waits up to one interval for news.",
+        "ru": "Обычный обработчик обязан ответить сразу — даже «200 []», — поэтому клиент переспрашивает по таймеру и ждёт новость до целого интервала."
+      },
+      "discovery": [
+        {
+          "id": "baseline-d1-nothing-new",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A handler for `GET /api/messages` runs and finds nothing new. In the ordinary request/response model, what can it do?",
+            "ru": "Обработчик `GET /api/messages` отработал и не нашёл ничего нового. Что он может сделать в обычной модели «запрос — ответ»?"
+          },
+          "reveal": {
+            "en": "A regular HTTP request is a **closed loop**, and every step is forced:\n\n```mermaid\nflowchart LR\n  A[\"1. client sends a request\"] --> B[\"2. a worker thread runs the handler\"]\n  B --> C[\"3. the handler produces a response now\"]\n  C --> D[\"4. the response is written, the request is over\"]\n```\n\nStep 3 has no \"wait a bit\" option. With nothing to report the handler still has to say something — `200 []` or `204 No Content` — and that empty answer costs exactly what a useful one costs: a TCP/TLS round trip, request headers, a handler invocation, usually a database look-up and a log line.\n\nBetween requests **nothing is open**, so news appearing right after a response has to wait for the client's next request. Asking again on a timer is called **polling** (or short polling): with an interval of *N* seconds the average delay is *N/2* and the worst case is *N*. You cannot make the data fresher without paying for more empty requests, and you cannot cut the empty requests without making the data staler. That trade-off is the entire reason long polling exists.",
+            "ru": "Обычный HTTP-запрос — это **замкнутый цикл**, и каждый шаг в нём обязателен:\n\n```mermaid\nflowchart LR\n  A[\"1. клиент отправляет запрос\"] --> B[\"2. рабочий поток выполняет обработчик\"]\n  B --> C[\"3. обработчик выдаёт ответ сейчас\"]\n  C --> D[\"4. ответ записан, запрос завершён\"]\n```\n\nУ шага 3 нет варианта «подожди немного». Если сообщать нечего, обработчик всё равно обязан что-то сказать — `200 []` или `204 No Content`, — и этот пустой ответ стоит ровно столько же, сколько полезный: обмен TCP/TLS, заголовки запроса, вызов обработчика, обычно обращение к базе и строка в логе.\n\nМежду запросами **ничего не открыто**, поэтому новость, появившаяся сразу после ответа, ждёт следующего запроса клиента. Переспрашивать по таймеру называется **опросом** (polling, короткий опрос): при интервале *N* секунд средняя задержка равна *N/2*, а худшая — *N*. Нельзя сделать данные свежее, не заплатив большим числом пустых запросов, и нельзя сократить пустые запросы, не сделав данные более устаревшими. Ради этого компромисса и существует длинный опрос."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — a handler answers now, even when the answer is empty.",
+              "ru": "Верно — обработчик отвечает сейчас, даже если ответ пустой."
+            },
+            "incorrect": {
+              "en": "A handler has no way to wait: it answers immediately, even with `200 []`.",
+              "ru": "Обработчик не умеет ждать: он отвечает сразу, пусть даже `200 []`."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Return an empty response now — `200 []` or `204 No Content`",
+                "ru": "Вернуть пустой ответ прямо сейчас — `200 []` или `204 No Content`"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Wait until a message appears, and only then answer",
+                "ru": "Подождать, пока появится сообщение, и только тогда ответить"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "An ordinary handler has no \"wait\" step — that deliberate waiting is exactly what long polling adds.",
+                "ru": "У обычного обработчика нет шага «подожди» — именно это намеренное ожидание и добавляет длинный опрос."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Answer later, by writing into the already finished request",
+                "ru": "Ответить позже, дописав в уже завершённый запрос"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Once the response is written the request is over; nothing can be added to it.",
+                "ru": "Как только ответ записан, запрос завершён; дописать в него ничего нельзя."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "baseline-p1-empty-cost",
+          "type": "true_false",
+          "prompt": {
+            "en": "In a regular HTTP request, an empty `200 []` response costs the server much less than a response that carries data.",
+            "ru": "В обычном HTTP-запросе пустой ответ `200 []` стоит серверу заметно дешевле, чем ответ с данными."
+          },
+          "feedback": {
+            "correct": {
+              "en": "An empty answer still pays for the round trip, headers, handler invocation and usually a database look-up.",
+              "ru": "Пустой ответ всё равно оплачивает обмен, заголовки, вызов обработчика и обычно обращение к базе."
+            },
+            "incorrect": {
+              "en": "It costs the same: TCP/TLS round trip, headers, handler invocation, usually a database look-up and a log line.",
+              "ru": "Он стоит столько же: обмен TCP/TLS, заголовки, вызов обработчика, обычно запрос к базе и строка в логе."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "baseline-p2-delay",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A client polls `GET /api/messages` every 10 seconds. An event happens 1 second after a response was written. When does the client see it?",
+            "ru": "Клиент опрашивает `GET /api/messages` каждые 10 секунд. Событие происходит через 1 секунду после записи ответа. Когда клиент его увидит?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Nothing is open between requests, so the news waits for the next scheduled one.",
+              "ru": "Между запросами ничего не открыто, поэтому новость ждёт следующего запроса по расписанию."
+            },
+            "incorrect": {
+              "en": "About 9 seconds later: the event waits for the client's next scheduled request.",
+              "ru": "Примерно через 9 секунд: событие ждёт следующего запроса клиента по таймеру."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "About 9 seconds later, on the next scheduled request",
+                "ru": "Примерно через 9 секунд, на следующем запросе по таймеру"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Immediately — the server sends it as soon as it happens",
+                "ru": "Сразу — сервер отправит его, как только оно произойдёт"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing is open between requests, so the server has nowhere to write the event.",
+                "ru": "Между запросами ничего не открыто, поэтому серверу некуда записать событие."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Never — an event that happens between requests is lost",
+                "ru": "Никогда — событие между запросами теряется"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing is lost here: the next request simply reads the current state. Only the delay is the problem.",
+                "ru": "Здесь ничего не теряется: следующий запрос просто читает текущее состояние. Проблема только в задержке."
+              }
+            }
+          ]
+        },
+        {
+          "id": "baseline-p3-loop",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the steps of a regular HTTP request.",
+            "ru": "Расставь по порядку шаги обычного HTTP-запроса."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The loop is closed: the handler must produce a response before the request can end.",
+              "ru": "Цикл замкнут: обработчик обязан выдать ответ, прежде чем запрос завершится."
+            },
+            "incorrect": {
+              "en": "Request, worker thread runs the handler, response produced now, response written and the request ends.",
+              "ru": "Запрос, рабочий поток выполняет обработчик, ответ выдан сейчас, ответ записан и запрос завершён."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "The client opens a connection and sends a request",
+                "ru": "Клиент открывает соединение и отправляет запрос"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "A worker thread picks it up and runs the handler",
+                "ru": "Рабочий поток забирает его и выполняет обработчик"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "The handler produces a response now, even an empty one",
+                "ru": "Обработчик выдаёт ответ сейчас, пусть даже пустой"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "The response is written and the request is over",
+                "ru": "Ответ записан, и запрос завершён"
+              }
+            }
+          ]
+        },
+        {
+          "id": "baseline-p4-delay-math",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing values.",
+            "ru": "Впиши пропущенные значения."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Shorter intervals cut the delay only by paying for more empty requests.",
+              "ru": "Короче интервал — меньше задержка, но ценой большего числа пустых запросов."
+            },
+            "incorrect": {
+              "en": "The average is N/2 and the worst case is N — the client waits for its own next request.",
+              "ru": "Средняя задержка — N/2, худшая — N: клиент ждёт собственного следующего запроса."
+            }
+          },
+          "text": {
+            "en": "With a polling interval of N seconds, the average delay before news reaches the client is ___ and the worst case is ___.",
+            "ru": "При интервале опроса N секунд средняя задержка до получения новости равна ___, а худший случай — ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "N/2",
+                "n/2"
+              ],
+              "ru": [
+                "N/2",
+                "n/2"
+              ]
+            },
+            {
+              "en": [
+                "N",
+                "n"
+              ],
+              "ru": [
+                "N",
+                "n"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "held-request",
+      "title": {
+        "en": "Holding the request open",
+        "ru": "Придержанный запрос"
+      },
+      "summary": {
+        "en": "Long polling is the same GET, deliberately not answered yet: the server holds it open and completes it the moment there is news, or answers empty when the hold window runs out.",
+        "ru": "Длинный опрос — это тот же GET, на который намеренно пока не отвечают: сервер держит запрос открытым и завершает его в момент появления новости либо отвечает пустым, когда истекает окно удержания."
+      },
+      "discovery": [
+        {
+          "id": "held-d1-nothing-to-report",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A long-poll endpoint receives `GET /api/messages` and has nothing to report. What does it do?",
+            "ru": "Long-poll эндпоинт получил `GET /api/messages`, и сообщать ему нечего. Что он делает?"
+          },
+          "reveal": {
+            "en": "**Long polling** is an ordinary HTTP request that the server *deliberately does not answer yet*. Finding nothing to report, the handler does not return an empty response — it **parks** the request (holds it open) and completes it the instant an event happens.\n\n```mermaid\nsequenceDiagram\n  participant C as Client\n  participant S as Server\n  C->>S: GET /api/messages\n  Note over S: nothing to report, request parked\n  Note over S: msg-2 happens\n  S-->>C: \"200 [msg-2]\"\n  C->>S: GET /api/messages\n```\n\nThe waiting did not disappear — it **moved from the client's timer to the server**. That is what removes the delay: there is no interval left to sit through, so an event reaches the client as soon as it exists.\n\nThe hold is bounded on purpose. The **hold window** is how long the server is willing to wait, typically 20 to 30 seconds; when it runs out the server answers empty (`200 []` or `204`) and the client opens a new request.",
+            "ru": "**Длинный опрос** — это обычный HTTP-запрос, на который сервер *намеренно пока не отвечает*. Не найдя, что сообщить, обработчик не возвращает пустой ответ, а **паркует** запрос (держит его открытым) и завершает в тот момент, когда происходит событие.\n\n```mermaid\nsequenceDiagram\n  participant C as Клиент\n  participant S as Сервер\n  C->>S: GET /api/messages\n  Note over S: сообщать нечего, запрос припаркован\n  Note over S: произошло msg-2\n  S-->>C: \"200 [msg-2]\"\n  C->>S: GET /api/messages\n```\n\nОжидание никуда не делось — оно **переехало с таймера клиента на сервер**. Именно это убирает задержку: пережидать больше нечего, и событие доходит до клиента, как только появляется.\n\nУдержание намеренно ограничено. **Окно удержания** — это то, сколько сервер готов ждать, обычно от 20 до 30 секунд; когда оно истекает, сервер отвечает пустым (`200 []` или `204`), и клиент открывает новый запрос."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the request is parked and completed on the first event, or answered empty when the hold runs out.",
+              "ru": "Верно — запрос паркуется и завершается на первом событии либо получает пустой ответ по истечении удержания."
+            },
+            "incorrect": {
+              "en": "It holds the request open instead of answering, and completes it when an event arrives or the hold window expires.",
+              "ru": "Он держит запрос открытым вместо ответа и завершает его при событии или по истечении окна удержания."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Holds the request open and completes it when an event arrives — or answers empty when its hold window runs out",
+                "ru": "Держит запрос открытым и завершает его при появлении события — либо отвечает пустым, когда истекает окно удержания"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Answers `204` at once, like a normal endpoint",
+                "ru": "Сразу отвечает `204`, как обычный эндпоинт"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the regular request; long polling deliberately delays the response instead.",
+                "ru": "Это обычный запрос; длинный опрос вместо этого намеренно откладывает ответ."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Closes the connection so the client knows to retry",
+                "ru": "Закрывает соединение, чтобы клиент понял, что нужно повторить"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A closed connection reaches the client as an error; long polling keeps the request and answers it properly.",
+                "ru": "Закрытое соединение приходит к клиенту как ошибка; длинный опрос сохраняет запрос и отвечает на него нормально."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "held-p1-forever",
+          "type": "true_false",
+          "prompt": {
+            "en": "Long polling holds a request open indefinitely, until an event finally arrives.",
+            "ru": "Длинный опрос держит запрос открытым бесконечно, пока наконец не придёт событие."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The hold is bounded on purpose, typically 20 to 30 seconds, and ends in a deliberate empty response.",
+              "ru": "Удержание намеренно ограничено, обычно 20–30 секунд, и заканчивается намеренным пустым ответом."
+            },
+            "incorrect": {
+              "en": "No — the hold window is bounded on purpose, typically 20 to 30 seconds.",
+              "ru": "Нет — окно удержания намеренно ограничено, обычно 20–30 секундами."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "held-p2-vs-short-polling",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "How does long polling differ from polling every second?",
+            "ru": "Чем длинный опрос отличается от опроса раз в секунду?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Latency and occupancy swap places: the client stops waiting, the server starts.",
+              "ru": "Задержка и занятость меняются местами: клиент перестаёт ждать, начинает сервер."
+            },
+            "incorrect": {
+              "en": "The wait moves to the server: no client-side interval, but a long server-side hold.",
+              "ru": "Ожидание переезжает на сервер: интервала на клиенте нет, зато есть долгое удержание на сервере."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The wait moves to the server: no client-side interval, but a long server-side hold",
+                "ru": "Ожидание переезжает на сервер: интервала на клиенте нет, зато есть долгое удержание на сервере"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It is the same thing, just with a bigger interval",
+                "ru": "Это то же самое, просто с бо́льшим интервалом"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The opposite: short polling waits on the client, long polling waits on the server.",
+                "ru": "Наоборот: короткий опрос ждёт на клиенте, длинный — на сервере."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It sends smaller requests",
+                "ru": "Он отправляет запросы меньшего размера"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The request is byte-for-byte an ordinary one; only the timing of the response differs.",
+                "ru": "Запрос байт в байт обычный; отличается только момент ответа."
+              }
+            }
+          ]
+        },
+        {
+          "id": "held-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble what long polling actually moves.",
+            "ru": "Собери, что на самом деле переносит длинный опрос."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The wait is not removed, it is relocated — which is why the server pays for it.",
+              "ru": "Ожидание не убрано, а перенесено — поэтому за него платит сервер."
+            },
+            "incorrect": {
+              "en": "The waiting moves from the client's timer to the server.",
+              "ru": "Ожидание переезжает с таймера клиента на сервер."
+            }
+          },
+          "tokens": {
+            "en": [
+              "the",
+              "waiting",
+              "moves",
+              "from",
+              "the",
+              "client's",
+              "timer",
+              "to",
+              "the",
+              "server"
+            ],
+            "ru": [
+              "ожидание",
+              "переезжает",
+              "с",
+              "таймера",
+              "клиента",
+              "на",
+              "сервер"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "protocol"
+            ],
+            "ru": [
+              "протокол"
+            ]
+          }
+        },
+        {
+          "id": "held-p4-hold-window",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the usual bounds of the hold window.",
+            "ru": "Впиши обычные границы окна удержания."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Bounded on purpose, so the server answers before anything on the path cuts the connection.",
+              "ru": "Ограничено намеренно, чтобы сервер ответил раньше, чем соединение оборвёт кто-то на пути."
+            },
+            "incorrect": {
+              "en": "Typically 20 to 30 seconds — long enough to be useful, short enough to answer first.",
+              "ru": "Обычно от 20 до 30 секунд — достаточно долго, чтобы быть полезным, и достаточно коротко, чтобы ответить первым."
+            }
+          },
+          "text": {
+            "en": "A long poll's hold window is bounded on purpose — typically ___ to ___ seconds.",
+            "ru": "Окно удержания длинного опроса намеренно ограничено — обычно от ___ до ___ секунд."
+          },
+          "blanks": [
+            {
+              "en": [
+                "20"
+              ],
+              "ru": [
+                "20"
+              ]
+            },
+            {
+              "en": [
+                "30"
+              ],
+              "ru": [
+                "30"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "same-on-the-wire",
+      "title": {
+        "en": "Nothing new on the wire",
+        "ru": "На проводе ничего нового"
+      },
+      "summary": {
+        "en": "Long polling changes only when the response is written: same method, URL, headers, cookies, auth, status codes, TLS, CORS and access logs, with no upgrade and no new protocol.",
+        "ru": "Длинный опрос меняет только момент записи ответа: тот же метод, URL, заголовки, куки, авторизация, коды состояния, TLS, CORS и access-логи, без апгрейда и без нового протокола."
+      },
+      "discovery": [
+        {
+          "id": "wire-d1-proxy",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A reverse proxy sees a request to a long-poll endpoint. How can it tell that request apart from a regular one?",
+            "ru": "Обратный прокси видит запрос к long-poll эндпоинту. Как ему отличить этот запрос от обычного?"
+          },
+          "reveal": {
+            "en": "Exactly one thing changes: **when the response is written**. Everything else is identical, and this list is worth being able to recite in an interview:\n\n- same method and URL;\n- same headers, cookies and auth;\n- same status codes and TLS;\n- same CORS rules and access logs;\n- the same HTTP semantics end to end.\n\nThere is no upgrade, no new protocol, no special content type. A proxy cannot tell the two apart. The client cannot tell them apart *from the request it just sent* — only from how long the response takes to arrive.\n\nThat is precisely why long polling was the answer for a decade before WebSockets: it needs nothing that plain HTTP/1.1 did not already have, and no second stack to secure, monitor and scale.",
+            "ru": "Меняется ровно одно: **момент, когда записывается ответ**. Всё остальное идентично, и этот список стоит уметь перечислить на собеседовании:\n\n- тот же метод и URL;\n- те же заголовки, куки и авторизация;\n- те же коды состояния и TLS;\n- те же правила CORS и access-логи;\n- та же семантика HTTP от начала до конца.\n\nНи апгрейда, ни нового протокола, ни особого content-type. Прокси не отличит одно от другого. Клиент не отличит их *по только что отправленному запросу* — только по тому, как долго идёт ответ.\n\nИменно поэтому длинный опрос был ответом на протяжении десятилетия до WebSocket: ему не нужно ничего, чего не было бы в обычном HTTP/1.1, и не нужен второй стек, который пришлось бы защищать, мониторить и масштабировать."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It cannot: only the response timing differs, and a proxy sees an ordinary request.",
+              "ru": "Никак: отличается только момент ответа, а прокси видит обычный запрос."
+            },
+            "incorrect": {
+              "en": "It cannot tell them apart — there is no upgrade, no new protocol and no special content type.",
+              "ru": "Отличить нельзя — нет ни апгрейда, ни нового протокола, ни особого content-type."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It cannot — the only difference is how long the response takes to arrive",
+                "ru": "Никак — единственное отличие в том, как долго идёт ответ"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "By the protocol upgrade handshake the endpoint performs",
+                "ru": "По рукопожатию апгрейда протокола, которое делает эндпоинт"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no upgrade and no new protocol — that is what lets long polling run on plain HTTP/1.1.",
+                "ru": "Апгрейда и нового протокола нет — именно поэтому длинный опрос работает на обычном HTTP/1.1."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "By a dedicated content type on the response",
+                "ru": "По особому content-type у ответа"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The response body is whatever your API normally returns; no special content type is involved.",
+                "ru": "Тело ответа — то же, что обычно возвращает ваш API; никакого особого content-type нет."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "wire-p1-what-changes",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Switching an endpoint from regular responses to long polling changes which of these?",
+            "ru": "Что меняется при переводе эндпоинта с обычных ответов на длинный опрос?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Only the timing changes; method, URL, headers, auth and status codes stay as they were.",
+              "ru": "Меняется только момент ответа; метод, URL, заголовки, авторизация и коды состояния остаются прежними."
+            },
+            "incorrect": {
+              "en": "Only when the response is written — everything else on the wire is unchanged.",
+              "ru": "Только момент записи ответа — всё остальное на проводе не меняется."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "When the response is written",
+                "ru": "Момент, когда записывается ответ"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The HTTP method and the URL",
+                "ru": "HTTP-метод и URL"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Both stay the same — the client sends the very same request it always sent.",
+                "ru": "Оба остаются теми же — клиент отправляет ровно тот же запрос, что и раньше."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The status codes the endpoint is allowed to return",
+                "ru": "Коды состояния, которые эндпоинт может возвращать"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The same status codes apply; long polling changes no HTTP semantics.",
+                "ru": "Те же коды состояния; длинный опрос не меняет семантику HTTP."
+              }
+            }
+          ]
+        },
+        {
+          "id": "wire-p2-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble what long polling changes on the wire.",
+            "ru": "Собери, что длинный опрос меняет на проводе."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Same method, headers, auth, status codes and proxies — only the moment of the answer.",
+              "ru": "Тот же метод, заголовки, авторизация, коды состояния и прокси — меняется только момент ответа."
+            },
+            "incorrect": {
+              "en": "Only the timing of the response changes.",
+              "ru": "Меняется только момент ответа."
+            }
+          },
+          "tokens": {
+            "en": [
+              "only",
+              "the",
+              "timing",
+              "of",
+              "the",
+              "response",
+              "changes"
+            ],
+            "ru": [
+              "меняется",
+              "только",
+              "момент",
+              "ответа"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "protocol",
+              "headers"
+            ],
+            "ru": [
+              "протокол",
+              "заголовки"
+            ]
+          }
+        },
+        {
+          "id": "wire-p3-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing word.",
+            "ru": "Впиши пропущенное слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The response arrives later; nothing about the request itself is different.",
+              "ru": "Ответ приходит позже; сам запрос ничем не отличается."
+            },
+            "incorrect": {
+              "en": "Long polling changes only WHEN the response is written — nothing else.",
+              "ru": "Длинный опрос меняет только то, КОГДА записывается ответ, — и больше ничего."
+            }
+          },
+          "text": {
+            "en": "Long polling changes exactly one thing: ___ the response is written.",
+            "ru": "Длинный опрос меняет ровно одно: ___ записывается ответ."
+          },
+          "blanks": [
+            {
+              "en": [
+                "when"
+              ],
+              "ru": [
+                "когда"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pull-not-push",
+      "title": {
+        "en": "Still pull, not push",
+        "ru": "Это по-прежнему pull, а не push"
+      },
+      "summary": {
+        "en": "The server can only write into a request it already holds, so it never initiates: a client that has not asked cannot be reached.",
+        "ru": "Сервер может писать только в тот запрос, который у него уже есть, поэтому он никогда не инициирует: до клиента, который не спросил, дотянуться нельзя."
+      },
+      "discovery": [
+        {
+          "id": "pull-d1-is-push",
+          "type": "true_false",
+          "prompt": {
+            "en": "Long polling is a push technology: the server can send a message to a client whenever it wants.",
+            "ru": "Длинный опрос — это push-технология: сервер может отправить сообщение клиенту, когда захочет."
+          },
+          "reveal": {
+            "en": "**Push** means the server initiates delivery; **pull** means the client asks and the server answers. Long polling only delays the answer — it never changes who starts the exchange.\n\n```mermaid\nflowchart LR\n  A[\"client has a request open\"] --> B[\"server can write into it\"]\n  C[\"client has not asked\"] --> D[\"server cannot reach it\"]\n```\n\nThe server can write only into a request it *already holds*. That is not pedantry — it shows up in design decisions: there is no server-initiated channel to fall back on, and a client that is not currently polling is simply unreachable. Calling long polling \"push\" leads people to design features that quietly assume one exists.",
+            "ru": "**Push** означает, что доставку инициирует сервер; **pull** — что спрашивает клиент, а сервер отвечает. Длинный опрос лишь откладывает ответ и никогда не меняет того, кто начинает обмен.\n\n```mermaid\nflowchart LR\n  A[\"у клиента открыт запрос\"] --> B[\"сервер может писать в него\"]\n  C[\"клиент не спросил\"] --> D[\"сервер не может до него дотянуться\"]\n```\n\nСервер может писать только в тот запрос, который у него *уже есть*. Это не придирка — это проявляется в проектных решениях: запасного канала, инициируемого сервером, нет, а клиент, который сейчас не опрашивает, попросту недостижим. Называя длинный опрос «push», люди начинают проектировать функции, молча предполагающие такой канал."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The server writes only into a request it already holds; it never initiates.",
+              "ru": "Сервер пишет только в тот запрос, который уже держит; он никогда не инициирует."
+            },
+            "incorrect": {
+              "en": "It is pull, not push: the server can only write into a request the client already opened.",
+              "ru": "Это pull, а не push: сервер может писать только в запрос, который клиент уже открыл."
+            }
+          },
+          "answer": false
+        }
+      ],
+      "practice": [
+        {
+          "id": "pull-p1-when-deliver",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In long polling, when can the server deliver an event to a particular client?",
+            "ru": "Когда при длинном опросе сервер может доставить событие конкретному клиенту?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Only into a request it is already holding — there is no other channel.",
+              "ru": "Только в запрос, который он уже держит, — другого канала нет."
+            },
+            "incorrect": {
+              "en": "Only while it holds an open request from that client; the server never initiates.",
+              "ru": "Только пока он держит открытый запрос от этого клиента; сервер никогда не инициирует."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Only while it is holding an open request from that client",
+                "ru": "Только пока он держит открытый запрос от этого клиента"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "At any time, over a connection kept open for that purpose",
+                "ru": "В любой момент, через соединение, открытое специально для этого"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That describes SSE or a WebSocket; long polling has no channel open between requests.",
+                "ru": "Это описание SSE или WebSocket; у длинного опроса между запросами нет открытого канала."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Whenever the event occurs — the server opens a connection to the client",
+                "ru": "Как только произошло событие — сервер сам открывает соединение к клиенту"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Servers do not dial browsers; the client always initiates.",
+                "ru": "Серверы не «звонят» браузерам; инициирует всегда клиент."
+              }
+            }
+          ]
+        },
+        {
+          "id": "pull-p2-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each term to what it means.",
+            "ru": "Соотнеси каждый термин с его значением."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Long polling delays the answer; it does not change who speaks first.",
+              "ru": "Длинный опрос откладывает ответ; он не меняет того, кто заговорит первым."
+            },
+            "incorrect": {
+              "en": "Pull = the client asks; push = the server initiates; long polling is pull with a delayed answer.",
+              "ru": "Pull — спрашивает клиент; push — инициирует сервер; длинный опрос — это pull с отложенным ответом."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "pull",
+                "ru": "pull"
+              },
+              "right": {
+                "en": "The client asks, the server answers",
+                "ru": "Клиент спрашивает, сервер отвечает"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "push",
+                "ru": "push"
+              },
+              "right": {
+                "en": "The server initiates delivery",
+                "ru": "Доставку инициирует сервер"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "long polling",
+                "ru": "длинный опрос"
+              },
+              "right": {
+                "en": "Pull, with the answer delayed until there is news",
+                "ru": "Pull, где ответ откладывают до появления новости"
+              }
+            }
+          ]
+        },
+        {
+          "id": "pull-p3-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing verb.",
+            "ru": "Впиши пропущенный глагол."
+          },
+          "feedback": {
+            "correct": {
+              "en": "No held request means no way to reach that client at all.",
+              "ru": "Нет придержанного запроса — значит, до клиента вообще не дотянуться."
+            },
+            "incorrect": {
+              "en": "It holds: the server writes only into a request the client already opened.",
+              "ru": "Держит: сервер пишет только в тот запрос, который клиент уже открыл."
+            }
+          },
+          "text": {
+            "en": "In long polling the server can only write into a request it already ___.",
+            "ru": "При длинном опросе сервер может писать только в тот запрос, который он уже ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "holds",
+                "hold"
+              ],
+              "ru": [
+                "держит"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "response-ends-request",
+      "title": {
+        "en": "A response ends the request",
+        "ru": "Ответ завершает запрос"
+      },
+      "summary": {
+        "en": "Long polling delivers at most one message per request: writing the response ends it, and the client must open a new request for the next message.",
+        "ru": "Длинный опрос доставляет не более одного сообщения на запрос: запись ответа завершает его, и за следующим сообщением клиент должен открыть новый запрос."
+      },
+      "discovery": [
+        {
+          "id": "ends-d1-next-message",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A parked long poll is completed with one message. What has to happen before the client can receive the next one?",
+            "ru": "Припаркованный длинный опрос завершён одним сообщением. Что должно произойти, прежде чем клиент получит следующее?"
+          },
+          "reveal": {
+            "en": "Writing the response **ends** the request. That puts a hard ceiling on long polling: **one message per request**. After every delivery the client must open a new one.\n\n```mermaid\nflowchart LR\n  R1[\"request 1: parked\"] --> M1[\"event -> response, request ends\"]\n  M1 --> R2[\"request 2: parked\"]\n  R2 --> M2[\"event -> response, request ends\"]\n```\n\nThis is exactly why long polling stops paying off on a chatty stream: at several events per second per client, every message costs a full response *plus* a fresh request. The alternatives — **SSE** (Server-Sent Events) and **WebSockets** — keep **one** connection open and write many messages into it, which is where their advantage comes from.\n\nIt also means that between one response and the next request, no request is open at all. What that costs is the subject of the next step.",
+            "ru": "Запись ответа **завершает** запрос. Отсюда жёсткий потолок длинного опроса: **одно сообщение на запрос**. После каждой доставки клиент обязан открыть новый.\n\n```mermaid\nflowchart LR\n  R1[\"запрос 1: припаркован\"] --> M1[\"событие -> ответ, запрос завершён\"]\n  M1 --> R2[\"запрос 2: припаркован\"]\n  R2 --> M2[\"событие -> ответ, запрос завершён\"]\n```\n\nИменно поэтому длинный опрос перестаёт окупаться на «болтливом» потоке: при нескольких событиях в секунду на клиента каждое сообщение стоит полного ответа *плюс* нового запроса. Альтернативы — **SSE** (Server-Sent Events) и **WebSocket** — держат **одно** соединение и пишут в него много сообщений; отсюда и их преимущество.\n\nЭто также означает, что между одним ответом и следующим запросом не открыто вообще ничего. Чем это оборачивается — тема следующего шага."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One message per request is the ceiling; the client re-opens after every response.",
+              "ru": "Одно сообщение на запрос — это потолок; после каждого ответа клиент открывает запрос заново."
+            },
+            "incorrect": {
+              "en": "The client must send a new request: writing the response ended the previous one.",
+              "ru": "Клиент должен отправить новый запрос: запись ответа завершила предыдущий."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The client sends a new request",
+                "ru": "Клиент отправляет новый запрос"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing — the same request stays open and more messages are written into it",
+                "ru": "Ничего — тот же запрос остаётся открытым, и в него пишут следующие сообщения"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Writing a response ends the request; HTTP has no way to append to a finished one.",
+                "ru": "Запись ответа завершает запрос; в HTTP нельзя дописать что-то в завершённый."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The server re-opens the connection itself",
+                "ru": "Сервер сам переоткрывает соединение"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The server never initiates; only the client can start the next request.",
+                "ru": "Сервер никогда не инициирует; начать следующий запрос может только клиент."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "ends-p1-many-messages",
+          "type": "true_false",
+          "prompt": {
+            "en": "A single long-poll request can deliver several messages as they arrive.",
+            "ru": "Один запрос длинного опроса может доставить несколько сообщений по мере их появления."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The response ends the request, so one message per request is the ceiling.",
+              "ru": "Ответ завершает запрос, поэтому потолок — одно сообщение на запрос."
+            },
+            "incorrect": {
+              "en": "No — writing the response ends the request; the client must open a new one for the next message.",
+              "ru": "Нет — запись ответа завершает запрос; за следующим сообщением клиент открывает новый."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "ends-p2-cycle",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order one delivery cycle of a long poll.",
+            "ru": "Расставь по порядку один цикл доставки длинного опроса."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Every message costs a response plus a re-open, which is why event rate decides the fit.",
+              "ru": "Каждое сообщение стоит ответа плюс переоткрытия — поэтому частота событий и решает, подходит ли это."
+            },
+            "incorrect": {
+              "en": "Request, park, event written as the response, request ends, client opens a new request.",
+              "ru": "Запрос, парковка, событие записано ответом, запрос завершён, клиент открывает новый запрос."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "The client sends a request",
+                "ru": "Клиент отправляет запрос"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "The server has nothing to report and parks it",
+                "ru": "Серверу нечего сообщить, и он паркует запрос"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "An event arrives and is written as the response",
+                "ru": "Приходит событие и записывается в качестве ответа"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "The request is over",
+                "ru": "Запрос завершён"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "The client opens a new request",
+                "ru": "Клиент открывает новый запрос"
+              }
+            }
+          ]
+        },
+        {
+          "id": "ends-p3-ceiling",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing words.",
+            "ru": "Впиши пропущенные слова."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That ceiling is why a chatty stream turns into a request per message.",
+              "ru": "Из-за этого потолка «болтливый» поток превращается в запрос на каждое сообщение."
+            },
+            "incorrect": {
+              "en": "At most ONE message per request, because writing the response ENDS it.",
+              "ru": "Не более ОДНОГО сообщения на запрос, потому что запись ответа его ЗАВЕРШАЕТ."
+            }
+          },
+          "text": {
+            "en": "Long polling delivers at most ___ message per request, because writing the response ___ it.",
+            "ru": "Длинный опрос доставляет не более ___ сообщения на запрос, потому что запись ответа его ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "one",
+                "1"
+              ],
+              "ru": [
+                "одного",
+                "1"
+              ]
+            },
+            {
+              "en": [
+                "ends",
+                "finishes",
+                "closes"
+              ],
+              "ru": [
+                "завершает",
+                "заканчивает"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gap-and-cursor",
+      "title": {
+        "en": "The gap, and the cursor that closes it",
+        "ru": "Промежуток и курсор, который его закрывает"
+      },
+      "summary": {
+        "en": "Between one response and the next request nothing is listening, so a long-poll endpoint must answer from stored state using a client cursor like '?since=42', not from a live subscription.",
+        "ru": "Между одним ответом и следующим запросом никто не слушает, поэтому long-poll эндпоинт должен отвечать из сохранённого состояния по курсору клиента вида «?since=42», а не из живой подписки."
+      },
+      "discovery": [
+        {
+          "id": "gap-d1-lost-event",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "An endpoint subscribes to events when a request arrives and remembers nothing else. A response with msg-5 is written; msg-6 happens two milliseconds later, before the client's next request. What does the client see?",
+            "ru": "Эндпоинт подписывается на события в момент прихода запроса и больше ничего не помнит. Записан ответ с msg-5; через две миллисекунды, до следующего запроса клиента, происходит msg-6. Что увидит клиент?"
+          },
+          "reveal": {
+            "en": "Between one response and the next request **no request is open** — nothing is listening. An event landing in that window has nowhere to be written. If the client just says \"tell me when something happens\", that event is gone silently: no error, no log line, and a screen that is simply wrong until the next event nudges it.\n\nThe fix is not a longer hold. The endpoint must be answerable **from state, not from a subscription**: keep an append-only **log** (or a version column, or a last-updated timestamp), have the client send a **cursor** — where it stopped, `?since=42` — and answer from the log first, parking only when `since` is already at the head.\n\n```mermaid\nsequenceDiagram\n  participant C as Client\n  participant S as Server\n  S-->>C: \"200 [msg-5]\"\n  Note over S: msg-6 happens, no request is open\n  C->>S: \"GET /api/messages?since=5\"\n  S-->>C: \"200 [msg-6] answered at once, from the log\"\n```\n\nNow the gap is harmless: the next request arrives with `since=5`, finds `#6` in the log and is answered instantly.",
+            "ru": "Между одним ответом и следующим запросом **не открыто ни одного запроса** — никто не слушает. Событию, попавшему в это окно, некуда записаться. Если клиент просто говорит «сообщи, когда что-нибудь произойдёт», это событие пропадает молча: ни ошибки, ни строки в логе, а экран просто неверен, пока его не подтолкнёт следующее событие.\n\nЛечится это не более длинным удержанием. На эндпоинт нужно уметь отвечать **из состояния, а не из подписки**: держите **журнал** только на добавление (или колонку версии, или отметку «последнее обновление»), пусть клиент присылает **курсор** — место, где он остановился, `?since=42`, — и отвечайте сначала из журнала, паркуя запрос, только когда `since` уже на самом краю.\n\n```mermaid\nsequenceDiagram\n  participant C as Клиент\n  participant S as Сервер\n  S-->>C: \"200 [msg-5]\"\n  Note over S: происходит msg-6, ни одного запроса не открыто\n  C->>S: \"GET /api/messages?since=5\"\n  S-->>C: \"200 [msg-6] ответ сразу, из журнала\"\n```\n\nТеперь промежуток безвреден: следующий запрос приходит с `since=5`, находит `#6` в журнале и получает ответ мгновенно."
+          },
+          "feedback": {
+            "correct": {
+              "en": "With nothing stored and nothing listening, msg-6 is lost silently.",
+              "ru": "Ничего не сохранено и никто не слушает — msg-6 теряется молча."
+            },
+            "incorrect": {
+              "en": "Nothing was listening and nothing was stored, so msg-6 is lost until some later event arrives.",
+              "ru": "Никто не слушал и ничего не сохранено, поэтому msg-6 потеряно до прихода какого-нибудь следующего события."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Nothing about msg-6, until some later event happens to arrive",
+                "ru": "Ничего про msg-6 — пока случайно не придёт какое-нибудь следующее событие"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "msg-6 on the next request — the server replays it",
+                "ru": "msg-6 на следующем запросе — сервер его переотправит"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A fresh subscription knows nothing about the past; only stored state can be replayed.",
+                "ru": "Свежая подписка ничего не знает о прошлом; переотправить можно только сохранённое состояние."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "An error, so the client knows it has to re-fetch",
+                "ru": "Ошибку, чтобы клиент понял, что нужно перезапросить данные"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing fails: the event is lost silently, with no error and no log line.",
+                "ru": "Ничего не падает: событие теряется молча, без ошибки и без строки в логе."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "gap-p1-longer-hold",
+          "type": "true_false",
+          "prompt": {
+            "en": "Making the hold window longer removes the gap between one long-poll response and the client's next request.",
+            "ru": "Более длинное окно удержания убирает промежуток между ответом длинного опроса и следующим запросом клиента."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The gap shrinks but never closes; only answering from stored state makes it harmless.",
+              "ru": "Промежуток сокращается, но не исчезает; безвредным его делает только ответ из сохранённого состояния."
+            },
+            "incorrect": {
+              "en": "No — a longer hold only shrinks the window. The fix is a cursor plus a log.",
+              "ru": "Нет — более длинное удержание лишь сужает окно. Лечение — курсор и журнал."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "gap-p2-what-client-sends",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What must a long-poll client send so the endpoint cannot lose events?",
+            "ru": "Что должен присылать клиент длинного опроса, чтобы эндпоинт не терял события?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The cursor is what lets the server answer from the log instead of from a live subscription.",
+              "ru": "Именно курсор позволяет серверу отвечать из журнала, а не из живой подписки."
+            },
+            "incorrect": {
+              "en": "A cursor saying where it stopped, such as `?since=42`.",
+              "ru": "Курсор с местом, где он остановился, например `?since=42`."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A cursor saying where it stopped, e.g. `?since=42`",
+                "ru": "Курсор с местом, где он остановился, например `?since=42`"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Its session id, so the server can track it",
+                "ru": "Свой идентификатор сессии, чтобы сервер мог его отслеживать"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Identity does not tell the server which events this client already has.",
+                "ru": "Идентичность не говорит серверу, какие события у этого клиента уже есть."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A longer read timeout",
+                "ru": "Более длинный таймаут чтения"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Timeouts do not bring back an event that nothing was listening for.",
+                "ru": "Таймауты не вернут событие, которое никто не слушал."
+              }
+            }
+          ]
+        },
+        {
+          "id": "gap-p3-handler",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order how a long-poll handler that cannot lose events answers a request.",
+            "ru": "Расставь по порядку, как отвечает на запрос long-poll обработчик, который не теряет события."
+          },
+          "feedback": {
+            "correct": {
+              "en": "State first, parking second — that ordering is what makes the gap harmless.",
+              "ru": "Сначала состояние, потом парковка — именно такой порядок делает промежуток безвредным."
+            },
+            "incorrect": {
+              "en": "Read the cursor, check the log, answer immediately if there is anything newer, otherwise park.",
+              "ru": "Прочитать курсор, заглянуть в журнал, ответить сразу, если есть что-то новее, иначе припарковать."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Read the client's cursor from the request",
+                "ru": "Прочитать курсор клиента из запроса"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Look in the log for anything newer than the cursor",
+                "ru": "Поискать в журнале что-нибудь новее курсора"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "If there is something newer, answer immediately",
+                "ru": "Если есть что-то новее — ответить немедленно"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Otherwise park the request until an event arrives or the hold expires",
+                "ru": "Иначе припарковать запрос до события или истечения удержания"
+              }
+            }
+          ]
+        },
+        {
+          "id": "gap-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing words.",
+            "ru": "Впиши пропущенные слова."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Answering from stored state is what makes an event between requests recoverable.",
+              "ru": "Ответ из сохранённого состояния и делает событие между запросами восстановимым."
+            },
+            "incorrect": {
+              "en": "From a stored log, with the client's position sent as `?since=42`.",
+              "ru": "Из сохранённого журнала, а позицию клиент присылает как `?since=42`."
+            }
+          },
+          "text": {
+            "en": "A safe long-poll endpoint answers from a stored ___ rather than from a live subscription, and the client sends its position as `?___=42`.",
+            "ru": "Безопасный long-poll эндпоинт отвечает из сохранённого ___, а не из живой подписки, и клиент присылает свою позицию как `?___=42`."
+          },
+          "blanks": [
+            {
+              "en": [
+                "log"
+              ],
+              "ru": [
+                "журнала",
+                "лога",
+                "log"
+              ]
+            },
+            {
+              "en": [
+                "since"
+              ],
+              "ru": [
+                "since"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "lifecycle-branches",
+      "title": {
+        "en": "Two branches out of a received request",
+        "ru": "Две ветки из принятого запроса"
+      },
+      "summary": {
+        "en": "A received long poll is answered immediately when the log holds anything newer than the client's cursor, and parked only when the client is already caught up.",
+        "ru": "Принятый длинный опрос получает ответ немедленно, если в журнале есть что-то новее курсора клиента, и паркуется, только когда клиент уже всё видел."
+      },
+      "discovery": [
+        {
+          "id": "lifecycle-d1-behind",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A client that was offline for a minute sends `GET /api/messages?since=10`, while the log head is `#20`. The handler parks the request, because that is what a long poll does. What is wrong with that?",
+            "ru": "Клиент, отсутствовавший минуту, отправляет `GET /api/messages?since=10`, а край журнала — `#20`. Обработчик паркует запрос, ведь это и есть длинный опрос. Что здесь не так?"
+          },
+          "reveal": {
+            "en": "A received long poll has **two** branches, and the second one is the only one juniors usually implement:\n\n```mermaid\nstateDiagram-v2\n  [*] --> RECEIVED\n  RECEIVED --> ANSWERED: something newer than the cursor\n  RECEIVED --> PARKED: nothing to report\n  PARKED --> ANSWERED: an event arrives\n  PARKED --> EXPIRED: the hold window runs out\n  ANSWERED --> [*]\n  EXPIRED --> [*]\n```\n\n- A request whose cursor is **behind** the log must be answered **immediately**. The events already exist; there is nothing to wait for.\n- Parking is correct only for a client that is **already caught up**.\n\nGet that wrong and every client that was away for a minute waits for the *next* event before it sees the previous ten.\n\nThe `EXPIRED` branch matters too: when the hold runs out with nothing to report, the server answers **on purpose** — `200 []` or `204 No Content` — so the client learns the wait ended normally and simply opens the next request. Anything else (a dropped connection, a 5xx) is indistinguishable from a real failure.",
+            "ru": "У принятого длинного опроса **две** ветки, и джуны обычно реализуют только вторую:\n\n```mermaid\nstateDiagram-v2\n  [*] --> RECEIVED\n  RECEIVED --> ANSWERED: есть что-то новее курсора\n  RECEIVED --> PARKED: сообщать нечего\n  PARKED --> ANSWERED: пришло событие\n  PARKED --> EXPIRED: истекло окно удержания\n  ANSWERED --> [*]\n  EXPIRED --> [*]\n```\n\n- Запрос, чей курсор **отстаёт** от журнала, должен получить ответ **немедленно**. События уже есть, ждать нечего.\n- Парковка корректна только для клиента, который **уже всё видел**.\n\nОшибитесь тут — и каждый клиент, отсутствовавший минуту, будет ждать *следующего* события, чтобы увидеть предыдущие десять.\n\nВетка `EXPIRED` тоже важна: когда удержание истекает и сообщать нечего, сервер отвечает **намеренно** — `200 []` или `204 No Content`, — чтобы клиент понял, что ожидание закончилось нормально, и просто открыл следующий запрос. Всё остальное (оборванное соединение, 5xx) неотличимо от настоящего сбоя."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A client behind the log has events waiting already — parking it delays what already exists.",
+              "ru": "У клиента, отстающего от журнала, события уже есть — парковка задерживает то, что уже существует."
+            },
+            "incorrect": {
+              "en": "The cursor is behind the log, so the handler must answer immediately instead of parking.",
+              "ru": "Курсор отстаёт от журнала, поэтому обработчик обязан ответить сразу, а не парковать запрос."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The client is behind the log, so it must be answered immediately from the log",
+                "ru": "Клиент отстаёт от журнала, поэтому ему нужно ответить немедленно из журнала"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing — parking every request is what long polling means",
+                "ru": "Ничего — парковать каждый запрос и значит «длинный опрос»"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Parking is correct only for a caught-up client; this one waits for the next event to see ten old ones.",
+                "ru": "Парковка корректна только для догнавшего клиента; этот будет ждать следующего события, чтобы увидеть десять старых."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It should answer `204 No Content` instead",
+                "ru": "Нужно вместо этого ответить `204 No Content`"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "`204` is the deliberate empty answer for a caught-up client whose hold expired, not for one with unread events.",
+                "ru": "`204` — намеренный пустой ответ догнавшему клиенту, у которого истекло удержание, а не тому, у кого есть непрочитанные события."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "lifecycle-p1-when-park",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "When is parking a long-poll request the correct behaviour?",
+            "ru": "Когда парковка запроса длинного опроса — правильное поведение?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Park only a caught-up client; anyone behind the log is answered at once.",
+              "ru": "Парковать только догнавшего клиента; всем, кто отстаёт от журнала, отвечают сразу."
+            },
+            "incorrect": {
+              "en": "Only when the client's cursor is already at the head of the log.",
+              "ru": "Только когда курсор клиента уже на самом краю журнала."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Only when the client's cursor is already at the head of the log",
+                "ru": "Только когда курсор клиента уже на самом краю журнала"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Always — that is what long polling means",
+                "ru": "Всегда — в этом и состоит длинный опрос"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A client whose cursor is behind must be answered at once from the log.",
+                "ru": "Клиенту, чей курсор отстаёт, нужно ответить сразу из журнала."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Only when the server is under load",
+                "ru": "Только когда сервер под нагрузкой"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Load has nothing to do with it; the client's cursor decides.",
+                "ru": "Нагрузка ни при чём; решает курсор клиента."
+              }
+            }
+          ]
+        },
+        {
+          "id": "lifecycle-p2-states",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each state of a long-poll request to what it means.",
+            "ru": "Соотнеси каждое состояние запроса длинного опроса с его значением."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Received splits into answered-now and parked; parked ends either way.",
+              "ru": "Принятый делится на «ответить сейчас» и «припарковать»; припаркованный заканчивается в любом случае."
+            },
+            "incorrect": {
+              "en": "RECEIVED compares the cursor, PARKED waits, ANSWERED writes events, EXPIRED answers empty on purpose.",
+              "ru": "RECEIVED сверяет курсор, PARKED ждёт, ANSWERED пишет события, EXPIRED намеренно отвечает пустым."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "RECEIVED",
+                "ru": "RECEIVED"
+              },
+              "right": {
+                "en": "The handler has the request and compares the cursor with the log",
+                "ru": "Обработчик получил запрос и сверяет курсор с журналом"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "PARKED",
+                "ru": "PARKED"
+              },
+              "right": {
+                "en": "Nothing to report, so the request is held open",
+                "ru": "Сообщать нечего, поэтому запрос держат открытым"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "ANSWERED",
+                "ru": "ANSWERED"
+              },
+              "right": {
+                "en": "Events are written into the request, which then ends",
+                "ru": "События записаны в запрос, и он завершается"
+              }
+            },
+            {
+              "id": "m4",
+              "left": {
+                "en": "EXPIRED",
+                "ru": "EXPIRED"
+              },
+              "right": {
+                "en": "The hold ran out; an empty response is sent on purpose",
+                "ru": "Удержание истекло; пустой ответ отправлен намеренно"
+              }
+            }
+          ]
+        },
+        {
+          "id": "lifecycle-p3-expired",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing status code.",
+            "ru": "Впиши пропущенный код состояния."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A deliberate empty answer tells the client the wait ended normally, so it just re-opens.",
+              "ru": "Намеренный пустой ответ сообщает клиенту, что ожидание закончилось нормально, и он просто открывает запрос заново."
+            },
+            "incorrect": {
+              "en": "It is `204 No Content` — the alternative to `200 []` when there is nothing to report.",
+              "ru": "Это `204 No Content` — альтернатива `200 []`, когда сообщать нечего."
+            }
+          },
+          "text": {
+            "en": "When a long poll's hold expires with nothing to report, the server deliberately answers `200 []` or `___ No Content`.",
+            "ru": "Когда удержание длинного опроса истекает и сообщать нечего, сервер намеренно отвечает `200 []` или `___ No Content`."
+          },
+          "blanks": [
+            {
+              "en": [
+                "204"
+              ],
+              "ru": [
+                "204"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "at-least-once",
+      "title": {
+        "en": "At-least-once delivery",
+        "ru": "Доставка at-least-once"
+      },
+      "summary": {
+        "en": "A retry or a timeout can redeliver a long-poll event, so events need stable ids and the client must be idempotent.",
+        "ru": "Повтор или таймаут может доставить событие длинного опроса заново, поэтому событиям нужны стабильные id, а клиент обязан быть идемпотентным."
+      },
+      "discovery": [
+        {
+          "id": "alo-d1-retry",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A client's read timeout fires at the exact moment the server writes msg-7. The client retries with the cursor it still has. What does it get?",
+            "ru": "Таймаут чтения у клиента срабатывает ровно в тот момент, когда сервер пишет msg-7. Клиент повторяет запрос с тем курсором, который у него остался. Что он получит?"
+          },
+          "reveal": {
+            "en": "Cursor-based long polling delivers **at-least-once**: every event is delivered, but a timeout or a retry can deliver it twice. The client's cursor only advances once it has actually applied a response, so anything lost in flight is simply sent again.\n\nTwo things make that safe:\n\n- **Stable event ids** — the same event carries the same id every time it is delivered, so a duplicate is recognisable.\n- An **idempotent** client — applying the same event twice leaves the same result as applying it once, typically by skipping ids it has already seen.\n\nOrdering is not the problem here: each response continues from the cursor the client sent, so events arrive in log order. Duplicates are. And treat a delivered event as a *hint* that state changed, not as the state itself — when in doubt, re-read the state.",
+            "ru": "Длинный опрос с курсором даёт доставку **at-least-once**: каждое событие доставляется, но таймаут или повтор могут доставить его дважды. Курсор клиента сдвигается, только когда тот действительно применил ответ, поэтому всё потерянное в пути просто отправляется снова.\n\nБезопасным это делают две вещи:\n\n- **Стабильные id событий** — одно и то же событие при каждой доставке несёт один и тот же id, поэтому дубликат опознаётся.\n- **Идемпотентный** клиент — применить событие дважды даёт тот же результат, что и один раз; обычно за счёт пропуска уже виденных id.\n\nПорядок здесь не проблема: каждый ответ продолжается от присланного клиентом курсора, поэтому события приходят в порядке журнала. Проблема — дубликаты. И считайте доставленное событие *подсказкой* о том, что состояние изменилось, а не самим состоянием: если сомневаетесь — перечитайте состояние."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The cursor never advanced, so the server sends msg-7 again — at-least-once.",
+              "ru": "Курсор не сдвинулся, поэтому сервер отправит msg-7 снова — at-least-once."
+            },
+            "incorrect": {
+              "en": "msg-7 again: the client's cursor never advanced, and the server answers from that cursor.",
+              "ru": "Снова msg-7: курсор клиента не сдвинулся, а сервер отвечает именно по этому курсору."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "msg-7 again — delivery is at-least-once",
+                "ru": "Снова msg-7 — доставка тут at-least-once"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing — the server knows it already sent msg-7",
+                "ru": "Ничего — сервер знает, что уже отправлял msg-7"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no acknowledgement; the server answers from the cursor the client sent, and it never advanced.",
+                "ru": "Подтверждений нет; сервер отвечает по присланному курсору, а тот не сдвинулся."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "An error, because the cursor is stale",
+                "ru": "Ошибку, потому что курсор устарел"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The cursor is perfectly valid — it just points at an event the client already received.",
+                "ru": "Курсор совершенно корректен — он просто указывает на событие, которое клиент уже получил."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "alo-p1-exactly-once",
+          "type": "true_false",
+          "prompt": {
+            "en": "Cursor-based long polling guarantees exactly-once delivery.",
+            "ru": "Длинный опрос с курсором гарантирует доставку exactly-once."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Retries and timeouts make redelivery normal, so the guarantee is at-least-once.",
+              "ru": "Повторы и таймауты делают повторную доставку нормой, поэтому гарантия — at-least-once."
+            },
+            "incorrect": {
+              "en": "No — it is at-least-once; stable ids and an idempotent client are part of the design.",
+              "ru": "Нет — это at-least-once; стабильные id и идемпотентный клиент — часть дизайна."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "alo-p2-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble how a client should regard a delivered event.",
+            "ru": "Собери, как клиент должен относиться к доставленному событию."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A hint prompts a re-read; a guarantee would let a duplicate corrupt the screen.",
+              "ru": "Подсказка побуждает перечитать состояние; «гарантия» позволила бы дубликату испортить экран."
+            },
+            "incorrect": {
+              "en": "Treat a delivered event as a hint that state changed.",
+              "ru": "Считай доставленное событие подсказкой, что состояние изменилось."
+            }
+          },
+          "tokens": {
+            "en": [
+              "treat",
+              "a",
+              "delivered",
+              "event",
+              "as",
+              "a",
+              "hint",
+              "that",
+              "state",
+              "changed"
+            ],
+            "ru": [
+              "считай",
+              "доставленное",
+              "событие",
+              "подсказкой",
+              "что",
+              "состояние",
+              "изменилось"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "guarantee"
+            ],
+            "ru": [
+              "гарантией"
+            ]
+          }
+        },
+        {
+          "id": "alo-p3-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing terms.",
+            "ru": "Впиши пропущенные термины."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Stable ids let the client recognise a duplicate; idempotence makes applying it harmless.",
+              "ru": "Стабильные id позволяют клиенту опознать дубликат; идемпотентность делает его применение безвредным."
+            },
+            "incorrect": {
+              "en": "At-least-once, so the client must be idempotent.",
+              "ru": "At-least-once, поэтому клиент обязан быть идемпотентным."
+            }
+          },
+          "text": {
+            "en": "Retries make long-poll delivery ___-once, so events need stable ids and the client must be ___.",
+            "ru": "Из-за повторов доставка при длинном опросе становится ___-once, поэтому событиям нужны стабильные id, а клиент обязан быть ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "at-least",
+                "at least"
+              ],
+              "ru": [
+                "at-least",
+                "at least"
+              ]
+            },
+            {
+              "en": [
+                "idempotent"
+              ],
+              "ru": [
+                "идемпотентным",
+                "идемпотентен"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "parked-request-cost",
+      "title": {
+        "en": "What a parked request costs",
+        "ru": "Чем стоит припаркованный запрос"
+      },
+      "summary": {
+        "en": "A parked request is state on the server: a blocking handler parks a worker thread and exhausts the pool, while an async one frees the thread and keeps only a socket and a small registration.",
+        "ru": "Припаркованный запрос — это состояние на сервере: блокирующий обработчик паркует ещё и рабочий поток, исчерпывая пул, а асинхронный освобождает поток и держит лишь сокет и небольшую регистрацию."
+      },
+      "discovery": [
+        {
+          "id": "cost-d1-blocking",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This Spring MVC handler implements a 25-second long poll. What is the defect?",
+            "ru": "Этот обработчик Spring MVC реализует длинный опрос на 25 секунд. В чём дефект?"
+          },
+          "code": "@GetMapping(\"/api/messages\")\npublic List<Message> poll(@RequestParam long since) throws InterruptedException {\n    long deadline = System.currentTimeMillis() + 25_000;\n    while (log.after(since).isEmpty() && System.currentTimeMillis() < deadline) {\n        Thread.sleep(200);\n    }\n    return log.after(since);\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "A parked request is **state on the server**, and how much it costs depends entirely on how the handler is written.\n\nThis one is **blocking**: the request is parked, so its **worker thread** — one slot in the servlet container's fixed-size thread pool, plus its stack — is parked too. With 200 Tomcat workers, client 201 does not get served: not on this endpoint, and not on any other endpoint sharing the pool. A notification feature written this way takes down the checkout page, and it is the single most common way long polling is implemented badly.\n\nNote what this is *not*. A slow endpoint is **working**; a long poll is **waiting for a condition** while doing nothing. Same duration, completely different resource profile — which is exactly why the implementation choice matters so much here.",
+            "ru": "Припаркованный запрос — это **состояние на сервере**, и его цена целиком зависит от того, как написан обработчик.\n\nЭтот — **блокирующий**: запрос припаркован, а значит, припаркован и его **рабочий поток**: слот в пуле потоков сервлет-контейнера фиксированного размера плюс его стек. При 200 воркерах Tomcat клиент номер 201 не будет обслужен: ни на этом эндпоинте, ни на любом другом, который делит тот же пул. Написанная так фича уведомлений роняет страницу оплаты — и это самый частый способ реализовать длинный опрос плохо.\n\nЗаметьте, чем это *не* является. Медленный эндпоинт **работает**; длинный опрос **ждёт условия**, ничего не делая. Одна и та же длительность и совершенно разный профиль ресурсов — именно поэтому выбор реализации здесь так важен."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The request is parked and so is a worker thread — capacity dies at a few hundred idle clients.",
+              "ru": "Припаркован запрос — и вместе с ним рабочий поток; ёмкость кончается на паре сотен простаивающих клиентов."
+            },
+            "incorrect": {
+              "en": "The defect is the blocked worker thread: a parked request must not occupy one.",
+              "ru": "Дефект — заблокированный рабочий поток: припаркованный запрос не должен его занимать."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It holds a Tomcat worker thread for the whole hold, so a few hundred idle clients exhaust the pool",
+                "ru": "Он занимает рабочий поток Tomcat на всё удержание, поэтому пара сотен простаивающих клиентов исчерпает пул"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The 200 ms sleep checks the log too often",
+                "ru": "Пауза в 200 мс слишком часто проверяет журнал"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The internal check interval is a detail; the defect is that a worker thread is occupied while nothing happens.",
+                "ru": "Интервал внутренней проверки — деталь; дефект в том, что рабочий поток занят, пока ничего не происходит."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A hold of 25 seconds is too short to be useful",
+                "ru": "Удержание в 25 секунд слишком короткое, чтобы быть полезным"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "25 seconds is a normal, deliberate bound — the problem is the thread it blocks.",
+                "ru": "25 секунд — нормальная намеренная граница; проблема в потоке, который он блокирует."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cost-d2-deferred",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The same endpoint is rewritten to return a `DeferredResult`, completed later by whatever publishes the events. What changes?",
+            "ru": "Тот же эндпоинт переписали так, что он возвращает `DeferredResult`, который позже завершает публикатор событий. Что изменится?"
+          },
+          "reveal": {
+            "en": "An **async handler** returns something the framework can complete later — a `DeferredResult`, a `CompletableFuture`, a `Mono`/`Flux`, or the Servlet 3 async context. The framework remembers the unfinished response, the worker thread returns to the pool immediately, and completing the response later is just a callback from whatever produced the event:\n\n```java\n@GetMapping(\"/api/messages\")\npublic DeferredResult<List<Message>> poll(@RequestParam long since) {\n    var result = new DeferredResult<List<Message>>(25_000L, List.of());\n    var newer = log.after(since);\n    if (!newer.isEmpty()) result.setResult(newer);  // behind the log: answer now\n    else subscribers.register(since, result);       // caught up: park\n    return result;\n}\n```\n\nWhat stays open is a socket, a file descriptor and a small registration — thousands of waiting clients per instance instead of a couple of hundred. Same protocol behaviour, completely different capacity.\n\nEither way, an idle client is not free: it costs one request per hold window, forever. With a 30-second hold that is 2 requests a minute per tab, 120 a minute for 60 tabs — cheap next to polling every second, and not zero.",
+            "ru": "**Асинхронный обработчик** возвращает то, что фреймворк может завершить позже: `DeferredResult`, `CompletableFuture`, `Mono`/`Flux` или асинхронный контекст сервлета. Фреймворк запоминает незавершённый ответ, рабочий поток сразу возвращается в пул, а завершение ответа позже — это просто колбэк от того, что породило событие:\n\n```java\n@GetMapping(\"/api/messages\")\npublic DeferredResult<List<Message>> poll(@RequestParam long since) {\n    var result = new DeferredResult<List<Message>>(25_000L, List.of());\n    var newer = log.after(since);\n    if (!newer.isEmpty()) result.setResult(newer);  // отстаёт от журнала: ответить сейчас\n    else subscribers.register(since, result);       // догнал: припарковать\n    return result;\n}\n```\n\nОткрытыми остаются сокет, файловый дескриптор и небольшая регистрация — тысячи ждущих клиентов на экземпляр вместо пары сотен. Поведение протокола то же, ёмкость совершенно другая.\n\nВ любом случае простаивающий клиент не бесплатен: он стоит одного запроса на окно удержания, и так всегда. При удержании 30 секунд это 2 запроса в минуту на вкладку и 120 в минуту на 60 вкладок — дёшево по сравнению с опросом раз в секунду, но не ноль."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Parking the request and parking a thread are different things; async separates them.",
+              "ru": "Припарковать запрос и припарковать поток — разные вещи; асинхронность их разделяет."
+            },
+            "incorrect": {
+              "en": "The worker thread returns to the pool at once; only a socket and a small registration stay open.",
+              "ru": "Рабочий поток сразу возвращается в пул; открытыми остаются лишь сокет и небольшая регистрация."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The worker thread returns to the pool immediately; only a socket and a small registration stay open",
+                "ru": "Рабочий поток сразу возвращается в пул; открытыми остаются только сокет и небольшая регистрация"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing — the request is still parked, so a thread is still parked with it",
+                "ru": "Ничего — запрос всё так же припаркован, значит, вместе с ним припаркован и поток"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Parking the request and parking a thread are two different things; async is exactly what separates them.",
+                "ru": "Парковка запроса и парковка потока — две разные вещи; асинхронность как раз их разделяет."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The client now receives a push over a persistent connection",
+                "ru": "Клиент теперь получает push через постоянное соединение"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Protocol behaviour is unchanged: the client still asked, and still waits for one response.",
+                "ru": "Поведение протокола не меняется: клиент всё так же спросил и всё так же ждёт один ответ."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cost-p1-slow-endpoint",
+          "type": "true_false",
+          "prompt": {
+            "en": "An endpoint that takes 25 seconds because it is computing a heavy report is a long poll.",
+            "ru": "Эндпоинт, который отвечает 25 секунд, потому что считает тяжёлый отчёт, — это длинный опрос."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A slow endpoint is working; a long poll is waiting for a condition while doing nothing.",
+              "ru": "Медленный эндпоинт работает; длинный опрос ждёт условия, ничего не делая."
+            },
+            "incorrect": {
+              "en": "No — same duration, different resource profile: one computes, the other waits for a condition.",
+              "ru": "Нет — та же длительность, но разный профиль ресурсов: один считает, другой ждёт условия."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "cost-p2-pool",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A long-poll endpoint blocks a worker thread per parked request. The server has 200 Tomcat workers and 250 idle clients. What happens?",
+            "ru": "Long-poll эндпоинт блокирует по рабочему потоку на каждый припаркованный запрос. У сервера 200 воркеров Tomcat и 250 простаивающих клиентов. Что произойдёт?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The pool is shared, so a notification feature can take down unrelated pages.",
+              "ru": "Пул общий, поэтому фича уведомлений может уронить совершенно не связанные с ней страницы."
+            },
+            "incorrect": {
+              "en": "Every endpoint sharing that thread pool stops being served, not just the long-poll one.",
+              "ru": "Перестают обслуживаться все эндпоинты, делящие этот пул потоков, а не только long-poll."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Requests to other endpoints sharing the pool stop being served too",
+                "ru": "Перестают обслуживаться и запросы к другим эндпоинтам, делящим тот же пул"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Only the long-poll endpoint slows down",
+                "ru": "Замедлится только сам long-poll эндпоинт"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The pool is shared: unrelated endpoints starve as well.",
+                "ru": "Пул общий: голодают и совершенно не связанные эндпоинты."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The container simply creates more threads as needed",
+                "ru": "Контейнер просто создаст столько потоков, сколько нужно"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The pool has a fixed maximum — that maximum is exactly what is being hit.",
+                "ru": "У пула есть фиксированный максимум — именно в него и упираются."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cost-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each long-poll implementation detail to what it occupies.",
+            "ru": "Соотнеси каждую деталь реализации длинного опроса с тем, что она занимает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Same protocol behaviour, completely different capacity — and an idle client is never free.",
+              "ru": "Поведение протокола то же, ёмкость совершенно разная — и простаивающий клиент никогда не бесплатен."
+            },
+            "incorrect": {
+              "en": "Blocking takes a thread, DeferredResult takes a socket plus a registration, an idle tab costs 2 requests a minute.",
+              "ru": "Блокирующий занимает поток, DeferredResult — сокет и регистрацию, простаивающая вкладка стоит 2 запроса в минуту."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "A blocking handler",
+                "ru": "Блокирующий обработчик"
+              },
+              "right": {
+                "en": "A worker thread and its stack, for the whole hold",
+                "ru": "Рабочий поток и его стек — на всё удержание"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "A `DeferredResult` handler",
+                "ru": "Обработчик на `DeferredResult`"
+              },
+              "right": {
+                "en": "A socket, a file descriptor and a small registration",
+                "ru": "Сокет, файловый дескриптор и небольшая регистрация"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "An idle client with a 30-second hold",
+                "ru": "Простаивающий клиент при удержании 30 секунд"
+              },
+              "right": {
+                "en": "2 requests a minute, forever",
+                "ru": "2 запроса в минуту, и так всегда"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cost-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing Spring type.",
+            "ru": "Впиши пропущенный тип из Spring."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The framework remembers the unfinished response and completes it from a callback later.",
+              "ru": "Фреймворк запоминает незавершённый ответ и позже завершает его из колбэка."
+            },
+            "incorrect": {
+              "en": "It is `DeferredResult` (or a `CompletableFuture`, a `Mono`, or the servlet async context).",
+              "ru": "Это `DeferredResult` (или `CompletableFuture`, `Mono`, либо асинхронный контекст сервлета)."
+            }
+          },
+          "text": {
+            "en": "In Spring MVC, return a ___ so the worker thread returns to the pool while the request stays parked.",
+            "ru": "В Spring MVC верните ___, чтобы рабочий поток вернулся в пул, пока запрос остаётся припаркованным."
+          },
+          "blanks": [
+            {
+              "en": [
+                "DeferredResult"
+              ],
+              "ru": [
+                "DeferredResult"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "timeout-ladder",
+      "title": {
+        "en": "The timeout ladder",
+        "ru": "Лестница таймаутов"
+      },
+      "summary": {
+        "en": "The server's hold must be shorter than the shortest idle timeout above it, and the client's read timeout must be longer than the hold.",
+        "ru": "Удержание на сервере должно быть короче самого короткого таймаута простоя над ним, а таймаут чтения у клиента — длиннее удержания."
+      },
+      "discovery": [
+        {
+          "id": "ladder-d1-proxy-cuts",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A handler holds a quiet request for 90 seconds. The reverse proxy in front of it has a 60-second idle timeout. What does the client get?",
+            "ru": "Обработчик держит тихий запрос 90 секунд. У обратного прокси перед ним таймаут простоя 60 секунд. Что получит клиент?"
+          },
+          "reveal": {
+            "en": "A hold is a **bounded, deliberate** wait, and its length is not a free choice. Everything between the browser and your handler has an idle timeout, and whoever fires first wins:\n\n```mermaid\nflowchart LR\n  B[\"browser / fetch: read timeout, must be longer than the hold\"] --> P[\"reverse proxy: idle timeout, often 60s\"]\n  P --> L[\"load balancer: idle timeout, often 60s\"]\n  L --> A[\"your handler: hold, e.g. 25-30s\"]\n```\n\nRead it from the inside out:\n\n- The server's hold must be **shorter** than the shortest timeout above it, so a quiet wait ends in a clean empty response instead of a connection someone else cut. A cut connection reaches the client as a **network error**, not as data.\n- The client's own read timeout must be **longer** than the server's hold, or the client aborts its own perfectly healthy request every cycle.\n\nBoth mistakes look identical in the browser and are usually diagnosed as \"the long polling doesn't work\".",
+            "ru": "Удержание — это **ограниченное и намеренное** ожидание, и его длину нельзя выбрать произвольно. У всего между браузером и вашим обработчиком есть таймаут простоя, и побеждает тот, кто срабатывает первым:\n\n```mermaid\nflowchart LR\n  B[\"браузер / fetch: таймаут чтения, должен быть больше удержания\"] --> P[\"обратный прокси: таймаут простоя, часто 60s\"]\n  P --> L[\"балансировщик: таймаут простоя, часто 60s\"]\n  L --> A[\"ваш обработчик: удержание, например 25-30s\"]\n```\n\nЧитайте изнутри наружу:\n\n- Удержание сервера должно быть **короче** самого короткого таймаута над ним, чтобы тихое ожидание закончилось аккуратным пустым ответом, а не соединением, которое оборвал кто-то другой. Оборванное соединение приходит к клиенту как **сетевая ошибка**, а не как данные.\n- Собственный таймаут чтения у клиента должен быть **больше** удержания сервера, иначе клиент каждый цикл прерывает свой же совершенно здоровый запрос.\n\nОбе ошибки в браузере выглядят одинаково и обычно диагностируются как «длинный опрос не работает»."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Whoever times out first wins — and a cut connection carries no response at all.",
+              "ru": "Побеждает тот, чей таймаут сработал первым, — а в оборванном соединении ответа нет вовсе."
+            },
+            "incorrect": {
+              "en": "A network error at 60 seconds: the proxy ended the request before the handler could answer.",
+              "ru": "Сетевую ошибку на 60-й секунде: прокси завершил запрос раньше, чем обработчик успел ответить."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A network error at 60 seconds — the proxy ended the request, and a cut connection carries no response",
+                "ru": "Сетевую ошибку на 60-й секунде — запрос завершил прокси, а в оборванном соединении ответа нет"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The empty `200 []` the handler would have sent, just earlier",
+                "ru": "Тот же пустой `200 []`, который отправил бы обработчик, просто раньше"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The handler never got to send it; the proxy cut the connection, and a cut connection has no response in it.",
+                "ru": "Обработчик не успел его отправить; прокси оборвал соединение, а в оборванном соединении ответа нет."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The response at 90 seconds, slightly delayed",
+                "ru": "Ответ на 90-й секунде, просто с небольшой задержкой"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "By second 90 the request no longer exists — whoever times out first wins.",
+                "ru": "К 90-й секунде запроса уже нет — побеждает тот, чей таймаут сработал первым."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "ladder-p1-client-timeout",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A client sets a 10-second read timeout against a long-poll endpoint whose hold is 25 seconds. What happens?",
+            "ru": "Клиент ставит таймаут чтения 10 секунд для long-poll эндпоинта с удержанием 25 секунд. Что произойдёт?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The client kills its own healthy request every cycle; it looks exactly like a flaky server.",
+              "ru": "Клиент каждый цикл убивает свой же здоровый запрос; выглядит это в точности как нестабильный сервер."
+            },
+            "incorrect": {
+              "en": "The client aborts its own healthy request every cycle — its read timeout must exceed the hold.",
+              "ru": "Клиент каждый цикл прерывает свой же здоровый запрос — его таймаут чтения должен превышать удержание."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The client aborts its own healthy request every cycle, which looks like a flaky server",
+                "ru": "Клиент каждый цикл прерывает свой же здоровый запрос, и это выглядит как нестабильный сервер"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The server notices and shortens its hold to 10 seconds",
+                "ru": "Сервер заметит это и сократит удержание до 10 секунд"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The server has no idea what the client's timeout is.",
+                "ru": "Сервер понятия не имеет, какой таймаут у клиента."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The request succeeds, just with fewer events",
+                "ru": "Запрос выполнится успешно, просто с меньшим числом событий"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The request is aborted before any response is written at all.",
+                "ru": "Запрос прерывается до того, как вообще будет записан какой-либо ответ."
+              }
+            }
+          ]
+        },
+        {
+          "id": "ladder-p2-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each rung of a long-poll timeout ladder to its rule.",
+            "ru": "Соотнеси каждую ступень лестницы таймаутов длинного опроса с её правилом."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The server answers first; the client waits longer than the server holds.",
+              "ru": "Сервер отвечает первым; клиент ждёт дольше, чем сервер держит."
+            },
+            "incorrect": {
+              "en": "Hold shortest, infrastructure idle timeouts above it, client read timeout longer than the hold.",
+              "ru": "Удержание самое короткое, таймауты простоя инфраструктуры над ним, таймаут чтения клиента больше удержания."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "Your handler's hold",
+                "ru": "Удержание вашего обработчика"
+              },
+              "right": {
+                "en": "Shorter than every idle timeout above it, e.g. 25s",
+                "ru": "Короче любого таймаута простоя над ним, например 25s"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "The reverse proxy or load balancer",
+                "ru": "Обратный прокси или балансировщик"
+              },
+              "right": {
+                "en": "An idle timeout, often 60s, that must not fire first",
+                "ru": "Таймаут простоя, часто 60s, который не должен сработать первым"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "The client's read timeout",
+                "ru": "Таймаут чтения у клиента"
+              },
+              "right": {
+                "en": "Longer than the server's hold",
+                "ru": "Длиннее удержания на сервере"
+              }
+            }
+          ]
+        },
+        {
+          "id": "ladder-p3-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing comparisons.",
+            "ru": "Впиши два пропущенных сравнения."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The server must answer before anything above it cuts the connection, and the client must outwait the server.",
+              "ru": "Сервер обязан ответить раньше, чем соединение оборвёт кто-то сверху, а клиент — переждать сервер."
+            },
+            "incorrect": {
+              "en": "Shorter than the proxy's idle timeout, and the client's read timeout longer than the hold.",
+              "ru": "Короче таймаута простоя прокси, а таймаут чтения у клиента — длиннее удержания."
+            }
+          },
+          "text": {
+            "en": "The server's hold must be ___ than the proxy's idle timeout, and the client's read timeout must be ___ than the hold.",
+            "ru": "Удержание на сервере должно быть ___ таймаута простоя прокси, а таймаут чтения у клиента — ___ удержания."
+          },
+          "blanks": [
+            {
+              "en": [
+                "shorter"
+              ],
+              "ru": [
+                "короче"
+              ]
+            },
+            {
+              "en": [
+                "longer"
+              ],
+              "ru": [
+                "длиннее",
+                "больше"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "browser-connection-limit",
+      "title": {
+        "en": "The browser's connection limit",
+        "ru": "Лимит соединений в браузере"
+      },
+      "summary": {
+        "en": "Over HTTP/1.1 a browser allows about 6 connections per origin and a parked long poll permanently occupies one of them; over HTTP/2 they share a single connection.",
+        "ru": "По HTTP/1.1 браузер разрешает около 6 соединений на источник, и припаркованный длинный опрос навсегда занимает одно из них; по HTTP/2 они делят одно соединение."
+      },
+      "discovery": [
+        {
+          "id": "browser-d1-limit",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A tab keeps one long poll open to your origin over HTTP/1.1, and then the page fires seven more requests to the same origin. What happens?",
+            "ru": "Вкладка держит один длинный опрос к вашему источнику по HTTP/1.1, а затем страница отправляет ещё семь запросов к тому же источнику. Что произойдёт?"
+          },
+          "reveal": {
+            "en": "Over **HTTP/1.1** a browser allows about **6 connections per origin**, and a parked long poll occupies one of them for its whole hold — permanently, in practice, because the client re-opens immediately after every response.\n\n```mermaid\nflowchart LR\n  T[\"tab over HTTP/1.1\"] --> C1[\"connection 1: parked long poll\"]\n  T --> C2[\"connections 2-6: everything else\"]\n  T --> Q[\"further requests: queued\"]\n```\n\nSo a page that also needs several other requests to the same origin will see some of them wait. Over **HTTP/2** requests to one origin are multiplexed over a single connection, which mostly removes the problem. Multiple tabs multiply it either way: every open tab runs its own poll.",
+            "ru": "По **HTTP/1.1** браузер разрешает около **6 соединений на источник**, и припаркованный длинный опрос занимает одно из них на всё удержание — практически навсегда, ведь клиент переоткрывает запрос сразу после каждого ответа.\n\n```mermaid\nflowchart LR\n  T[\"вкладка по HTTP/1.1\"] --> C1[\"соединение 1: припаркованный длинный опрос\"]\n  T --> C2[\"соединения 2-6: всё остальное\"]\n  T --> Q[\"следующие запросы: в очереди\"]\n```\n\nПоэтому страница, которой нужны ещё несколько запросов к тому же источнику, увидит, что часть из них ждёт. По **HTTP/2** запросы к одному источнику мультиплексируются в одно соединение, что почти снимает проблему. В любом случае несколько вкладок умножают эффект: каждая открытая вкладка ведёт собственный опрос."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The parked poll holds one of about 6 connections; the extras queue behind the rest.",
+              "ru": "Припаркованный опрос держит одно из примерно 6 соединений; лишние встают в очередь за остальными."
+            },
+            "incorrect": {
+              "en": "Some requests queue: over HTTP/1.1 a browser allows about 6 connections per origin, and the poll holds one.",
+              "ru": "Часть запросов встанет в очередь: по HTTP/1.1 браузер разрешает около 6 соединений на источник, и одно держит опрос."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Some of them queue — the parked poll permanently holds one of the ~6 connections allowed per origin",
+                "ru": "Часть из них встанет в очередь — припаркованный опрос постоянно держит одно из ~6 разрешённых соединений на источник"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing — browsers do not limit connections per origin",
+                "ru": "Ничего — браузеры не ограничивают число соединений на источник"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Over HTTP/1.1 a browser allows about 6 per origin.",
+                "ru": "По HTTP/1.1 браузер разрешает около 6 на источник."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The browser cancels the long poll to free a connection",
+                "ru": "Браузер отменит длинный опрос, чтобы освободить соединение"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The parked request keeps its connection; it is the new requests that wait.",
+                "ru": "Припаркованный запрос сохраняет своё соединение; ждут именно новые запросы."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "browser-p1-http2",
+          "type": "true_false",
+          "prompt": {
+            "en": "Over HTTP/2, a parked long poll still consumes one of the browser's ~6 connections per origin.",
+            "ru": "По HTTP/2 припаркованный длинный опрос всё ещё занимает одно из ~6 соединений браузера на источник."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Over HTTP/2 requests to one origin share a single connection, which mostly removes the limit.",
+              "ru": "По HTTP/2 запросы к одному источнику делят одно соединение, что почти снимает это ограничение."
+            },
+            "incorrect": {
+              "en": "No — the ~6 per origin limit is an HTTP/1.1 problem; HTTP/2 shares one connection.",
+              "ru": "Нет — лимит ~6 на источник — проблема HTTP/1.1; HTTP/2 использует одно общее соединение."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "browser-p2-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble what a parked long poll costs the browser.",
+            "ru": "Собери, чем припаркованный длинный опрос обходится браузеру."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One of about six per origin, held for as long as the tab is polling.",
+              "ru": "Одно примерно из шести на источник, занятое всё время, пока вкладка опрашивает."
+            },
+            "incorrect": {
+              "en": "Over HTTP/1.1 a parked long poll occupies one browser connection.",
+              "ru": "По HTTP/1.1 припаркованный длинный опрос занимает одно соединение браузера."
+            }
+          },
+          "tokens": {
+            "en": [
+              "over",
+              "HTTP/1.1",
+              "a",
+              "parked",
+              "long",
+              "poll",
+              "occupies",
+              "one",
+              "browser",
+              "connection"
+            ],
+            "ru": [
+              "по",
+              "HTTP/1.1",
+              "припаркованный",
+              "длинный",
+              "опрос",
+              "занимает",
+              "одно",
+              "соединение",
+              "браузера"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "all"
+            ],
+            "ru": [
+              "все"
+            ]
+          }
+        },
+        {
+          "id": "browser-p3-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing numbers.",
+            "ru": "Впиши пропущенные числа."
+          },
+          "feedback": {
+            "correct": {
+              "en": "About 6 per origin on HTTP/1.1; HTTP/2 multiplexes them into one.",
+              "ru": "Около 6 на источник по HTTP/1.1; HTTP/2 мультиплексирует их в одно."
+            },
+            "incorrect": {
+              "en": "About 6 connections per origin over HTTP/1.1; over HTTP/2 they share a single connection.",
+              "ru": "Около 6 соединений на источник по HTTP/1.1; по HTTP/2 они делят одно соединение."
+            }
+          },
+          "text": {
+            "en": "Over HTTP/1.1 a browser allows about ___ connections per origin; over HTTP/___ they share a single connection.",
+            "ru": "По HTTP/1.1 браузер разрешает около ___ соединений на источник; по HTTP/___ они делят одно соединение."
+          },
+          "blanks": [
+            {
+              "en": [
+                "6",
+                "six"
+              ],
+              "ru": [
+                "6",
+                "шести"
+              ]
+            },
+            {
+              "en": [
+                "2"
+              ],
+              "ru": [
+                "2"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "retry-backoff",
+      "title": {
+        "en": "The client's retry loop",
+        "ru": "Цикл повторов на клиенте"
+      },
+      "summary": {
+        "en": "A failed long poll must be retried with backoff, while a successful one may re-open at once; retrying instantly after an error is a self-inflicted denial of service.",
+        "ru": "Неудачный длинный опрос нужно повторять с backoff, а удачный можно переоткрывать сразу; мгновенный повтор после ошибки — это отказ в обслуживании своими руками."
+      },
+      "discovery": [
+        {
+          "id": "retry-d1-loop",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This is the client side of a long poll. What is wrong with the retry loop?",
+            "ru": "Это клиентская часть длинного опроса. Что не так с циклом повторов?"
+          },
+          "code": "async function loop() {\n  let since = 0;\n  while (true) {\n    try {\n      const res = await fetch(`/api/messages?since=${since}`);\n      const events = await res.json();\n      for (const e of events) { apply(e); since = e.id; }\n    } catch (err) {\n      // ignore and go round again\n    }\n  }\n}",
+          "codeLang": "text",
+          "reveal": {
+            "en": "The retry loop is where a client turns a server fault into an outage. If the endpoint starts failing and the client re-opens immediately, the failed requests arrive as fast as the network allows — from every open tab at once. That is a denial of service you wrote against your own server.\n\nThe rule is asymmetric:\n\n- a **successful** poll — events, or the deliberate empty response when the hold expired — may re-open **at once**; that is what keeps latency near zero;\n- a **failed** poll must **back off** before retrying, usually growing the delay on repeated failures (exponential backoff), so a struggling server gets room to recover.\n\nThe loop must also advance the cursor only from events it has actually applied, so an interrupted iteration re-reads rather than skips.",
+            "ru": "Цикл повторов — это то место, где клиент превращает сбой сервера в аварию. Если эндпоинт начал падать, а клиент тут же переоткрывает запрос, неудачные запросы летят так быстро, как позволяет сеть, — и сразу со всех открытых вкладок. Это отказ в обслуживании, который вы написали себе сами.\n\nПравило асимметрично:\n\n- **удачный** опрос — с событиями или с намеренным пустым ответом по истечении удержания — можно переоткрывать **сразу**; именно это держит задержку около нуля;\n- **неудачный** опрос обязан **отступить по времени** (backoff) перед повтором, обычно увеличивая паузу при повторных сбоях (экспоненциальный backoff), чтобы у страдающего сервера был шанс восстановиться.\n\nЕщё цикл должен сдвигать курсор только по реально применённым событиям, чтобы прерванная итерация перечитала данные, а не перескочила их."
+          },
+          "feedback": {
+            "correct": {
+              "en": "No backoff: a failing endpoint gets hammered as fast as the client can send.",
+              "ru": "Нет backoff: падающий эндпоинт бомбят так быстро, как клиент способен отправлять."
+            },
+            "incorrect": {
+              "en": "The failure path retries instantly — a failed poll must back off before trying again.",
+              "ru": "Ветка ошибки повторяет запрос мгновенно — неудачный опрос обязан отступить по времени перед повтором."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A failure is retried instantly, so a broken endpoint gets hammered as fast as the client can send",
+                "ru": "Ошибка повторяется мгновенно, поэтому сломанный эндпоинт бомбят так быстро, как клиент способен отправлять"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It should pause between successful polls as well",
+                "ru": "Между удачными опросами тоже нужна пауза"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A successful poll may re-open at once — that is what keeps the latency near zero.",
+                "ru": "Удачный опрос можно переоткрывать сразу — именно это держит задержку около нуля."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The cursor should be sent in a header instead of the query string",
+                "ru": "Курсор нужно слать в заголовке, а не в строке запроса"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Where the cursor travels makes no difference; the missing backoff does.",
+                "ru": "Где именно едет курсор — неважно; важен отсутствующий backoff."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "retry-p1-500",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A long-poll endpoint starts returning 500 and every client re-opens immediately. What is the result?",
+            "ru": "Long-poll эндпоинт начал возвращать 500, и каждый клиент тут же переоткрывает запрос. К чему это приведёт?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The retry loop amplifies the fault instead of waiting it out.",
+              "ru": "Цикл повторов усиливает сбой вместо того, чтобы его переждать."
+            },
+            "incorrect": {
+              "en": "The clients turn the fault into a denial of service against your own server.",
+              "ru": "Клиенты превращают сбой в отказ в обслуживании против вашего же сервера."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The clients turn the fault into a denial of service against your own server",
+                "ru": "Клиенты превращают сбой в отказ в обслуживании против вашего же сервера"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing serious — failed requests are cheap",
+                "ru": "Ничего серьёзного — неудачные запросы дёшевы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Each still costs a connection, a handler invocation and a log line, arriving as fast as the client can send.",
+                "ru": "Каждый всё равно стоит соединения, вызова обработчика и строки в логе — и они летят с максимальной скоростью."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The browser throttles the repeated requests automatically",
+                "ru": "Браузер автоматически притормозит повторяющиеся запросы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing throttles your own retry loop for you; backoff is your code's job.",
+                "ru": "Ваш собственный цикл повторов никто за вас не притормозит; backoff — задача вашего кода."
+              }
+            }
+          ]
+        },
+        {
+          "id": "retry-p2-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each long-poll outcome to the correct client reaction.",
+            "ru": "Соотнеси каждый исход длинного опроса с правильной реакцией клиента."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Success re-opens at once; only failure waits.",
+              "ru": "После успеха переоткрываем сразу; ждать нужно только после ошибки."
+            },
+            "incorrect": {
+              "en": "Events or a deliberate empty answer: re-open at once. An error: back off first.",
+              "ru": "События или намеренно пустой ответ — переоткрыть сразу. Ошибка — сначала отступить по времени."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "A response carrying events",
+                "ru": "Ответ с событиями"
+              },
+              "right": {
+                "en": "Apply them, advance the cursor, re-open at once",
+                "ru": "Применить их, сдвинуть курсор, сразу переоткрыть"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "An empty response after the hold expired",
+                "ru": "Пустой ответ после истечения удержания"
+              },
+              "right": {
+                "en": "Re-open at once — the wait ended normally",
+                "ru": "Сразу переоткрыть — ожидание закончилось нормально"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "An error or a network failure",
+                "ru": "Ошибка или сетевой сбой"
+              },
+              "right": {
+                "en": "Back off, then retry",
+                "ru": "Отступить по времени, затем повторить"
+              }
+            }
+          ]
+        },
+        {
+          "id": "retry-p3-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing words.",
+            "ru": "Впиши пропущенные слова."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That asymmetry keeps latency near zero without amplifying a fault.",
+              "ru": "Эта асимметрия держит задержку около нуля и не усиливает сбой."
+            },
+            "incorrect": {
+              "en": "A failure needs backoff; a success may re-open immediately.",
+              "ru": "После ошибки нужен backoff; после успеха можно переоткрывать сразу."
+            }
+          },
+          "text": {
+            "en": "A failed long poll must be retried with ___, while a successful one may re-open ___.",
+            "ru": "Неудачный длинный опрос нужно повторять с ___, а удачный можно переоткрывать ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "backoff",
+                "back-off"
+              ],
+              "ru": [
+                "backoff",
+                "бэкоффом",
+                "задержкой"
+              ]
+            },
+            {
+              "en": [
+                "immediately",
+                "at once",
+                "now"
+              ],
+              "ru": [
+                "сразу",
+                "немедленно"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "monitoring",
+      "title": {
+        "en": "Monitoring a long poll",
+        "ru": "Мониторинг длинного опроса"
+      },
+      "summary": {
+        "en": "A long-poll endpoint legitimately shows a p99 latency equal to its hold, so measure time from event to delivery and parked requests in flight instead of raw request duration.",
+        "ru": "У long-poll эндпоинта p99 задержки законно равен удержанию, поэтому измеряйте время от события до доставки и число припаркованных запросов, а не длительность запроса."
+      },
+      "discovery": [
+        {
+          "id": "monitor-d1-p99",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A dashboard shows a p99 request duration of 30 seconds on an endpoint whose long-poll hold is 30 seconds. Is that a bug?",
+            "ru": "Дашборд показывает p99 длительности запроса 30 секунд на эндпоинте, у которого удержание длинного опроса равно 30 секундам. Это баг?"
+          },
+          "reveal": {
+            "en": "Request duration measures how long the handler held the request — and for a long poll that is *by design* the whole hold window. A p99 of 30 seconds on a 30-second hold means the endpoint was quiet, not broken. Point the usual latency alert at it and your dashboards will scream about a perfectly healthy system.\n\nMeasure the things that actually describe this endpoint:\n\n- **time from event to delivery** — the latency users actually feel, and the number that should be near zero;\n- **parked requests in flight** — how much capacity the endpoint is holding right now, which is what tells you whether you are approaching a limit.\n\nRaw request duration is useful only as a sanity check that the hold behaves: it should cluster near the hold window and never exceed it. If it does exceed it, something above you is cutting requests.",
+            "ru": "Длительность запроса измеряет, сколько обработчик держал запрос, — а у длинного опроса это *по замыслу* всё окно удержания. p99 в 30 секунд при удержании 30 секунд означает, что на эндпоинте было тихо, а не что он сломан. Наведите на него обычный алерт по задержке — и дашборды будут кричать о совершенно здоровой системе.\n\nИзмеряйте то, что действительно описывает этот эндпоинт:\n\n- **время от события до доставки** — та задержка, которую реально чувствуют пользователи, и именно она должна быть около нуля;\n- **число припаркованных запросов прямо сейчас** — сколько ёмкости эндпоинт держит в данный момент; это и говорит, близко ли вы к пределу.\n\nСырая длительность запроса полезна лишь как проверка, что удержание ведёт себя правильно: она должна группироваться около окна удержания и никогда его не превышать. Если превышает — значит, запросы обрывает кто-то выше вас."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A quiet hold lasts the full window by design; duration is not work here.",
+              "ru": "Тихое удержание по замыслу длится всё окно; длительность здесь — не работа."
+            },
+            "incorrect": {
+              "en": "No — a quiet long poll lasts its whole hold window on purpose. Measure event-to-delivery instead.",
+              "ru": "Нет — тихий длинный опрос намеренно длится всё окно удержания. Измеряйте время от события до доставки."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "No — a quiet hold lasts the full window by design",
+                "ru": "Нет — тихое удержание по замыслу длится всё окно"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Yes, the endpoint is far too slow",
+                "ru": "Да, эндпоинт слишком медленный"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Duration is not work here: the handler is waiting for a condition, not computing anything.",
+                "ru": "Длительность здесь — не работа: обработчик ждёт условия, а не что-то вычисляет."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Yes — the hold should be lowered until p99 drops",
+                "ru": "Да — удержание надо снижать, пока p99 не упадёт"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That would only make every client re-open more often, for no gain.",
+                "ru": "Это лишь заставит каждого клиента чаще переоткрывать запрос, без всякой пользы."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "monitor-p1-metric",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which metric shows how fast events actually reach long-poll clients?",
+            "ru": "Какая метрика показывает, насколько быстро события реально доходят до клиентов длинного опроса?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Event-to-delivery is the only number that tracks freshness for the user.",
+              "ru": "Время от события до доставки — единственное число, отражающее свежесть данных для пользователя."
+            },
+            "incorrect": {
+              "en": "Time from event to delivery — request duration only reflects the hold window.",
+              "ru": "Время от события до доставки — длительность запроса отражает лишь окно удержания."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Time from event to delivery",
+                "ru": "Время от события до доставки"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "p99 request duration",
+                "ru": "p99 длительности запроса"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That equals the hold window by design and says nothing about freshness.",
+                "ru": "Он по замыслу равен окну удержания и ничего не говорит о свежести данных."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Requests per second on the endpoint",
+                "ru": "Число запросов в секунду на эндпоинте"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That tracks how often clients re-open, not how fresh their data is.",
+                "ru": "Это отражает, как часто клиенты переоткрывают запрос, а не свежесть их данных."
+              }
+            }
+          ]
+        },
+        {
+          "id": "monitor-p2-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each long-poll metric to what it actually tells you.",
+            "ru": "Соотнеси каждую метрику длинного опроса с тем, что она на самом деле показывает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Duration describes the design, not the health; the other two describe the health.",
+              "ru": "Длительность описывает замысел, а не здоровье; здоровье описывают две другие."
+            },
+            "incorrect": {
+              "en": "Duration equals the hold, event-to-delivery is the felt latency, parked-in-flight is the held capacity.",
+              "ru": "Длительность равна удержанию, событие-доставка — ощущаемая задержка, припаркованные — занятая ёмкость."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "p99 request duration",
+                "ru": "p99 длительности запроса"
+              },
+              "right": {
+                "en": "Roughly the hold window — expected, not a fault",
+                "ru": "Примерно окно удержания — ожидаемо, а не сбой"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "Time from event to delivery",
+                "ru": "Время от события до доставки"
+              },
+              "right": {
+                "en": "The latency users actually feel",
+                "ru": "Задержка, которую реально чувствуют пользователи"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "Parked requests in flight",
+                "ru": "Число припаркованных запросов"
+              },
+              "right": {
+                "en": "How much capacity the endpoint is holding right now",
+                "ru": "Сколько ёмкости эндпоинт держит прямо сейчас"
+              }
+            }
+          ]
+        },
+        {
+          "id": "monitor-p3-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing words.",
+            "ru": "Впиши пропущенные слова."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Those two describe freshness and capacity, which is what actually matters here.",
+              "ru": "Эти две описывают свежесть и ёмкость — именно то, что здесь действительно важно."
+            },
+            "incorrect": {
+              "en": "Measure time from event to delivery, and the number of parked requests.",
+              "ru": "Измеряйте время от события до доставки и число припаркованных запросов."
+            }
+          },
+          "text": {
+            "en": "For a long-poll endpoint, measure the time from ___ to ___, and the number of ___ requests.",
+            "ru": "Для long-poll эндпоинта измеряйте время от ___ до ___ и число ___ запросов."
+          },
+          "blanks": [
+            {
+              "en": [
+                "event"
+              ],
+              "ru": [
+                "события"
+              ]
+            },
+            {
+              "en": [
+                "delivery"
+              ],
+              "ru": [
+                "доставки"
+              ]
+            },
+            {
+              "en": [
+                "parked"
+              ],
+              "ru": [
+                "припаркованных"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "where-it-fits",
+      "title": {
+        "en": "Where long polling still fits",
+        "ru": "Где длинный опрос всё ещё уместен"
+      },
+      "summary": {
+        "en": "Long polling fits low event rates and paths hostile to long-lived connections, and it keeps no state between requests, so it needs no sticky sessions or shared bus.",
+        "ru": "Длинный опрос подходит при низкой частоте событий и на путях, враждебных долгоживущим соединениям, и не хранит состояния между запросами, поэтому ему не нужны ни sticky-сессии, ни общая шина."
+      },
+      "discovery": [
+        {
+          "id": "fits-d1-choose",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "For which feature is long polling the right choice?",
+            "ru": "Для какой функции длинный опрос — правильный выбор?"
+          },
+          "reveal": {
+            "en": "Long polling is not merely historical. It is the right answer when:\n\n- the message rate is **low** — a notification bell, a job or export that finishes, an approval, a payment confirmation. A request per event is nothing when there are ten events an hour;\n- the path is **hostile to long-lived connections**: corporate proxies that buffer or strip `text/event-stream`, a gateway that will not proxy WebSockets, a mobile network that drops idle sockets anyway;\n- you want **one code path** — the same endpoint, the same auth, the same observability as the rest of your API, with no second stack to secure, monitor and scale;\n- you need it *today*, and the infrastructure discussion for WebSockets will take a quarter.\n\nIt also has one real operational advantage: it keeps **no state between requests**, so any instance can answer.\n\n```mermaid\nflowchart LR\n  C[\"client: GET ?since=42\"] --> LB[\"load balancer\"]\n  LB --> I1[\"instance 1\"]\n  LB --> I2[\"instance 2\"]\n  LB --> I3[\"instance 3\"]\n  I1 --> L[\"event log\"]\n  I2 --> L\n  I3 --> L\n```\n\nNo sticky sessions and no shared bus for connection state: the answer comes from the log, so whichever instance receives the request can produce it. It is the wrong answer for chat, typing indicators, cursors or tickers — anything at several events per second per client, where one response per message becomes a request per message plus a re-open. Switch to SSE or a WebSocket as soon as messages become frequent.",
+            "ru": "Длинный опрос — не только история. Это правильный ответ, когда:\n\n- поток сообщений **низкий**: колокольчик уведомлений, завершившаяся задача или выгрузка, согласование, подтверждение платежа. Запрос на событие ничего не значит, когда событий десять в час;\n- путь **враждебен долгоживущим соединениям**: корпоративные прокси, которые буферят или вырезают `text/event-stream`, шлюз, который не проксирует WebSocket, мобильная сеть, всё равно рвущая простаивающие сокеты;\n- нужен **один путь кода** — тот же эндпоинт, та же авторизация, та же наблюдаемость, что и у остального API, без второго стека, который надо защищать, мониторить и масштабировать;\n- это нужно *сегодня*, а обсуждение инфраструктуры под WebSocket займёт квартал.\n\nЕсть и реальное эксплуатационное преимущество: между запросами он **не хранит состояния**, поэтому ответить может любой экземпляр.\n\n```mermaid\nflowchart LR\n  C[\"клиент: GET ?since=42\"] --> LB[\"балансировщик\"]\n  LB --> I1[\"экземпляр 1\"]\n  LB --> I2[\"экземпляр 2\"]\n  LB --> I3[\"экземпляр 3\"]\n  I1 --> L[\"журнал событий\"]\n  I2 --> L\n  I3 --> L\n```\n\nНи sticky-сессий, ни общей шины для состояния соединений: ответ берётся из журнала, поэтому его может выдать любой экземпляр, получивший запрос. И это неправильный ответ для чата, индикаторов набора, курсоров и тикеров — всего, где событий несколько в секунду на клиента и один ответ на сообщение превращается в запрос на сообщение плюс переоткрытие. Переходите на SSE или WebSocket, едва сообщения станут частыми."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A request per event is nothing when there are ten events an hour.",
+              "ru": "Запрос на событие ничего не значит, когда событий десять в час."
+            },
+            "incorrect": {
+              "en": "Low event rates fit; several events per second per client do not.",
+              "ru": "Низкая частота событий подходит; несколько событий в секунду на клиента — нет."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A notification bell that fires a few times an hour",
+                "ru": "Колокольчик уведомлений, срабатывающий несколько раз в час"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A chat with typing indicators",
+                "ru": "Чат с индикаторами набора текста"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Several events per second per client means a request per message plus a re-open — polling with extra steps.",
+                "ru": "Несколько событий в секунду на клиента — это запрос на сообщение плюс переоткрытие: тот же опрос, только сложнее."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A live price ticker",
+                "ru": "Живой тикер котировок"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Same problem: high event rates need one connection carrying many messages.",
+                "ru": "Та же проблема: при высокой частоте событий нужно одно соединение, несущее много сообщений."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "fits-p1-sticky",
+          "type": "true_false",
+          "prompt": {
+            "en": "Long polling behind a load balancer needs sticky sessions, so a client returns to the instance holding its subscription.",
+            "ru": "Длинному опросу за балансировщиком нужны sticky-сессии, чтобы клиент возвращался на экземпляр, который держит его подписку."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It is stateless between requests: any instance can answer from the log.",
+              "ru": "Между запросами он не хранит состояния: ответить из журнала может любой экземпляр."
+            },
+            "incorrect": {
+              "en": "No — it keeps no state between requests, so any instance can answer. That is a real advantage over SSE and WebSockets.",
+              "ru": "Нет — между запросами состояния нет, ответить может любой экземпляр. Это реальное преимущество перед SSE и WebSocket."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "fits-p2-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each situation to the transport that fits it.",
+            "ru": "Соотнеси каждую ситуацию с подходящим для неё транспортом."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Event rate decides first; the path decides when the rate leaves a choice.",
+              "ru": "Сначала решает частота событий; путь решает тогда, когда частота оставляет выбор."
+            },
+            "incorrect": {
+              "en": "Low rate: long polling. Several events a second: SSE or a WebSocket. Stripped event-stream: long polling.",
+              "ru": "Низкая частота — длинный опрос. Несколько событий в секунду — SSE или WebSocket. Вырезанный event-stream — длинный опрос."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "Ten notifications an hour",
+                "ru": "Десять уведомлений в час"
+              },
+              "right": {
+                "en": "Long polling fits",
+                "ru": "Длинный опрос подходит"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "A chat with typing indicators",
+                "ru": "Чат с индикаторами набора"
+              },
+              "right": {
+                "en": "Switch to SSE or a WebSocket",
+                "ru": "Переходите на SSE или WebSocket"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "A corporate proxy that strips `text/event-stream`",
+                "ru": "Корпоративный прокси, вырезающий `text/event-stream`"
+              },
+              "right": {
+                "en": "Long polling, because SSE will not get through",
+                "ru": "Длинный опрос, потому что SSE не пройдёт"
+              }
+            }
+          ]
+        },
+        {
+          "id": "fits-p3-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing word.",
+            "ru": "Впиши пропущенное слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Statelessness between requests is long polling's real operational edge over SSE and WebSockets.",
+              "ru": "Отсутствие состояния между запросами — реальное эксплуатационное преимущество перед SSE и WebSocket."
+            },
+            "incorrect": {
+              "en": "Sticky sessions: long polling needs none, because any instance can answer from the log.",
+              "ru": "Sticky-сессии: длинному опросу они не нужны, ведь ответить из журнала может любой экземпляр."
+            }
+          },
+          "text": {
+            "en": "Long polling needs no ___ sessions, because it keeps no state between requests.",
+            "ru": "Длинному опросу не нужны ___-сессии, потому что между запросами он не хранит состояния."
+          },
+          "blanks": [
+            {
+              "en": [
+                "sticky"
+              ],
+              "ru": [
+                "sticky",
+                "липкие"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "putting-it-together",
+      "title": {
+        "en": "Putting it together",
+        "ru": "Собираем всё вместе"
+      },
+      "summary": {
+        "en": "One long poll end to end: the same GET with a cursor, an immediate or parked answer, a bounded hold under every upstream timeout, an async handler, and a client that re-opens with backoff.",
+        "ru": "Один длинный опрос от начала до конца: тот же GET с курсором, немедленный ответ или парковка, ограниченное удержание ниже всех таймаутов сверху, асинхронный обработчик и клиент, переоткрывающий запрос с backoff."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "cap-d1-full-trace",
+          "type": "predict_output",
+          "prompt": {
+            "en": "A client that last saw event #5 sends `GET /api/messages?since=5` while the log head is #7. What does this server do?",
+            "ru": "Клиент, последним видевший событие #5, отправляет `GET /api/messages?since=5`, а край журнала — #7. Что сделает этот сервер?"
+          },
+          "code": "// hold = 25s, proxy idle timeout = 60s, client read timeout = 40s\n@GetMapping(\"/api/messages\")\npublic DeferredResult<List<Message>> poll(@RequestParam long since) {\n    var result = new DeferredResult<List<Message>>(25_000L, List.of());\n    var newer = log.after(since);        // log head is #7\n    if (!newer.isEmpty()) result.setResult(newer);\n    else subscribers.register(since, result);\n    return result;\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "The whole pipeline in one place:\n\n```mermaid\nflowchart TD\n  R[\"GET /api/messages?since=N\"] --> Q{\"log has anything newer than N?\"}\n  Q -->|yes| A[\"answer at once, from the log\"]\n  Q -->|no| P[\"park: DeferredResult, worker thread freed\"]\n  P --> E[\"an event arrives: complete the response\"]\n  P --> X[\"hold expires: answer 200 [] on purpose\"]\n  A --> C[\"client applies events, advances the cursor, re-opens\"]\n  E --> C\n  X --> C\n```\n\nEvery piece earns its place. The **cursor** makes the branch decidable and makes events between requests recoverable. The **immediate** branch is the one juniors forget: a client behind the log must never be parked. **`DeferredResult`** parks the request without parking a worker thread. The **25-second hold** stays below the 60-second proxy timeout so the server, not the infrastructure, ends a quiet wait — and the client's 40-second read timeout stays above the hold so it does not kill its own request. On the client, a success re-opens at once, an error backs off, and duplicates are skipped by event id because delivery is at-least-once.",
+            "ru": "Весь конвейер в одном месте:\n\n```mermaid\nflowchart TD\n  R[\"GET /api/messages?since=N\"] --> Q{\"есть ли в журнале что-то новее N?\"}\n  Q -->|да| A[\"ответить сразу, из журнала\"]\n  Q -->|нет| P[\"припарковать: DeferredResult, поток освобождён\"]\n  P --> E[\"пришло событие: завершить ответ\"]\n  P --> X[\"удержание истекло: намеренно ответить 200 []\"]\n  A --> C[\"клиент применяет события, сдвигает курсор, переоткрывает\"]\n  E --> C\n  X --> C\n```\n\nКаждая деталь здесь не случайна. **Курсор** делает ветвление возможным, а события между запросами — восстановимыми. Ветку **немедленного ответа** джуны забывают: клиента, отстающего от журнала, парковать нельзя. **`DeferredResult`** паркует запрос, не паркуя рабочий поток. **Удержание в 25 секунд** остаётся ниже 60-секундного таймаута прокси, чтобы тихое ожидание завершал сервер, а не инфраструктура, — а 40-секундный таймаут чтения клиента остаётся выше удержания, чтобы клиент не убивал свой же запрос. На клиенте успех переоткрывается сразу, ошибка отступает по времени, а дубликаты отбрасываются по id события, ведь доставка тут at-least-once."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The cursor is behind the log, so the events already exist — nothing is waited for.",
+              "ru": "Курсор отстаёт от журнала, значит, события уже есть — ждать нечего."
+            },
+            "incorrect": {
+              "en": "`log.after(5)` is not empty, so `setResult` answers immediately; parking is only for a caught-up client.",
+              "ru": "`log.after(5)` не пуст, поэтому `setResult` отвечает сразу; парковка — только для догнавшего клиента."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Answers immediately with #6 and #7, without parking anything",
+                "ru": "Немедленно отвечает событиями #6 и #7, ничего не паркуя"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Parks the request for up to 25 seconds, then answers with #6 and #7",
+                "ru": "Паркует запрос на срок до 25 секунд, а затем отвечает событиями #6 и #7"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Parking is correct only for a client already at the head; a client behind the log is answered at once.",
+                "ru": "Парковка корректна только для клиента на самом краю; отстающему от журнала отвечают сразу."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Parks the request and answers empty after 25 seconds",
+                "ru": "Паркует запрос и через 25 секунд отвечает пустым"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The events already exist in the log; the empty answer is only for a caught-up client whose hold expired.",
+                "ru": "События уже есть в журнале; пустой ответ — только для догнавшего клиента, у которого истекло удержание."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cap-p1-no-cursor",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This long-poll handler is fully asynchronous. What is still wrong with it?",
+            "ru": "Этот long-poll обработчик полностью асинхронный. Что в нём всё равно не так?"
+          },
+          "code": "@GetMapping(\"/api/messages\")\npublic DeferredResult<List<Message>> poll() {\n    var result = new DeferredResult<List<Message>>(25_000L, List.of());\n    subscribers.register(result);   // wait for the next event\n    return result;\n}",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "It answers from a subscription instead of from state, so the gap between requests swallows events.",
+              "ru": "Он отвечает из подписки, а не из состояния, поэтому промежуток между запросами проглатывает события."
+            },
+            "incorrect": {
+              "en": "There is no cursor: an event landing between two requests has nothing listening and is lost silently.",
+              "ru": "Нет курсора: событие, попавшее между двумя запросами, никто не слушает, и оно теряется молча."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "With no cursor it reports only events that occur while the request is open, so anything landing between two requests is lost",
+                "ru": "Без курсора он сообщает только о событиях во время открытого запроса, поэтому всё, что попало между двумя запросами, теряется"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The 25-second hold is too short",
+                "ru": "Удержание в 25 секунд слишком короткое"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "25 seconds is a normal bound, chosen to stay below proxy idle timeouts.",
+                "ru": "25 секунд — нормальная граница, выбранная так, чтобы остаться ниже таймаутов простоя прокси."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "`DeferredResult` blocks a worker thread for the whole hold",
+                "ru": "`DeferredResult` блокирует рабочий поток на всё удержание"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "`DeferredResult` is exactly what frees the thread; the defect here is the missing cursor.",
+                "ru": "`DeferredResult` как раз освобождает поток; дефект здесь — отсутствующий курсор."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p2-timeout-order",
+          "type": "predict_output",
+          "prompt": {
+            "en": "A long poll runs against this configuration and nothing happens during the wait. What does the client observe?",
+            "ru": "Длинный опрос работает с этой конфигурацией, и за время ожидания ничего не происходит. Что увидит клиент?"
+          },
+          "code": "server hold          = 45s\nload balancer idle   = 30s\nclient read timeout  = 60s",
+          "codeLang": "text",
+          "feedback": {
+            "correct": {
+              "en": "The innermost wait must be the shortest; here the load balancer fires first.",
+              "ru": "Самое внутреннее ожидание должно быть самым коротким; здесь первым срабатывает балансировщик."
+            },
+            "incorrect": {
+              "en": "A network error at 30 seconds: the load balancer ends the request before the server can answer.",
+              "ru": "Сетевая ошибка на 30-й секунде: балансировщик завершает запрос раньше, чем сервер успевает ответить."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A network error at 30 seconds, because the load balancer ends the request first",
+                "ru": "Сетевую ошибку на 30-й секунде, потому что запрос первым завершает балансировщик"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "An empty `200 []` at 45 seconds",
+                "ru": "Пустой `200 []` на 45-й секунде"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The server never gets to send it — the load balancer cut the request at 30 seconds.",
+                "ru": "Сервер не успевает его отправить — балансировщик оборвал запрос на 30-й секунде."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "An empty `200 []` at 30 seconds",
+                "ru": "Пустой `200 []` на 30-й секунде"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A cut connection carries no response at all; the client sees a network error.",
+                "ru": "В оборванном соединении нет никакого ответа; клиент видит сетевую ошибку."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p3-full-cycle",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order one complete long-poll cycle, including its edge cases.",
+            "ru": "Расставь по порядку полный цикл длинного опроса, включая крайние случаи."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Cursor, log check, immediate answer or park, deliberate end, apply and re-open.",
+              "ru": "Курсор, проверка журнала, немедленный ответ или парковка, намеренное завершение, применение и переоткрытие."
+            },
+            "incorrect": {
+              "en": "The log check comes before parking, and the client always re-opens — at once on success, after a delay on failure.",
+              "ru": "Проверка журнала идёт до парковки, и клиент всегда переоткрывает запрос: сразу при успехе, с паузой при ошибке."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "The client sends `GET /api/messages?since=42`",
+                "ru": "Клиент отправляет `GET /api/messages?since=42`"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "The handler compares the cursor with the log",
+                "ru": "Обработчик сверяет курсор с журналом"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "If the log is ahead it answers at once; otherwise it parks the request without blocking a worker thread",
+                "ru": "Если журнал впереди — отвечает сразу; иначе паркует запрос, не блокируя рабочий поток"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "An event completes the parked request, or the hold expires and it answers `200 []` on purpose",
+                "ru": "Событие завершает припаркованный запрос, либо истекает удержание и он намеренно отвечает `200 []`"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "The client applies the events, skipping ids it has already seen, and advances its cursor",
+                "ru": "Клиент применяет события, пропуская уже виденные id, и сдвигает курсор"
+              }
+            },
+            {
+              "id": "s6",
+              "text": {
+                "en": "The client re-opens at once after a success, or after a backoff delay after a failure",
+                "ru": "Клиент переоткрывает запрос сразу после успеха или после паузы backoff при ошибке"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p4-match-roles",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each mechanism to its job in a long-poll design.",
+            "ru": "Соотнеси каждый механизм с его ролью в устройстве длинного опроса."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Cursor for correctness, async for capacity, timeout order for clean endings, ids and backoff for the client.",
+              "ru": "Курсор — за корректность, асинхронность — за ёмкость, порядок таймаутов — за аккуратное завершение, id и backoff — за клиента."
+            },
+            "incorrect": {
+              "en": "Cursor recovers missed events, DeferredResult frees the thread, the hold order avoids cut connections, ids and backoff protect the client and the server.",
+              "ru": "Курсор возвращает пропущенные события, DeferredResult освобождает поток, порядок удержания спасает от обрывов, id и backoff защищают клиента и сервер."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "The `?since=` cursor",
+                "ru": "Курсор `?since=`"
+              },
+              "right": {
+                "en": "Makes events landing between requests recoverable",
+                "ru": "Делает восстановимыми события между запросами"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "`DeferredResult`",
+                "ru": "`DeferredResult`"
+              },
+              "right": {
+                "en": "Parks the request without parking a worker thread",
+                "ru": "Паркует запрос, не паркуя рабочий поток"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "A hold shorter than every idle timeout above it",
+                "ru": "Удержание короче любого таймаута простоя над ним"
+              },
+              "right": {
+                "en": "The server, not the proxy, ends a quiet wait",
+                "ru": "Тихое ожидание завершает сервер, а не прокси"
+              }
+            },
+            {
+              "id": "m4",
+              "left": {
+                "en": "Stable event ids and an idempotent client",
+                "ru": "Стабильные id событий и идемпотентный клиент"
+              },
+              "right": {
+                "en": "Survives at-least-once redelivery",
+                "ru": "Переживает повторную доставку at-least-once"
+              }
+            },
+            {
+              "id": "m5",
+              "left": {
+                "en": "Backoff after a failed poll",
+                "ru": "Backoff после неудачного опроса"
+              },
+              "right": {
+                "en": "Stops a broken endpoint from being hammered",
+                "ru": "Не даёт бомбить сломанный эндпоинт"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p5-type-answer",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill the key parts of the design in one line.",
+            "ru": "Впиши ключевые части устройства в одну строку."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That single line is the interview answer: correctness, capacity, timeout order and client discipline.",
+              "ru": "Эта одна строка и есть ответ на собеседовании: корректность, ёмкость, порядок таймаутов и дисциплина клиента."
+            },
+            "incorrect": {
+              "en": "Answer from a log, park with a DeferredResult, keep the hold under every upstream timeout, retry with backoff.",
+              "ru": "Отвечать из журнала, парковать через DeferredResult, держать удержание ниже всех таймаутов сверху, повторять с backoff."
+            }
+          },
+          "text": {
+            "en": "A long poll answers from a ___ using the client's `?since=` cursor, parks with a ___ so no worker thread is blocked, keeps its hold below every upstream ___, and the client retries a failure with ___.",
+            "ru": "Длинный опрос отвечает из ___ по курсору клиента `?since=`, паркует запрос через ___, чтобы не блокировать рабочий поток, держит удержание ниже любого ___ сверху, а клиент повторяет неудачу с ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "log"
+              ],
+              "ru": [
+                "журнала",
+                "лога",
+                "log"
+              ]
+            },
+            {
+              "en": [
+                "DeferredResult"
+              ],
+              "ru": [
+                "DeferredResult"
+              ]
+            },
+            {
+              "en": [
+                "timeout"
+              ],
+              "ru": [
+                "таймаута"
+              ]
+            },
+            {
+              "en": [
+                "backoff",
+                "back-off"
+              ],
+              "ru": [
+                "backoff",
+                "бэкоффом",
+                "задержкой"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

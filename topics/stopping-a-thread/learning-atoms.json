@@ -1,0 +1,2713 @@
+{
+  "schemaVersion": 1,
+  "topicId": "stopping-a-thread",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "cooperative-cancellation",
+      "title": {
+        "en": "Cooperative cancellation",
+        "ru": "Кооперативная отмена"
+      },
+      "summary": {
+        "en": "A started thread is not killed from outside: the owner requests a stop and the worker returns from run() at a safe point.",
+        "ru": "Запущенный thread не убивают снаружи: владелец запрашивает остановку, а worker сам возвращается из run() в безопасной точке."
+      },
+      "discovery": [
+        {
+          "id": "coop-d1-who-ends-thread",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A worker thread is in the middle of a task. Another thread decides it should stop. What actually ends the worker thread?",
+            "ru": "Worker thread находится посреди задачи. Другой thread решает, что его пора остановить. Что на самом деле завершает worker thread?"
+          },
+          "reveal": {
+            "en": "**Cooperative cancellation** is the standard way to stop a started Java thread: one thread *requests* a stop, and the worker decides when it is safe to obey. There is no safe API that yanks a running thread away from the outside.\n\n```mermaid\nsequenceDiagram\n  participant O as owner thread\n  participant W as worker thread\n  O->>W: start()\n  loop work loop\n    W->>W: do one unit of work\n    W->>W: check the stop request\n  end\n  O->>W: request stop\n  W->>W: cleanup\n  W-->>O: run() returns\n```\n\nA **safe point** is a place in the worker's own code — usually the top of its loop — where nothing is half-finished: no half-written record, no half-updated shared object. There the worker notices the request, releases what it holds, and **returns from `run()`**. A Java thread ends exactly when its own `run()` returns; nothing else ends it.\n\nSo stopping is a protocol, not one magic method. The next atoms add the parts: a visible flag, `interrupt()` for a blocked worker, and `join()` for waiting.",
+            "ru": "**Кооперативная отмена** — стандартный способ остановить уже запущенный Java thread: один thread *запрашивает* остановку, а worker сам решает, когда её безопасно выполнить. Безопасного API, который выдернул бы работающий thread снаружи, не существует.\n\n```mermaid\nsequenceDiagram\n  participant O as thread-владелец\n  participant W as worker thread\n  O->>W: start()\n  loop рабочий цикл\n    W->>W: выполнить одну единицу работы\n    W->>W: проверить запрос остановки\n  end\n  O->>W: запросить остановку\n  W->>W: cleanup\n  W-->>O: run() возвращается\n```\n\n**Безопасная точка** — место в коде самого worker'а, обычно начало его цикла, где ничего не сделано наполовину: нет недописанной записи, нет наполовину обновлённого общего объекта. Там worker замечает запрос, освобождает ресурсы и **возвращается из `run()`**. Java thread завершается ровно тогда, когда возвращается его собственный `run()`; ничто другое его не завершает.\n\nПоэтому остановка — это протокол, а не один магический метод. Следующие атомы добавят детали: видимый флаг, `interrupt()` для заблокированного worker'а и `join()` для ожидания."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the worker ends itself by returning from run().",
+              "ru": "Верно — worker завершает себя сам, возвращаясь из run()."
+            },
+            "incorrect": {
+              "en": "A thread ends only when its own run() returns; the outside can only ask.",
+              "ru": "Thread завершается, только когда возвращается его собственный run(); снаружи можно лишь попросить."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The worker itself: it notices the request and returns from run()",
+                "ru": "Сам worker: он замечает запрос и возвращается из run()"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The owner thread kills it from outside",
+                "ru": "Thread-владелец убивает его снаружи"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Java has no safe way to kill a running thread from outside; the worker has to end itself.",
+                "ru": "В Java нет безопасного способа убить работающий thread снаружи; worker должен завершиться сам."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The JVM terminates it as soon as a stop is requested",
+                "ru": "JVM завершает его, как только запрошена остановка"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The JVM does not watch cancellation requests; a thread lives until run() returns.",
+                "ru": "JVM не следит за запросами отмены; thread живёт, пока не вернётся run()."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "coop-p1-outside-kill-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In Java, a running thread can be safely terminated by another thread without its cooperation.",
+            "ru": "В Java работающий thread можно безопасно завершить другим потоком без его участия."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Stopping is cooperative: the worker must notice a request and exit itself.",
+              "ru": "Остановка кооперативна: worker должен заметить запрос и выйти сам."
+            },
+            "incorrect": {
+              "en": "No — the safe approach is cooperative cancellation; the worker ends itself.",
+              "ru": "Нет — безопасный подход это кооперативная отмена; worker завершает себя сам."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "coop-p2-what-ends-thread",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What ends the life of a Java thread?",
+            "ru": "Что завершает жизнь Java thread?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "A thread lives exactly as long as its run() method is executing.",
+              "ru": "Thread живёт ровно столько, сколько выполняется его метод run()."
+            },
+            "incorrect": {
+              "en": "A thread ends when its run() method returns — nothing else terminates it.",
+              "ru": "Thread завершается, когда возвращается его метод run() — ничто другое его не завершает."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Its run() method returns",
+                "ru": "Возврат из его метода run()"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Another thread calls join() on it",
+                "ru": "Другой thread вызывает у него join()"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "join() only waits for that moment; it does not cause it.",
+                "ru": "join() лишь ждёт этого момента; он его не вызывает."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The scheduler removes it after its time slice",
+                "ru": "Планировщик убирает его после кванта времени"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The scheduler only pauses and resumes threads; it never ends them.",
+                "ru": "Планировщик только приостанавливает и возобновляет потоки; он их не завершает."
+              }
+            }
+          ]
+        },
+        {
+          "id": "coop-p3-sort-stop",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order a cooperative stop of a running worker thread.",
+            "ru": "Расставь по порядку кооперативную остановку работающего worker thread."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Request, safe point, cleanup, return from run() — that is the whole protocol.",
+              "ru": "Запрос, безопасная точка, cleanup, возврат из run() — это весь протокол."
+            },
+            "incorrect": {
+              "en": "The owner only sets the request; the worker finishes its unit, cleans up and returns from run().",
+              "ru": "Владелец лишь ставит запрос; worker заканчивает единицу работы, делает cleanup и возвращается из run()."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "The owner sets the cancellation request",
+                "ru": "Владелец выставляет запрос отмены"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "The worker finishes the current unit of work",
+                "ru": "Worker заканчивает текущую единицу работы"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "The worker sees the request and leaves its loop",
+                "ru": "Worker видит запрос и выходит из цикла"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "The worker releases its resources (cleanup)",
+                "ru": "Worker освобождает ресурсы (cleanup)"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "run() returns and the thread ends",
+                "ru": "run() возвращается, и thread завершается"
+              }
+            }
+          ]
+        },
+        {
+          "id": "coop-p4-fill-run",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing method name.",
+            "ru": "Впиши имя пропущенного метода."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A cancelled worker ends itself by returning from run().",
+              "ru": "Отменённый worker завершает себя, возвращаясь из run()."
+            },
+            "incorrect": {
+              "en": "It is run(): a Java thread ends exactly when its run() returns.",
+              "ru": "Это run(): Java thread завершается ровно тогда, когда возвращается его run()."
+            }
+          },
+          "text": {
+            "en": "A cooperatively cancelled worker thread ends by returning from ___().",
+            "ru": "Кооперативно отменённый worker thread завершается возвратом из ___()."
+          },
+          "answers": {
+            "en": [
+              "run"
+            ],
+            "ru": [
+              "run"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "visible-stop-flag",
+      "title": {
+        "en": "A visible stop flag",
+        "ru": "Видимый флаг остановки"
+      },
+      "summary": {
+        "en": "The cancellation flag must be visible across threads: volatile boolean, AtomicBoolean, or guarded by synchronization.",
+        "ru": "Флаг отмены должен быть видим между потоками: volatile boolean, AtomicBoolean или под synchronization."
+      },
+      "discovery": [
+        {
+          "id": "flag-d1-plain-boolean-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "Another thread calls stop() on this worker. What is the defect?",
+            "ru": "Другой thread вызывает у этого worker метод stop(). В чём дефект?"
+          },
+          "code": "class Worker implements Runnable {\n    private boolean stopped = false;      // written by another thread\n\n    void stop() { stopped = true; }\n\n    @Override public void run() {\n        while (!stopped) {\n            doOneUnit();\n        }\n    }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "A plain `boolean` field gives you **atomicity** (you never read half a boolean) but not **visibility**. Without a memory-ordering guarantee the JIT and the CPU may keep `stopped` in a register or a core-local cache, so the worker's loop can keep reading a stale `false` — possibly forever. Reordering is allowed too: the write may become visible far later than it happened.\n\nThree ways to publish the signal:\n\n```java\nprivate volatile boolean stopped;                          // simplest\nprivate final AtomicBoolean stopped = new AtomicBoolean();  // atomic value + visibility\nprivate boolean stopped;                                    // only read/written inside synchronized\n```\n\n```mermaid\nflowchart LR\n  O[\"owner: stopped = true\"] -->|volatile write| M[\"main memory\"]\n  M -->|volatile read| W[\"worker sees true\"]\n  O -->|plain field| C[\"worker may keep reading a cached false\"]\n```\n\n**`volatile`** means every write is published to other threads and every read goes to shared memory. **`AtomicBoolean`** wraps the same guarantee in an object. **`synchronized`** access works too, because entering and leaving a monitor publishes changes. A cancellation flag is written by one thread and read by another, so it always needs one of the three.",
+            "ru": "Обычное поле `boolean` даёт **атомарность** (нельзя прочитать «половину» boolean), но не даёт **visibility**. Без гарантий модели памяти JIT и процессор вправе держать `stopped` в регистре или в кэше ядра, поэтому цикл worker'а может бесконечно читать устаревшее `false`. Переупорядочивание тоже разрешено: запись может стать видимой гораздо позже, чем произошла.\n\nТри способа опубликовать сигнал:\n\n```java\nprivate volatile boolean stopped;                          // самый простой\nprivate final AtomicBoolean stopped = new AtomicBoolean();  // атомарное значение + visibility\nprivate boolean stopped;                                    // только чтение/запись внутри synchronized\n```\n\n```mermaid\nflowchart LR\n  O[\"владелец: stopped = true\"] -->|volatile write| M[\"общая память\"]\n  M -->|volatile read| W[\"worker видит true\"]\n  O -->|обычное поле| C[\"worker может читать закэшированное false\"]\n```\n\n**`volatile`** означает, что каждая запись публикуется другим потокам, а каждое чтение идёт в общую память. **`AtomicBoolean`** оборачивает ту же гарантию в объект. Доступ под **`synchronized`** тоже работает, потому что вход в монитор и выход из него публикуют изменения. Флаг отмены пишет один поток, а читает другой — значит, ему всегда нужен один из трёх вариантов."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — a plain flag can be cached, so the worker may never see it.",
+              "ru": "Верно — обычный флаг может закэшироваться, и worker его не увидит."
+            },
+            "incorrect": {
+              "en": "The missing piece is visibility: the flag needs volatile, AtomicBoolean or synchronization.",
+              "ru": "Не хватает visibility: флагу нужен volatile, AtomicBoolean или synchronization."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "stopped is not volatile, so the worker may never see the update",
+                "ru": "stopped не volatile, поэтому worker может не увидеть обновление"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing is wrong: a boolean write is atomic, so the worker sees it",
+                "ru": "Всё в порядке: запись boolean атомарна, значит worker её увидит"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Atomicity is not visibility: a plain field can sit in a register or a CPU cache.",
+                "ru": "Атомарность — не visibility: обычное поле может лежать в регистре или кэше процессора."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The loop condition is inverted — it should be while (stopped)",
+                "ru": "Условие цикла перевёрнуто — должно быть while (stopped)"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The condition is right: the worker runs while no stop has been requested.",
+                "ru": "Условие верное: worker работает, пока остановку не запросили."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "flag-p1-volatile-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Declaring a thread cancellation flag volatile guarantees that a worker thread sees a write made by another thread.",
+            "ru": "Объявление флага отмены как volatile гарантирует, что worker thread увидит запись, сделанную другим потоком."
+          },
+          "feedback": {
+            "correct": {
+              "en": "volatile publishes every write and forces every read to see the latest value.",
+              "ru": "volatile публикует каждую запись и заставляет каждое чтение видеть свежее значение."
+            },
+            "incorrect": {
+              "en": "It does — that visibility guarantee is exactly what volatile is for here.",
+              "ru": "Гарантирует — именно ради этой visibility здесь и нужен volatile."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "flag-p2-which-not-visible",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which declaration of a thread cancellation flag gives NO cross-thread visibility guarantee?",
+            "ru": "Какое объявление флага отмены потока НЕ даёт гарантии видимости между потоками?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "A plain field may be cached per core, so the worker can miss the update.",
+              "ru": "Обычное поле может кэшироваться на ядре, и worker пропустит обновление."
+            },
+            "incorrect": {
+              "en": "The unsafe one is the plain field; volatile and AtomicBoolean both publish the write.",
+              "ru": "Небезопасно именно обычное поле; volatile и AtomicBoolean публикуют запись."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "private boolean stopped;",
+                "ru": "private boolean stopped;"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "private volatile boolean stopped;",
+                "ru": "private volatile boolean stopped;"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "volatile publishes every write to the other threads.",
+                "ru": "volatile публикует каждую запись остальным потокам."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "private final AtomicBoolean stopped = new AtomicBoolean();",
+                "ru": "private final AtomicBoolean stopped = new AtomicBoolean();"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "AtomicBoolean gives the same visibility guarantee in object form.",
+                "ru": "AtomicBoolean даёт ту же гарантию visibility в виде объекта."
+              }
+            }
+          ]
+        },
+        {
+          "id": "flag-p3-match-visibility",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each way of holding a cancellation flag to what it guarantees.",
+            "ru": "Соотнеси способ хранения флага отмены с тем, что он гарантирует."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Three mechanisms publish the write; a plain field publishes nothing.",
+              "ru": "Три механизма публикуют запись; обычное поле не публикует ничего."
+            },
+            "incorrect": {
+              "en": "volatile, AtomicBoolean and synchronized access all publish the write; a plain field does not.",
+              "ru": "volatile, AtomicBoolean и доступ под synchronized публикуют запись; обычное поле — нет."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "volatile boolean",
+                "ru": "volatile boolean"
+              },
+              "right": {
+                "en": "Every write is published to other threads",
+                "ru": "Каждая запись публикуется другим потокам"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "AtomicBoolean",
+                "ru": "AtomicBoolean"
+              },
+              "right": {
+                "en": "The same visibility, wrapped in an object",
+                "ru": "Та же visibility, но в виде объекта"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "A field read and written inside synchronized",
+                "ru": "Поле, читаемое и записываемое внутри synchronized"
+              },
+              "right": {
+                "en": "Visibility through entering and leaving a monitor",
+                "ru": "Visibility через вход в монитор и выход из него"
+              }
+            },
+            {
+              "id": "m4",
+              "left": {
+                "en": "A plain boolean field",
+                "ru": "Обычное поле boolean"
+              },
+              "right": {
+                "en": "No guarantee: the update may stay cached",
+                "ru": "Никакой гарантии: обновление может остаться в кэше"
+              }
+            }
+          ]
+        },
+        {
+          "id": "flag-p4-fill-volatile-atomic",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two usual ways to make a cancellation flag visible.",
+            "ru": "Впиши два обычных способа сделать флаг отмены видимым."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Both publish the write so the worker's loop reads the fresh value.",
+              "ru": "Оба публикуют запись, и цикл worker'а читает свежее значение."
+            },
+            "incorrect": {
+              "en": "They are volatile and AtomicBoolean (synchronized access works as well).",
+              "ru": "Это volatile и AtomicBoolean (доступ под synchronized тоже работает)."
+            }
+          },
+          "text": {
+            "en": "A cancellation flag is declared ___ boolean, or wrapped in an ___, so both threads see the same value.",
+            "ru": "Флаг отмены объявляют как ___ boolean или оборачивают в ___, чтобы оба потока видели одно значение."
+          },
+          "blanks": [
+            {
+              "en": [
+                "volatile"
+              ],
+              "ru": [
+                "volatile"
+              ]
+            },
+            {
+              "en": [
+                "AtomicBoolean"
+              ],
+              "ru": [
+                "AtomicBoolean"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "flag-does-not-wake",
+      "title": {
+        "en": "A flag cannot wake a blocked worker",
+        "ru": "Флаг не будит заблокированный worker"
+      },
+      "summary": {
+        "en": "A worker parked in sleep(), wait(), join() or a blocking queue call cannot read any flag until that call returns.",
+        "ru": "Worker, застрявший в sleep(), wait(), join() или блокирующем вызове очереди, не может прочитать флаг, пока вызов не вернётся."
+      },
+      "discovery": [
+        {
+          "id": "wake-d1-sleeping-worker",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The owner sets the volatile stop flag one second after the worker fell asleep. When does the worker actually stop?",
+            "ru": "Владелец выставляет volatile-флаг остановки через секунду после того, как worker уснул. Когда worker реально остановится?"
+          },
+          "code": "// worker thread\nwhile (!stopped) {          // stopped is volatile\n    poll();\n    Thread.sleep(60_000);   // a minute between polls\n}\n\n// owner thread, one second later\nstopped = true;",
+          "codeLang": "java",
+          "reveal": {
+            "en": "A flag is only ever read at the point where the worker *looks at it* — the top of the loop. While the thread sits inside a **blocking call** it executes no code of yours at all, so it cannot notice anything.\n\n```mermaid\nsequenceDiagram\n  participant O as owner thread\n  participant W as worker thread\n  W->>W: sleep(60000) blocks\n  O->>O: stopped = true\n  Note over W: still blocked, cannot check the flag\n  W->>W: sleep ends, checks the flag\n  W->>W: leaves the loop\n```\n\nThe common blocking calls a worker parks in are `Thread.sleep()`, `Object.wait()`, `Thread.join()`, and queue or IO-style waits such as `BlockingQueue.take()`. The stop request is not lost — it is simply invisible until the call returns, which may be a minute later, or never if the queue stays empty.\n\nThat is exactly the gap the second tool fills: `interrupt()` can wake those calls.",
+            "ru": "Флаг читается только там, где worker *на него смотрит* — в начале цикла. Пока поток находится внутри **блокирующего вызова**, он вообще не выполняет твой код и потому ничего заметить не может.\n\n```mermaid\nsequenceDiagram\n  participant O as thread-владелец\n  participant W as worker thread\n  W->>W: sleep(60000) блокирует\n  O->>O: stopped = true\n  Note over W: всё ещё заблокирован, флаг не проверить\n  W->>W: сон закончился, проверяет флаг\n  W->>W: выходит из цикла\n```\n\nОбычные блокирующие вызовы, в которых стоит worker: `Thread.sleep()`, `Object.wait()`, `Thread.join()` и ожидания очереди или IO-стиля вроде `BlockingQueue.take()`. Запрос остановки не теряется — он просто невидим, пока вызов не вернётся: через минуту, а если очередь пуста, то и никогда.\n\nИменно эту брешь закрывает второй инструмент: `interrupt()` умеет будить такие вызовы."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the flag is only checked after the sleep finishes.",
+              "ru": "Верно — флаг проверяется только после окончания сна."
+            },
+            "incorrect": {
+              "en": "A blocked thread runs no code, so it cannot look at the flag until sleep() returns.",
+              "ru": "Заблокированный поток не выполняет код, поэтому не увидит флаг, пока sleep() не вернётся."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Only after the sleep finishes — up to a minute later",
+                "ru": "Только после окончания сна — почти через минуту"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Immediately: a volatile write wakes the sleeping thread",
+                "ru": "Сразу: volatile-запись будит спящий поток"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Writing a field does not touch the sleeping thread; nothing wakes it early.",
+                "ru": "Запись в поле не трогает спящий поток; раньше времени его ничто не будит."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Never: the request is lost while the thread sleeps",
+                "ru": "Никогда: запрос теряется, пока поток спит"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The flag stays set; the worker just cannot read it until it wakes.",
+                "ru": "Флаг остаётся выставленным; worker просто не может его прочитать, пока не проснётся."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "wake-p1-flag-wakes-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Setting a volatile cancellation flag wakes a thread that is blocked in Thread.sleep().",
+            "ru": "Выставление volatile-флага отмены будит поток, заблокированный в Thread.sleep()."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A flag is passive: the blocked thread reads it only after the call returns.",
+              "ru": "Флаг пассивен: заблокированный поток прочитает его только после возврата из вызова."
+            },
+            "incorrect": {
+              "en": "No — a flag wakes nobody; interrupt() is what can end a blocking wait early.",
+              "ru": "Нет — флаг никого не будит; прервать ожидание раньше времени может interrupt()."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "wake-p2-blocked-take",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A worker thread is blocked in BlockingQueue.take() and the queue stays empty. Which action can make it stop?",
+            "ru": "Worker thread заблокирован в BlockingQueue.take(), и очередь остаётся пустой. Какое действие может его остановить?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "interrupt() reaches a blocked thread; a flag does not.",
+              "ru": "interrupt() достаёт до заблокированного потока; флаг — нет."
+            },
+            "incorrect": {
+              "en": "Only interrupt() can end the wait: a blocked thread cannot read a flag.",
+              "ru": "Прервать ожидание может только interrupt(): заблокированный поток не читает флаг."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Calling interrupt() on that thread",
+                "ru": "Вызвать у этого потока interrupt()"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Setting the volatile cancellation flag",
+                "ru": "Выставить volatile-флаг отмены"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The blocked thread cannot read the flag until take() returns, and it never will.",
+                "ru": "Заблокированный поток не прочитает флаг, пока take() не вернётся, а он не вернётся."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Calling join() on that thread",
+                "ru": "Вызвать у этого потока join()"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "join() makes the caller wait; it sends nothing to the blocked worker.",
+                "ru": "join() заставляет ждать вызывающего; заблокированному worker'у он ничего не посылает."
+              }
+            }
+          ]
+        },
+        {
+          "id": "wake-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the rule about a worker sitting in a blocking call.",
+            "ru": "Собери правило про worker'а, застрявшего в блокирующем вызове."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It runs no code while blocked, so the request stays unseen.",
+              "ru": "Пока он заблокирован, он не выполняет код, и запрос остаётся незамеченным."
+            },
+            "incorrect": {
+              "en": "A blocked thread cannot check the stop flag — that is why interrupt() exists.",
+              "ru": "Заблокированный поток не может проверить флаг остановки — для этого и нужен interrupt()."
+            }
+          },
+          "tokens": {
+            "en": [
+              "a",
+              "blocked",
+              "thread",
+              "cannot",
+              "check",
+              "the",
+              "stop",
+              "flag"
+            ],
+            "ru": [
+              "заблокированный",
+              "thread",
+              "не",
+              "может",
+              "проверить",
+              "флаг",
+              "остановки"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "ignores",
+              "deletes"
+            ],
+            "ru": [
+              "игнорирует",
+              "удаляет"
+            ]
+          }
+        },
+        {
+          "id": "wake-p4-fill-interrupt",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing method name.",
+            "ru": "Впиши имя пропущенного метода."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The flag covers running code; interrupt() covers blocking waits.",
+              "ru": "Флаг закрывает работающий код; interrupt() — блокирующие ожидания."
+            },
+            "incorrect": {
+              "en": "It is interrupt(): only it can end a wait in sleep(), wait() or take().",
+              "ru": "Это interrupt(): только он может прервать ожидание в sleep(), wait() или take()."
+            }
+          },
+          "text": {
+            "en": "A worker blocked in sleep() cannot check the stop flag, so the owner also calls ___() to wake it.",
+            "ru": "Worker, заблокированный в sleep(), не может проверить флаг остановки, поэтому владелец ещё вызывает ___(), чтобы его разбудить."
+          },
+          "answers": {
+            "en": [
+              "interrupt"
+            ],
+            "ru": [
+              "interrupt"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "interrupt-is-a-signal",
+      "title": {
+        "en": "interrupt() is a signal, not a kill",
+        "ru": "interrupt() — сигнал, а не убийство"
+      },
+      "summary": {
+        "en": "Thread.interrupt() sets the thread's interrupt status; it never terminates the thread.",
+        "ru": "Thread.interrupt() выставляет interrupt status потока; он никогда не завершает поток."
+      },
+      "discovery": [
+        {
+          "id": "signal-d1-cpu-loop",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The worker does pure CPU work with no blocking calls. What is printed after interrupt()?",
+            "ru": "Worker выполняет чистые вычисления без блокирующих вызовов. Что будет напечатано после interrupt()?"
+          },
+          "code": "Thread worker = new Thread(() -> {\n    long n = 0;\n    for (int i = 0; i < 1_000_000; i++) {\n        n += i;                       // pure CPU work\n    }\n    System.out.println(\"worker finished, n=\" + n);\n});\nworker.start();\nworker.interrupt();                   // right after start",
+          "codeLang": "java",
+          "reveal": {
+            "en": "`interrupt()` does **not** stop anything. Every `Thread` object carries one boolean called its **interrupt status**, and `t.interrupt()` simply sets it to `true`:\n\n```java\nThread.currentThread().isInterrupted();   // reads the interrupt status\n```\n\nSo an interrupt is a *request*, just like the boolean flag from the earlier atoms — with two differences: it is built into every thread (no field to declare, and the JVM handles its visibility), and it can also wake certain blocking calls.\n\n```mermaid\nflowchart LR\n  O[\"owner: t.interrupt()\"] --> S[\"interrupt status = true\"]\n  S --> R[\"running CPU code: nothing happens until the code checks it\"]\n  S --> B[\"thread blocked in sleep/wait/take: InterruptedException\"]\n```\n\nIf the worker never checks its interrupt status and never calls a blocking method, an interrupt changes nothing at all — the loop runs to its natural end.",
+            "ru": "`interrupt()` **ничего не останавливает**. У каждого объекта `Thread` есть один boolean — **interrupt status**, и `t.interrupt()` просто ставит его в `true`:\n\n```java\nThread.currentThread().isInterrupted();   // читает interrupt status\n```\n\nТо есть interrupt — это *запрос*, такой же, как boolean-флаг из прошлых атомов, но с двумя отличиями: он встроен в каждый поток (не нужно объявлять поле, а его visibility обеспечивает JVM) и он умеет будить некоторые блокирующие вызовы.\n\n```mermaid\nflowchart LR\n  O[\"владелец: t.interrupt()\"] --> S[\"interrupt status = true\"]\n  S --> R[\"работающий CPU-код: ничего не произойдёт, пока код не проверит статус\"]\n  S --> B[\"поток в sleep/wait/take: InterruptedException\"]\n```\n\nЕсли worker никогда не проверяет свой interrupt status и не вызывает блокирующих методов, interrupt не меняет вообще ничего — цикл доработает до естественного конца."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the loop finishes; interrupt() only set a flag.",
+              "ru": "Верно — цикл доработает; interrupt() лишь выставил флаг."
+            },
+            "incorrect": {
+              "en": "interrupt() sets the interrupt status and nothing else; CPU code keeps running.",
+              "ru": "interrupt() только выставляет interrupt status; CPU-код продолжает работать."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "worker finished, n=... — the loop runs to the end",
+                "ru": "worker finished, n=... — цикл доходит до конца"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing: interrupt() terminates the thread",
+                "ru": "Ничего: interrupt() завершает поток"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "interrupt() only sets a flag on the thread; it stops no code.",
+                "ru": "interrupt() лишь выставляет флаг у потока; он не останавливает код."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "An InterruptedException is thrown out of the loop",
+                "ru": "Из цикла вылетит InterruptedException"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "InterruptedException comes from an interruptible blocking call, not from plain CPU code.",
+                "ru": "InterruptedException приходит из interruptible блокирующего вызова, а не из обычных вычислений."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "signal-p1-kills-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Calling interrupt() on a running Java thread terminates that thread.",
+            "ru": "Вызов interrupt() у работающего Java thread завершает этот поток."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It only sets the interrupt status; the code has to cooperate.",
+              "ru": "Он только выставляет interrupt status; код должен сотрудничать."
+            },
+            "incorrect": {
+              "en": "No — interrupt() sets a status and may wake a blocking call; it kills nothing.",
+              "ru": "Нет — interrupt() выставляет статус и может разбудить блокирующий вызов; он ничего не убивает."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "signal-p2-what-it-does",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does Thread.interrupt() do to a thread that is busy running CPU code?",
+            "ru": "Что делает Thread.interrupt() с потоком, который занят вычислениями на CPU?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The status is a request; the running code must read it to react.",
+              "ru": "Статус — это запрос; работающий код должен его прочитать, чтобы отреагировать."
+            },
+            "incorrect": {
+              "en": "It sets the thread's interrupt status to true — nothing more.",
+              "ru": "Он выставляет interrupt status потока в true — и ничего больше."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Sets its interrupt status to true",
+                "ru": "Выставляет его interrupt status в true"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Throws InterruptedException inside it",
+                "ru": "Бросает внутри него InterruptedException"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That happens only inside an interruptible blocking call.",
+                "ru": "Это происходит только внутри interruptible блокирующего вызова."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Moves it to the TERMINATED state",
+                "ru": "Переводит его в состояние TERMINATED"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Only returning from run() ends a thread.",
+                "ru": "Завершает поток только возврат из run()."
+              }
+            }
+          ]
+        },
+        {
+          "id": "signal-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble what Thread.interrupt() actually does.",
+            "ru": "Собери, что на самом деле делает Thread.interrupt()."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A status bit is all it sets; the thread keeps running.",
+              "ru": "Он выставляет лишь бит статуса; поток продолжает работать."
+            },
+            "incorrect": {
+              "en": "interrupt() only sets the interrupt status — it never kills the thread.",
+              "ru": "interrupt() лишь выставляет interrupt status — он не убивает поток."
+            }
+          },
+          "tokens": {
+            "en": [
+              "interrupt()",
+              "only",
+              "sets",
+              "the",
+              "interrupt",
+              "status"
+            ],
+            "ru": [
+              "interrupt()",
+              "лишь",
+              "выставляет",
+              "interrupt",
+              "status"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "kills",
+              "thread"
+            ],
+            "ru": [
+              "убивает",
+              "поток"
+            ]
+          }
+        },
+        {
+          "id": "signal-p4-fill-status",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the two halves of the interrupt signal.",
+            "ru": "Дополни обе половины сигнала interrupt."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One side sets the status, the other side has to read it.",
+              "ru": "Одна сторона выставляет статус, другая обязана его прочитать."
+            },
+            "incorrect": {
+              "en": "interrupt() sets the interrupt status; running code notices it via isInterrupted().",
+              "ru": "interrupt() выставляет interrupt status; работающий код замечает его через isInterrupted()."
+            }
+          },
+          "text": {
+            "en": "t.interrupt() sets the thread's interrupt ___; running code must call ___() to notice it.",
+            "ru": "t.interrupt() выставляет у потока interrupt ___; работающий код должен вызвать ___(), чтобы это заметить."
+          },
+          "blanks": [
+            {
+              "en": [
+                "status"
+              ],
+              "ru": [
+                "status",
+                "статус"
+              ]
+            },
+            {
+              "en": [
+                "isInterrupted"
+              ],
+              "ru": [
+                "isInterrupted"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "interrupt-wakes-blocking-calls",
+      "title": {
+        "en": "Interrupting a blocked thread",
+        "ru": "Прерывание заблокированного потока"
+      },
+      "summary": {
+        "en": "If the worker is blocked in sleep(), wait(), join() or an interruptible queue call, interrupt() wakes it with InterruptedException.",
+        "ru": "Если worker заблокирован в sleep(), wait(), join() или interruptible вызове очереди, interrupt() будит его через InterruptedException."
+      },
+      "discovery": [
+        {
+          "id": "blocking-d1-sleep-throws",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The worker is sleeping when the interrupt arrives. What is printed?",
+            "ru": "Worker спит, когда приходит interrupt. Что будет напечатано?"
+          },
+          "code": "Thread worker = new Thread(() -> {\n    try {\n        Thread.sleep(60_000);\n        System.out.println(\"slept the whole minute\");\n    } catch (InterruptedException e) {\n        System.out.println(\"woken up early\");\n    }\n});\nworker.start();\nworker.interrupt();",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Some blocking methods are **interruptible**: they promise to react to an interrupt instead of waiting for their normal condition. They deliver the interrupt as an exception:\n\n```java\ntry {\n    queue.take();                     // or sleep(), wait(), join()\n} catch (InterruptedException e) {\n    // this is the cancellation, arriving as an exception\n}\n```\n\n```mermaid\nsequenceDiagram\n  participant O as owner thread\n  participant W as worker thread\n  W->>W: sleep() / wait() / take() blocks\n  O->>W: interrupt()\n  W-->>W: InterruptedException is thrown\n  W->>W: catch: cleanup and return from run()\n```\n\nThe interruptible calls you meet most often are `Thread.sleep()`, `Object.wait()`, `Thread.join()`, and interruptible queue or IO-style waits such as `BlockingQueue.take()`. This is why a shutdown normally does both things: it sets the cancellation flag (for a worker that is computing) **and** calls `interrupt()` (for a worker that is waiting). The `catch` block is where such a worker cleans up and leaves `run()`.",
+            "ru": "Некоторые блокирующие методы **interruptible**: они обещают отреагировать на interrupt, а не ждать своего обычного условия. Interrupt доставляется им в виде исключения:\n\n```java\ntry {\n    queue.take();                     // или sleep(), wait(), join()\n} catch (InterruptedException e) {\n    // это и есть отмена, пришедшая исключением\n}\n```\n\n```mermaid\nsequenceDiagram\n  participant O as thread-владелец\n  participant W as worker thread\n  W->>W: sleep() / wait() / take() блокирует\n  O->>W: interrupt()\n  W-->>W: бросается InterruptedException\n  W->>W: catch: cleanup и возврат из run()\n```\n\nЧаще всего встречаются interruptible вызовы `Thread.sleep()`, `Object.wait()`, `Thread.join()` и interruptible ожидания очереди или IO-стиля вроде `BlockingQueue.take()`. Поэтому shutdown обычно делает две вещи сразу: выставляет флаг отмены (для worker'а, который считает) **и** вызывает `interrupt()` (для worker'а, который ждёт). Блок `catch` — то место, где такой worker освобождает ресурсы и выходит из `run()`."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — sleep() is interruptible, so it throws instead of finishing.",
+              "ru": "Верно — sleep() interruptible, поэтому он бросает исключение, а не досыпает."
+            },
+            "incorrect": {
+              "en": "An interrupt makes sleep() throw InterruptedException, so the catch branch runs.",
+              "ru": "Interrupt заставляет sleep() бросить InterruptedException, поэтому выполняется ветка catch."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "woken up early",
+                "ru": "woken up early"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "slept the whole minute",
+                "ru": "slept the whole minute"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "sleep() does not run to completion once the thread is interrupted.",
+                "ru": "sleep() не досыпает до конца, если поток прерван."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — the thread dies inside sleep()",
+                "ru": "Ничего — поток умирает внутри sleep()"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The thread does not die; sleep() throws and execution continues in the catch.",
+                "ru": "Поток не умирает; sleep() бросает исключение, и выполнение продолжается в catch."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "blocking-p1-take-mc",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A worker thread is blocked in queue.take(). The owner calls worker.interrupt(). What happens?",
+            "ru": "Worker thread заблокирован в queue.take(). Владелец вызывает worker.interrupt(). Что произойдёт?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "An interruptible wait reacts to the interrupt instead of waiting for data.",
+              "ru": "Interruptible ожидание реагирует на interrupt вместо ожидания данных."
+            },
+            "incorrect": {
+              "en": "take() throws InterruptedException, so the worker wakes up and can exit.",
+              "ru": "take() бросает InterruptedException, поэтому worker просыпается и может выйти."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "take() throws InterruptedException and the worker wakes up",
+                "ru": "take() бросает InterruptedException, и worker просыпается"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The worker thread is terminated on the spot",
+                "ru": "Worker thread завершается на месте"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "An interrupt never terminates a thread; it only delivers a signal.",
+                "ru": "Interrupt никогда не завершает поток; он лишь доставляет сигнал."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing until an element is added to the queue",
+                "ru": "Ничего, пока в очередь не добавят элемент"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "An interruptible blocking call reacts without waiting for data.",
+                "ru": "Interruptible блокирующий вызов реагирует, не дожидаясь данных."
+              }
+            }
+          ]
+        },
+        {
+          "id": "blocking-p2-sleep-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Thread.sleep() throws InterruptedException when the sleeping thread is interrupted.",
+            "ru": "Thread.sleep() бросает InterruptedException, когда спящий поток прерывают."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That exception is how an interrupt reaches a blocked thread.",
+              "ru": "Именно этим исключением interrupt доходит до заблокированного потока."
+            },
+            "incorrect": {
+              "en": "It does — sleep() is interruptible, so an interrupt ends the wait with that exception.",
+              "ru": "Бросает — sleep() interruptible, поэтому interrupt завершает ожидание этим исключением."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "blocking-p3-match-situations",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each worker situation to what interrupt() achieves there.",
+            "ru": "Соотнеси ситуацию worker'а с тем, чего в ней добивается interrupt()."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Blocking waits get an exception; running code gets only a status bit.",
+              "ru": "Блокирующие ожидания получают исключение; работающий код — лишь бит статуса."
+            },
+            "incorrect": {
+              "en": "sleep()/wait()/join() throw InterruptedException; CPU loops must poll isInterrupted().",
+              "ru": "sleep()/wait()/join() бросают InterruptedException; CPU-циклы должны опрашивать isInterrupted()."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "Blocked in sleep(), wait() or join()",
+                "ru": "Заблокирован в sleep(), wait() или join()"
+              },
+              "right": {
+                "en": "The call throws InterruptedException",
+                "ru": "Вызов бросает InterruptedException"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "Blocked in BlockingQueue.take()",
+                "ru": "Заблокирован в BlockingQueue.take()"
+              },
+              "right": {
+                "en": "The wait ends without any element arriving",
+                "ru": "Ожидание заканчивается, хотя элемент не пришёл"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "Running a tight CPU loop",
+                "ru": "Крутит плотный CPU-цикл"
+              },
+              "right": {
+                "en": "Only the interrupt status changes, nothing else",
+                "ru": "Меняется только interrupt status, больше ничего"
+              }
+            }
+          ]
+        },
+        {
+          "id": "blocking-p4-fill-exception",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the exception name.",
+            "ru": "Впиши имя исключения."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That exception is how cancellation reaches a blocked thread.",
+              "ru": "Этим исключением отмена доходит до заблокированного потока."
+            },
+            "incorrect": {
+              "en": "It is InterruptedException — thrown by interruptible blocking calls.",
+              "ru": "Это InterruptedException — его бросают interruptible блокирующие вызовы."
+            }
+          },
+          "text": {
+            "en": "Interrupting a thread blocked in sleep(), wait() or take() makes that call throw ___.",
+            "ru": "Interrupt для потока, заблокированного в sleep(), wait() или take(), заставляет этот вызов бросить ___."
+          },
+          "answers": {
+            "en": [
+              "InterruptedException"
+            ],
+            "ru": [
+              "InterruptedException"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "checking-interrupt-status",
+      "title": {
+        "en": "Checking interrupt status in a loop",
+        "ru": "Проверка interrupt status в цикле"
+      },
+      "summary": {
+        "en": "CPU-bound work reacts to an interrupt only if the loop polls Thread.currentThread().isInterrupted().",
+        "ru": "CPU-работа реагирует на interrupt, только если цикл опрашивает Thread.currentThread().isInterrupted()."
+      },
+      "discovery": [
+        {
+          "id": "check-d1-loop-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "The owner's only stop mechanism is worker.interrupt(). What is wrong with this run()?",
+            "ru": "Единственный механизм остановки у владельца — worker.interrupt(). Что не так с этим run()?"
+          },
+          "code": "// The owner stops this worker with worker.interrupt().\npublic void run() {\n    while (true) {\n        crunchOneBatch();   // pure CPU work, no blocking calls\n    }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "An interrupt status is only a **signal**. Code that is running has to look at it, exactly like the boolean flag:\n\n```java\npublic void run() {\n    while (!Thread.currentThread().isInterrupted()) {\n        crunchOneBatch();\n    }\n    cleanup();          // safe point reached, resources released\n}\n```\n\n```mermaid\nflowchart LR\n  S[\"top of the loop\"] --> C{\"isInterrupted()?\"}\n  C -->|no| U[\"do one unit of work\"]\n  U --> S\n  C -->|yes| E[\"cleanup and return from run()\"]\n```\n\nHow *often* the loop checks decides how quickly cancellation takes effect: check once per batch and the worker stops within one batch. The check belongs at a safe point — between units of work, never in the middle of updating shared state.\n\n`Thread.currentThread()` returns the thread executing this code, so `Thread.currentThread().isInterrupted()` is the worker asking about itself. A `volatile` flag and this check are two forms of the same idea, and real workers often check both.",
+            "ru": "Interrupt status — это только **сигнал**. Работающий код обязан на него посмотреть, ровно как на boolean-флаг:\n\n```java\npublic void run() {\n    while (!Thread.currentThread().isInterrupted()) {\n        crunchOneBatch();\n    }\n    cleanup();          // дошли до безопасной точки, ресурсы освобождены\n}\n```\n\n```mermaid\nflowchart LR\n  S[\"начало цикла\"] --> C{\"isInterrupted()?\"}\n  C -->|нет| U[\"выполнить одну единицу работы\"]\n  U --> S\n  C -->|да| E[\"cleanup и возврат из run()\"]\n```\n\nКак *часто* цикл проверяет статус — тем и определяется скорость реакции на отмену: проверка раз в батч означает остановку в пределах одного батча. Проверять нужно в безопасной точке — между единицами работы, а не посреди обновления общего состояния.\n\n`Thread.currentThread()` возвращает поток, который выполняет этот код, поэтому `Thread.currentThread().isInterrupted()` — это worker, спрашивающий про самого себя. Флаг `volatile` и такая проверка — две формы одной идеи, и реальные worker'ы часто проверяют оба."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — nothing in this loop ever reads the interrupt status.",
+              "ru": "Верно — в этом цикле никто не читает interrupt status."
+            },
+            "incorrect": {
+              "en": "The loop never checks isInterrupted(), so the interrupt is simply ignored.",
+              "ru": "Цикл не проверяет isInterrupted(), поэтому interrupt просто игнорируется."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The loop never checks isInterrupted(), so the interrupt is ignored",
+                "ru": "Цикл не проверяет isInterrupted(), поэтому interrupt игнорируется"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "run() should catch InterruptedException",
+                "ru": "run() должен ловить InterruptedException"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no blocking call here, so no InterruptedException is ever thrown.",
+                "ru": "Здесь нет блокирующего вызова, поэтому InterruptedException никогда не бросается."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "crunchOneBatch() should be synchronized",
+                "ru": "crunchOneBatch() должен быть synchronized"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Synchronization is about shared state, not about noticing cancellation.",
+                "ru": "Синхронизация — про общее состояние, а не про замечание отмены."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "check-p1-auto-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A CPU-bound loop with no blocking calls reacts to interrupt() automatically, without checking anything.",
+            "ru": "CPU-цикл без блокирующих вызовов реагирует на interrupt() автоматически, ничего не проверяя."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The status is passive: unchecked, it changes nothing.",
+              "ru": "Статус пассивен: если его не проверять, он ничего не меняет."
+            },
+            "incorrect": {
+              "en": "No — running code must poll Thread.currentThread().isInterrupted() itself.",
+              "ru": "Нет — работающий код должен сам опрашивать Thread.currentThread().isInterrupted()."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "check-p2-loop-condition",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which loop condition lets a CPU-bound worker react to interrupt()?",
+            "ru": "Какое условие цикла позволяет CPU-worker'у отреагировать на interrupt()?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The loop runs while the status is false and exits when it turns true.",
+              "ru": "Цикл работает, пока статус false, и выходит, когда он становится true."
+            },
+            "incorrect": {
+              "en": "It is while (!Thread.currentThread().isInterrupted()) — run until interrupted.",
+              "ru": "Это while (!Thread.currentThread().isInterrupted()) — работать, пока не прервали."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "while (!Thread.currentThread().isInterrupted())",
+                "ru": "while (!Thread.currentThread().isInterrupted())"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "while (true)",
+                "ru": "while (true)"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing in that loop ever reads the interrupt status.",
+                "ru": "В таком цикле никто не читает interrupt status."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "while (Thread.currentThread().isInterrupted())",
+                "ru": "while (Thread.currentThread().isInterrupted())"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Inverted: that loop would not even start until an interrupt arrived.",
+                "ru": "Перевёрнуто: такой цикл вообще не начнётся, пока не придёт interrupt."
+              }
+            }
+          ]
+        },
+        {
+          "id": "check-p3-sort-loop",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order what a CPU-bound worker loop does once its interrupt status becomes true.",
+            "ru": "Расставь по порядку, что делает CPU-цикл worker'а, когда его interrupt status стал true."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Check, leave the loop, clean up, return — the interrupt is noticed, not enforced.",
+              "ru": "Проверить, выйти из цикла, освободить ресурсы, вернуться — interrupt замечают, а не навязывают."
+            },
+            "incorrect": {
+              "en": "The loop checks the status at the top, exits, cleans up, then returns from run().",
+              "ru": "Цикл проверяет статус в начале, выходит, делает cleanup, затем возвращается из run()."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Reach the top of the work loop",
+                "ru": "Дойти до начала рабочего цикла"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Call Thread.currentThread().isInterrupted()",
+                "ru": "Вызвать Thread.currentThread().isInterrupted()"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "See that the status is true and leave the loop",
+                "ru": "Увидеть, что статус true, и выйти из цикла"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Release the resources the worker holds",
+                "ru": "Освободить ресурсы, которые держит worker"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "Return from run() so the thread ends",
+                "ru": "Вернуться из run(), чтобы поток завершился"
+              }
+            }
+          ]
+        },
+        {
+          "id": "check-p4-fill-current-thread",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the call a worker uses to check its own cancellation.",
+            "ru": "Дополни вызов, которым worker проверяет собственную отмену."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The worker asks about itself, at a safe point in its loop.",
+              "ru": "Worker спрашивает про самого себя, в безопасной точке цикла."
+            },
+            "incorrect": {
+              "en": "It is Thread.currentThread().isInterrupted().",
+              "ru": "Это Thread.currentThread().isInterrupted()."
+            }
+          },
+          "text": {
+            "en": "A CPU-bound loop notices an interrupt by calling Thread.___().___().",
+            "ru": "CPU-цикл замечает interrupt, вызывая Thread.___().___()."
+          },
+          "blanks": [
+            {
+              "en": [
+                "currentThread"
+              ],
+              "ru": [
+                "currentThread"
+              ]
+            },
+            {
+              "en": [
+                "isInterrupted"
+              ],
+              "ru": [
+                "isInterrupted"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "restoring-interrupt-status",
+      "title": {
+        "en": "Restoring the interrupt status",
+        "ru": "Восстановление interrupt status"
+      },
+      "summary": {
+        "en": "Catching InterruptedException clears the interrupt status, so a method that cannot finish the cancellation must restore it.",
+        "ru": "Перехват InterruptedException очищает interrupt status, поэтому метод, который не завершает отмену сам, обязан его восстановить."
+      },
+      "discovery": [
+        {
+          "id": "restore-d1-status-after-catch",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The thread is interrupted while sleeping, and the exception is caught. What does this print?",
+            "ru": "Поток прерывают во время сна, и исключение перехватывается. Что напечатает этот код?"
+          },
+          "code": "try {\n    Thread.sleep(1000);\n} catch (InterruptedException e) {\n    // swallowed\n}\nSystem.out.println(Thread.currentThread().isInterrupted());",
+          "codeLang": "java",
+          "reveal": {
+            "en": "When an interruptible call throws `InterruptedException`, Java **clears the interrupt status** first. The reasoning: the exception itself carries the cancellation, so the flag would be redundant — *if* whoever catches it actually handles the cancellation.\n\nIf your method catches the exception but is not the place that decides to end the task, put the signal back:\n\n```java\n} catch (InterruptedException e) {\n    Thread.currentThread().interrupt();   // restore the status\n    return;                               // let the caller decide\n}\n```\n\nWithout that line the cancellation is silently lost: the loop above would call `isInterrupted()`, read `false`, and keep working as if nothing had been requested. That is why \"catch and ignore\" is one of the classic concurrency bugs.\n\nThe **cancellation boundary** is the code that owns the task — usually `run()` itself — and it is allowed to swallow the exception, because it responds by returning instead.",
+            "ru": "Когда interruptible вызов бросает `InterruptedException`, Java сначала **очищает interrupt status**. Логика такая: сама отмена уже едет в исключении, значит флаг избыточен — *при условии*, что тот, кто ловит исключение, действительно обработает отмену.\n\nЕсли твой метод ловит исключение, но не является тем местом, где принимается решение завершить задачу, верни сигнал на место:\n\n```java\n} catch (InterruptedException e) {\n    Thread.currentThread().interrupt();   // восстановить статус\n    return;                               // пусть решает вызывающий\n}\n```\n\nБез этой строки отмена молча теряется: цикл выше вызовет `isInterrupted()`, прочитает `false` и продолжит работать, будто ничего не просили. Поэтому «поймать и проигнорировать» — классическая ошибка многопоточности.\n\n**Граница отмены** — это код, владеющий задачей, обычно сам `run()`; ему проглотить исключение можно, потому что он отвечает на него возвратом."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — throwing InterruptedException already cleared the status.",
+              "ru": "Верно — бросок InterruptedException уже очистил статус."
+            },
+            "incorrect": {
+              "en": "It prints false: Java clears the interrupt status when it throws InterruptedException.",
+              "ru": "Печатается false: Java очищает interrupt status, когда бросает InterruptedException."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "false",
+                "ru": "false"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "true",
+                "ru": "true"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Throwing InterruptedException clears the interrupt status, so the flag is already gone.",
+                "ru": "Бросок InterruptedException очищает interrupt status, поэтому флага уже нет."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing is printed — the exception propagates",
+                "ru": "Ничего не печатается — исключение улетает дальше"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The exception is caught, so execution continues to the println.",
+                "ru": "Исключение перехвачено, поэтому выполнение доходит до println."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "restore-p1-status-kept-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "After catching InterruptedException, the thread's interrupt status is still true.",
+            "ru": "После перехвата InterruptedException interrupt status потока всё ещё равен true."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The status is cleared when the exception is thrown; restore it if needed.",
+              "ru": "Статус очищается при броске исключения; при необходимости его восстанавливают."
+            },
+            "incorrect": {
+              "en": "No — Java clears it, which is why code restores it with Thread.currentThread().interrupt().",
+              "ru": "Нет — Java его очищает, поэтому код восстанавливает его через Thread.currentThread().interrupt()."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "restore-p2-swallow-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This worker is stopped with interrupt() only. What is the defect?",
+            "ru": "Этот worker останавливают только через interrupt(). В чём дефект?"
+          },
+          "code": "while (!Thread.currentThread().isInterrupted()) {\n    try {\n        Item item = queue.take();\n        handle(item);\n    } catch (InterruptedException e) {\n        // ignore and continue\n    }\n}",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "The swallowed exception erases the only cancellation signal the loop reads.",
+              "ru": "Проглоченное исключение стирает единственный сигнал отмены, который читает цикл."
+            },
+            "incorrect": {
+              "en": "The catch clears the status and restores nothing, so isInterrupted() stays false forever.",
+              "ru": "Catch очищает статус и ничего не восстанавливает, поэтому isInterrupted() навсегда остаётся false."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The catch loses the cleared interrupt status, so the loop never exits",
+                "ru": "Catch теряет очищенный interrupt status, поэтому цикл никогда не выходит"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "queue.take() should be called outside the loop",
+                "ru": "queue.take() нужно вызывать вне цикла"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The blocking call belongs in the loop; the bug is the swallowed cancellation.",
+                "ru": "Блокирующий вызов должен быть в цикле; ошибка — в проглоченной отмене."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "isInterrupted() cannot be used together with a blocking call",
+                "ru": "isInterrupted() нельзя использовать вместе с блокирующим вызовом"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It works fine here — as long as the status is not thrown away by the catch.",
+                "ru": "Здесь он работает нормально — если только catch не выбрасывает статус."
+              }
+            }
+          ]
+        },
+        {
+          "id": "restore-p3-sort-catch",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order a correct reaction to InterruptedException in a method that does not own the cancellation decision.",
+            "ru": "Расставь по порядку правильную реакцию на InterruptedException в методе, который не решает судьбу отмены."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Clean up, restore the status, return — the caller still sees the cancellation.",
+              "ru": "Cleanup, восстановить статус, вернуться — вызывающий по-прежнему видит отмену."
+            },
+            "incorrect": {
+              "en": "The exception clears the status, so the method restores it before returning.",
+              "ru": "Исключение очищает статус, поэтому метод восстанавливает его перед возвратом."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "A blocking call throws InterruptedException",
+                "ru": "Блокирующий вызов бросает InterruptedException"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Java clears the thread's interrupt status",
+                "ru": "Java очищает interrupt status потока"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "The catch block releases what this method holds",
+                "ru": "Блок catch освобождает то, что держит этот метод"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Call Thread.currentThread().interrupt() to restore the status",
+                "ru": "Вызвать Thread.currentThread().interrupt(), чтобы восстановить статус"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "Return, so the caller can still see the cancellation",
+                "ru": "Вернуться, чтобы вызывающий всё ещё видел отмену"
+              }
+            }
+          ]
+        },
+        {
+          "id": "restore-p4-fill-restore",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the line that restores a cleared cancellation signal.",
+            "ru": "Дополни строку, которая восстанавливает стёртый сигнал отмены."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Interrupting yourself is how you hand the cancellation back to the caller.",
+              "ru": "Прервать самого себя — это способ вернуть отмену вызывающему коду."
+            },
+            "incorrect": {
+              "en": "It is Thread.currentThread().interrupt(); inside the catch block.",
+              "ru": "Это Thread.currentThread().interrupt(); внутри блока catch."
+            }
+          },
+          "text": {
+            "en": "catch (InterruptedException e) { Thread.___().___(); return; }",
+            "ru": "catch (InterruptedException e) { Thread.___().___(); return; }"
+          },
+          "blanks": [
+            {
+              "en": [
+                "currentThread"
+              ],
+              "ru": [
+                "currentThread"
+              ]
+            },
+            {
+              "en": [
+                "interrupt"
+              ],
+              "ru": [
+                "interrupt"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "join-is-not-a-stop",
+      "title": {
+        "en": "join() waits, it does not stop",
+        "ru": "join() ждёт, а не останавливает"
+      },
+      "summary": {
+        "en": "join() blocks the caller until the worker reaches TERMINATED; it never requests cancellation.",
+        "ru": "join() блокирует вызывающего, пока worker не дойдёт до TERMINATED; отмену он не запрашивает."
+      },
+      "discovery": [
+        {
+          "id": "join-d1-endless-worker",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The owner has set no stop flag and sent no interrupt. The worker is running an endless loop. What happens here?",
+            "ru": "Владелец не выставил флаг остановки и не послал interrupt. Worker крутит бесконечный цикл. Что произойдёт здесь?"
+          },
+          "code": "// owner thread\nworker.join();\nSystem.out.println(\"after join\");",
+          "codeLang": "java",
+          "reveal": {
+            "en": "`join()` is a **wait**, not a command. `worker.join()` blocks the *calling* thread until `worker` has reached the **TERMINATED** state — the state a thread enters when its `run()` has returned.\n\n```mermaid\nstateDiagram-v2\n  [*] --> NEW\n  NEW --> RUNNABLE: start()\n  RUNNABLE --> WAITING: sleep() / wait() / take()\n  WAITING --> RUNNABLE: interrupt() or the wait ends\n  RUNNABLE --> TERMINATED: run() returns\n  TERMINATED --> [*]\n```\n\nNothing in `join()` reaches the worker, so joining a worker nobody asked to stop simply blocks the owner forever.\n\nWhere `join()` does belong is the *last* step of a shutdown, because a stop that was requested is not yet a thread that has finished — until `run()` returns, the scheduler may still be running it. So a shutdown is: request the stop, `interrupt()` in case the worker is blocked, then `join()` (usually with a bounded wait) to confirm it really ended.",
+            "ru": "`join()` — это **ожидание**, а не команда. `worker.join()` блокирует *вызывающий* поток, пока `worker` не дойдёт до состояния **TERMINATED** — того, в которое поток переходит после возврата из `run()`.\n\n```mermaid\nstateDiagram-v2\n  [*] --> NEW\n  NEW --> RUNNABLE: start()\n  RUNNABLE --> WAITING: sleep() / wait() / take()\n  WAITING --> RUNNABLE: interrupt() или конец ожидания\n  RUNNABLE --> TERMINATED: run() возвращается\n  TERMINATED --> [*]\n```\n\nВ `join()` нет ничего, что доходило бы до worker'а, поэтому join для worker'а, которого никто не просил остановиться, просто блокирует владельца навсегда.\n\nМесто `join()` — *последний* шаг shutdown: запрошенная остановка ещё не равна завершённому потоку, и пока `run()` не вернулся, планировщик может его выполнять. Итого shutdown такой: запросить остановку, вызвать `interrupt()` на случай блокировки, затем `join()` (обычно с ограниченным ожиданием), чтобы убедиться, что поток действительно закончился."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — join() waits and sends nothing, so the owner blocks forever.",
+              "ru": "Верно — join() ждёт и ничего не посылает, поэтому владелец блокируется навсегда."
+            },
+            "incorrect": {
+              "en": "join() is a wait, not a request: the worker never learns that anyone wants it to stop.",
+              "ru": "join() — это ожидание, а не запрос: worker вообще не узнаёт, что его хотят остановить."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The owner blocks in join() forever while the worker keeps running",
+                "ru": "Владелец навсегда блокируется в join(), а worker продолжает работать"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "join() asks the worker to stop and then returns",
+                "ru": "join() просит worker остановиться и затем возвращается"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "join() sends nothing to the worker; it only waits for termination.",
+                "ru": "join() ничего не посылает worker'у; он лишь ждёт завершения."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The worker is terminated as soon as join() is called",
+                "ru": "Worker завершается, как только вызван join()"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "join() never touches the worker's execution.",
+                "ru": "join() вообще не трогает выполнение worker'а."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "join-p1-asks-stop-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Calling worker.join() asks the worker thread to stop.",
+            "ru": "Вызов worker.join() просит worker thread остановиться."
+          },
+          "feedback": {
+            "correct": {
+              "en": "join() only waits; the stop request has to be sent separately.",
+              "ru": "join() только ждёт; запрос остановки нужно послать отдельно."
+            },
+            "incorrect": {
+              "en": "No — join() waits for termination; it requests nothing.",
+              "ru": "Нет — join() ждёт завершения; он ничего не запрашивает."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "join-p2-what-join-does",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does worker.join() do?",
+            "ru": "Что делает worker.join()?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "It is the confirmation step: the worker really reached TERMINATED.",
+              "ru": "Это шаг подтверждения: worker действительно дошёл до TERMINATED."
+            },
+            "incorrect": {
+              "en": "It blocks the caller until the worker's run() has returned — nothing more.",
+              "ru": "Он блокирует вызывающего, пока не вернётся run() worker'а — и ничего больше."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Blocks the calling thread until the worker has finished run()",
+                "ru": "Блокирует вызывающий поток, пока worker не завершит run()"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Sets the worker's interrupt status",
+                "ru": "Выставляет interrupt status worker'а"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is interrupt(); join() sends no signal at all.",
+                "ru": "Это делает interrupt(); join() не посылает никакого сигнала."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Merges the worker's remaining work into the calling thread",
+                "ru": "Переносит оставшуюся работу worker'а в вызывающий поток"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no merging; join() only waits for termination.",
+                "ru": "Никакого переноса нет; join() лишь ждёт завершения."
+              }
+            }
+          ]
+        },
+        {
+          "id": "join-p3-sort-shutdown",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order a graceful shutdown of a worker thread that may be blocked in a queue call.",
+            "ru": "Расставь по порядку аккуратный shutdown worker thread, который может быть заблокирован в вызове очереди."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Request, interrupt, cleanup, TERMINATED, join — join is always last.",
+              "ru": "Запрос, interrupt, cleanup, TERMINATED, join — join всегда последний."
+            },
+            "incorrect": {
+              "en": "join() comes last: it confirms termination that the flag and interrupt caused.",
+              "ru": "join() идёт последним: он подтверждает завершение, вызванное флагом и interrupt."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Set the visible cancellation flag",
+                "ru": "Выставить видимый флаг отмены"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Call worker.interrupt() in case the worker is blocked",
+                "ru": "Вызвать worker.interrupt() на случай, если worker заблокирован"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "The worker wakes, sees the cancellation and cleans up",
+                "ru": "Worker просыпается, видит отмену и освобождает ресурсы"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "run() returns and the worker becomes TERMINATED",
+                "ru": "run() возвращается, и worker переходит в TERMINATED"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "worker.join() returns in the owner thread",
+                "ru": "worker.join() возвращается в потоке-владельце"
+              }
+            }
+          ]
+        },
+        {
+          "id": "join-p4-fill-join",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing method name.",
+            "ru": "Впиши имя пропущенного метода."
+          },
+          "feedback": {
+            "correct": {
+              "en": "join() is the confirmation step, never the request.",
+              "ru": "join() — шаг подтверждения, но не запрос."
+            },
+            "incorrect": {
+              "en": "It is join(): it returns when the worker has reached TERMINATED.",
+              "ru": "Это join(): он возвращается, когда worker дошёл до TERMINATED."
+            }
+          },
+          "text": {
+            "en": "To wait until a worker thread has really reached TERMINATED, the owner calls ___().",
+            "ru": "Чтобы дождаться, пока worker thread реально дойдёт до TERMINATED, владелец вызывает ___()."
+          },
+          "answers": {
+            "en": [
+              "join"
+            ],
+            "ru": [
+              "join"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "thread-stop-is-unsafe",
+      "title": {
+        "en": "Why Thread.stop() is unsafe",
+        "ru": "Почему Thread.stop() небезопасен"
+      },
+      "summary": {
+        "en": "Thread.stop() is deprecated: it throws asynchronously at an arbitrary bytecode point and releases locks while invariants are half-updated.",
+        "ru": "Thread.stop() deprecated: он бросает асинхронную ошибку в произвольной точке bytecode и освобождает locks, пока invariants обновлены наполовину."
+      },
+      "discovery": [
+        {
+          "id": "unsafe-d1-half-update",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Another thread calls the deprecated worker.stop() exactly at the marked point. What is the result?",
+            "ru": "Другой thread вызывает deprecated-метод worker.stop() ровно в отмеченной точке. Каков результат?"
+          },
+          "code": "// worker thread\nsynchronized (account) {\n    account.debit(100);\n    // <-- another thread calls worker.stop() right here\n    account.credit(100);\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "`Thread.stop()` is deprecated because it stops the thread **asynchronously**: it throws an error into the target thread at whatever bytecode instruction it happens to be executing. The thread has no chance to reach a safe point.\n\n```mermaid\nflowchart LR\n  A[\"Thread.stop()\"] --> B[\"asynchronous error at an arbitrary bytecode point\"]\n  B --> C[\"locks are released immediately\"]\n  C --> D[\"shared state stays half-updated\"]\n```\n\nTwo things go wrong at once:\n\n1. **Invariants break.** In the code above the money is debited but never credited — the account object is left in a state it was never supposed to be observable in.\n2. **Locks are released anyway.** The `synchronized` block unwinds, so the *next* thread happily acquires the monitor and reads that corrupted state as if it were valid. A `synchronized` block protects against other threads; it cannot delay an asynchronous stop.\n\nThat is why the answer to \"how do I stop a thread\" is always the cooperative protocol: only the worker itself knows where its state is consistent.",
+            "ru": "`Thread.stop()` deprecated, потому что останавливает поток **асинхронно**: он бросает в целевой поток ошибку на той инструкции bytecode, которую тот как раз выполняет. У потока нет шанса дойти до безопасной точки.\n\n```mermaid\nflowchart LR\n  A[\"Thread.stop()\"] --> B[\"асинхронная ошибка в произвольной точке bytecode\"]\n  B --> C[\"locks освобождаются немедленно\"]\n  C --> D[\"общее состояние остаётся обновлённым наполовину\"]\n```\n\nЛомается сразу две вещи:\n\n1. **Рушатся invariants.** В коде выше деньги списаны, но не зачислены — объект account остался в состоянии, которое никто не должен был увидеть.\n2. **Locks всё равно освобождаются.** Блок `synchronized` разворачивается, поэтому *следующий* поток спокойно захватывает монитор и читает это испорченное состояние как корректное. `synchronized` защищает от других потоков, но не может задержать асинхронную остановку.\n\nПоэтому ответ на вопрос «как остановить поток» всегда один — кооперативный протокол: только сам worker знает, где его состояние согласовано."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the monitor is freed with the object half-updated.",
+              "ru": "Верно — монитор освобождается, а объект обновлён наполовину."
+            },
+            "incorrect": {
+              "en": "Thread.stop() strikes mid-block: the debit stands, the credit never happens, and the lock is released.",
+              "ru": "Thread.stop() бьёт посреди блока: списание осталось, зачисления не было, а lock освобождён."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The monitor is released with the money debited but not credited",
+                "ru": "Монитор освобождается, а деньги списаны, но не зачислены"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The synchronized block protects the worker until it completes",
+                "ru": "Блок synchronized защищает worker, пока тот не завершится"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The block guards against other threads; it does not delay an asynchronous stop.",
+                "ru": "Блок защищает от других потоков; асинхронную остановку он не задерживает."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The thread finishes the block and only then stops",
+                "ru": "Поток доводит блок до конца и только потом останавливается"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Thread.stop() does not wait for a safe point; it strikes wherever the thread is.",
+                "ru": "Thread.stop() не ждёт безопасной точки; он бьёт там, где поток оказался."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "unsafe-p1-emergency-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Thread.stop() is an acceptable way to stop a thread in an emergency.",
+            "ru": "Thread.stop() допустимо использовать для остановки потока в экстренном случае."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It can corrupt shared state, so there is no situation where it is the right tool.",
+              "ru": "Он может испортить общее состояние, поэтому нет ситуации, где он подходит."
+            },
+            "incorrect": {
+              "en": "No — it breaks invariants and releases locks; cooperative cancellation is the answer.",
+              "ru": "Нет — он ломает invariants и освобождает locks; ответ — кооперативная отмена."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "unsafe-p2-why-unsafe",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why is Thread.stop() deprecated and unsafe?",
+            "ru": "Почему Thread.stop() deprecated и небезопасен?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "It stops the thread where it stands, not where its state is consistent.",
+              "ru": "Он останавливает поток там, где тот стоит, а не там, где состояние согласовано."
+            },
+            "incorrect": {
+              "en": "It throws at an arbitrary bytecode point and frees locks over half-updated state.",
+              "ru": "Он бросает ошибку в произвольной точке bytecode и освобождает locks над недообновлённым состоянием."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It can throw at any bytecode point and release locks while shared state is half-updated",
+                "ru": "Он может бросить ошибку в любой точке bytecode и освободить locks, пока состояние обновлено наполовину"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It is slower than a cancellation flag",
+                "ru": "Он медленнее, чем флаг отмены"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Speed is not the issue; the correctness of shared state is.",
+                "ru": "Дело не в скорости, а в корректности общего состояния."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It works only on threads created from a Runnable",
+                "ru": "Он работает только с потоками, созданными из Runnable"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It is not selective; it is deprecated because it breaks invariants.",
+                "ru": "Он не избирателен; он deprecated именно потому, что ломает invariants."
+              }
+            }
+          ]
+        },
+        {
+          "id": "unsafe-p3-match-tools",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each way of dealing with a running worker thread to its effect.",
+            "ru": "Соотнеси способ обращения с работающим worker thread и его эффект."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Three of these cooperate with the worker; one overrides it and corrupts state.",
+              "ru": "Три из них сотрудничают с worker'ом; один ломает его и портит состояние."
+            },
+            "incorrect": {
+              "en": "The flag and interrupt() request, join() waits, Thread.stop() corrupts.",
+              "ru": "Флаг и interrupt() запрашивают, join() ждёт, Thread.stop() портит состояние."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "A volatile stop flag checked in the loop",
+                "ru": "volatile-флаг остановки, проверяемый в цикле"
+              },
+              "right": {
+                "en": "The worker exits at a safe point with consistent state",
+                "ru": "Worker выходит в безопасной точке с согласованным состоянием"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "interrupt()",
+                "ru": "interrupt()"
+              },
+              "right": {
+                "en": "Wakes an interruptible blocking call so the worker can exit",
+                "ru": "Будит interruptible блокирующий вызов, чтобы worker мог выйти"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "join()",
+                "ru": "join()"
+              },
+              "right": {
+                "en": "Waits for termination and requests nothing",
+                "ru": "Ждёт завершения и ничего не запрашивает"
+              }
+            },
+            {
+              "id": "m4",
+              "left": {
+                "en": "Thread.stop()",
+                "ru": "Thread.stop()"
+              },
+              "right": {
+                "en": "Breaks invariants and releases locks at an arbitrary point",
+                "ru": "Ломает invariants и освобождает locks в произвольной точке"
+              }
+            }
+          ]
+        },
+        {
+          "id": "unsafe-p4-fill-stop",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the name of the method that must not be used.",
+            "ru": "Впиши имя метода, который использовать нельзя."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It is deprecated precisely because it stops the thread at an unsafe point.",
+              "ru": "Он deprecated именно потому, что останавливает поток в небезопасной точке."
+            },
+            "incorrect": {
+              "en": "It is Thread.stop() — deprecated, asynchronous and invariant-breaking.",
+              "ru": "Это Thread.stop() — deprecated, асинхронный и ломающий invariants."
+            }
+          },
+          "text": {
+            "en": "The deprecated method that terminates a thread asynchronously is Thread.___().",
+            "ru": "Deprecated-метод, который асинхронно завершает поток, — это Thread.___()."
+          },
+          "answers": {
+            "en": [
+              "stop"
+            ],
+            "ru": [
+              "stop"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "executor-shutdown",
+      "title": {
+        "en": "Stopping pool threads",
+        "ru": "Остановка потоков пула"
+      },
+      "summary": {
+        "en": "With an ExecutorService you shut down the pool: shutdown() stops accepting new work, shutdownNow() interrupts running tasks and returns queued ones.",
+        "ru": "С ExecutorService останавливают пул: shutdown() перестаёт принимать новую работу, shutdownNow() прерывает running tasks и возвращает queued tasks."
+      },
+      "discovery": [
+        {
+          "id": "pool-d1-how-to-stop",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A task is running inside an ExecutorService pool and you want the pool to stop working. What do you call?",
+            "ru": "Задача выполняется в пуле ExecutorService, и нужно, чтобы пул прекратил работу. Что вызывать?"
+          },
+          "reveal": {
+            "en": "With a thread pool you do not own the worker threads, so you never stop them one by one. You shut down the **pool**, and it does the interrupting for you:\n\n```mermaid\nflowchart TD\n  S[\"shutdown()\"] --> A[\"no new tasks are accepted\"]\n  A --> B[\"already accepted tasks finish normally\"]\n  N[\"shutdownNow()\"] --> C[\"running tasks are interrupted\"]\n  C --> D[\"queued tasks are returned to the caller\"]\n```\n\n- **`shutdown()`** — the graceful stop: the pool refuses new submissions and lets everything already accepted run to completion.\n- **`shutdownNow()`** — the aggressive stop: it *attempts* cancellation by interrupting the running tasks, and returns the list of tasks that were still waiting in the queue.\n\nNote the word *attempts*. `shutdownNow()` has no more power than `interrupt()` does — a task that never checks its interrupt status and never blocks will keep running to the end. Pool shutdown is still cooperative cancellation, just packaged behind an API.",
+            "ru": "В пуле потоков worker-потоки тебе не принадлежат, поэтому их не останавливают по одному. Останавливают **пул**, а он сам рассылает interrupt:\n\n```mermaid\nflowchart TD\n  S[\"shutdown()\"] --> A[\"новые задачи не принимаются\"]\n  A --> B[\"уже принятые задачи спокойно доработают\"]\n  N[\"shutdownNow()\"] --> C[\"running tasks получают interrupt\"]\n  C --> D[\"queued tasks возвращаются вызывающему\"]\n```\n\n- **`shutdown()`** — аккуратная остановка: пул перестаёт принимать новые задачи и даёт доработать всем уже принятым.\n- **`shutdownNow()`** — жёсткая остановка: он *пытается* отменить работу, прерывая running tasks, и возвращает список задач, которые ещё ждали в очереди.\n\nОбрати внимание на слово *пытается*. У `shutdownNow()` не больше власти, чем у `interrupt()`: задача, которая не проверяет свой interrupt status и не блокируется, доработает до конца. Остановка пула — та же кооперативная отмена, просто упакованная в API."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — pool threads are stopped through the pool's own API.",
+              "ru": "Верно — потоки пула останавливают через API самого пула."
+            },
+            "incorrect": {
+              "en": "You shut down the ExecutorService: shutdown() for graceful, shutdownNow() for interrupt-based.",
+              "ru": "Останавливают ExecutorService: shutdown() — аккуратно, shutdownNow() — через interrupt."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "shutdown() or shutdownNow() on the ExecutorService",
+                "ru": "shutdown() или shutdownNow() у ExecutorService"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Thread.stop() on the pool's worker thread",
+                "ru": "Thread.stop() у worker-потока пула"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Thread.stop() is deprecated and unsafe anywhere, pool or not.",
+                "ru": "Thread.stop() deprecated и небезопасен где угодно, в пуле или нет."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "join() on each pool thread",
+                "ru": "join() у каждого потока пула"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "You do not own pool threads, and join() would only wait anyway.",
+                "ru": "Потоки пула тебе не принадлежат, да и join() всё равно только ждёт."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "pool-p1-shutdownnow-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "ExecutorService.shutdownNow() guarantees that every running task stops immediately.",
+            "ru": "ExecutorService.shutdownNow() гарантирует, что каждая выполняющаяся задача остановится немедленно."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It only interrupts; a task that ignores interrupts keeps running.",
+              "ru": "Он лишь рассылает interrupt; задача, игнорирующая его, продолжит работу."
+            },
+            "incorrect": {
+              "en": "No — it attempts cancellation by interrupting; the tasks still have to cooperate.",
+              "ru": "Нет — он пытается отменить работу через interrupt; задачи всё равно должны сотрудничать."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "pool-p2-what-shutdown-does",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does ExecutorService.shutdown() do?",
+            "ru": "Что делает ExecutorService.shutdown()?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "It is the graceful option: no new work in, accepted work finishes.",
+              "ru": "Это аккуратный вариант: новую работу не берут, принятую доделывают."
+            },
+            "incorrect": {
+              "en": "It stops accepting new tasks and lets already accepted ones finish.",
+              "ru": "Он перестаёт принимать новые задачи и даёт доработать уже принятым."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Stops accepting new tasks and lets already accepted tasks finish",
+                "ru": "Перестаёт принимать новые задачи и даёт доработать уже принятым"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Interrupts every running task at once",
+                "ru": "Немедленно прерывает все выполняющиеся задачи"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is shutdownNow(), and even it only attempts interruption.",
+                "ru": "Это shutdownNow(), да и тот лишь пытается прервать задачи."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Kills the pool's threads immediately",
+                "ru": "Немедленно убивает потоки пула"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "No API kills threads; even a pool shutdown relies on cooperation.",
+                "ru": "Никакой API не убивает потоки; даже shutdown пула опирается на сотрудничество."
+              }
+            }
+          ]
+        },
+        {
+          "id": "pool-p3-match-pool-api",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each ExecutorService shutdown option to what it does.",
+            "ru": "Соотнеси вариант остановки ExecutorService с тем, что он делает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One drains the accepted work, the other interrupts it — both need cooperation.",
+              "ru": "Один даёт доработать принятому, другой шлёт interrupt — обоим нужно сотрудничество."
+            },
+            "incorrect": {
+              "en": "shutdown() is graceful, shutdownNow() interrupts and returns queued tasks.",
+              "ru": "shutdown() аккуратный, shutdownNow() прерывает и возвращает queued tasks."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "shutdown()",
+                "ru": "shutdown()"
+              },
+              "right": {
+                "en": "No new tasks; accepted ones run to completion",
+                "ru": "Новых задач нет; принятые доработают до конца"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "shutdownNow()",
+                "ru": "shutdownNow()"
+              },
+              "right": {
+                "en": "Interrupts running tasks and returns the queued ones",
+                "ru": "Прерывает running tasks и возвращает queued tasks"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "A task that never checks its interrupt status",
+                "ru": "Задача, которая не проверяет свой interrupt status"
+              },
+              "right": {
+                "en": "Keeps running even after shutdownNow()",
+                "ru": "Продолжает работать даже после shutdownNow()"
+              }
+            }
+          ]
+        },
+        {
+          "id": "pool-p4-fill-shutdown",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two ExecutorService methods.",
+            "ru": "Впиши два метода ExecutorService."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One drains the accepted work, the other interrupts what is running.",
+              "ru": "Один даёт доработать принятому, другой прерывает выполняющееся."
+            },
+            "incorrect": {
+              "en": "They are shutdown() for a graceful stop and shutdownNow() for interrupt-based cancellation.",
+              "ru": "Это shutdown() для аккуратной остановки и shutdownNow() для отмены через interrupt."
+            }
+          },
+          "text": {
+            "en": "For a graceful pool stop call ___(); to interrupt the running tasks call ___().",
+            "ru": "Для аккуратной остановки пула вызывают ___(); чтобы прервать running tasks — ___()."
+          },
+          "blanks": [
+            {
+              "en": [
+                "shutdown"
+              ],
+              "ru": [
+                "shutdown"
+              ]
+            },
+            {
+              "en": [
+                "shutdownNow"
+              ],
+              "ru": [
+                "shutdownNow"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "full-stop-protocol",
+      "title": {
+        "en": "The complete stop protocol",
+        "ru": "Полный протокол остановки"
+      },
+      "summary": {
+        "en": "Visible flag for running code, interrupt() for blocked calls, a restored status so the signal survives, join() to confirm — and never Thread.stop().",
+        "ru": "Видимый флаг для работающего кода, interrupt() для блокирующих вызовов, восстановленный статус ради сохранности сигнала, join() для подтверждения — и никогда Thread.stop()."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "cap-d1-lost-interrupt",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The owner calls only worker.interrupt() while the worker is blocked in take(). What happens to the worker?",
+            "ru": "Владелец вызывает только worker.interrupt(), пока worker заблокирован в take(). Что произойдёт с worker'ом?"
+          },
+          "code": "private volatile boolean stopped = false;\n\npublic void run() {\n    while (!stopped && !Thread.currentThread().isInterrupted()) {\n        try {\n            handle(queue.take());\n        } catch (InterruptedException e) {\n            // status cleared, nothing restored\n        }\n    }\n    System.out.println(\"worker done\");\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "The whole protocol in one picture — every part covers a gap the others leave:\n\n```mermaid\nflowchart TD\n  R[\"owner: set the visible flag\"] --> I[\"owner: interrupt() in case the worker is blocked\"]\n  I --> W[\"worker: the blocking call throws InterruptedException\"]\n  W --> S[\"worker: restore the status with Thread.currentThread().interrupt()\"]\n  S --> C[\"worker: cleanup and return from run()\"]\n  C --> J[\"owner: join() confirms TERMINATED\"]\n```\n\nHere the owner used only one of those parts. `take()` threw, the throw cleared the interrupt status, the empty `catch` restored nothing, and `stopped` was never set — so **both** loop conditions read as \"keep going\" and the worker goes straight back into `take()`, waiting forever. \"worker done\" is never printed.\n\nThe fix is either line: set the flag as well, or restore the status in the `catch`. That is the shape of the interview answer — a visible flag for running code, `interrupt()` for blocked code, a restored status so the signal is not lost, `join()` to confirm the thread really ended, and never `Thread.stop()`.",
+            "ru": "Весь протокол на одной картинке — каждая часть закрывает брешь, которую оставляют остальные:\n\n```mermaid\nflowchart TD\n  R[\"владелец: выставить видимый флаг\"] --> I[\"владелец: interrupt() на случай блокировки\"]\n  I --> W[\"worker: блокирующий вызов бросает InterruptedException\"]\n  W --> S[\"worker: восстановить статус через Thread.currentThread().interrupt()\"]\n  S --> C[\"worker: cleanup и возврат из run()\"]\n  C --> J[\"владелец: join() подтверждает TERMINATED\"]\n```\n\nЗдесь владелец использовал лишь одну из частей. `take()` бросил исключение, бросок очистил interrupt status, пустой `catch` ничего не восстановил, а `stopped` никто не выставлял — поэтому **оба** условия цикла говорят «продолжаем», и worker снова уходит в `take()` ждать вечно. «worker done» не напечатается никогда.\n\nЛечится любой из двух строк: выставить флаг или восстановить статус в `catch`. Это и есть форма ответа на собеседовании — видимый флаг для работающего кода, `interrupt()` для заблокированного, восстановленный статус, чтобы сигнал не потерялся, `join()` для подтверждения завершения и никогда `Thread.stop()`."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the cleared status plus an unset flag means the loop never exits.",
+              "ru": "Верно — очищенный статус плюс невыставленный флаг означают, что цикл не выйдет."
+            },
+            "incorrect": {
+              "en": "The catch swallowed the cleared status and no flag was set, so the worker waits forever.",
+              "ru": "Catch проглотил очищенный статус, а флаг не выставили, поэтому worker ждёт вечно."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Both conditions are still false, so the worker loops back into take() and waits forever",
+                "ru": "Оба условия по-прежнему false, worker возвращается в take() и ждёт вечно"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "\"worker done\" is printed: the interrupt status makes the loop exit",
+                "ru": "Печатается «worker done»: interrupt status заставляет цикл выйти"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The status was cleared by the exception and never restored, so isInterrupted() reads false.",
+                "ru": "Статус очищен исключением и не восстановлен, поэтому isInterrupted() читает false."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The thread dies inside take()",
+                "ru": "Поток умирает внутри take()"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "An interrupt never kills a thread; take() just throws InterruptedException.",
+                "ru": "Interrupt никогда не убивает поток; take() лишь бросает InterruptedException."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cap-p1-plain-flag-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "The owner stops this worker by setting stopped = true and never interrupts it. What is the defect?",
+            "ru": "Владелец останавливает этот worker, выставляя stopped = true, и никогда не шлёт interrupt. В чём дефект?"
+          },
+          "code": "private boolean stopped = false;      // set from the owner thread\n\npublic void run() {\n    while (!stopped) {\n        try {\n            poll();\n            Thread.sleep(500);\n        } catch (InterruptedException e) {\n            Thread.currentThread().interrupt();\n            return;\n        }\n    }\n}",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "The catch is correct; the flag is the part without a visibility guarantee.",
+              "ru": "Catch написан правильно; без гарантии visibility остался именно флаг."
+            },
+            "incorrect": {
+              "en": "stopped is a plain field: without volatile the worker may keep reading a cached false.",
+              "ru": "stopped — обычное поле: без volatile worker может читать закэшированное false."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "stopped is a plain field, so the worker may never see the owner's write",
+                "ru": "stopped — обычное поле, поэтому worker может не увидеть запись владельца"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The catch should swallow the exception instead of restoring the status",
+                "ru": "Catch должен проглатывать исключение, а не восстанавливать статус"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Restoring the status before returning is exactly the right behaviour.",
+                "ru": "Восстановить статус перед возвратом — как раз правильное поведение."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Thread.sleep() must not be called inside the work loop",
+                "ru": "Thread.sleep() нельзя вызывать внутри рабочего цикла"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Sleeping between units is normal; the flag's visibility is the problem.",
+                "ru": "Спать между единицами работы нормально; проблема — в visibility флага."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p2-order-of-prints",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Predict the printed lines and their order.",
+            "ru": "Предскажи напечатанные строки и их порядок."
+          },
+          "code": "Thread worker = new Thread(() -> {\n    while (!Thread.currentThread().isInterrupted()) {\n        compute();                    // CPU only, no blocking calls\n    }\n    System.out.println(\"stopped\");\n});\nworker.start();\nworker.interrupt();\nworker.join();\nSystem.out.println(\"owner continues\");",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "The loop polls the status, exits normally, and join() returns only after that.",
+              "ru": "Цикл опрашивает статус, штатно выходит, и только после этого возвращается join()."
+            },
+            "incorrect": {
+              "en": "join() returns only after run() finished, so \"stopped\" is always printed first.",
+              "ru": "join() возвращается только после завершения run(), поэтому «stopped» печатается первым."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "stopped, then owner continues",
+                "ru": "stopped, затем owner continues"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "owner continues, then stopped",
+                "ru": "owner continues, затем stopped"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "join() blocks the owner until the worker's run() has returned.",
+                "ru": "join() блокирует владельца, пока не вернётся run() worker'а."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Only \"owner continues\": the interrupt kills the loop before the println",
+                "ru": "Только «owner continues»: interrupt убивает цикл до println"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "An interrupt does not kill; the loop exits normally and reaches the println.",
+                "ru": "Interrupt не убивает; цикл выходит штатно и доходит до println."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p3-sort-full-shutdown",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the complete shutdown of a worker thread that may be blocked, including the interrupt-status edge case.",
+            "ru": "Расставь по порядку полный shutdown worker thread, который может быть заблокирован, включая случай с interrupt status."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Flag, interrupt, restore, cleanup, TERMINATED, join — the whole protocol.",
+              "ru": "Флаг, interrupt, восстановление, cleanup, TERMINATED, join — весь протокол."
+            },
+            "incorrect": {
+              "en": "Request and interrupt first, restore the cleared status, clean up, then join() last.",
+              "ru": "Сначала запрос и interrupt, затем восстановление статуса, cleanup, и join() последним."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Set the visible cancellation flag (volatile or AtomicBoolean)",
+                "ru": "Выставить видимый флаг отмены (volatile или AtomicBoolean)"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Call worker.interrupt() so a blocking call wakes up",
+                "ru": "Вызвать worker.interrupt(), чтобы блокирующий вызов проснулся"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "The worker catches InterruptedException and restores the interrupt status",
+                "ru": "Worker ловит InterruptedException и восстанавливает interrupt status"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "The worker releases its resources at a safe point",
+                "ru": "Worker освобождает ресурсы в безопасной точке"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "run() returns and the worker becomes TERMINATED",
+                "ru": "run() возвращается, и worker переходит в TERMINATED"
+              }
+            },
+            {
+              "id": "s6",
+              "text": {
+                "en": "worker.join() returns and the owner continues its shutdown",
+                "ru": "worker.join() возвращается, и владелец продолжает свой shutdown"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p4-match-roles",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each mechanism to its role in stopping a started thread.",
+            "ru": "Соотнеси каждый механизм с его ролью при остановке запущенного потока."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Each one covers a different gap; only Thread.stop() is never part of the answer.",
+              "ru": "Каждый закрывает свою брешь; только Thread.stop() никогда не входит в ответ."
+            },
+            "incorrect": {
+              "en": "Flag for CPU work, interrupt() for blocked waits, restore for the signal, join() to confirm.",
+              "ru": "Флаг для CPU-работы, interrupt() для блокировок, восстановление для сигнала, join() для подтверждения."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "volatile or AtomicBoolean flag",
+                "ru": "Флаг volatile или AtomicBoolean"
+              },
+              "right": {
+                "en": "Makes the stop request visible to CPU-bound work",
+                "ru": "Делает запрос остановки видимым для CPU-работы"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "interrupt()",
+                "ru": "interrupt()"
+              },
+              "right": {
+                "en": "Wakes a thread blocked in sleep(), wait() or take()",
+                "ru": "Будит поток, заблокированный в sleep(), wait() или take()"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "Thread.currentThread().interrupt() in a catch",
+                "ru": "Thread.currentThread().interrupt() в блоке catch"
+              },
+              "right": {
+                "en": "Restores the signal that the exception cleared",
+                "ru": "Восстанавливает сигнал, стёртый исключением"
+              }
+            },
+            {
+              "id": "m4",
+              "left": {
+                "en": "join()",
+                "ru": "join()"
+              },
+              "right": {
+                "en": "Confirms the worker really reached TERMINATED",
+                "ru": "Подтверждает, что worker действительно дошёл до TERMINATED"
+              }
+            },
+            {
+              "id": "m5",
+              "left": {
+                "en": "Thread.stop()",
+                "ru": "Thread.stop()"
+              },
+              "right": {
+                "en": "Deprecated: breaks invariants and releases locks",
+                "ru": "Deprecated: ломает invariants и освобождает locks"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p5-fill-protocol",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill the three key parts of the cooperative stop.",
+            "ru": "Впиши три ключевые части кооперативной остановки."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Visible flag, interrupt for blocked waits, join to confirm — the interview answer in one line.",
+              "ru": "Видимый флаг, interrupt для блокировок, join для подтверждения — ответ на собеседовании одной строкой."
+            },
+            "incorrect": {
+              "en": "The flag is volatile, interrupt() wakes a blocked worker, join() waits for termination.",
+              "ru": "Флаг делают volatile, interrupt() будит заблокированный worker, join() ждёт завершения."
+            }
+          },
+          "text": {
+            "en": "Cooperative stop: declare the flag ___, call ___() to wake a blocked worker, then ___() to wait until it has finished.",
+            "ru": "Кооперативная остановка: объявить флаг как ___, вызвать ___(), чтобы разбудить заблокированный worker, затем ___(), чтобы дождаться завершения."
+          },
+          "blanks": [
+            {
+              "en": [
+                "volatile"
+              ],
+              "ru": [
+                "volatile"
+              ]
+            },
+            {
+              "en": [
+                "interrupt"
+              ],
+              "ru": [
+                "interrupt"
+              ]
+            },
+            {
+              "en": [
+                "join"
+              ],
+              "ru": [
+                "join"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

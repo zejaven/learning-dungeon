@@ -1,0 +1,2962 @@
+{
+  "schemaVersion": 1,
+  "topicId": "spring-transactional-rollback",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "proxy-boundary",
+      "title": {
+        "en": "The proxy owns the transaction",
+        "ru": "Транзакцией управляет proxy"
+      },
+      "summary": {
+        "en": "A Spring proxy opens the transaction before the method body and decides commit or rollback by how the method exits.",
+        "ru": "Spring proxy открывает транзакцию до тела метода и решает commit или rollback по тому, как метод завершился."
+      },
+      "discovery": [
+        {
+          "id": "proxy-d1-who-opens",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A service method is annotated `@Transactional`. Who actually opens the transaction and later closes it?",
+            "ru": "Метод сервиса помечен `@Transactional`. Кто на самом деле открывает транзакцию и потом закрывает её?"
+          },
+          "code": "@Transactional\npublic void createOrder() {\n    em.persist(new Order(1L));\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "`@Transactional` is not executed by your method. Spring wraps the bean in a **proxy** — an object with the same methods that runs extra logic around each call. The transactional part of that logic is the **transaction interceptor**.\n\n```mermaid\nflowchart LR\n  C[\"caller\"] --> P[\"Spring proxy\"]\n  P --> B[\"begin transaction\"]\n  B --> M[\"service method body\"]\n  M --> D[\"proxy sees how the method exited\"]\n  D --> R[\"commit or rollback\"]\n```\n\nThe order matters: the proxy begins the transaction **before** the body runs, then watches **how the body exits** — normal return or exception — and only then commits or rolls back.\n\nSo everything the method does is provisional until control comes back to the proxy. **Commit** makes the work permanent; **rollback** throws it away.",
+            "ru": "`@Transactional` выполняется не твоим методом. Spring оборачивает бин в **proxy** — объект с теми же методами, который выполняет дополнительную логику вокруг каждого вызова. Транзакционная часть этой логики — **transaction interceptor**.\n\n```mermaid\nflowchart LR\n  C[\"вызывающий код\"] --> P[\"Spring proxy\"]\n  P --> B[\"начать транзакцию\"]\n  B --> M[\"тело метода сервиса\"]\n  M --> D[\"proxy видит, как метод завершился\"]\n  D --> R[\"commit или rollback\"]\n```\n\nПорядок важен: proxy открывает транзакцию **до** выполнения тела, затем смотрит, **как тело завершилось** — обычный возврат или exception — и только потом делает commit или rollback.\n\nПоэтому всё, что делает метод, остаётся предварительным, пока управление не вернётся в proxy. **Commit** делает работу постоянной; **rollback** её отбрасывает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — a proxy wraps the bean and runs the transaction around the call.",
+              "ru": "Верно — proxy оборачивает бин и ведёт транзакцию вокруг вызова."
+            },
+            "incorrect": {
+              "en": "It is a Spring proxy around the bean, not the method body or the database.",
+              "ru": "Это Spring proxy вокруг бина, а не тело метода и не база данных."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A Spring proxy wrapped around the bean",
+                "ru": "Spring proxy, обёрнутый вокруг бина"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The method body itself, at its first repository call",
+                "ru": "Само тело метода, при первом обращении к репозиторию"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The transaction is already open before the first line of the body runs.",
+                "ru": "Транзакция уже открыта до выполнения первой строки тела."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The database, when it receives the first SQL statement",
+                "ru": "База данных, когда получает первый SQL-запрос"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The database executes the transaction, but Spring's proxy is what starts and ends it.",
+                "ru": "База выполняет транзакцию, но начинает и завершает её именно Spring proxy."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "proxy-p1-when-decided",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In Spring, when is the commit-or-rollback decision for a `@Transactional` method made?",
+            "ru": "Когда в Spring принимается решение commit или rollback для `@Transactional` метода?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The proxy decides at the exit, based on how the method finished.",
+              "ru": "Proxy решает на выходе, исходя из того, как завершился метод."
+            },
+            "incorrect": {
+              "en": "The decision is made when the method exits and control returns to the proxy.",
+              "ru": "Решение принимается, когда метод завершается и управление возвращается в proxy."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "When the method exits and control returns to the proxy",
+                "ru": "Когда метод завершается и управление возвращается в proxy"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "At the moment persist() is called",
+                "ru": "В момент вызова persist()"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "persist() only stages work; nothing is decided there.",
+                "ru": "persist() лишь подготавливает работу; там ничего не решается."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "When the first SQL statement reaches the database",
+                "ru": "Когда первый SQL-запрос доходит до базы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "SQL can reach the database long before the transaction is decided.",
+                "ru": "SQL может дойти до базы задолго до решения по транзакции."
+              }
+            }
+          ]
+        },
+        {
+          "id": "proxy-p2-before-body-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In Spring, the transaction of a `@Transactional` method is opened before the method body starts running.",
+            "ru": "В Spring транзакция `@Transactional` метода открывается до того, как начинает выполняться тело метода."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The proxy begins the transaction, then calls the body.",
+              "ru": "Proxy начинает транзакцию, а затем вызывает тело."
+            },
+            "incorrect": {
+              "en": "It is — the proxy begins the transaction first and only then calls the body.",
+              "ru": "Открывается — proxy сначала начинает транзакцию и только потом вызывает тело."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "proxy-p3-sort-lifecycle",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order what a Spring transactional proxy does around a `@Transactional` method call.",
+            "ru": "Расставь по порядку, что делает Spring transactional proxy вокруг вызова `@Transactional` метода."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Begin, call, observe the exit, then commit or roll back.",
+              "ru": "Начать, вызвать, посмотреть на завершение, затем commit или rollback."
+            },
+            "incorrect": {
+              "en": "The proxy begins the transaction, calls the body, observes how it exited, then commits or rolls back.",
+              "ru": "Proxy начинает транзакцию, вызывает тело, смотрит, как оно завершилось, затем делает commit или rollback."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Begin the transaction",
+                "ru": "Начать транзакцию"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Call the annotated method body",
+                "ru": "Вызвать тело аннотированного метода"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Observe how the body exited: normal return or exception",
+                "ru": "Посмотреть, как завершилось тело: обычный возврат или exception"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Commit or roll back the transaction",
+                "ru": "Сделать commit или rollback транзакции"
+              }
+            }
+          ]
+        },
+        {
+          "id": "proxy-p4-fill-proxy",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing word.",
+            "ru": "Впиши пропущенное слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The annotation is applied by a proxy wrapped around the bean.",
+              "ru": "Аннотацию применяет proxy, обёрнутый вокруг бина."
+            },
+            "incorrect": {
+              "en": "It is a proxy: Spring wraps the bean and runs the transaction around the call.",
+              "ru": "Это proxy: Spring оборачивает бин и ведёт транзакцию вокруг вызова."
+            }
+          },
+          "text": {
+            "en": "Spring applies @Transactional with a ___ that wraps the service method.",
+            "ru": "Spring применяет @Transactional через ___, который оборачивает метод сервиса."
+          },
+          "answers": {
+            "en": [
+              "proxy"
+            ],
+            "ru": [
+              "proxy",
+              "прокси"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "persist-is-staged",
+      "title": {
+        "en": "persist stages, commit finalizes",
+        "ru": "persist подготавливает, commit фиксирует"
+      },
+      "summary": {
+        "en": "persist() puts the entity into the persistence context; the row becomes permanent only at commit.",
+        "ru": "persist() помещает entity в persistence context; строка становится постоянной только при commit."
+      },
+      "discovery": [
+        {
+          "id": "persist-d1-state-after",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The `persist` line has just executed and the method is still running. What is true about the Order row right now?",
+            "ru": "Строка с `persist` только что выполнилась, метод ещё работает. Что сейчас верно про строку Order?"
+          },
+          "code": "@Transactional\npublic void createOrder() {\n    em.persist(new Order(1L));\n    // method still running...\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "`persist(entity)` does **not** mean \"the row is safe forever\". In JPA it puts the entity into the **persistence context** — the in-memory set of entities the transaction is managing. The SQL may be **flushed** (sent to the database) before commit, but it is still inside the open transaction.\n\n```mermaid\nflowchart LR\n  P[\"persist(entity)\"] --> PC[\"persistence context\"]\n  PC --> F[\"flush: SQL sent, transaction still open\"]\n  F --> C[\"commit: change becomes permanent\"]\n  F --> R[\"rollback: staged work discarded\"]\n```\n\nSo work done inside the method is **staged**: real, visible to this transaction, and undoable. Only `commit` turns it into a permanent row; `rollback` throws it away, flushed SQL included.\n\nThis is the single most common wrong assumption in interview answers: \"persist already saved it\".",
+            "ru": "`persist(entity)` **не** означает «строка сохранена навсегда». В JPA он помещает entity в **persistence context** — набор entity в памяти, которыми управляет транзакция. SQL может быть отправлен в базу при **flush** до commit, но он всё ещё внутри открытой транзакции.\n\n```mermaid\nflowchart LR\n  P[\"persist(entity)\"] --> PC[\"persistence context\"]\n  PC --> F[\"flush: SQL отправлен, транзакция ещё открыта\"]\n  F --> C[\"commit: изменение становится постоянным\"]\n  F --> R[\"rollback: подготовленная работа отбрасывается\"]\n```\n\nПоэтому работа внутри метода — **подготовленная (staged)**: реальная, видимая этой транзакции и отменяемая. Только `commit` превращает её в постоянную строку; `rollback` её отбрасывает вместе с отправленным SQL.\n\nЭто самое частое неверное допущение в ответах на собеседовании: «persist уже сохранил»."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Staged in the persistence context — still undoable.",
+              "ru": "Подготовлена в persistence context — всё ещё отменяема."
+            },
+            "incorrect": {
+              "en": "persist stages the entity in the persistence context; only commit makes it permanent.",
+              "ru": "persist подготавливает entity в persistence context; постоянной её делает только commit."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It is staged in the persistence context and can still be rolled back",
+                "ru": "Она подготовлена в persistence context и всё ещё может быть откачена"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It is permanently committed in the database",
+                "ru": "Она окончательно зафиксирована в базе данных"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Commit has not happened yet — the proxy commits only after the method exits.",
+                "ru": "Commit ещё не произошёл — proxy фиксирует транзакцию только после выхода из метода."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing happened at all: persist is a no-op until commit",
+                "ru": "Ничего не произошло: persist ничего не делает до commit"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It does something: the entity is managed, and SQL may even be flushed before commit.",
+                "ru": "Он делает своё: entity становится managed, а SQL может быть отправлен при flush до commit."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "persist-p1-committed-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In JPA, a successful `em.persist(entity)` call means the row is already permanently committed.",
+            "ru": "В JPA успешный вызов `em.persist(entity)` означает, что строка уже окончательно зафиксирована."
+          },
+          "feedback": {
+            "correct": {
+              "en": "persist only stages the entity; the transaction can still discard it.",
+              "ru": "persist лишь подготавливает entity; транзакция всё ещё может её отбросить."
+            },
+            "incorrect": {
+              "en": "No — persist stages the entity in the persistence context; only commit makes it permanent.",
+              "ru": "Нет — persist подготавливает entity в persistence context; постоянной её делает только commit."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "persist-p2-flush-vs-commit",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In a JPA transaction, what is the difference between flush and commit?",
+            "ru": "В чём разница между flush и commit в JPA-транзакции?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Flush sends SQL inside the open transaction; commit is what makes it permanent.",
+              "ru": "Flush отправляет SQL внутри открытой транзакции; постоянным его делает commit."
+            },
+            "incorrect": {
+              "en": "Flush sends the staged SQL while the transaction is still open; commit makes the change permanent.",
+              "ru": "Flush отправляет подготовленный SQL, пока транзакция ещё открыта; commit делает изменение постоянным."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Flush sends the staged SQL while the transaction is still open; commit makes it permanent",
+                "ru": "Flush отправляет подготовленный SQL, пока транзакция открыта; commit делает его постоянным"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "They are two names for the same operation",
+                "ru": "Это два названия одной и той же операции"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Flushed SQL is still rollback-able; committed data is not.",
+                "ru": "Отправленный при flush SQL ещё можно откатить; зафиксированные данные — нет."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Flush commits the row; commit only closes the connection",
+                "ru": "Flush фиксирует строку; commit только закрывает соединение"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Reversed: flush stays inside the transaction, commit is what finalizes it.",
+                "ru": "Наоборот: flush остаётся внутри транзакции, а завершает её commit."
+              }
+            }
+          ]
+        },
+        {
+          "id": "persist-p3-match-stages",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each JPA/transaction operation to what it does.",
+            "ru": "Соотнеси каждую операцию JPA/транзакции с тем, что она делает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Only commit is final; everything before it is staged work.",
+              "ru": "Окончателен только commit; всё до него — подготовленная работа."
+            },
+            "incorrect": {
+              "en": "persist stages, flush sends SQL inside the transaction, commit finalizes, rollback discards.",
+              "ru": "persist подготавливает, flush отправляет SQL внутри транзакции, commit фиксирует, rollback отбрасывает."
+            }
+          },
+          "pairs": [
+            {
+              "id": "persist",
+              "left": {
+                "en": "persist(entity)",
+                "ru": "persist(entity)"
+              },
+              "right": {
+                "en": "Puts the entity into the persistence context",
+                "ru": "Помещает entity в persistence context"
+              }
+            },
+            {
+              "id": "flush",
+              "left": {
+                "en": "flush",
+                "ru": "flush"
+              },
+              "right": {
+                "en": "Sends the staged SQL while the transaction is still open",
+                "ru": "Отправляет подготовленный SQL, пока транзакция ещё открыта"
+              }
+            },
+            {
+              "id": "commit",
+              "left": {
+                "en": "commit",
+                "ru": "commit"
+              },
+              "right": {
+                "en": "Makes the change permanent",
+                "ru": "Делает изменение постоянным"
+              }
+            },
+            {
+              "id": "rollback",
+              "left": {
+                "en": "rollback",
+                "ru": "rollback"
+              },
+              "right": {
+                "en": "Discards the staged work",
+                "ru": "Отбрасывает подготовленную работу"
+              }
+            }
+          ]
+        },
+        {
+          "id": "persist-p4-fill-context",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill in both blanks.",
+            "ru": "Заполни оба пропуска."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Persistence context first, permanence only at commit.",
+              "ru": "Сначала persistence context, постоянство — только при commit."
+            },
+            "incorrect": {
+              "en": "persist() puts the entity into the persistence context; only commit makes the change permanent.",
+              "ru": "persist() помещает entity в persistence context; постоянным изменение делает только commit."
+            }
+          },
+          "text": {
+            "en": "In JPA, persist() puts the entity into the persistence ___; the change becomes permanent only at ___.",
+            "ru": "В JPA persist() помещает entity в persistence ___; изменение становится постоянным только при ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "context"
+              ],
+              "ru": [
+                "context",
+                "контекст"
+              ]
+            },
+            {
+              "en": [
+                "commit"
+              ],
+              "ru": [
+                "commit",
+                "коммите"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "unchecked-rolls-back",
+      "title": {
+        "en": "The default rule: unchecked rolls back",
+        "ru": "Правило по умолчанию: unchecked откатывает"
+      },
+      "summary": {
+        "en": "By default Spring rolls back when a RuntimeException or an Error propagates out of the method.",
+        "ru": "По умолчанию Spring откатывает транзакцию, когда наружу из метода выходит RuntimeException или Error."
+      },
+      "discovery": [
+        {
+          "id": "unchecked-d1-predict-ise",
+          "type": "predict_output",
+          "prompt": {
+            "en": "`IllegalStateException` is a `RuntimeException`. What does Spring do with the transaction here?",
+            "ru": "`IllegalStateException` — это `RuntimeException`. Что Spring сделает с транзакцией здесь?"
+          },
+          "code": "@Transactional\npublic void createOrder() {\n    em.persist(new Order(1L));\n    throw new IllegalStateException(\"payment declined\");\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Spring's default rule looks only at **what kind of throwable** left the method.\n\n- **Unchecked** — `RuntimeException` and `Error`: the compiler does not force you to declare or catch them. These **roll back** by default.\n- **Checked** — every other `Exception` (for example `IOException`): the compiler forces `throws` or a `catch`. These do **not** roll back by default.\n\n```mermaid\nflowchart LR\n  T[\"Throwable\"] --> E[\"Error: unchecked, rolls back\"]\n  T --> X[\"Exception\"]\n  X --> RE[\"RuntimeException: unchecked, rolls back\"]\n  X --> CE[\"checked, e.g. IOException: commits\"]\n```\n\nWhy this split? It is a historical Spring convention: an unchecked failure usually means a programming or infrastructure bug, so undoing the work is the safe reaction. Here `IllegalStateException` propagates out, so the staged `Order` is discarded.",
+            "ru": "Правило Spring по умолчанию смотрит только на то, **какого рода throwable** вышел из метода.\n\n- **Unchecked** — `RuntimeException` и `Error`: компилятор не заставляет их объявлять или ловить. Они по умолчанию **откатывают** транзакцию.\n- **Checked** — все остальные `Exception` (например `IOException`): компилятор требует `throws` или `catch`. Они по умолчанию **не** откатывают.\n\n```mermaid\nflowchart LR\n  T[\"Throwable\"] --> E[\"Error: unchecked, откат\"]\n  T --> X[\"Exception\"]\n  X --> RE[\"RuntimeException: unchecked, откат\"]\n  X --> CE[\"checked, напр. IOException: commit\"]\n```\n\nЗачем такое разделение? Это историческая договорённость Spring: unchecked-сбой обычно означает ошибку программирования или инфраструктуры, поэтому отменить работу — безопасная реакция. Здесь `IllegalStateException` выходит наружу, поэтому подготовленный `Order` отбрасывается."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Unchecked exception out of the method means rollback by default.",
+              "ru": "Unchecked exception наружу из метода — по умолчанию rollback."
+            },
+            "incorrect": {
+              "en": "A RuntimeException propagating out rolls the transaction back, so the staged row is discarded.",
+              "ru": "Вышедший наружу RuntimeException откатывает транзакцию, поэтому подготовленная строка отбрасывается."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Rolls back — the Order row is discarded",
+                "ru": "Откатывает — строка Order отбрасывается"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Commits — persist already ran successfully",
+                "ru": "Фиксирует — persist уже успешно выполнился"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "persist only staged the row; the rollback discards staged work.",
+                "ru": "persist лишь подготовил строку; rollback отбрасывает подготовленную работу."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Commits the Order and logs a warning",
+                "ru": "Фиксирует Order и пишет предупреждение в лог"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no such half-measure: the interceptor either commits or rolls back.",
+                "ru": "Такой полумеры нет: interceptor делает либо commit, либо rollback."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "unchecked-p1-which-types",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which throwable types make a Spring `@Transactional` method roll back by default?",
+            "ru": "Какие типы throwable по умолчанию заставляют Spring `@Transactional` метод откатить транзакцию?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The default set is exactly RuntimeException and Error.",
+              "ru": "Набор по умолчанию — именно RuntimeException и Error."
+            },
+            "incorrect": {
+              "en": "By default it is RuntimeException and Error — the unchecked ones.",
+              "ru": "По умолчанию это RuntimeException и Error — unchecked."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "RuntimeException and Error",
+                "ru": "RuntimeException и Error"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Every subclass of Throwable",
+                "ru": "Любой наследник Throwable"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Checked exceptions are also Throwable subclasses, and they commit by default.",
+                "ru": "Checked exceptions тоже наследники Throwable, и они по умолчанию фиксируют транзакцию."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Only checked exceptions declared with throws",
+                "ru": "Только checked exceptions, объявленные через throws"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Exactly reversed: checked exceptions are the ones that do NOT roll back by default.",
+                "ru": "Ровно наоборот: именно checked exceptions по умолчанию НЕ откатывают."
+              }
+            }
+          ]
+        },
+        {
+          "id": "unchecked-p2-error-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "By default, an `Error` propagating out of a Spring `@Transactional` method rolls the transaction back.",
+            "ru": "По умолчанию `Error`, вышедший наружу из Spring `@Transactional` метода, откатывает транзакцию."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Error is unchecked, so it is part of the default rollback set.",
+              "ru": "Error относится к unchecked, поэтому он входит в набор отката по умолчанию."
+            },
+            "incorrect": {
+              "en": "It does — the default rollback set is RuntimeException AND Error.",
+              "ru": "Откатывает — набор отката по умолчанию это RuntimeException И Error."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "unchecked-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble Spring's default rollback rule for `@Transactional`.",
+            "ru": "Собери правило отката Spring по умолчанию для `@Transactional`."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Unchecked failures are the default rollback trigger.",
+              "ru": "Unchecked-сбои — триггер отката по умолчанию."
+            },
+            "incorrect": {
+              "en": "The default rule is: roll back on RuntimeException and Error.",
+              "ru": "Правило по умолчанию: откат на RuntimeException и Error."
+            }
+          },
+          "tokens": {
+            "en": [
+              "rollback",
+              "by",
+              "default",
+              "on",
+              "RuntimeException",
+              "and",
+              "Error"
+            ],
+            "ru": [
+              "откат",
+              "по",
+              "умолчанию",
+              "на",
+              "RuntimeException",
+              "и",
+              "Error"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "checked",
+              "IOException"
+            ],
+            "ru": [
+              "checked",
+              "IOException"
+            ]
+          }
+        },
+        {
+          "id": "unchecked-p4-fill-default",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type both default rollback types.",
+            "ru": "Впиши оба типа отката по умолчанию."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Those two are the unchecked family Spring rolls back on.",
+              "ru": "Эти два — семейство unchecked, на котором Spring откатывает."
+            },
+            "incorrect": {
+              "en": "They are RuntimeException and Error — the unchecked throwables.",
+              "ru": "Это RuntimeException и Error — unchecked throwable."
+            }
+          },
+          "text": {
+            "en": "By default, Spring @Transactional rolls back on ___ and ___.",
+            "ru": "По умолчанию Spring @Transactional откатывается на ___ и ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "RuntimeException"
+              ],
+              "ru": [
+                "RuntimeException"
+              ]
+            },
+            {
+              "en": [
+                "Error"
+              ],
+              "ru": [
+                "Error"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "checked-commits",
+      "title": {
+        "en": "Checked exceptions commit",
+        "ru": "Checked exceptions фиксируют"
+      },
+      "summary": {
+        "en": "A checked exception propagating out of a @Transactional method does not roll back by default — Spring commits.",
+        "ru": "Checked exception, вышедший наружу из @Transactional метода, по умолчанию не откатывает — Spring фиксирует транзакцию."
+      },
+      "discovery": [
+        {
+          "id": "checked-d1-predict-ioe",
+          "type": "predict_output",
+          "prompt": {
+            "en": "`IOException` is a checked exception and no rollback rules are configured. What happens to the Report row?",
+            "ru": "`IOException` — checked exception, правила отката не настроены. Что произойдёт со строкой Report?"
+          },
+          "code": "@Transactional\npublic void importReport() throws IOException {\n    em.persist(new Report(1L));\n    throw new IOException(\"file unreadable\");\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "This is the answer interviewers actually probe for: **a checked exception commits by default**.\n\nSpring's reasoning is a convention, not a JVM rule. Old Java APIs forced callers to declare a lot of checked exceptions for perfectly expected business outcomes (\"file not found\", \"quota reached\"), so Spring treats them as *expected flows* rather than failures. Unchecked throwables, by contrast, usually mean something genuinely broke.\n\n```java\n@Transactional\npublic void importReport() throws IOException {\n    em.persist(new Report(1L));   // staged\n    throw new IOException(...);   // checked -> COMMIT by default\n}\n```\n\nSo the `Report` row survives even though the method failed. If that is not what you want, you must say so explicitly — the next atom shows how.",
+            "ru": "Именно этот ответ и проверяют на собеседовании: **checked exception по умолчанию фиксирует транзакцию**.\n\nЛогика Spring — это договорённость, а не правило JVM. Старые Java API заставляли объявлять множество checked exceptions для вполне ожидаемых бизнес-исходов («файл не найден», «квота исчерпана»), поэтому Spring считает их *ожидаемыми сценариями*, а не сбоями. Unchecked, наоборот, обычно означают, что что-то действительно сломалось.\n\n```java\n@Transactional\npublic void importReport() throws IOException {\n    em.persist(new Report(1L));   // подготовлено\n    throw new IOException(...);   // checked -> по умолчанию COMMIT\n}\n```\n\nПоэтому строка `Report` сохранится, хотя метод завершился ошибкой. Если это не то, что нужно, придётся сказать об этом явно — как, покажет следующий атом."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Checked exceptions are not part of the default rollback set.",
+              "ru": "Checked exceptions не входят в набор отката по умолчанию."
+            },
+            "incorrect": {
+              "en": "A checked exception commits by default — only unchecked ones roll back without configuration.",
+              "ru": "Checked exception по умолчанию фиксирует — без настройки откатывают только unchecked."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It is committed — checked exceptions do not roll back by default",
+                "ru": "Она фиксируется — checked exceptions по умолчанию не откатывают"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It is rolled back — any exception rolls back",
+                "ru": "Она откатывается — любой exception откатывает"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The default rule covers RuntimeException and Error only, not checked exceptions.",
+                "ru": "Правило по умолчанию покрывает только RuntimeException и Error, а не checked exceptions."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Spring wraps the IOException into a RuntimeException and rolls back",
+                "ru": "Spring оборачивает IOException в RuntimeException и откатывает"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "No wrapping happens here; the checked exception propagates as itself and commits.",
+                "ru": "Никакого оборачивания здесь нет; checked exception выходит как есть, и транзакция фиксируется."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "checked-p1-default-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In Spring, a checked exception thrown out of a `@Transactional` method rolls the transaction back by default.",
+            "ru": "В Spring checked exception, выброшенный из `@Transactional` метода, по умолчанию откатывает транзакцию."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Checked exceptions commit by default; only unchecked ones roll back.",
+              "ru": "Checked exceptions по умолчанию фиксируют; откатывают только unchecked."
+            },
+            "incorrect": {
+              "en": "No — a checked exception commits by default unless a rule says otherwise.",
+              "ru": "Нет — checked exception по умолчанию фиксирует транзакцию, пока правило не скажет иначе."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "checked-p2-why-convention",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why does Spring not roll back on checked exceptions by default?",
+            "ru": "Почему Spring по умолчанию не откатывает на checked exceptions?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "It is a historical convention about what each exception family usually means.",
+              "ru": "Это историческая договорённость о том, что обычно означает каждое семейство exception."
+            },
+            "incorrect": {
+              "en": "It is a Spring convention: checked exceptions often model expected business flows.",
+              "ru": "Это договорённость Spring: checked exceptions часто описывают ожидаемые бизнес-сценарии."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "By convention, checked exceptions often model expected business flows, while unchecked ones signal programming or infrastructure failure",
+                "ru": "По договорённости checked exceptions часто описывают ожидаемые бизнес-сценарии, а unchecked означают ошибку программирования или инфраструктуры"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Because a checked exception cannot reach the transactional proxy",
+                "ru": "Потому что checked exception не может дойти до transactional proxy"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It reaches the proxy just fine — the proxy simply decides to commit.",
+                "ru": "Он прекрасно доходит до proxy — proxy просто решает зафиксировать транзакцию."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Because the JPA specification forbids rolling back on them",
+                "ru": "Потому что спецификация JPA запрещает откатывать на них"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing forbids it — you can opt in explicitly with an annotation attribute.",
+                "ru": "Ничто этого не запрещает — можно явно включить через атрибут аннотации."
+              }
+            }
+          ]
+        },
+        {
+          "id": "checked-p3-match-defaults",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each throwable to Spring's default `@Transactional` behaviour (no rollback rules configured).",
+            "ru": "Соотнеси каждый throwable с поведением Spring `@Transactional` по умолчанию (правила отката не настроены)."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Unchecked rolls back, checked commits — that is the whole default rule.",
+              "ru": "Unchecked откатывает, checked фиксирует — вот и всё правило по умолчанию."
+            },
+            "incorrect": {
+              "en": "RuntimeException and Error roll back; a checked exception like IOException commits.",
+              "ru": "RuntimeException и Error откатывают; checked вроде IOException фиксирует."
+            }
+          },
+          "pairs": [
+            {
+              "id": "runtime",
+              "left": {
+                "en": "RuntimeException",
+                "ru": "RuntimeException"
+              },
+              "right": {
+                "en": "Unchecked — rolls back by default",
+                "ru": "Unchecked — по умолчанию откатывает"
+              }
+            },
+            {
+              "id": "ioexception",
+              "left": {
+                "en": "IOException",
+                "ru": "IOException"
+              },
+              "right": {
+                "en": "Checked — commits by default",
+                "ru": "Checked — по умолчанию фиксирует"
+              }
+            },
+            {
+              "id": "error",
+              "left": {
+                "en": "Error",
+                "ru": "Error"
+              },
+              "right": {
+                "en": "Not an Exception at all, but still rolls back by default",
+                "ru": "Вообще не Exception, но всё равно откатывает по умолчанию"
+              }
+            }
+          ]
+        },
+        {
+          "id": "checked-p4-fill-commits",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing verb.",
+            "ru": "Впиши пропущенный глагол."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Without configuration, a checked exception ends in a commit.",
+              "ru": "Без настройки checked exception заканчивается фиксацией транзакции."
+            },
+            "incorrect": {
+              "en": "Spring commits: checked exceptions are outside the default rollback set.",
+              "ru": "Spring фиксирует: checked exceptions не входят в набор отката по умолчанию."
+            }
+          },
+          "text": {
+            "en": "By default Spring ___ the transaction when a checked exception propagates out of a @Transactional method.",
+            "ru": "По умолчанию Spring ___ транзакцию, когда checked exception выходит наружу из @Transactional метода."
+          },
+          "answers": {
+            "en": [
+              "commits",
+              "commit"
+            ],
+            "ru": [
+              "фиксирует",
+              "коммитит",
+              "commit"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "rollback-for",
+      "title": {
+        "en": "rollbackFor widens the rule",
+        "ru": "rollbackFor расширяет правило"
+      },
+      "summary": {
+        "en": "rollbackFor names exception types that should roll back too, so a checked exception can roll back.",
+        "ru": "rollbackFor называет типы exception, которые тоже должны откатывать, поэтому checked exception может откатить транзакцию."
+      },
+      "discovery": [
+        {
+          "id": "rollback-for-d1-predict",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Predict what happens to the Report row when this method throws.",
+            "ru": "Предскажи, что произойдёт со строкой Report, когда этот метод бросит exception."
+          },
+          "code": "@Transactional(rollbackFor = IOException.class)\npublic void importReport() throws IOException {\n    em.persist(new Report(1L));\n    throw new IOException(\"file unreadable\");\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "The default rule is a *default*, not a law. **`rollbackFor`** says: \"this exception type should roll back too.\"\n\n```java\n@Transactional(rollbackFor = IOException.class)\npublic void importReport() throws IOException { ... }\n```\n\nNow an `IOException` leaving the method behaves exactly like a `RuntimeException` would: the interceptor rolls back and the staged `Report` is discarded.\n\nThis is the attribute you name in an interview when asked \"how do I make a checked exception roll back?\". It **adds** to the rollback set — the unchecked types still roll back as before.",
+            "ru": "Правило по умолчанию — это *умолчание*, а не закон. **`rollbackFor`** говорит: «этот тип exception тоже должен откатывать».\n\n```java\n@Transactional(rollbackFor = IOException.class)\npublic void importReport() throws IOException { ... }\n```\n\nТеперь `IOException`, выходящий из метода, ведёт себя ровно как `RuntimeException`: interceptor откатывает транзакцию, и подготовленный `Report` отбрасывается.\n\nЭто тот атрибут, который называют на собеседовании в ответ на вопрос «как заставить checked exception откатывать?». Он **добавляет** типы в набор отката — unchecked при этом откатывают как и раньше."
+          },
+          "feedback": {
+            "correct": {
+              "en": "rollbackFor names IOException, so it rolls back.",
+              "ru": "rollbackFor называет IOException, поэтому происходит откат."
+            },
+            "incorrect": {
+              "en": "rollbackFor adds IOException to the rollback set, so the staged row is discarded.",
+              "ru": "rollbackFor добавляет IOException в набор отката, поэтому подготовленная строка отбрасывается."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Rolled back — rollbackFor names IOException",
+                "ru": "Откатывается — rollbackFor называет IOException"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Committed — checked exceptions can never roll back",
+                "ru": "Фиксируется — checked exceptions никогда не могут откатить"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "They can: that is exactly what rollbackFor configures.",
+                "ru": "Могут: именно это и настраивает rollbackFor."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Rolled back only if the IOException is wrapped in a RuntimeException",
+                "ru": "Откатывается, только если IOException обёрнут в RuntimeException"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Wrapping is one workaround, but rollbackFor already handles the checked type directly.",
+                "ru": "Оборачивание — один из обходных путей, но rollbackFor уже обрабатывает checked-тип напрямую."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "rollback-for-p1-what-it-does",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does the `rollbackFor` attribute of `@Transactional` do?",
+            "ru": "Что делает атрибут `rollbackFor` у `@Transactional`?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "It extends the rollback set beyond the unchecked default.",
+              "ru": "Он расширяет набор отката за пределы unchecked по умолчанию."
+            },
+            "incorrect": {
+              "en": "It adds exception types that should roll back, on top of the default unchecked rule.",
+              "ru": "Он добавляет типы exception, которые должны откатывать, поверх правила unchecked по умолчанию."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Adds exception types that should roll back, on top of the default unchecked rule",
+                "ru": "Добавляет типы exception, которые должны откатывать, поверх правила unchecked по умолчанию"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Declares which exceptions the method is allowed to throw",
+                "ru": "Объявляет, какие exceptions методу разрешено бросать"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the `throws` clause; rollbackFor only affects the commit/rollback decision.",
+                "ru": "Это делает `throws`; rollbackFor влияет только на решение commit/rollback."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Turns rollback OFF for the listed exceptions",
+                "ru": "ОТКЛЮЧАЕТ откат для перечисленных exceptions"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is noRollbackFor — the opposite attribute.",
+                "ru": "Это noRollbackFor — противоположный атрибут."
+              }
+            }
+          ]
+        },
+        {
+          "id": "rollback-for-p2-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "`@Transactional(rollbackFor = IOException.class)` makes a thrown IOException roll the transaction back.",
+            "ru": "`@Transactional(rollbackFor = IOException.class)` заставляет брошенный IOException откатить транзакцию."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That is exactly what the attribute is for.",
+              "ru": "Именно для этого и нужен этот атрибут."
+            },
+            "incorrect": {
+              "en": "It does — rollbackFor adds that checked type to the rollback set.",
+              "ru": "Заставляет — rollbackFor добавляет этот checked-тип в набор отката."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "rollback-for-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble what `rollbackFor` achieves in `@Transactional`.",
+            "ru": "Собери, чего добивается `rollbackFor` в `@Transactional`."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It opts a checked type into the rollback behaviour.",
+              "ru": "Он подключает checked-тип к поведению с откатом."
+            },
+            "incorrect": {
+              "en": "rollbackFor makes a checked exception roll back too.",
+              "ru": "rollbackFor заставляет checked exception тоже откатывать транзакцию."
+            }
+          },
+          "tokens": {
+            "en": [
+              "rollbackFor",
+              "makes",
+              "a",
+              "checked",
+              "exception",
+              "roll",
+              "back",
+              "too"
+            ],
+            "ru": [
+              "rollbackFor",
+              "заставляет",
+              "checked",
+              "exception",
+              "тоже",
+              "откатывать",
+              "транзакцию"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "never",
+              "commit"
+            ],
+            "ru": [
+              "никогда",
+              "фиксировать"
+            ]
+          }
+        },
+        {
+          "id": "rollback-for-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing attribute name.",
+            "ru": "Впиши пропущенное имя атрибута."
+          },
+          "feedback": {
+            "correct": {
+              "en": "rollbackFor is the opt-in for checked exceptions.",
+              "ru": "rollbackFor — это подключение отката для checked exceptions."
+            },
+            "incorrect": {
+              "en": "It is rollbackFor: it adds the named type to the rollback set.",
+              "ru": "Это rollbackFor: он добавляет названный тип в набор отката."
+            }
+          },
+          "text": {
+            "en": "@Transactional(___ = IOException.class) makes that checked exception roll back.",
+            "ru": "@Transactional(___ = IOException.class) заставляет этот checked exception откатывать транзакцию."
+          },
+          "answers": {
+            "en": [
+              "rollbackFor"
+            ],
+            "ru": [
+              "rollbackFor"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "no-rollback-for",
+      "title": {
+        "en": "noRollbackFor narrows the rule",
+        "ru": "noRollbackFor сужает правило"
+      },
+      "summary": {
+        "en": "noRollbackFor keeps the commit for an exception that would otherwise roll the transaction back.",
+        "ru": "noRollbackFor сохраняет commit для exception, который иначе откатил бы транзакцию."
+      },
+      "discovery": [
+        {
+          "id": "no-rollback-for-d1-predict",
+          "type": "predict_output",
+          "prompt": {
+            "en": "`IllegalStateException` is a `RuntimeException`. Predict what happens to the Order row.",
+            "ru": "`IllegalStateException` — это `RuntimeException`. Предскажи, что произойдёт со строкой Order."
+          },
+          "code": "@Transactional(noRollbackFor = IllegalStateException.class)\npublic void createOrder() {\n    em.persist(new Order(1L));\n    throw new IllegalStateException(\"duplicate warning\");\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "**`noRollbackFor`** is the mirror image of `rollbackFor`: it names an exception type that should **not** roll back, even though the default rule would have rolled it back.\n\n```java\n@Transactional(noRollbackFor = IllegalStateException.class)\npublic void createOrder() { ... }   // RuntimeException -> still COMMIT\n```\n\nTwo things stay true, and both are worth saying out loud in an interview:\n\n1. The exception **still propagates to the caller**. `noRollbackFor` changes only the commit/rollback decision, never the control flow.\n2. The staged work is **committed**, so the `Order` row is really there afterwards.\n\nUse it when an exception is a signal to the caller rather than a sign that the data is wrong.",
+            "ru": "**`noRollbackFor`** — зеркальное отражение `rollbackFor`: он называет тип exception, который **не** должен откатывать транзакцию, хотя правило по умолчанию откатило бы.\n\n```java\n@Transactional(noRollbackFor = IllegalStateException.class)\npublic void createOrder() { ... }   // RuntimeException -> всё равно COMMIT\n```\n\nДве вещи остаются верными, и обе стоит проговорить на собеседовании:\n\n1. Exception **всё равно доходит до вызывающего кода**. `noRollbackFor` меняет только решение commit/rollback, но не поток управления.\n2. Подготовленная работа **фиксируется**, поэтому строка `Order` действительно останется в базе.\n\nПрименяй, когда exception — это сигнал вызывающему коду, а не признак того, что данные неверны."
+          },
+          "feedback": {
+            "correct": {
+              "en": "noRollbackFor overrides the default rollback for that type.",
+              "ru": "noRollbackFor переопределяет откат по умолчанию для этого типа."
+            },
+            "incorrect": {
+              "en": "noRollbackFor keeps the commit even though a RuntimeException propagated out.",
+              "ru": "noRollbackFor сохраняет commit, даже когда наружу вышел RuntimeException."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Committed — noRollbackFor overrides the default rollback",
+                "ru": "Фиксируется — noRollbackFor переопределяет откат по умолчанию"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Rolled back — a RuntimeException always rolls back",
+                "ru": "Откатывается — RuntimeException всегда откатывает"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "\"Always\" is the trap: an explicit noRollbackFor beats the default rule.",
+                "ru": "«Всегда» — это ловушка: явный noRollbackFor побеждает правило по умолчанию."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Committed, and the proxy swallows the exception",
+                "ru": "Фиксируется, и proxy проглатывает exception"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The exception still reaches the caller; only the commit decision changed.",
+                "ru": "Exception всё равно доходит до вызывающего кода; изменилось только решение о фиксации."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "no-rollback-for-p1-what",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does `noRollbackFor` do in `@Transactional`?",
+            "ru": "Что делает `noRollbackFor` в `@Transactional`?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "It keeps the commit for a type that the default rule would roll back.",
+              "ru": "Он сохраняет commit для типа, который правило по умолчанию откатило бы."
+            },
+            "incorrect": {
+              "en": "It commits even though the listed exception would normally roll the transaction back.",
+              "ru": "Он фиксирует транзакцию, хотя перечисленный exception обычно откатил бы её."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Commits even though the listed exception would normally roll back",
+                "ru": "Фиксирует транзакцию, хотя перечисленный exception обычно откатил бы её"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Stops the listed exception from being thrown at all",
+                "ru": "Полностью запрещает бросать перечисленный exception"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It never touches control flow; the exception still propagates.",
+                "ru": "Он никак не влияет на поток управления; exception всё равно выходит наружу."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Declares which exceptions the method must not throw",
+                "ru": "Объявляет, какие exceptions метод не должен бросать"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It is not a declaration — it is a rollback rule for the interceptor.",
+                "ru": "Это не объявление — это правило отката для interceptor."
+              }
+            }
+          ]
+        },
+        {
+          "id": "no-rollback-for-p2-propagates-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "`noRollbackFor` also prevents the exception from reaching the caller of the `@Transactional` method.",
+            "ru": "`noRollbackFor` также не даёт exception дойти до вызывающего кода `@Transactional` метода."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It changes only the commit/rollback decision, never control flow.",
+              "ru": "Он меняет только решение commit/rollback, но не поток управления."
+            },
+            "incorrect": {
+              "en": "No — the exception still propagates; only the rollback decision changes.",
+              "ru": "Нет — exception всё равно выходит наружу; меняется только решение об откате."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "no-rollback-for-p3-match-attrs",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each `@Transactional` rollback setting to its effect.",
+            "ru": "Соотнеси каждую настройку отката `@Transactional` с её эффектом."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One widens the rollback set, one narrows it, the default covers the unchecked family.",
+              "ru": "Один расширяет набор отката, другой сужает, а умолчание покрывает семейство unchecked."
+            },
+            "incorrect": {
+              "en": "rollbackFor adds a type, noRollbackFor keeps the commit, and the default covers RuntimeException and Error.",
+              "ru": "rollbackFor добавляет тип, noRollbackFor сохраняет commit, а умолчание покрывает RuntimeException и Error."
+            }
+          },
+          "pairs": [
+            {
+              "id": "rollback-for",
+              "left": {
+                "en": "rollbackFor",
+                "ru": "rollbackFor"
+              },
+              "right": {
+                "en": "Adds an exception type that should roll back",
+                "ru": "Добавляет тип exception, который должен откатывать"
+              }
+            },
+            {
+              "id": "no-rollback-for",
+              "left": {
+                "en": "noRollbackFor",
+                "ru": "noRollbackFor"
+              },
+              "right": {
+                "en": "Keeps the commit for a type that would otherwise roll back",
+                "ru": "Сохраняет commit для типа, который иначе откатил бы транзакцию"
+              }
+            },
+            {
+              "id": "plain",
+              "left": {
+                "en": "@Transactional with no rollback attributes",
+                "ru": "@Transactional без атрибутов отката"
+              },
+              "right": {
+                "en": "Rolls back only on RuntimeException and Error",
+                "ru": "Откатывает только на RuntimeException и Error"
+              }
+            }
+          ]
+        },
+        {
+          "id": "no-rollback-for-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing attribute name.",
+            "ru": "Впиши пропущенное имя атрибута."
+          },
+          "feedback": {
+            "correct": {
+              "en": "noRollbackFor is the opt-out from the default rollback.",
+              "ru": "noRollbackFor — это отказ от отката по умолчанию."
+            },
+            "incorrect": {
+              "en": "It is noRollbackFor: it keeps the commit for the named type.",
+              "ru": "Это noRollbackFor: он сохраняет commit для названного типа."
+            }
+          },
+          "text": {
+            "en": "To commit even though a RuntimeException propagates out, configure ___ for that exception type.",
+            "ru": "Чтобы зафиксировать транзакцию, даже когда наружу выходит RuntimeException, настрой ___ для этого типа exception."
+          },
+          "answers": {
+            "en": [
+              "noRollbackFor"
+            ],
+            "ru": [
+              "noRollbackFor"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "decision-order",
+      "title": {
+        "en": "The order of the checks",
+        "ru": "Порядок проверок"
+      },
+      "summary": {
+        "en": "The interceptor checks noRollbackFor first, then rollbackFor, then the RuntimeException-or-Error default.",
+        "ru": "Interceptor проверяет сначала noRollbackFor, затем rollbackFor, и только потом умолчание RuntimeException-или-Error."
+      },
+      "discovery": [
+        {
+          "id": "order-d1-conflict",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Both attributes could apply to the thrown `IllegalStateException`. What does Spring decide?",
+            "ru": "Оба атрибута могут относиться к брошенному `IllegalStateException`. Что решит Spring?"
+          },
+          "code": "@Transactional(rollbackFor = Exception.class,\n               noRollbackFor = IllegalStateException.class)\npublic void process() {\n    em.persist(new Order(1L));\n    throw new IllegalStateException(\"skip\");\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "The rollback decision is a short chain of checks, and the **order** is what resolves conflicts. `noRollbackFor` is consulted first, so it wins.\n\n```mermaid\nflowchart TD\n  A[\"Exception leaves @Transactional method\"] --> B{\"matches noRollbackFor?\"}\n  B -->|yes| C[\"commit\"]\n  B -->|no| D{\"matches rollbackFor?\"}\n  D -->|yes| R[\"rollback\"]\n  D -->|no| E{\"RuntimeException or Error?\"}\n  E -->|yes| R\n  E -->|no| C\n```\n\nRead it as a checklist: an explicit \"do not roll back\" instruction beats an explicit \"do roll back\" instruction, and both beat the built-in unchecked default. If nothing matches and the throwable is checked, the transaction commits.\n\nBeing able to recite these three checks in order is what separates \"I know the default\" from \"I know the rule\".",
+            "ru": "Решение об откате — короткая цепочка проверок, и конфликты разрешает именно **порядок**. `noRollbackFor` проверяется первым, поэтому он и побеждает.\n\n```mermaid\nflowchart TD\n  A[\"Exception выходит из @Transactional метода\"] --> B{\"совпадает с noRollbackFor?\"}\n  B -->|да| C[\"commit\"]\n  B -->|нет| D{\"совпадает с rollbackFor?\"}\n  D -->|да| R[\"rollback\"]\n  D -->|нет| E{\"RuntimeException или Error?\"}\n  E -->|да| R\n  E -->|нет| C\n```\n\nЧитай как чеклист: явная инструкция «не откатывать» побеждает явную инструкцию «откатывать», а обе побеждают встроенное умолчание для unchecked. Если ничего не совпало и throwable — checked, транзакция фиксируется.\n\nУмение перечислить эти три проверки по порядку отличает «я знаю умолчание» от «я знаю правило»."
+          },
+          "feedback": {
+            "correct": {
+              "en": "noRollbackFor is checked first, so it wins the conflict.",
+              "ru": "noRollbackFor проверяется первым, поэтому он выигрывает конфликт."
+            },
+            "incorrect": {
+              "en": "The order decides: noRollbackFor is checked before rollbackFor, so the transaction commits.",
+              "ru": "Решает порядок: noRollbackFor проверяется до rollbackFor, поэтому транзакция фиксируется."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Commits — noRollbackFor is checked first",
+                "ru": "Фиксирует — noRollbackFor проверяется первым"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Rolls back — rollbackFor = Exception.class covers everything",
+                "ru": "Откатывает — rollbackFor = Exception.class покрывает всё"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It would, but the noRollbackFor check happens before it.",
+                "ru": "Покрывал бы, но проверка noRollbackFor происходит раньше."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Fails at startup with a configuration error",
+                "ru": "Падает при старте с ошибкой конфигурации"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Overlapping rules are legal; the check order resolves them.",
+                "ru": "Пересекающиеся правила допустимы; их разрешает порядок проверок."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "order-p1-first-check",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which check does Spring's `@Transactional` rollback decision perform FIRST?",
+            "ru": "Какую проверку решение об откате `@Transactional` в Spring выполняет ПЕРВОЙ?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "noRollbackFor comes first, which is why it wins conflicts.",
+              "ru": "noRollbackFor идёт первым, поэтому он и выигрывает конфликты."
+            },
+            "incorrect": {
+              "en": "noRollbackFor is checked first, then rollbackFor, then the unchecked default.",
+              "ru": "Сначала проверяется noRollbackFor, затем rollbackFor, потом умолчание для unchecked."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Whether the exception matches noRollbackFor",
+                "ru": "Совпадает ли exception с noRollbackFor"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Whether the exception is a RuntimeException or Error",
+                "ru": "Является ли exception RuntimeException или Error"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the LAST check — the built-in default, used only when no rule matched.",
+                "ru": "Это ПОСЛЕДНЯЯ проверка — встроенное умолчание, применяемое, когда правила не совпали."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Whether the exception matches rollbackFor",
+                "ru": "Совпадает ли exception с rollbackFor"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the second check; noRollbackFor is consulted before it.",
+                "ru": "Это вторая проверка; noRollbackFor смотрится до неё."
+              }
+            }
+          ]
+        },
+        {
+          "id": "order-p2-predict-plain-exception",
+          "type": "predict_output",
+          "prompt": {
+            "en": "No rollback attributes are configured and `Exception` is checked. Predict what happens to the Report row.",
+            "ru": "Атрибуты отката не настроены, а `Exception` — checked. Предскажи, что произойдёт со строкой Report."
+          },
+          "code": "@Transactional\npublic void archive() throws Exception {\n    em.persist(new Report(1L));\n    throw new Exception(\"archive unavailable\");\n}",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "No rule matched and the throwable is checked, so the last check says commit.",
+              "ru": "Правила не совпали, throwable — checked, поэтому последняя проверка даёт commit."
+            },
+            "incorrect": {
+              "en": "Nothing matches noRollbackFor or rollbackFor, and a plain Exception is checked, so Spring commits.",
+              "ru": "Ничего не совпало с noRollbackFor и rollbackFor, а обычный Exception — checked, поэтому Spring фиксирует."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Committed",
+                "ru": "Фиксируется"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Rolled back",
+                "ru": "Откатывается"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A bare Exception is checked, and checked exceptions are outside the default rollback set.",
+                "ru": "Голый Exception — checked, а checked не входят в набор отката по умолчанию."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Rolled back only if the caller catches it",
+                "ru": "Откатывается, только если вызывающий код его поймает"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "What the caller does afterwards is irrelevant; the decision was already made at the method exit.",
+                "ru": "То, что делает вызывающий код потом, не важно; решение уже принято при выходе из метода."
+              }
+            }
+          ]
+        },
+        {
+          "id": "order-p3-sort-checks",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the checks Spring performs to decide commit or rollback for a `@Transactional` method.",
+            "ru": "Расставь по порядку проверки, которыми Spring решает commit или rollback для `@Transactional` метода."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Explicit rules first, built-in default last.",
+              "ru": "Сначала явные правила, встроенное умолчание — в конце."
+            },
+            "incorrect": {
+              "en": "The order is: exception leaves the method, noRollbackFor, rollbackFor, then the unchecked default.",
+              "ru": "Порядок такой: exception выходит из метода, noRollbackFor, rollbackFor, затем умолчание для unchecked."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "An exception propagates out of the annotated method",
+                "ru": "Exception выходит наружу из аннотированного метода"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Does it match noRollbackFor? If yes, commit",
+                "ru": "Совпадает ли он с noRollbackFor? Если да — commit"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Does it match rollbackFor? If yes, roll back",
+                "ru": "Совпадает ли он с rollbackFor? Если да — rollback"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Is it a RuntimeException or Error? If yes roll back, otherwise commit",
+                "ru": "Это RuntimeException или Error? Если да — rollback, иначе commit"
+              }
+            }
+          ]
+        },
+        {
+          "id": "order-p4-fill-order",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two attribute names in the order they are checked.",
+            "ru": "Впиши два имени атрибутов в том порядке, в котором они проверяются."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Opt-out first, opt-in second, built-in default last.",
+              "ru": "Сначала отказ, затем подключение, встроенное умолчание — последним."
+            },
+            "incorrect": {
+              "en": "noRollbackFor is checked first, then rollbackFor, then the RuntimeException-or-Error rule.",
+              "ru": "Сначала проверяется noRollbackFor, затем rollbackFor, потом правило RuntimeException-или-Error."
+            }
+          },
+          "text": {
+            "en": "The rollback decision checks ___ first, then ___, and only then the RuntimeException-or-Error rule.",
+            "ru": "Решение об откате проверяет сначала ___, затем ___, и только потом правило RuntimeException-или-Error."
+          },
+          "blanks": [
+            {
+              "en": [
+                "noRollbackFor"
+              ],
+              "ru": [
+                "noRollbackFor"
+              ]
+            },
+            {
+              "en": [
+                "rollbackFor"
+              ],
+              "ru": [
+                "rollbackFor"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "external-call-inside",
+      "title": {
+        "en": "Failure inside the method",
+        "ru": "Ошибка внутри метода"
+      },
+      "summary": {
+        "en": "A RuntimeException from a call inside the method propagates out before the commit, so the earlier persist is discarded.",
+        "ru": "RuntimeException из вызова внутри метода выходит наружу до commit, поэтому предыдущий persist отбрасывается."
+      },
+      "discovery": [
+        {
+          "id": "external-d1-predict-payment",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The payment client throws a `RuntimeException`. Is the Order row in the database afterwards?",
+            "ru": "Payment client бросает `RuntimeException`. Останется ли строка Order в базе после этого?"
+          },
+          "code": "@Transactional\npublic void placeOrder() {\n    em.persist(new Order(1L));   // staged\n    paymentClient.charge(1L);    // throws RuntimeException\n}                                // never reached",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Everything here happens **inside** the transactional boundary, so the earlier `persist` is not protected by having run first.\n\n```mermaid\nsequenceDiagram\n  participant P as Spring proxy\n  participant S as Service method\n  participant DB as Database\n  participant X as External client\n  P->>P: begin transaction\n  P->>S: call method\n  S->>DB: persist(entity) staged\n  S->>X: call()\n  X-->>S: RuntimeException\n  S-->>P: exception propagates\n  P->>P: mark rollback-only\n  P->>DB: rollback\n```\n\nWhen the interceptor decides on rollback it marks the transaction **rollback-only** — a flag meaning \"this transaction can no longer commit\" — and then rolls back. The staged `Order` disappears.\n\nThe deciding factor is timing: the failure happened **before the method returned**, so the proxy was still in control. Swap the `RuntimeException` for a checked exception and the default flips to commit.",
+            "ru": "Всё здесь происходит **внутри** границы транзакции, поэтому более ранний `persist` не защищён тем, что выполнился раньше.\n\n```mermaid\nsequenceDiagram\n  participant P as Spring proxy\n  participant S as Service method\n  participant DB as Database\n  participant X as External client\n  P->>P: начать transaction\n  P->>S: вызвать method\n  S->>DB: persist(entity) подготовлено\n  S->>X: call()\n  X-->>S: RuntimeException\n  S-->>P: exception выходит наружу\n  P->>P: пометить rollback-only\n  P->>DB: rollback\n```\n\nКогда interceptor решает откатывать, он помечает транзакцию **rollback-only** — флаг «эта транзакция больше не может быть зафиксирована» — и затем делает rollback. Подготовленный `Order` исчезает.\n\nРешает время: сбой произошёл **до возврата из метода**, поэтому управление ещё было у proxy. Замени `RuntimeException` на checked exception — и умолчание переключится на commit."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The exception propagates out before commit, so the staged row is discarded.",
+              "ru": "Exception выходит наружу до commit, поэтому подготовленная строка отбрасывается."
+            },
+            "incorrect": {
+              "en": "No — persist was only staged work, and the propagating RuntimeException rolls it back.",
+              "ru": "Нет — persist был лишь подготовленной работой, и вышедший наружу RuntimeException её откатывает."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "No — the exception propagates out, so the transaction rolls back",
+                "ru": "Нет — exception выходит наружу, поэтому транзакция откатывается"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Yes — persist ran before the failure, so that row is already saved",
+                "ru": "Да — persist выполнился до сбоя, поэтому строка уже сохранена"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Running earlier does not protect it: persist only stages work until commit.",
+                "ru": "То, что он выполнился раньше, не защищает: persist лишь подготавливает работу до commit."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Yes — a failure in an external client is outside the transaction",
+                "ru": "Да — сбой во внешнем клиенте находится вне транзакции"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The call site is inside the method, so its exception reaches the proxy and triggers the rollback.",
+                "ru": "Место вызова — внутри метода, поэтому его exception доходит до proxy и запускает откат."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "external-p1-safe-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A `persist()` that already ran is safe from rollback if the failure happens later in the same `@Transactional` method.",
+            "ru": "Уже выполненный `persist()` защищён от отката, если сбой происходит позже в том же `@Transactional` методе."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Order inside the method does not matter; the whole transaction is decided at the exit.",
+              "ru": "Порядок внутри метода не важен; вся транзакция решается на выходе."
+            },
+            "incorrect": {
+              "en": "No — the persist is staged work and is discarded when the transaction rolls back.",
+              "ru": "Нет — persist это подготовленная работа, и она отбрасывается при откате транзакции."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "external-p2-predict-checked-client",
+          "type": "predict_output",
+          "prompt": {
+            "en": "`PaymentException` is a checked exception and no rollback attributes are configured. Predict what happens to the Order row.",
+            "ru": "`PaymentException` — checked exception, атрибуты отката не настроены. Предскажи, что произойдёт со строкой Order."
+          },
+          "code": "@Transactional\npublic void placeOrder() throws PaymentException {\n    em.persist(new Order(1L));   // staged\n    paymentClient.charge(1L);    // throws checked PaymentException\n}",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "Checked exception, no rollbackFor: the default is commit, even though the call failed.",
+              "ru": "Checked exception без rollbackFor: по умолчанию commit, хотя вызов и провалился."
+            },
+            "incorrect": {
+              "en": "It commits — a checked exception does not roll back unless rollbackFor names it.",
+              "ru": "Она фиксируется — checked exception не откатывает, пока его не назовёт rollbackFor."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Committed — a checked exception does not roll back by default",
+                "ru": "Фиксируется — checked exception по умолчанию не откатывает"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Rolled back — the failure happened before the method returned",
+                "ru": "Откатывается — сбой произошёл до возврата из метода"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Timing is necessary but not sufficient: the exception type still has to match a rollback rule.",
+                "ru": "Времени мало: тип exception всё равно должен совпасть с правилом отката."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Rolled back — failures of external clients always roll back",
+                "ru": "Откатывается — сбои внешних клиентов всегда откатывают"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Where the exception came from is irrelevant; only its type and the configured rules matter.",
+                "ru": "Откуда пришёл exception, не важно; важны только его тип и настроенные правила."
+              }
+            }
+          ]
+        },
+        {
+          "id": "external-p3-sort-flow",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order what happens when a `@Transactional` method persists an entity and then an inner call throws a `RuntimeException`.",
+            "ru": "Расставь по порядку, что происходит, когда `@Transactional` метод сохраняет entity, а затем внутренний вызов бросает `RuntimeException`."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Staged work is discarded the moment the exception reaches the proxy.",
+              "ru": "Подготовленная работа отбрасывается в тот момент, когда exception доходит до proxy."
+            },
+            "incorrect": {
+              "en": "Begin, stage with persist, the inner call throws, the exception propagates out, the proxy rolls back.",
+              "ru": "Начать, подготовить через persist, внутренний вызов бросает, exception выходит наружу, proxy откатывает."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "The proxy begins the transaction and calls the method",
+                "ru": "Proxy начинает транзакцию и вызывает метод"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "persist stages the entity in the persistence context",
+                "ru": "persist подготавливает entity в persistence context"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "The inner call throws a RuntimeException",
+                "ru": "Внутренний вызов бросает RuntimeException"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "The exception propagates out of the method to the proxy",
+                "ru": "Exception выходит из метода наружу к proxy"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "The proxy marks the transaction rollback-only and rolls back, discarding the staged row",
+                "ru": "Proxy помечает транзакцию rollback-only и откатывает её, отбрасывая подготовленную строку"
+              }
+            }
+          ]
+        },
+        {
+          "id": "external-p4-fill-rollback-only",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill in both blanks.",
+            "ru": "Заполни оба пропуска."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The rollback-only flag means the transaction can no longer commit.",
+              "ru": "Флаг rollback-only означает, что транзакция больше не может быть зафиксирована."
+            },
+            "incorrect": {
+              "en": "The proxy marks the transaction rollback-only, and the staged row is discarded.",
+              "ru": "Proxy помечает транзакцию rollback-only, и подготовленная строка отбрасывается."
+            }
+          },
+          "text": {
+            "en": "When a RuntimeException propagates out, the proxy marks the transaction ___-only and the staged row is ___.",
+            "ru": "Когда RuntimeException выходит наружу, proxy помечает транзакцию ___-only, и подготовленная строка ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "rollback"
+              ],
+              "ru": [
+                "rollback"
+              ]
+            },
+            {
+              "en": [
+                "discarded",
+                "dropped",
+                "rolled back"
+              ],
+              "ru": [
+                "отбрасывается",
+                "откатывается",
+                "discarded"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "after-commit-too-late",
+      "title": {
+        "en": "After commit it is too late",
+        "ru": "После commit уже поздно"
+      },
+      "summary": {
+        "en": "Once the transactional method has returned and committed, a later failure is outside that transaction and cannot undo it.",
+        "ru": "Как только transactional метод вернулся и зафиксировался, более поздняя ошибка находится вне транзакции и не может её отменить."
+      },
+      "discovery": [
+        {
+          "id": "after-commit-d1-predict",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The notification fails AFTER `saveOrder()` has returned. Is the Order row still in the database?",
+            "ru": "Уведомление падает ПОСЛЕ того, как `saveOrder()` вернулся. Останется ли строка Order в базе?"
+          },
+          "code": "@Transactional\npublic void saveOrder() {\n    em.persist(new Order(1L));\n}                                   // proxy commits here\n\n// in the caller:\norderService.saveOrder();\nnotificationClient.send(1L);        // throws RuntimeException",
+          "codeLang": "java",
+          "reveal": {
+            "en": "The transaction boundary **ends at the method exit**. Once the proxy has committed, the transaction is finished — there is no longer anything to roll back.\n\n```mermaid\nflowchart LR\n  M[\"@Transactional method returns\"] --> C[\"proxy commits\"]\n  C --> E[\"transaction boundary ends\"]\n  E --> F[\"later external failure\"]\n  F --> N[\"nothing left to roll back\"]\n```\n\nA later failure is a **new problem**, not a rollback trigger. This is the practical face of [ACID](topic:acid-principles): a local transaction can atomically protect local database work; it cannot reach back in time or undo a call to a different system.\n\nFor \"change the database **and** notify another system\" flows, the fix is a design, not an annotation: commit a durable local intent inside the transaction and let a background worker publish it afterwards — the [Outbox pattern](topic:outbox-pattern).",
+            "ru": "Граница транзакции **заканчивается на выходе из метода**. Как только proxy сделал commit, транзакция завершена — откатывать уже нечего.\n\n```mermaid\nflowchart LR\n  M[\"@Transactional метод вернулся\"] --> C[\"proxy делает commit\"]\n  C --> E[\"граница транзакции закончилась\"]\n  E --> F[\"более поздний внешний сбой\"]\n  F --> N[\"откатывать уже нечего\"]\n```\n\nБолее поздний сбой — это **новая проблема**, а не триггер отката. Это практическое лицо [ACID](topic:acid-principles): локальная транзакция атомарно защищает локальную работу с базой, но не умеет вернуться в прошлое или отменить вызов другой системы.\n\nДля сценариев «изменить базу **и** уведомить другую систему» решение — это дизайн, а не аннотация: зафиксировать durable local intent внутри транзакции и дать фоновому worker опубликовать его потом — [Outbox pattern](topic:outbox-pattern)."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The commit already happened, so the later failure cannot undo it.",
+              "ru": "Commit уже произошёл, поэтому более поздний сбой не может его отменить."
+            },
+            "incorrect": {
+              "en": "Yes, the row stays — the transaction ended at the method exit, before the notification failed.",
+              "ru": "Да, строка остаётся — транзакция закончилась на выходе из метода, до сбоя уведомления."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Yes — the transaction already committed, so the later failure cannot undo it",
+                "ru": "Да — транзакция уже зафиксирована, поэтому более поздний сбой не может её отменить"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "No — the RuntimeException rolls the transaction back",
+                "ru": "Нет — RuntimeException откатывает транзакцию"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no transaction left to roll back: it ended when the method returned.",
+                "ru": "Откатывать нечего: транзакция закончилась, когда метод вернулся."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "No — Spring keeps the transaction open until the caller returns",
+                "ru": "Нет — Spring держит транзакцию открытой, пока не вернётся вызывающий код"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The boundary is the annotated method, not the caller.",
+                "ru": "Граница — это аннотированный метод, а не вызывающий код."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "after-commit-p1-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A failure that happens after a `@Transactional` method has committed can still roll that transaction back.",
+            "ru": "Сбой, который происходит после того, как `@Transactional` метод зафиксировался, всё ещё может откатить эту транзакцию."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A committed transaction is finished; a later failure is a separate problem.",
+              "ru": "Зафиксированная транзакция завершена; более поздний сбой — отдельная проблема."
+            },
+            "incorrect": {
+              "en": "No — after commit the transaction is over, so there is nothing left to roll back.",
+              "ru": "Нет — после commit транзакция завершена, откатывать уже нечего."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "after-commit-p2-why",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why can an exception thrown after a `@Transactional` method returned no longer roll back that transaction?",
+            "ru": "Почему exception, брошенный после возврата из `@Transactional` метода, уже не может откатить эту транзакцию?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The boundary ended at the method exit and the commit is already final.",
+              "ru": "Граница закончилась на выходе из метода, и commit уже окончателен."
+            },
+            "incorrect": {
+              "en": "The transaction boundary ended when the method returned, and the commit is final.",
+              "ru": "Граница транзакции закончилась при возврате из метода, и commit окончателен."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The transaction boundary ended at the method exit and the commit is already final",
+                "ru": "Граница транзакции закончилась на выходе из метода, и commit уже окончателен"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Because Spring rolls back only on checked exceptions",
+                "ru": "Потому что Spring откатывает только на checked exceptions"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is backwards, and the exception type is not the point here — the timing is.",
+                "ru": "Это наоборот, и дело здесь не в типе exception, а во времени."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Because the persistence context was cleared, so there is nothing to undo",
+                "ru": "Потому что persistence context очищен, и отменять нечего"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The reason is the commit itself: the data is permanent, regardless of the persistence context.",
+                "ru": "Причина в самом commit: данные постоянны независимо от persistence context."
+              }
+            }
+          ]
+        },
+        {
+          "id": "after-commit-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the rule about failures that happen after a commit.",
+            "ru": "Собери правило про сбои, происходящие после commit."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Once committed, the local transaction is out of the picture.",
+              "ru": "После фиксации локальная транзакция уже ни при чём."
+            },
+            "incorrect": {
+              "en": "After commit, a later failure cannot roll back the transaction.",
+              "ru": "После commit более поздний сбой не может откатить транзакцию."
+            }
+          },
+          "tokens": {
+            "en": [
+              "after",
+              "commit",
+              "a",
+              "later",
+              "failure",
+              "cannot",
+              "roll",
+              "back"
+            ],
+            "ru": [
+              "после",
+              "commit",
+              "более",
+              "поздний",
+              "сбой",
+              "не",
+              "может",
+              "откатить"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "always",
+              "rolls"
+            ],
+            "ru": [
+              "всегда",
+              "откатывает"
+            ]
+          }
+        },
+        {
+          "id": "after-commit-p4-fill-outbox",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the name of the pattern.",
+            "ru": "Впиши название паттерна."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Commit the intent locally, publish it afterwards from a worker.",
+              "ru": "Фиксируем намерение локально, а публикуем позже из worker."
+            },
+            "incorrect": {
+              "en": "It is the Outbox pattern: commit a durable local intent, then publish it separately.",
+              "ru": "Это Outbox pattern: зафиксировать durable local intent, а затем опубликовать отдельно."
+            }
+          },
+          "text": {
+            "en": "For a reliable 'save a row, then notify another system' flow, commit a durable local intent and let a worker publish it later — the ___ pattern.",
+            "ru": "Для надёжного сценария «сохранить строку, затем уведомить другую систему» фиксируй durable local intent и дай worker опубликовать его позже — это паттерн ___."
+          },
+          "answers": {
+            "en": [
+              "Outbox",
+              "outbox"
+            ],
+            "ru": [
+              "Outbox",
+              "outbox"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "caught-exception-trap",
+      "title": {
+        "en": "Trap: the caught exception",
+        "ru": "Ловушка: пойманный exception"
+      },
+      "summary": {
+        "en": "If the method catches the exception and returns normally, the proxy sees success and commits.",
+        "ru": "Если метод ловит exception и возвращается нормально, proxy видит успех и фиксирует транзакцию."
+      },
+      "discovery": [
+        {
+          "id": "caught-d1-spot-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "The author expects a rollback when the charge fails, but the Order row is committed. Why?",
+            "ru": "Автор ожидает откат при сбое оплаты, но строка Order фиксируется. Почему?"
+          },
+          "code": "@Transactional\npublic void placeOrder() {\n    em.persist(new Order(1L));\n    try {\n        paymentClient.charge(1L);   // throws RuntimeException\n    } catch (RuntimeException e) {\n        log.error(\"charge failed\", e);\n    }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "The proxy cannot see inside the method — it only sees **how the method exited**. Here the `catch` swallows the exception and the method returns normally, so from the proxy's point of view the call succeeded, and it commits.\n\n```java\n} catch (RuntimeException e) {\n    log.error(\"charge failed\", e);\n    throw e;                       // <- makes the rollback happen\n}\n```\n\nIf you must catch (to log, to enrich the message, to clean up), you still have to make the failure visible to the interceptor. Your options are:\n\n- **rethrow** the exception (or a new one) so it propagates out;\n- mark the transaction **rollback-only** so it can no longer commit;\n- drive the transaction with another transaction API instead of the annotation.\n\n\"Catching and logging still rolls back\" is one of the two traps interviewers ask about by name.",
+            "ru": "Proxy не видит, что происходит внутри метода — он видит только, **как метод завершился**. Здесь `catch` проглатывает exception, и метод возвращается нормально, поэтому с точки зрения proxy вызов прошёл успешно, и он делает commit.\n\n```java\n} catch (RuntimeException e) {\n    log.error(\"charge failed\", e);\n    throw e;                       // <- вот теперь будет откат\n}\n```\n\nЕсли ловить всё же нужно (залогировать, дополнить сообщение, прибраться), сбой всё равно надо сделать видимым для interceptor. Варианты такие:\n\n- **rethrow** — выбросить exception (или новый) заново, чтобы он вышел наружу;\n- пометить транзакцию **rollback-only**, чтобы она больше не могла зафиксироваться;\n- управлять транзакцией через другой transaction API вместо аннотации.\n\n«Если поймать и залогировать, откат всё равно будет» — одна из двух ловушек, про которые спрашивают на собеседовании поимённо."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A swallowed exception never reaches the proxy, so the exit looks normal.",
+              "ru": "Проглоченный exception не доходит до proxy, поэтому завершение выглядит нормальным."
+            },
+            "incorrect": {
+              "en": "The catch block swallows the exception, so the method returns normally and Spring commits.",
+              "ru": "Блок catch проглатывает exception, поэтому метод возвращается нормально, и Spring фиксирует транзакцию."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The exception never leaves the method, so the proxy sees a normal return",
+                "ru": "Exception не выходит из метода, поэтому proxy видит обычный возврат"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "RuntimeException does not roll back by default — only Error does",
+                "ru": "RuntimeException по умолчанию не откатывает — откатывает только Error"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Both roll back by default; the problem is that this one never propagated out.",
+                "ru": "По умолчанию откатывают оба; проблема в том, что этот так и не вышел наружу."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "persist() had already committed the row before the catch block ran",
+                "ru": "persist() уже зафиксировал строку до того, как выполнился блок catch"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "persist never commits; the row was staged and then committed at the method exit.",
+                "ru": "persist ничего не фиксирует; строка была подготовлена, а зафиксирована на выходе из метода."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "caught-p1-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Catching and logging a `RuntimeException` inside a `@Transactional` method still rolls the transaction back.",
+            "ru": "Если поймать и залогировать `RuntimeException` внутри `@Transactional` метода, транзакция всё равно откатится."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A normal return looks like success to the proxy, so it commits.",
+              "ru": "Обычный возврат выглядит для proxy как успех, поэтому он фиксирует транзакцию."
+            },
+            "incorrect": {
+              "en": "No — the swallowed exception never reaches the proxy, so Spring commits.",
+              "ru": "Нет — проглоченный exception не доходит до proxy, поэтому Spring фиксирует транзакцию."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "caught-p2-what-spring-does",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A `@Transactional` method catches a `RuntimeException`, logs it, and returns normally. What does Spring do with the transaction?",
+            "ru": "`@Transactional` метод ловит `RuntimeException`, логирует его и возвращается нормально. Что Spring сделает с транзакцией?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "No exception propagated, so the proxy commits.",
+              "ru": "Наружу ничего не вышло, поэтому proxy фиксирует транзакцию."
+            },
+            "incorrect": {
+              "en": "It commits — the proxy sees a normal return and treats the call as successful.",
+              "ru": "Он фиксирует — proxy видит обычный возврат и считает вызов успешным."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Commits — the proxy sees a normal return",
+                "ru": "Фиксирует — proxy видит обычный возврат"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Rolls back — the exception was thrown inside the transaction",
+                "ru": "Откатывает — exception был брошен внутри транзакции"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The interceptor never learns about it: it only inspects what leaves the method.",
+                "ru": "Interceptor о нём не узнаёт: он смотрит только на то, что выходит из метода."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Commits, but logs a rollback warning",
+                "ru": "Фиксирует, но пишет предупреждение об откате"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no warning — as far as Spring can tell, nothing went wrong.",
+                "ru": "Никакого предупреждения нет — с точки зрения Spring ничего плохого не случилось."
+              }
+            }
+          ]
+        },
+        {
+          "id": "caught-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble why a caught exception does not roll back a `@Transactional` method.",
+            "ru": "Собери, почему пойманный exception не откатывает `@Transactional` метод."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The proxy only reacts to what propagates out of the method.",
+              "ru": "Proxy реагирует только на то, что выходит наружу из метода."
+            },
+            "incorrect": {
+              "en": "A caught exception never reaches the proxy, so Spring commits.",
+              "ru": "Пойманный exception не доходит до proxy, поэтому Spring фиксирует транзакцию."
+            }
+          },
+          "tokens": {
+            "en": [
+              "a",
+              "caught",
+              "exception",
+              "never",
+              "reaches",
+              "the",
+              "proxy"
+            ],
+            "ru": [
+              "пойманный",
+              "exception",
+              "не",
+              "доходит",
+              "до",
+              "proxy"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "rolls",
+              "back"
+            ],
+            "ru": [
+              "откатывает",
+              "транзакцию"
+            ]
+          }
+        },
+        {
+          "id": "caught-p4-fill-rethrow",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing verb.",
+            "ru": "Впиши пропущенный глагол."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Rethrowing makes the failure visible to the interceptor again.",
+              "ru": "Повторный выброс снова делает сбой видимым для interceptor."
+            },
+            "incorrect": {
+              "en": "Rethrow it — or mark the transaction rollback-only; otherwise Spring sees success.",
+              "ru": "Выброси его заново — или пометь транзакцию rollback-only; иначе Spring увидит успех."
+            }
+          },
+          "text": {
+            "en": "To roll back after catching the exception, ___ it so that it leaves the @Transactional method.",
+            "ru": "Чтобы откатить транзакцию после перехвата exception, ___ его заново, чтобы он вышел из @Transactional метода."
+          },
+          "answers": {
+            "en": [
+              "rethrow",
+              "re-throw",
+              "throw"
+            ],
+            "ru": [
+              "выброси",
+              "выбросить",
+              "пробрось",
+              "rethrow"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "self-invocation-trap",
+      "title": {
+        "en": "Trap: self-invocation",
+        "ru": "Ловушка: self-invocation"
+      },
+      "summary": {
+        "en": "@Transactional is proxy-based, so a call from another method of the same class can bypass the proxy and its transaction advice.",
+        "ru": "@Transactional работает через proxy, поэтому вызов из другого метода того же класса может обойти proxy и его transaction advice."
+      },
+      "discovery": [
+        {
+          "id": "self-d1-spot-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "The caller invokes `handle()`, and `@Transactional` on `save()` has no effect. Why?",
+            "ru": "Вызывающий код вызывает `handle()`, и `@Transactional` на `save()` не действует. Почему?"
+          },
+          "code": "@Service\npublic class OrderService {\n\n    public void handle() {\n        save();                       // internal call on this\n    }\n\n    @Transactional\n    public void save() {\n        em.persist(new Order(1L));\n    }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "In common Spring usage `@Transactional` is **proxy-based**: the caller holds a reference to the proxy, not to your object, and the transaction advice lives on the proxy.\n\n```mermaid\nflowchart LR\n  C[\"another bean\"] --> P[\"proxy: transaction advice\"]\n  P --> S[\"save()\"]\n  H[\"handle() in the same class\"] -->|\"internal call on this\"| S\n```\n\n`handle()` is already inside your object, so `save()` is invoked directly on `this`. The call never passes through the proxy, so the transaction advice is simply skipped — **self-invocation** bypasses `@Transactional`.\n\nThe annotation looks correct in review, which is what makes this the second classic trap: nothing is misconfigured, the call just never reaches the code that would have started a transaction.",
+            "ru": "В обычном использовании Spring `@Transactional` работает **через proxy**: вызывающий код держит ссылку на proxy, а не на твой объект, и transaction advice живёт именно на proxy.\n\n```mermaid\nflowchart LR\n  C[\"другой бин\"] --> P[\"proxy: transaction advice\"]\n  P --> S[\"save()\"]\n  H[\"handle() в том же классе\"] -->|\"внутренний вызов на this\"| S\n```\n\n`handle()` уже находится внутри твоего объекта, поэтому `save()` вызывается напрямую на `this`. Вызов не проходит через proxy, и transaction advice просто пропускается — **self-invocation** обходит `@Transactional`.\n\nАннотация при ревью выглядит правильной, и именно поэтому это вторая классическая ловушка: ничего не настроено неверно, просто вызов не доходит до кода, который открыл бы транзакцию."
+          },
+          "feedback": {
+            "correct": {
+              "en": "An internal this-call skips the proxy, so the advice never runs.",
+              "ru": "Внутренний вызов на this минует proxy, поэтому advice не выполняется."
+            },
+            "incorrect": {
+              "en": "handle() calls save() on this, so the call never passes through the proxy that applies @Transactional.",
+              "ru": "handle() вызывает save() на this, поэтому вызов не проходит через proxy, который применяет @Transactional."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "handle() calls save() on this, so the call never goes through the proxy",
+                "ru": "handle() вызывает save() на this, поэтому вызов не проходит через proxy"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "@Transactional works only on methods that return a value",
+                "ru": "@Transactional работает только на методах, возвращающих значение"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The return type is irrelevant; the call path through the proxy is what matters.",
+                "ru": "Тип возврата не важен; важно, проходит ли вызов через proxy."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "handle() must also throw an exception for the transaction to start",
+                "ru": "handle() тоже должен бросить exception, чтобы транзакция началась"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Exceptions end transactions, they do not start them.",
+                "ru": "Exceptions завершают транзакции, а не начинают их."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "self-p1-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In common proxy-based Spring usage, calling a `@Transactional` method from another method of the SAME class applies the transaction advice.",
+            "ru": "В обычном proxy-based использовании Spring вызов `@Transactional` метода из другого метода ТОГО ЖЕ класса применяет transaction advice."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The internal call goes straight to this, skipping the proxy.",
+              "ru": "Внутренний вызов идёт прямо на this, минуя proxy."
+            },
+            "incorrect": {
+              "en": "No — self-invocation bypasses the proxy, and with it the transaction advice.",
+              "ru": "Нет — self-invocation обходит proxy, а вместе с ним и transaction advice."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "self-p2-why",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why can self-invocation bypass `@Transactional` in Spring?",
+            "ru": "Почему self-invocation может обойти `@Transactional` в Spring?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The advice lives on the proxy, and an internal call does not pass through it.",
+              "ru": "Advice живёт на proxy, а внутренний вызов через него не проходит."
+            },
+            "incorrect": {
+              "en": "The annotation is applied by a proxy around the bean; an internal this-call skips that proxy.",
+              "ru": "Аннотацию применяет proxy вокруг бина; внутренний вызов на this минует этот proxy."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The annotation is applied by a proxy around the bean, and an internal this-call does not pass through it",
+                "ru": "Аннотацию применяет proxy вокруг бина, а внутренний вызов на this через него не проходит"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Because the annotation is read only once at startup and then discarded",
+                "ru": "Потому что аннотация читается один раз при старте и затем отбрасывается"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It is read at startup to build the proxy — which is exactly the object the internal call skips.",
+                "ru": "Она читается при старте, чтобы построить proxy — именно тот объект, который минует внутренний вызов."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Because internal calls run on a different thread",
+                "ru": "Потому что внутренние вызовы выполняются в другом потоке"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It is the same thread and the same object; only the proxy is missing from the call path.",
+                "ru": "Это тот же поток и тот же объект; из пути вызова выпал только proxy."
+              }
+            }
+          ]
+        },
+        {
+          "id": "self-p3-sort-flow",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order what happens when a bean's plain method calls its own `@Transactional` method on `this`.",
+            "ru": "Расставь по порядку, что происходит, когда обычный метод бина вызывает свой же `@Transactional` метод на `this`."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The proxy is only in the path of the outer call, never the inner one.",
+              "ru": "Proxy находится только на пути внешнего вызова, но не внутреннего."
+            },
+            "incorrect": {
+              "en": "The outer call goes through the proxy, finds no annotation, and the inner this-call skips the advice entirely.",
+              "ru": "Внешний вызов идёт через proxy, аннотации не находит, а внутренний вызов на this полностью минует advice."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Another bean calls handle() through the proxy",
+                "ru": "Другой бин вызывает handle() через proxy"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "handle() carries no @Transactional, so the proxy starts no transaction",
+                "ru": "На handle() нет @Transactional, поэтому proxy не начинает транзакцию"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "handle() calls save() directly on this",
+                "ru": "handle() вызывает save() напрямую на this"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "The transaction advice on save() is skipped entirely",
+                "ru": "Transaction advice на save() полностью пропускается"
+              }
+            }
+          ]
+        },
+        {
+          "id": "self-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill in both blanks.",
+            "ru": "Заполни оба пропуска."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Proxy-based means the call path decides whether the advice runs.",
+              "ru": "Proxy-based означает, что путь вызова решает, выполнится ли advice."
+            },
+            "incorrect": {
+              "en": "A proxy applies the annotation, so self-invocation inside the same class can bypass it.",
+              "ru": "Аннотацию применяет proxy, поэтому self-invocation внутри того же класса может его обойти."
+            }
+          },
+          "text": {
+            "en": "@Transactional is applied by a ___, so a ___-invocation inside the same class can bypass it.",
+            "ru": "@Transactional применяется через ___, поэтому ___-invocation внутри того же класса может его обойти."
+          },
+          "blanks": [
+            {
+              "en": [
+                "proxy"
+              ],
+              "ru": [
+                "proxy",
+                "прокси"
+              ]
+            },
+            {
+              "en": [
+                "self"
+              ],
+              "ru": [
+                "self"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "putting-it-together",
+      "title": {
+        "en": "Putting it together",
+        "ru": "Собираем всё вместе"
+      },
+      "summary": {
+        "en": "The whole decision: staged work, how the method exits, the noRollbackFor/rollbackFor/unchecked checks, and where the boundary ends.",
+        "ru": "Всё решение целиком: подготовленная работа, способ завершения метода, проверки noRollbackFor/rollbackFor/unchecked и где заканчивается граница."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "cap-d1-checked-external",
+          "type": "predict_output",
+          "prompt": {
+            "en": "`PaymentException` is checked and no rollback attributes are configured. Is the Order row in the database after `placeOrder` fails?",
+            "ru": "`PaymentException` — checked, атрибуты отката не настроены. Останется ли строка Order в базе после сбоя `placeOrder`?"
+          },
+          "code": "@Service\npublic class OrderService {\n\n    @Transactional\n    public void placeOrder() throws PaymentException {\n        em.persist(new Order(1L));   // staged\n        paymentClient.charge(1L);    // throws checked PaymentException\n    }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Two independent questions have to be answered, and interviews test whether you separate them:\n\n1. **Did the failure reach the proxy in time?** Yes — the client threw before the method returned, so the interceptor is still in control.\n2. **Does the rollback rule match?** No — `PaymentException` is checked, nothing names it, and the default set is only `RuntimeException` and `Error`. So: **commit**.\n\n```mermaid\nflowchart TD\n  A[\"proxy begins transaction\"] --> B[\"method stages work with persist\"]\n  B --> C{\"how did the method exit?\"}\n  C -->|\"returned normally\"| K[\"commit\"]\n  C -->|\"exception propagated\"| D{\"noRollbackFor, rollbackFor, unchecked?\"}\n  D -->|\"a rollback rule matches\"| R[\"rollback: staged work discarded\"]\n  D -->|\"no rule matches\"| K\n  K --> Z[\"boundary ends: later failures cannot undo it\"]\n```\n\nAdding `rollbackFor = PaymentException.class` is what makes this case roll back. Notice how many ways there are to end up committing when you expected a rollback: a checked exception, a swallowed exception, a self-invoked method, or a failure that arrives after the commit.",
+            "ru": "Ответить нужно на два независимых вопроса, и на собеседовании проверяют, разделяешь ли ты их:\n\n1. **Дошёл ли сбой до proxy вовремя?** Да — клиент бросил exception до возврата из метода, поэтому управление ещё у interceptor.\n2. **Совпало ли правило отката?** Нет — `PaymentException` относится к checked, его никто не назвал, а набор по умолчанию — только `RuntimeException` и `Error`. Значит: **commit**.\n\n```mermaid\nflowchart TD\n  A[\"proxy начинает транзакцию\"] --> B[\"метод подготавливает работу через persist\"]\n  B --> C{\"как завершился метод?\"}\n  C -->|\"вернулся нормально\"| K[\"commit\"]\n  C -->|\"exception вышел наружу\"| D{\"noRollbackFor, rollbackFor, unchecked?\"}\n  D -->|\"правило отката совпало\"| R[\"rollback: подготовленная работа отброшена\"]\n  D -->|\"правила не совпали\"| K\n  K --> Z[\"граница закончилась: более поздние сбои её не отменят\"]\n```\n\nДобавление `rollbackFor = PaymentException.class` — то, что заставит этот случай откатиться. Обрати внимание, сколькими способами можно получить commit там, где ждал rollback: checked exception, проглоченный exception, self-invocation или сбой уже после commit."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The failure was in time, but the type does not match any rollback rule.",
+              "ru": "Сбой был вовремя, но тип не совпал ни с одним правилом отката."
+            },
+            "incorrect": {
+              "en": "Yes, it commits — a checked exception is outside the default rollback set, and no rollbackFor names it.",
+              "ru": "Да, транзакция фиксируется — checked exception вне набора отката по умолчанию, и rollbackFor его не называет."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Yes — a checked exception commits by default",
+                "ru": "Да — checked exception по умолчанию фиксирует транзакцию"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "No — the failure happened before the method returned, so it rolls back",
+                "ru": "Нет — сбой произошёл до возврата из метода, поэтому будет откат"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Timing alone is not enough; the exception type must also match a rollback rule.",
+                "ru": "Одного времени мало; тип exception тоже должен совпасть с правилом отката."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "No — persist is always undone when the method throws",
+                "ru": "Нет — persist всегда отменяется, когда метод бросает exception"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Only when the transaction rolls back; here it commits, so the staged row is kept.",
+                "ru": "Только когда транзакция откатывается; здесь она фиксируется, поэтому подготовленная строка сохраняется."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cap-p1-no-rollback-wins",
+          "type": "predict_output",
+          "prompt": {
+            "en": "`PaymentDeclinedException` extends `RuntimeException`. Predict what happens to the Order row.",
+            "ru": "`PaymentDeclinedException` наследует `RuntimeException`. Предскажи, что произойдёт со строкой Order."
+          },
+          "code": "@Transactional(noRollbackFor = PaymentDeclinedException.class)\npublic void placeOrder() {\n    em.persist(new Order(1L));\n    paymentClient.charge(1L);   // throws PaymentDeclinedException\n}",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "noRollbackFor is checked before the unchecked default, so the commit stands.",
+              "ru": "noRollbackFor проверяется до умолчания для unchecked, поэтому commit остаётся."
+            },
+            "incorrect": {
+              "en": "It commits: noRollbackFor is checked first and overrides the RuntimeException default.",
+              "ru": "Фиксируется: noRollbackFor проверяется первым и переопределяет умолчание для RuntimeException."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Committed — noRollbackFor is checked before the unchecked default",
+                "ru": "Фиксируется — noRollbackFor проверяется до умолчания для unchecked"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Rolled back — it is a RuntimeException",
+                "ru": "Откатывается — это RuntimeException"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The default applies only when no explicit rule matched, and here one did.",
+                "ru": "Умолчание применяется, только когда явные правила не совпали, а здесь совпало."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Committed only if a rollbackFor is also present",
+                "ru": "Фиксируется, только если также указан rollbackFor"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "noRollbackFor works on its own; adding rollbackFor would not change this outcome.",
+                "ru": "noRollbackFor работает сам по себе; добавление rollbackFor этот исход не изменило бы."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p2-spot-bug-swallow",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "The author expects the Order row to be discarded when the charge fails. What actually happens, and why?",
+            "ru": "Автор ожидает, что строка Order будет отброшена при сбое оплаты. Что произойдёт на самом деле и почему?"
+          },
+          "code": "@Transactional\npublic void placeOrder() {\n    em.persist(new Order(1L));\n    try {\n        paymentClient.charge(1L);   // throws RuntimeException\n    } catch (RuntimeException e) {\n        log.warn(\"charge failed\", e);\n    }\n    auditClient.record(1L);         // succeeds\n}",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "Nothing propagated out, so the exit looks successful and the proxy commits.",
+              "ru": "Наружу ничего не вышло, поэтому завершение выглядит успешным, и proxy фиксирует транзакцию."
+            },
+            "incorrect": {
+              "en": "The row is committed: the exception was swallowed, so the method returns normally.",
+              "ru": "Строка фиксируется: exception был проглочен, поэтому метод возвращается нормально."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The row is committed: the exception never propagates out, so the proxy sees a normal return",
+                "ru": "Строка фиксируется: exception не выходит наружу, поэтому proxy видит обычный возврат"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The row is rolled back: the RuntimeException was thrown inside the transaction",
+                "ru": "Строка откатывается: RuntimeException был брошен внутри транзакции"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The interceptor only inspects what leaves the method, not what happens inside it.",
+                "ru": "Interceptor смотрит только на то, что выходит из метода, а не на происходящее внутри."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The row is committed because auditClient.record succeeded afterwards",
+                "ru": "Строка фиксируется, потому что auditClient.record потом отработал успешно"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The later call is irrelevant; what matters is that nothing propagated out of the method.",
+                "ru": "Более поздний вызов не важен; важно, что наружу из метода ничего не вышло."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p3-sort-full",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the complete life of a Spring `@Transactional` call, from the proxy taking control to the boundary ending.",
+            "ru": "Расставь по порядку всю жизнь вызова Spring `@Transactional` — от передачи управления proxy до завершения границы."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Begin, stage, exit, apply the rules, finish — and after that the boundary is closed.",
+              "ru": "Начать, подготовить, завершиться, применить правила, закончить — а дальше граница закрыта."
+            },
+            "incorrect": {
+              "en": "Begin and call, stage work, the exit is observed, the rollback rules are applied, then commit or rollback ends the boundary.",
+              "ru": "Начать и вызвать, подготовить работу, увидеть завершение, применить правила отката, затем commit или rollback закрывает границу."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "The proxy begins the transaction and calls the method body",
+                "ru": "Proxy начинает транзакцию и вызывает тело метода"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "The body stages work with persist and then fails",
+                "ru": "Тело подготавливает работу через persist и затем падает"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "The exception propagates out of the method back to the proxy",
+                "ru": "Exception выходит из метода наружу обратно к proxy"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "The proxy checks noRollbackFor, then rollbackFor, then RuntimeException or Error",
+                "ru": "Proxy проверяет noRollbackFor, затем rollbackFor, затем RuntimeException или Error"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "The proxy commits or rolls back, and the transaction boundary ends",
+                "ru": "Proxy делает commit или rollback, и граница транзакции заканчивается"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p4-match-roles",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each part of Spring's `@Transactional` rollback machinery to its role.",
+            "ru": "Соотнеси каждую часть механики отката Spring `@Transactional` с её ролью."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The proxy decides, the rules refine the decision, and the boundary limits how long it can be made.",
+              "ru": "Proxy решает, правила уточняют решение, а граница ограничивает, как долго его можно принять."
+            },
+            "incorrect": {
+              "en": "The proxy owns the transaction, unchecked throwables are the default trigger, rollbackFor adds, noRollbackFor removes, and after the commit nothing can be undone.",
+              "ru": "Proxy владеет транзакцией, unchecked — триггер по умолчанию, rollbackFor добавляет, noRollbackFor убирает, а после commit ничего отменить нельзя."
+            }
+          },
+          "pairs": [
+            {
+              "id": "proxy",
+              "left": {
+                "en": "The Spring proxy",
+                "ru": "Spring proxy"
+              },
+              "right": {
+                "en": "Opens the transaction and decides commit or rollback",
+                "ru": "Открывает транзакцию и решает: commit или rollback"
+              }
+            },
+            {
+              "id": "unchecked",
+              "left": {
+                "en": "RuntimeException or Error",
+                "ru": "RuntimeException или Error"
+              },
+              "right": {
+                "en": "The default rollback trigger",
+                "ru": "Триггер отката по умолчанию"
+              }
+            },
+            {
+              "id": "rollback-for",
+              "left": {
+                "en": "rollbackFor",
+                "ru": "rollbackFor"
+              },
+              "right": {
+                "en": "Adds a type to the rollback set",
+                "ru": "Добавляет тип в набор отката"
+              }
+            },
+            {
+              "id": "no-rollback-for",
+              "left": {
+                "en": "noRollbackFor",
+                "ru": "noRollbackFor"
+              },
+              "right": {
+                "en": "Keeps the commit for a type that would otherwise roll back",
+                "ru": "Сохраняет commit для типа, который иначе откатил бы транзакцию"
+              }
+            },
+            {
+              "id": "after",
+              "left": {
+                "en": "A failure after the method returned",
+                "ru": "Сбой после возврата из метода"
+              },
+              "right": {
+                "en": "Outside the transaction; cannot undo the commit",
+                "ru": "Вне транзакции; не может отменить commit"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p5-fill-summary",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill in all four blanks of the rollback rule.",
+            "ru": "Заполни все четыре пропуска в правиле отката."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That is the whole default rule plus its one opt-in attribute.",
+              "ru": "Это всё правило по умолчанию плюс единственный атрибут для подключения."
+            },
+            "incorrect": {
+              "en": "Rollback on RuntimeException and Error; a checked exception commits unless rollbackFor names it.",
+              "ru": "Откат на RuntimeException и Error; checked exception фиксируется, если его не назвал rollbackFor."
+            }
+          },
+          "text": {
+            "en": "@Transactional rolls back by default on ___ and ___; a checked exception ___ instead, unless ___ names it.",
+            "ru": "@Transactional по умолчанию откатывается на ___ и ___; checked exception вместо этого ___, если его не назвал ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "RuntimeException"
+              ],
+              "ru": [
+                "RuntimeException"
+              ]
+            },
+            {
+              "en": [
+                "Error"
+              ],
+              "ru": [
+                "Error"
+              ]
+            },
+            {
+              "en": [
+                "commits",
+                "commit"
+              ],
+              "ru": [
+                "фиксируется",
+                "коммитится",
+                "commit"
+              ]
+            },
+            {
+              "en": [
+                "rollbackFor"
+              ],
+              "ru": [
+                "rollbackFor"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

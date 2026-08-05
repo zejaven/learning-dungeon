@@ -1,0 +1,3535 @@
+{
+  "schemaVersion": 1,
+  "topicId": "endpoint-security-design",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "security-chain",
+      "title": {
+        "en": "The chain a request walks",
+        "ru": "Цепочка, через которую проходит запрос"
+      },
+      "summary": {
+        "en": "A security scheme is an ordered chain of checks — TLS, rate limit, rule match, authentication, authorization, object check — that every request walks before the handler.",
+        "ru": "Схема безопасности — это упорядоченная цепочка проверок: TLS, лимит частоты, подбор правила, аутентификация, авторизация, проверка объекта, — которую каждый запрос проходит до обработчика."
+      },
+      "discovery": [
+        {
+          "id": "chain-d1-order",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A request reaches your API. Which must the API settle FIRST: who the caller is, or what the caller is allowed to do?",
+            "ru": "Запрос дошёл до вашего API. Что нужно решить ПЕРВЫМ: кто вызывающий или что ему разрешено делать?"
+          },
+          "reveal": {
+            "en": "A **security scheme** is two artifacts: an ordered **rule list** saying what each endpoint requires, and a **chain of checks** every request walks before the handler runs.\n\n```mermaid\nflowchart LR\n  R[\"request\"] --> T[\"TLS\"] --> L[\"rate limit\"] --> M[\"rule match\"] --> A[\"authentication\"] --> Z[\"authorization\"] --> O[\"object check\"] --> H[\"handler + audit\"]\n```\n\nEach gate answers a different question:\n\n- **TLS** — may a credential travel here in plaintext? No.\n- **rate limit** — how many requests may this caller make, however valid each one is?\n- **rule match** — which rule covers this path and method?\n- **authentication** — *who* is calling? Unknown caller: `401`.\n- **authorization** — *may* this caller do this? Known and refused: `403`.\n- **object check** — is *this record* theirs? Not theirs: `404`.\n\nThe order is not decoration. Rate limiting has to precede the expensive checks or it protects nothing; authentication has to precede authorization, because you cannot decide what a caller may do before you know who they are; and the object check comes after both, because it needs the identity *and* the record. Later atoms zoom into each gate.",
+            "ru": "**Схема безопасности** — это два артефакта: упорядоченный **список правил**, который говорит, что требуется на каждом эндпоинте, и **цепочка проверок**, через которую проходит каждый запрос до обработчика.\n\n```mermaid\nflowchart LR\n  R[\"запрос\"] --> T[\"TLS\"] --> L[\"лимит частоты\"] --> M[\"подбор правила\"] --> A[\"аутентификация\"] --> Z[\"авторизация\"] --> O[\"проверка объекта\"] --> H[\"обработчик + аудит\"]\n```\n\nКаждая проверка отвечает на свой вопрос:\n\n- **TLS** — можно ли передавать здесь учётные данные открытым текстом? Нет.\n- **лимит частоты** — сколько запросов может сделать этот вызывающий, какими бы корректными они ни были?\n- **подбор правила** — какое правило покрывает этот путь и метод?\n- **аутентификация** — *кто* вызывает? Вызывающий неизвестен: `401`.\n- **авторизация** — *можно* ли ему это? Известен и получил отказ: `403`.\n- **проверка объекта** — *эта запись* его? Не его: `404`.\n\nПорядок здесь не украшение. Ограничение частоты обязано стоять до дорогих проверок, иначе оно ничего не защищает; аутентификация обязана идти до авторизации, потому что нельзя решить, что вызывающему можно, не зная, кто он; а проверка объекта идёт после обеих, потому что ей нужны и личность, *и* запись. Следующие атомы разберут каждую проверку."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — you cannot look up permissions before you know whose they are.",
+              "ru": "Верно — нельзя искать права, не зная, чьи они."
+            },
+            "incorrect": {
+              "en": "Authentication comes first: permissions are attached to an identity.",
+              "ru": "Сначала аутентификация: права привязаны к личности."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Who the caller is",
+                "ru": "Кто вызывающий"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "What the caller is allowed to do",
+                "ru": "Что вызывающему разрешено делать"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Permissions belong to an identity — with no identity there is nothing to look them up for.",
+                "ru": "Права принадлежат личности — без личности их не для кого искать."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Neither — the handler itself decides both",
+                "ru": "Ни то, ни другое — оба вопроса решает сам обработчик"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "By the time a handler runs the decision is already made; that is what the chain in front of it is for.",
+                "ru": "К моменту запуска обработчика решение уже принято; для этого и нужна цепочка перед ним."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "chain-p1-order-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In an endpoint security chain, authorization may run before authentication.",
+            "ru": "В цепочке безопасности эндпоинтов авторизация может выполняться до аутентификации."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Authorization needs an identity, so authentication always runs first.",
+              "ru": "Авторизации нужна личность, поэтому аутентификация всегда идёт первой."
+            },
+            "incorrect": {
+              "en": "No — you cannot decide what a caller may do before you know who they are.",
+              "ru": "Нет — нельзя решить, что вызывающему можно, не зная, кто он."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "chain-p2-sort-gates",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the gates a request passes in an endpoint security chain.",
+            "ru": "Расставь по порядку проверки, через которые проходит запрос в цепочке безопасности эндпоинтов."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Cheap and shared checks first, identity next, and the record-specific check last.",
+              "ru": "Сначала дешёвые общие проверки, затем личность, а проверка конкретной записи — последней."
+            },
+            "incorrect": {
+              "en": "TLS, rate limit, rule match, authentication, authorization, object check — each needs the result of the previous one.",
+              "ru": "TLS, лимит частоты, подбор правила, аутентификация, авторизация, проверка объекта — каждой нужен результат предыдущей."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "TLS: refuse credentials sent in plaintext",
+                "ru": "TLS: не принимать учётные данные, отправленные открытым текстом"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Rate limit: bound how many requests this caller may make",
+                "ru": "Лимит частоты: ограничить, сколько запросов может сделать вызывающий"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Rule match: find the rule that covers this path and method",
+                "ru": "Подбор правила: найти правило для этого пути и метода"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Authentication: establish who is calling",
+                "ru": "Аутентификация: установить, кто вызывает"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "Authorization: decide whether that caller may do this",
+                "ru": "Авторизация: решить, можно ли это данному вызывающему"
+              }
+            },
+            {
+              "id": "s6",
+              "text": {
+                "en": "Object check: decide whether this record is theirs",
+                "ru": "Проверка объекта: решить, его ли это запись"
+              }
+            }
+          ]
+        },
+        {
+          "id": "chain-p3-fill-gates",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two gate names.",
+            "ru": "Впиши названия двух проверок."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Identity first, permissions second — that order is what makes the rest of the chain possible.",
+              "ru": "Сначала личность, потом права — этот порядок и делает возможной остальную цепочку."
+            },
+            "incorrect": {
+              "en": "Authentication establishes who is calling; authorization then decides what they may do.",
+              "ru": "Аутентификация устанавливает, кто вызывает; авторизация затем решает, что ему можно."
+            }
+          },
+          "text": {
+            "en": "In the chain, ___ establishes who the caller is, and only then ___ decides what they may do.",
+            "ru": "В цепочке ___ устанавливает, кто вызывающий, и только затем ___ решает, что ему можно."
+          },
+          "blanks": [
+            {
+              "en": [
+                "authentication",
+                "authn"
+              ],
+              "ru": [
+                "аутентификация",
+                "authentication"
+              ]
+            },
+            {
+              "en": [
+                "authorization",
+                "authz"
+              ],
+              "ru": [
+                "авторизация",
+                "authorization"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rule-list",
+      "title": {
+        "en": "The rule list",
+        "ru": "Список правил"
+      },
+      "summary": {
+        "en": "The rule list is read top to bottom, the first match wins, and its last line decides what happens to an endpoint nobody wrote a rule for.",
+        "ru": "Список правил читается сверху вниз, побеждает первое совпадение, а последняя строка решает судьбу эндпоинта, для которого правило не написали."
+      },
+      "discovery": [
+        {
+          "id": "rules-d1-default-stance",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A colleague adds `POST /api/reports` next sprint and writes no security rule for it. The last line of the config is `anyRequest().permitAll()`. Who can call the new endpoint?",
+            "ru": "Коллега в следующем спринте добавляет `POST /api/reports` и не пишет для него правило безопасности. Последняя строка конфигурации — `anyRequest().permitAll()`. Кто сможет вызвать новый эндпоинт?"
+          },
+          "reveal": {
+            "en": "The **default stance** is what happens to a request that matches **no rule at all**.\n\n- **Permit by default** — the rule list must enumerate everything that needs protecting, including the endpoint somebody adds next sprint. A forgotten rule ships an open endpoint, and nothing in the system reports it.\n- **Deny by default** — everything is closed until a rule opens it. A forgotten rule breaks a feature, and somebody files a ticket the same day.\n\nBoth stances fail; the difference is *how*. Choose the one whose failure mode is **loud**. In Spring Security that is a final `anyRequest().denyAll()` (or `.authenticated()`):\n\n```java\nhttp.authorizeHttpRequests(auth -> auth\n    .requestMatchers(\"/api/public/**\").permitAll()\n    .requestMatchers(\"/api/admin/**\").hasRole(\"ADMIN\")\n    .anyRequest().denyAll());\n```\n\nThis is structural, not a detail you retrofit: with permit by default, every endpoint anyone ever adds is one forgotten line away from being public.",
+            "ru": "**Позиция по умолчанию** — это то, что происходит с запросом, который не подошёл **ни под одно правило**.\n\n- **Разрешать по умолчанию** — список правил обязан перечислить всё, что нужно защитить, включая эндпоинт, который кто-то добавит в следующем спринте. Забытое правило выкатывает открытый эндпоинт, и в системе об этом никто не сообщит.\n- **Запрещать по умолчанию** — всё закрыто, пока правило не откроет. Забытое правило ломает функцию, и тикет заводят в тот же день.\n\nОбе позиции ошибаются; разница в том, *как*. Выбирайте ту, чей отказ **громкий**. В Spring Security это последняя строка `anyRequest().denyAll()` (или `.authenticated()`):\n\n```java\nhttp.authorizeHttpRequests(auth -> auth\n    .requestMatchers(\"/api/public/**\").permitAll()\n    .requestMatchers(\"/api/admin/**\").hasRole(\"ADMIN\")\n    .anyRequest().denyAll());\n```\n\nЭто структурное решение, а не деталь на потом: при разрешении по умолчанию любой добавленный эндпоинт отделён от публичности одной забытой строкой."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Permit by default means an endpoint with no rule is open to everyone.",
+              "ru": "Разрешение по умолчанию означает, что эндпоинт без правила открыт для всех."
+            },
+            "incorrect": {
+              "en": "Nothing protects a request that matched no rule — permitAll lets it straight through.",
+              "ru": "Запрос, не подошедший ни под одно правило, ничем не защищён — permitAll пропускает его насквозь."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Anyone, including an anonymous caller",
+                "ru": "Кто угодно, включая анонимного вызывающего"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Only authenticated callers",
+                "ru": "Только аутентифицированные вызывающие"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing authenticates a request that matched no rule; permitAll requires no credential at all.",
+                "ru": "Запрос, не подошедший ни под одно правило, никто не аутентифицирует; permitAll не требует учётных данных."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nobody, until a rule is added",
+                "ru": "Никто, пока не добавят правило"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is deny by default; permitAll does the opposite.",
+                "ru": "Это запрет по умолчанию; permitAll делает обратное."
+              }
+            }
+          ]
+        },
+        {
+          "id": "rules-d2-dead-rule",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "Every logged-in user reaches `/api/admin/**`, whatever their role. Where is the defect?",
+            "ru": "Любой залогиненный пользователь попадает на `/api/admin/**`, независимо от роли. Где дефект?"
+          },
+          "code": "http.authorizeHttpRequests(auth -> auth\n    .requestMatchers(\"/api/**\").authenticated()\n    .requestMatchers(\"/api/admin/**\").hasRole(\"ADMIN\")\n    .anyRequest().denyAll());",
+          "codeLang": "java",
+          "reveal": {
+            "en": "A rule list is read **top to bottom, and the first match wins**. `/api/admin/orders` matches `/api/**` on the first line, the decision is made there, and the stricter rule below is never consulted — it is **dead code**.\n\n```mermaid\nflowchart LR\n  R[\"GET /api/admin/orders\"] --> M1[\"/api/** -> authenticated\"] --> D[\"decided: any logged-in user\"]\n  M2[\"/api/admin/** -> hasRole ADMIN\"] --> X[\"never reached\"]\n```\n\nThe rule is to put **specific patterns first and broad fallbacks last**:\n\n```java\n.requestMatchers(\"/api/admin/**\").hasRole(\"ADMIN\")\n.requestMatchers(\"/api/**\").authenticated()\n.anyRequest().denyAll()\n```\n\nThis is one of the few security bugs a five-minute test catches and code review reliably misses — nothing about the wrong version looks wrong, and it produces successful responses rather than errors.",
+            "ru": "Список правил читается **сверху вниз, и побеждает первое совпадение**. `/api/admin/orders` подходит под `/api/**` в первой строке, решение принимается там, а более строгое правило ниже никто не смотрит — это **мёртвый код**.\n\n```mermaid\nflowchart LR\n  R[\"GET /api/admin/orders\"] --> M1[\"/api/** -> authenticated\"] --> D[\"решено: любой залогиненный\"]\n  M2[\"/api/admin/** -> hasRole ADMIN\"] --> X[\"недостижимо\"]\n```\n\nПравило простое: **сначала конкретные шаблоны, общие запасные варианты — в конце**:\n\n```java\n.requestMatchers(\"/api/admin/**\").hasRole(\"ADMIN\")\n.requestMatchers(\"/api/**\").authenticated()\n.anyRequest().denyAll()\n```\n\nЭто одна из немногих ошибок безопасности, которую пятиминутный тест ловит, а ревью стабильно пропускает: неверный вариант не выглядит неверным и отдаёт успешные ответы, а не ошибки."
+          },
+          "feedback": {
+            "correct": {
+              "en": "First match wins, so a broad pattern above a specific one kills it.",
+              "ru": "Побеждает первое совпадение, поэтому широкий шаблон выше конкретного убивает его."
+            },
+            "incorrect": {
+              "en": "The `/api/**` rule matches first and decides; the admin rule below it is unreachable.",
+              "ru": "Правило `/api/**` совпадает первым и принимает решение; админское правило ниже недостижимо."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "`/api/**` matches first, so the admin rule below it is dead code",
+                "ru": "`/api/**` совпадает первым, поэтому админское правило ниже — мёртвый код"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "`hasRole` should be `hasAuthority`",
+                "ru": "`hasRole` следует заменить на `hasAuthority`"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The line is never reached at all, so no spelling of it would change the outcome.",
+                "ru": "До этой строки вообще не доходит, поэтому её написание ничего не изменит."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "`denyAll()` should be `permitAll()`",
+                "ru": "`denyAll()` следует заменить на `permitAll()`"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That would open every unmatched endpoint and still leave the admin rule unreachable.",
+                "ru": "Это открыло бы все эндпоинты без правил и всё равно оставило админское правило недостижимым."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "rules-p1-specific-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In an endpoint rule list, the most specific matching rule wins no matter where it appears.",
+            "ru": "В списке правил эндпоинтов побеждает самое конкретное подходящее правило, где бы оно ни стояло."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The list is read top to bottom and the first match decides; specificity has no say.",
+              "ru": "Список читается сверху вниз, и решает первое совпадение; конкретность значения не имеет."
+            },
+            "incorrect": {
+              "en": "No — the first matching rule wins, so a broad pattern placed above a specific one makes it dead code.",
+              "ru": "Нет — побеждает первое совпавшее правило, поэтому широкий шаблон выше конкретного делает его мёртвым кодом."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "rules-p2-why-deny",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why prefer deny by default for endpoint rules?",
+            "ru": "Почему для правил эндпоинтов лучше выбирать запрет по умолчанию?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Both stances fail on a forgotten rule; deny by default fails loudly.",
+              "ru": "Обе позиции ошибаются при забытом правиле; запрет по умолчанию ошибается громко."
+            },
+            "incorrect": {
+              "en": "Because its failure mode is loud: a forgotten rule breaks a feature instead of silently shipping an open endpoint.",
+              "ru": "Потому что его отказ громкий: забытое правило ломает функцию, а не выкатывает молча открытый эндпоинт."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A forgotten rule breaks a feature loudly instead of silently shipping an open endpoint",
+                "ru": "Забытое правило громко ломает функцию, а не выкатывает молча открытый эндпоинт"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It removes the need for per-endpoint authorization rules",
+                "ru": "Он избавляет от необходимости писать правила авторизации для эндпоинтов"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It only sets what happens to unmatched requests; every endpoint still needs its own rule.",
+                "ru": "Он задаёт лишь судьбу запросов без правил; своё правило всё равно нужно каждому эндпоинту."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It makes the rule list shorter",
+                "ru": "С ним список правил становится короче"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It is usually longer — the point is the failure mode, not the size of the list.",
+                "ru": "Обычно он длиннее — дело в характере отказа, а не в размере списка."
+              }
+            }
+          ]
+        },
+        {
+          "id": "rules-p3-sort-order",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order these rules so that each one is actually reachable.",
+            "ru": "Расставь правила так, чтобы каждое было достижимо."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Specific patterns first, broad fallbacks last, deny by default at the bottom.",
+              "ru": "Сначала конкретные шаблоны, потом широкие запасные, внизу — запрет по умолчанию."
+            },
+            "incorrect": {
+              "en": "The first match wins, so a broad pattern above a specific one would make the specific rule dead code.",
+              "ru": "Побеждает первое совпадение, поэтому широкий шаблон выше конкретного сделал бы конкретное правило мёртвым кодом."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "requestMatchers(\"/api/public/health\").permitAll()",
+                "ru": "requestMatchers(\"/api/public/health\").permitAll()"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "requestMatchers(\"/api/admin/**\").hasRole(\"ADMIN\")",
+                "ru": "requestMatchers(\"/api/admin/**\").hasRole(\"ADMIN\")"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "requestMatchers(\"/api/**\").authenticated()",
+                "ru": "requestMatchers(\"/api/**\").authenticated()"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "anyRequest().denyAll()",
+                "ru": "anyRequest().denyAll()"
+              }
+            }
+          ]
+        },
+        {
+          "id": "rules-p4-fill-list",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the two rules of a rule list.",
+            "ru": "Дополни два правила работы со списком правил."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Order decides which rule applies; the default stance decides what happens with no rule at all.",
+              "ru": "Порядок решает, какое правило применится; позиция по умолчанию — что будет, если правила нет вовсе."
+            },
+            "incorrect": {
+              "en": "The first match wins, and an unmatched request must be denied by default.",
+              "ru": "Побеждает первое совпадение, а запрос без правила по умолчанию должен быть запрещён."
+            }
+          },
+          "text": {
+            "en": "An endpoint rule list is read top to bottom and the ___ match wins; a request that matches no rule must be ___ by default.",
+            "ru": "Список правил эндпоинтов читается сверху вниз, и побеждает ___ совпадение; запрос, не подошедший ни под одно правило, по умолчанию должен быть ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "first"
+              ],
+              "ru": [
+                "первое"
+              ]
+            },
+            {
+              "en": [
+                "denied",
+                "deny",
+                "rejected",
+                "blocked"
+              ],
+              "ru": [
+                "запрещён",
+                "запрещен",
+                "отклонён",
+                "отклонен",
+                "denied"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "authentication-principal",
+      "title": {
+        "en": "Authentication and the principal",
+        "ru": "Аутентификация и principal"
+      },
+      "summary": {
+        "en": "Authentication turns a credential the caller cannot forge into a principal; anything the caller can set themselves is not a credential.",
+        "ru": "Аутентификация превращает учётные данные, которые вызывающий не может подделать, в principal; всё, что вызывающий выставляет сам, — не учётные данные."
+      },
+      "discovery": [
+        {
+          "id": "authn-d1-header",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A service reads the caller's identity from this request and trusts it. Who has it authenticated?",
+            "ru": "Сервис берёт личность вызывающего из этого запроса и доверяет ей. Кого он аутентифицировал?"
+          },
+          "code": "GET /api/orders HTTP/1.1\nHost: api.example.com\nX-User-Id: 42",
+          "codeLang": "text",
+          "reveal": {
+            "en": "Authentication produces a **principal** — the identity the rest of the chain reasons about — out of a credential the caller **cannot forge**: a signed token, a session id that only exists in your session store, a client certificate.\n\nAn `X-User-Id` header is none of those. It is user input with a colon in it; `curl -H 'X-User-Id: 1'` makes the caller anybody they like. The same is true of a user id in the query string or in the request body.\n\n```mermaid\nflowchart LR\n  C[\"credential the caller cannot forge\"] --> V[\"verify it\"] --> P[\"principal\"]\n  I[\"header or field the caller sets\"] --> X[\"user input, not a credential\"]\n```\n\nA request with no valid credential has no principal at all: it is **anonymous**, and a protected endpoint answers `401`. Note the word *verify* in the middle — reading a value is not authenticating it.",
+            "ru": "Аутентификация производит **principal** — личность, которой оперирует вся остальная цепочка, — из учётных данных, которые вызывающий **не может подделать**: подписанный токен, идентификатор сессии, существующий только в вашем хранилище сессий, клиентский сертификат.\n\nЗаголовок `X-User-Id` — ничто из этого. Это пользовательский ввод с двоеточием: `curl -H 'X-User-Id: 1'` делает вызывающего кем угодно. То же верно для идентификатора пользователя в query string или в теле запроса.\n\n```mermaid\nflowchart LR\n  C[\"учётные данные, которые нельзя подделать\"] --> V[\"проверить их\"] --> P[\"principal\"]\n  I[\"заголовок или поле, которое ставит клиент\"] --> X[\"пользовательский ввод, не учётные данные\"]\n```\n\nУ запроса без корректных учётных данных нет principal вообще: он **анонимный**, и защищённый эндпоинт отвечает `401`. Обратите внимание на слово *проверить* посередине — прочитать значение не значит аутентифицировать его."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A value the caller sets is input, not proof.",
+              "ru": "Значение, которое ставит сам вызывающий, — это ввод, а не доказательство."
+            },
+            "incorrect": {
+              "en": "Nobody — any HTTP client can set any header, so this identity is unverified user input.",
+              "ru": "Никого — любой HTTP-клиент может выставить любой заголовок, поэтому это непроверенный пользовательский ввод."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Nobody — the header is client input and anyone can send any value",
+                "ru": "Никого — заголовок это ввод клиента, и любой может прислать любое значение"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "User 42, because the browser put the header there",
+                "ru": "Пользователя 42, потому что заголовок поставил браузер"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Any HTTP client can set any header, and a browser is not the only possible caller.",
+                "ru": "Любой HTTP-клиент может выставить любой заголовок, и браузер — не единственный возможный вызывающий."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "User 42, because the value is in a header rather than the URL",
+                "ru": "Пользователя 42, потому что значение в заголовке, а не в URL"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Where a value sits in the request says nothing about who put it there.",
+                "ru": "Место значения в запросе ничего не говорит о том, кто его туда положил."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "authn-p1-what-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Authentication decides what a caller is allowed to do.",
+            "ru": "Аутентификация решает, что вызывающему разрешено делать."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Authentication answers who; deciding what they may do is authorization.",
+              "ru": "Аутентификация отвечает на вопрос «кто»; что ему можно, решает авторизация."
+            },
+            "incorrect": {
+              "en": "No — authentication only establishes who is calling; authorization decides what they may do.",
+              "ru": "Нет — аутентификация лишь устанавливает, кто вызывает; что ему можно, решает авторизация."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "authn-p2-match-gates",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each gate of an endpoint security scheme to the question it answers.",
+            "ru": "Соотнеси каждую проверку схемы безопасности эндпоинтов с вопросом, на который она отвечает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Three different questions — who, may they, and is this record theirs.",
+              "ru": "Три разных вопроса: кто, можно ли ему и его ли эта запись."
+            },
+            "incorrect": {
+              "en": "Authentication establishes the principal, authorization checks the operation, the object check checks the record.",
+              "ru": "Аутентификация устанавливает principal, авторизация проверяет операцию, проверка объекта — запись."
+            }
+          },
+          "pairs": [
+            {
+              "id": "authn",
+              "left": {
+                "en": "authentication",
+                "ru": "аутентификация"
+              },
+              "right": {
+                "en": "Establishes the principal: who is calling",
+                "ru": "Устанавливает principal: кто вызывает"
+              }
+            },
+            {
+              "id": "authz",
+              "left": {
+                "en": "authorization",
+                "ru": "авторизация"
+              },
+              "right": {
+                "en": "Decides whether that principal may perform this operation",
+                "ru": "Решает, может ли этот principal выполнить эту операцию"
+              }
+            },
+            {
+              "id": "object",
+              "left": {
+                "en": "object-level check",
+                "ru": "проверка на уровне объекта"
+              },
+              "right": {
+                "en": "Decides whether this particular record belongs to that principal",
+                "ru": "Решает, принадлежит ли эта конкретная запись этому principal"
+              }
+            }
+          ]
+        },
+        {
+          "id": "authn-p3-fill-principal",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the definition of authentication.",
+            "ru": "Дополни определение аутентификации."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That is the whole test for an identity source: could the caller have produced it themselves?",
+              "ru": "Это и есть весь критерий источника личности: мог ли вызывающий изготовить его сам?"
+            },
+            "incorrect": {
+              "en": "It produces a principal from a credential the caller cannot forge — a header they set does not qualify.",
+              "ru": "Она производит principal из учётных данных, которые вызывающий не может подделать, — выставленный им заголовок не годится."
+            }
+          },
+          "text": {
+            "en": "Authentication produces a ___ from a credential that the caller cannot ___.",
+            "ru": "Аутентификация производит ___ из учётных данных, которые вызывающий не может ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "principal"
+              ],
+              "ru": [
+                "principal",
+                "принципал"
+              ]
+            },
+            {
+              "en": [
+                "forge",
+                "fake"
+              ],
+              "ru": [
+                "подделать",
+                "подделывать"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "session-vs-token",
+      "title": {
+        "en": "Server session or stateless token",
+        "ru": "Серверная сессия или stateless-токен"
+      },
+      "summary": {
+        "en": "A server-side session is revoked instantly but needs shared state; a stateless JWT is verified locally by any instance but stays valid until it expires.",
+        "ru": "Серверная сессия отзывается мгновенно, но требует общего состояния; stateless-JWT проверяется локально любым инстансом, но действителен до истечения срока."
+      },
+      "discovery": [
+        {
+          "id": "token-d1-revoke",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "You must log one user out of every device right now. Your API authenticates with stateless JWTs that expire in 30 minutes. What can you actually promise?",
+            "ru": "Нужно прямо сейчас разлогинить одного пользователя на всех устройствах. Ваш API аутентифицирует по stateless-JWT со сроком жизни 30 минут. Что вы реально можете обещать?"
+          },
+          "reveal": {
+            "en": "Two mainstream ways to authenticate an API call:\n\n| | Server-side session | Stateless token (JWT) |\n|---|---|---|\n| State | a session store, shared between instances | none — the token carries the claims |\n| Revocation | immediate: delete the session | hard: valid until it expires |\n| Scaling | every instance needs the store | any instance verifies locally |\n| Typical use | classic web app with cookies | APIs, mobile, service-to-service |\n\nRevocation is the trade you are making, and it is a **design decision, not a feature you add later**: \"log this user out everywhere, now\" with stateless tokens requires either a deny-list (which puts the state back) or very short lifetimes.\n\nThat is where the usual compromise comes from:\n\n```mermaid\nflowchart LR\n  A[\"auth server\"] --> AT[\"access token: minutes, stateless\"]\n  A --> RT[\"refresh token: long-lived, revocable\"]\n  RT --> A\n```\n\nA stolen access token expires on its own within minutes, and the refresh token — the part that *is* stored server-side — can be revoked.",
+            "ru": "Два основных способа аутентифицировать вызов API:\n\n| | Серверная сессия | Stateless-токен (JWT) |\n|---|---|---|\n| Состояние | хранилище сессий, общее для инстансов | нет — токен несёт поля в себе |\n| Отзыв | мгновенный: удалить сессию | сложно: действителен до истечения |\n| Масштабирование | хранилище нужно каждому инстансу | любой инстанс проверяет локально |\n| Типичное применение | классическое веб-приложение на куках | API, мобильные клиенты, сервис-сервис |\n\nОтзыв — это то, чем вы платите, и это **проектное решение, а не фича «потом»**: «разлогинить этого пользователя везде, прямо сейчас» со stateless-токенами требует либо списка запрещённых токенов (который возвращает состояние), либо очень коротких сроков жизни.\n\nОтсюда и обычный компромисс:\n\n```mermaid\nflowchart LR\n  A[\"сервер авторизации\"] --> AT[\"access-токен: минуты, stateless\"]\n  A --> RT[\"refresh-токен: долгоживущий, отзываемый\"]\n  RT --> A\n```\n\nУкраденный access-токен истекает сам за считаные минуты, а refresh-токен — та часть, которая *хранится* на сервере, — может быть отозван."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Stateless means there is nothing to delete — only expiry or a deny-list ends a token early.",
+              "ru": "Stateless означает, что удалять нечего — токен обрывают только истечение срока или список запрещённых."
+            },
+            "incorrect": {
+              "en": "An issued JWT stays valid until it expires; instant revocation needs a deny-list or very short lifetimes.",
+              "ru": "Выпущенный JWT действителен до истечения срока; мгновенный отзыв требует списка запрещённых или очень коротких сроков."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Nothing immediate without extra machinery — the token stays valid until it expires unless you add a deny-list",
+                "ru": "Ничего мгновенного без дополнительной машинерии — токен действителен до истечения, если не завести список запрещённых"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Immediate logout: delete the token on the server",
+                "ru": "Мгновенный выход: удалить токен на сервере"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is nothing to delete — the token lives with the client and the server keeps no copy.",
+                "ru": "Удалять нечего — токен живёт у клиента, и сервер не хранит его копию."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Immediate logout: the next request fails because the session is gone",
+                "ru": "Мгновенный выход: следующий запрос упадёт, потому что сессии больше нет"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Stateless means there is no session at all; the token itself carries the claims.",
+                "ru": "Stateless означает, что сессии нет вовсе; поля несёт сам токен."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "token-p1-revoke-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A stateless JWT can be revoked instantly by deleting it on the server.",
+            "ru": "Stateless-JWT можно отозвать мгновенно, удалив его на сервере."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The server stores no copy; the token is valid until it expires.",
+              "ru": "Сервер не хранит копию; токен действителен до истечения срока."
+            },
+            "incorrect": {
+              "en": "No — the token lives with the client. Early revocation needs a deny-list or short lifetimes.",
+              "ru": "Нет — токен живёт у клиента. Досрочный отзыв требует списка запрещённых или коротких сроков."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "token-p2-match-tradeoffs",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each identity mechanism to what it buys you.",
+            "ru": "Соотнеси каждый механизм личности с тем, что он даёт."
+          },
+          "feedback": {
+            "correct": {
+              "en": "State bought revocation; statelessness bought local verification — the pair of tokens buys both.",
+              "ru": "Состояние даёт отзыв, отсутствие состояния — локальную проверку; пара токенов даёт и то, и другое."
+            },
+            "incorrect": {
+              "en": "Sessions revoke instantly but need a store; JWTs verify anywhere but live until exp.",
+              "ru": "Сессии отзываются мгновенно, но требуют хранилища; JWT проверяются где угодно, но живут до exp."
+            }
+          },
+          "pairs": [
+            {
+              "id": "session",
+              "left": {
+                "en": "server-side session",
+                "ru": "серверная сессия"
+              },
+              "right": {
+                "en": "Revoked instantly by deleting it, at the cost of shared state",
+                "ru": "Отзывается мгновенно удалением, ценой общего состояния"
+              }
+            },
+            {
+              "id": "jwt",
+              "left": {
+                "en": "stateless JWT",
+                "ru": "stateless-JWT"
+              },
+              "right": {
+                "en": "Verified locally by any instance, but valid until it expires",
+                "ru": "Проверяется локально любым инстансом, но действителен до истечения"
+              }
+            },
+            {
+              "id": "refresh",
+              "left": {
+                "en": "refresh token",
+                "ru": "refresh-токен"
+              },
+              "right": {
+                "en": "Long-lived and revocable; it mints new access tokens",
+                "ru": "Долгоживущий и отзываемый; выпускает новые access-токены"
+              }
+            },
+            {
+              "id": "short-lifetime",
+              "left": {
+                "en": "short access-token lifetime",
+                "ru": "короткий срок жизни access-токена"
+              },
+              "right": {
+                "en": "Bounds how long a stolen token stays useful",
+                "ru": "Ограничивает, сколько украденный токен остаётся полезным"
+              }
+            }
+          ]
+        },
+        {
+          "id": "token-p3-fill-pair",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the two tokens of the usual compromise.",
+            "ru": "Назови два токена обычного компромисса."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The short one limits the damage of a leak; the long one is the part you can revoke.",
+              "ru": "Короткий ограничивает ущерб от утечки; длинный — та часть, которую можно отозвать."
+            },
+            "incorrect": {
+              "en": "A short-lived access token plus a long-lived, revocable refresh token.",
+              "ru": "Короткоживущий access-токен плюс долгоживущий отзываемый refresh-токен."
+            }
+          },
+          "text": {
+            "en": "The usual compromise is a short-lived ___ token plus a long-lived, revocable ___ token.",
+            "ru": "Обычный компромисс — короткоживущий ___-токен плюс долгоживущий отзываемый ___-токен."
+          },
+          "blanks": [
+            {
+              "en": [
+                "access"
+              ],
+              "ru": [
+                "access"
+              ]
+            },
+            {
+              "en": [
+                "refresh"
+              ],
+              "ru": [
+                "refresh"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jwt-validation",
+      "title": {
+        "en": "Verifying a JWT",
+        "ru": "Проверка JWT"
+      },
+      "summary": {
+        "en": "Decoding a JWT is not verifying it: check the signature with a pinned algorithm, then iss, aud and exp, before reading a single claim.",
+        "ru": "Декодировать JWT не значит проверить его: до чтения любого поля проверьте подпись с зафиксированным алгоритмом, затем iss, aud и exp."
+      },
+      "discovery": [
+        {
+          "id": "jwt-d1-decode",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This code reads the user id out of an incoming JWT. What does it get wrong?",
+            "ru": "Этот код достаёт идентификатор пользователя из входящего JWT. Что он делает неправильно?"
+          },
+          "code": "String payload = new String(Base64.getUrlDecoder().decode(token.split(\"\\\\.\")[1]));\nString userId = readClaim(payload, \"sub\");\nreturn loadUser(userId);",
+          "codeLang": "java",
+          "reveal": {
+            "en": "A JWT is **base64, not encryption**. Anyone holding one can read the claims, edit them, re-encode and send them back. Decoding tells you what the client *claims*; only the **signature** tells you the token came from your issuer unmodified. Skip that step and the token is just JSON the client typed.\n\nTrusting a token means checking **all** of:\n\n1. **Signature** — with the issuer's public key, and with the algorithm **pinned**. A token asking for `alg: none`, or an RS256 public key fed to an HMAC verifier as if it were a shared secret, is the classic bypass.\n2. **Issuer (`iss`)** — a real signature from the wrong authority is not authorization here.\n3. **Audience (`aud`)** — a token minted for another API must not be replayable against yours.\n4. **Expiry (`exp` / `nbf`)** — the only thing that limits the damage of a leak.\n\n```mermaid\nflowchart LR\n  T[\"token\"] --> S[\"signature, pinned alg\"] --> I[\"iss\"] --> A[\"aud\"] --> E[\"exp / nbf\"] --> C[\"only now trust the claims\"]\n```",
+            "ru": "JWT — это **base64, а не шифрование**. Любой, у кого он в руках, может прочитать поля, изменить их, закодировать обратно и отправить снова. Декодирование говорит, что клиент *утверждает*; и только **подпись** говорит, что токен пришёл от вашего издателя без изменений. Пропустите этот шаг — и токен станет просто JSON, который вписал клиент.\n\nДоверять токену означает проверить **всё** из этого:\n\n1. **Подпись** — открытым ключом издателя и с **зафиксированным** алгоритмом. Токен с `alg: none` или открытый ключ RS256, скормленный HMAC-проверке как общий секрет, — классический обход.\n2. **Издатель (`iss`)** — настоящая подпись не того центра здесь не авторизация.\n3. **Аудитория (`aud`)** — токен, выпущенный для другого API, не должен работать против вашего.\n4. **Срок действия (`exp` / `nbf`)** — единственное, что ограничивает ущерб от утечки.\n\n```mermaid\nflowchart LR\n  T[\"токен\"] --> S[\"подпись, зафиксированный alg\"] --> I[\"iss\"] --> A[\"aud\"] --> E[\"exp / nbf\"] --> C[\"только теперь можно верить полям\"]\n```"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Decoding is not verifying — without the signature check the claims are client input.",
+              "ru": "Декодирование — не проверка: без проверки подписи поля токена это ввод клиента."
+            },
+            "incorrect": {
+              "en": "It never verifies the signature, so the caller can edit `sub` to any user id and re-encode it.",
+              "ru": "Он вообще не проверяет подпись, поэтому вызывающий может поменять `sub` на любой идентификатор и закодировать заново."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It decodes the token without verifying the signature, so every claim is client input",
+                "ru": "Он декодирует токен, не проверяя подпись, поэтому все поля — ввод клиента"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It reads the payload segment instead of the header segment",
+                "ru": "Он читает сегмент payload вместо сегмента header"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The claims really do live in the payload; the missing step is verification, not the segment.",
+                "ru": "Поля действительно лежат в payload; не хватает проверки, а не другого сегмента."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A JWT segment has to be base64-decoded twice",
+                "ru": "Сегмент JWT нужно декодировать из base64 дважды"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Each of the three segments is decoded once; the defect is that nothing is verified.",
+                "ru": "Каждый из трёх сегментов декодируется один раз; дефект в том, что ничего не проверяется."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "jwt-p1-iss",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A JWT arrives at your API with a mathematically valid signature, but it was issued by a different identity provider than the one your API trusts. Accept it?",
+            "ru": "В ваш API приходит JWT с математически корректной подписью, но выпущенный не тем провайдером личности, которому API доверяет. Принять его?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "A signature proves who signed it, not that you trust that signer.",
+              "ru": "Подпись доказывает, кто подписал, а не то, что вы доверяете подписавшему."
+            },
+            "incorrect": {
+              "en": "No — the `iss` claim must name an issuer you trust; a real signature from the wrong authority is not authorization.",
+              "ru": "Нет — поле `iss` должно называть издателя, которому вы доверяете; настоящая подпись не того центра — не авторизация."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "No — the `iss` claim must match an issuer this API trusts",
+                "ru": "Нет — поле `iss` должно совпадать с издателем, которому доверяет этот API"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Yes — a valid signature is proof enough",
+                "ru": "Да — корректной подписи достаточно"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It proves who signed the token, not that this API trusts that signer.",
+                "ru": "Она доказывает, кто подписал токен, а не то, что этот API доверяет подписавшему."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Yes, provided `exp` is still in the future",
+                "ru": "Да, если `exp` ещё не наступил"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Expiry is a separate check; a token from an untrusted issuer is never acceptable.",
+                "ru": "Срок действия — отдельная проверка; токен от недоверенного издателя неприемлем в любом случае."
+              }
+            }
+          ]
+        },
+        {
+          "id": "jwt-p2-aud",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why does an API check the `aud` claim of an incoming JWT?",
+            "ru": "Зачем API проверяет поле `aud` во входящем JWT?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The audience names the API the token was minted for — replay across APIs is what it stops.",
+              "ru": "Аудитория называет API, для которого выпущен токен, — она и останавливает переигрывание между API."
+            },
+            "incorrect": {
+              "en": "So a token minted for a different API cannot be replayed against this one.",
+              "ru": "Чтобы токен, выпущенный для другого API, нельзя было переиграть против этого."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "So a token minted for another API cannot be replayed against this one",
+                "ru": "Чтобы токен, выпущенный для другого API, нельзя было переиграть против этого"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "To find out which user the token belongs to",
+                "ru": "Чтобы узнать, какому пользователю принадлежит токен"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is `sub`; `aud` names the API the token was minted for.",
+                "ru": "Это `sub`; `aud` называет API, для которого выпущен токен."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "To decide which role the caller has",
+                "ru": "Чтобы определить роль вызывающего"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Roles and scopes are separate claims; `aud` is only about which API the token is for.",
+                "ru": "Роли и scope — отдельные поля; `aud` только о том, для какого API токен."
+              }
+            }
+          ]
+        },
+        {
+          "id": "jwt-p3-sort-checks",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the checks an API performs on an incoming JWT.",
+            "ru": "Расставь по порядку проверки, которые API выполняет над входящим JWT."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Signature first — until it passes, every other field is just client input.",
+              "ru": "Сначала подпись — пока она не пройдена, любое другое поле это просто ввод клиента."
+            },
+            "incorrect": {
+              "en": "Signature with a pinned algorithm, then iss, aud, exp/nbf — and only then read the claims.",
+              "ru": "Подпись с зафиксированным алгоритмом, затем iss, aud, exp/nbf — и только потом читать поля."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Verify the signature with the issuer's public key and a pinned algorithm",
+                "ru": "Проверить подпись открытым ключом издателя и с зафиксированным алгоритмом"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Check `iss`: the token came from an authority this API trusts",
+                "ru": "Проверить `iss`: токен пришёл от центра, которому доверяет этот API"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Check `aud`: the token was minted for this API",
+                "ru": "Проверить `aud`: токен выпущен для этого API"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Check `exp` and `nbf`: the token is inside its validity window",
+                "ru": "Проверить `exp` и `nbf`: токен внутри окна действия"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "Only now read the claims and build the principal",
+                "ru": "Только теперь читать поля и строить principal"
+              }
+            }
+          ]
+        },
+        {
+          "id": "jwt-p4-fill-checks",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the four things you verify on a JWT.",
+            "ru": "Назови четыре вещи, которые проверяют в JWT."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Authenticity, the right authority, the right API, and a live token.",
+              "ru": "Подлинность, тот самый центр, тот самый API и не истёкший токен."
+            },
+            "incorrect": {
+              "en": "Signature with a pinned algorithm, then the iss, aud and exp claims.",
+              "ru": "Подпись с зафиксированным алгоритмом, затем поля iss, aud и exp."
+            }
+          },
+          "text": {
+            "en": "Before trusting a JWT claim, verify the ___ with a pinned algorithm, then the ___, ___ and ___ claims.",
+            "ru": "Прежде чем доверять полям JWT, проверьте ___ с зафиксированным алгоритмом, а затем поля ___, ___ и ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "signature"
+              ],
+              "ru": [
+                "подпись",
+                "signature"
+              ]
+            },
+            {
+              "en": [
+                "iss"
+              ],
+              "ru": [
+                "iss"
+              ]
+            },
+            {
+              "en": [
+                "aud"
+              ],
+              "ru": [
+                "aud"
+              ]
+            },
+            {
+              "en": [
+                "exp"
+              ],
+              "ru": [
+                "exp"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "roles-and-scopes",
+      "title": {
+        "en": "Roles and scopes",
+        "ru": "Роли и scope"
+      },
+      "summary": {
+        "en": "A role says what the user may do; a scope says what this token may do on their behalf — a request has to pass both.",
+        "ru": "Роль говорит, что может делать пользователь; scope — что может этот токен от его имени; запрос обязан пройти обе проверки."
+      },
+      "discovery": [
+        {
+          "id": "scope-d1-third-party",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "An admin connects a third-party analytics app and consents to the scope `orders:read`. The app then calls `DELETE /api/orders/42` with the token it received. What should happen?",
+            "ru": "Администратор подключает стороннее аналитическое приложение и соглашается на scope `orders:read`. Приложение вызывает `DELETE /api/orders/42` с полученным токеном. Что должно произойти?"
+          },
+          "reveal": {
+            "en": "Two questions that get confused:\n\n- A **role** (or permission) says what the *user* may do: `ADMIN`, `SUPPORT`, `orders.refund`. It comes from your own model.\n- A **scope** says what *this token* may do on the user's behalf: `orders:read`. It comes from the consent under which the token was issued. That is how a third-party integration gets read access to orders without getting the account.\n\nA request needs **both** to pass, so \"the user is allowed but the token is not\" is a normal, expected outcome.\n\nRules are also **method-aware**: reading and writing the same path are different endpoints, so `GET /api/orders/**` and `POST /api/orders` deserve different requirements. Coarse URL rules are best kept as a backstop, with the real decision annotated on the method itself:\n\n```java\n@PreAuthorize(\"hasRole('ADMIN') or #userId == authentication.name\")\npublic UserDto get(@PathVariable String userId) { ... }\n```\n\nSpring implements those annotations with proxies, which is why they only apply to calls that actually go through the proxy.",
+            "ru": "Два вопроса, которые часто путают:\n\n- **Роль** (или разрешение) говорит, что может делать *пользователь*: `ADMIN`, `SUPPORT`, `orders.refund`. Она берётся из вашей модели.\n- **Scope** говорит, что может делать *этот токен* от имени пользователя: `orders:read`. Он берётся из согласия, по которому токен был выпущен. Именно так сторонняя интеграция получает чтение заказов, не получая аккаунт.\n\nЗапрос должен пройти **обе** проверки, поэтому «пользователю можно, а токену нельзя» — нормальный, ожидаемый исход.\n\nПравила ещё и **учитывают метод**: чтение и запись по одному пути — разные эндпоинты, поэтому `GET /api/orders/**` и `POST /api/orders` заслуживают разных требований. Грубые правила по URL лучше держать страховкой, а настоящее решение писать на самом методе:\n\n```java\n@PreAuthorize(\"hasRole('ADMIN') or #userId == authentication.name\")\npublic UserDto get(@PathVariable String userId) { ... }\n```\n\nSpring реализует такие аннотации через прокси — поэтому они действуют только на вызовы, которые действительно идут через прокси."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The role is only half the decision; the token carries its own, narrower permission.",
+              "ru": "Роль — лишь половина решения; у токена своё, более узкое разрешение."
+            },
+            "incorrect": {
+              "en": "Refused — the user may delete orders, but this token was issued for reading them only.",
+              "ru": "Отказ — пользователь может удалять заказы, но этот токен выпущен только для чтения."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Refused — the user may delete orders, but this token may only read them",
+                "ru": "Отказ — пользователь может удалять заказы, но этот токен может только читать"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Allowed — the user behind the token has the ADMIN role",
+                "ru": "Разрешено — у пользователя за токеном роль ADMIN"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The role is only half of the decision; the token was issued for reading only.",
+                "ru": "Роль — лишь половина решения; токен выпущен только на чтение."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Refused, because the token is invalid",
+                "ru": "Отказ, потому что токен невалиден"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The token is perfectly valid — it simply does not carry that permission.",
+                "ru": "Токен совершенно валиден — просто он не несёт этого разрешения."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "scope-p1-admin-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "If the user behind a token has the ADMIN role, that token may call any endpoint.",
+            "ru": "Если у пользователя за токеном роль ADMIN, этот токен может вызвать любой эндпоинт."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The token's scope limits it independently of the user's role.",
+              "ru": "Scope токена ограничивает его независимо от роли пользователя."
+            },
+            "incorrect": {
+              "en": "No — the scope says what this token may do; a read-only token stays read-only for an admin.",
+              "ru": "Нет — scope говорит, что может этот токен; токен только на чтение останется таким и у администратора."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "scope-p2-method-aware",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "How should `GET /api/orders/**` and `POST /api/orders` be treated in a rule list?",
+            "ru": "Как в списке правил относиться к `GET /api/orders/**` и `POST /api/orders`?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The HTTP method is part of the endpoint, so reads and writes get separate requirements.",
+              "ru": "HTTP-метод — часть эндпоинта, поэтому у чтения и записи свои требования."
+            },
+            "incorrect": {
+              "en": "As different endpoints — a rule that authorizes reading must not silently authorize writing.",
+              "ru": "Как разные эндпоинты — правило, разрешающее чтение, не должно молча разрешать запись."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "As different endpoints with their own requirements",
+                "ru": "Как разные эндпоинты со своими требованиями"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "As one endpoint, since the path prefix is the same",
+                "ru": "Как один эндпоинт, ведь префикс пути одинаковый"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The method is part of the endpoint; a read rule must not authorize a write.",
+                "ru": "Метод — часть эндпоинта; правило на чтение не должно разрешать запись."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Writes need no rule, because the request body is validated",
+                "ru": "Записи не нужно правило, ведь тело запроса валидируется"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Validation checks the payload; it says nothing about who is allowed to write.",
+                "ru": "Валидация проверяет содержимое; она ничего не говорит о том, кому можно писать."
+              }
+            }
+          ]
+        },
+        {
+          "id": "scope-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each authorization concept to what it expresses.",
+            "ru": "Соотнеси каждое понятие авторизации с тем, что оно выражает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Roles come from your model, scopes from the consent, and the annotation is where the real decision lives.",
+              "ru": "Роли берутся из вашей модели, scope — из согласия, а аннотация — место настоящего решения."
+            },
+            "incorrect": {
+              "en": "A role is about the user, a scope about the token, and the method annotation is the precise rule.",
+              "ru": "Роль — про пользователя, scope — про токен, а аннотация на методе — точное правило."
+            }
+          },
+          "pairs": [
+            {
+              "id": "role",
+              "left": {
+                "en": "role ADMIN",
+                "ru": "роль ADMIN"
+              },
+              "right": {
+                "en": "What the user may do — it comes from your own model",
+                "ru": "Что может делать пользователь — берётся из вашей модели"
+              }
+            },
+            {
+              "id": "scope",
+              "left": {
+                "en": "scope orders:read",
+                "ru": "scope orders:read"
+              },
+              "right": {
+                "en": "What this token may do on the user's behalf — it comes from the consent that issued it",
+                "ru": "Что может этот токен от имени пользователя — берётся из согласия, по которому он выпущен"
+              }
+            },
+            {
+              "id": "preauthorize",
+              "left": {
+                "en": "@PreAuthorize on the method",
+                "ru": "@PreAuthorize на методе"
+              },
+              "right": {
+                "en": "The precise decision next to the code it protects, with the URL rule as a backstop",
+                "ru": "Точное решение рядом с кодом, который оно защищает, а правило по URL — страховка"
+              }
+            }
+          ]
+        },
+        {
+          "id": "scope-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the two halves of an authorization decision.",
+            "ru": "Дополни две половины решения об авторизации."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Both must pass — that is why a user can be allowed while their token is not.",
+              "ru": "Пройти должны обе — поэтому пользователю может быть можно, а его токену нет."
+            },
+            "incorrect": {
+              "en": "A role is what the user may do; a scope is what this token may do on their behalf.",
+              "ru": "Роль — что может пользователь; scope — что может этот токен от его имени."
+            }
+          },
+          "text": {
+            "en": "A ___ says what the user may do; a ___ says what this token may do on the user's behalf.",
+            "ru": "___ говорит, что может делать пользователь; ___ говорит, что может этот токен от имени пользователя."
+          },
+          "blanks": [
+            {
+              "en": [
+                "role"
+              ],
+              "ru": [
+                "роль",
+                "role"
+              ]
+            },
+            {
+              "en": [
+                "scope"
+              ],
+              "ru": [
+                "scope",
+                "скоуп"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "status-codes",
+      "title": {
+        "en": "401, 403 and 404",
+        "ru": "401, 403 и 404"
+      },
+      "summary": {
+        "en": "401 means the caller is unknown, 403 means known and refused, and 404 hides whether the record exists at all.",
+        "ru": "401 означает, что вызывающий неизвестен, 403 — известен и получил отказ, 404 — скрывает сам факт существования записи."
+      },
+      "discovery": [
+        {
+          "id": "status-d1-expired",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A request arrives at an API with a token that expired an hour ago. Which status should the API return?",
+            "ru": "В API приходит запрос с токеном, который истёк час назад. Какой статус вернуть?"
+          },
+          "reveal": {
+            "en": "| | Meaning | The client should |\n|---|---|---|\n| `401 Unauthorized` | I do not know who you are — the credential is missing, expired or invalid | authenticate and retry |\n| `403 Forbidden` | I know exactly who you are, and no | stop; retrying changes nothing |\n| `404 Not Found` | (deliberately) I will not tell you whether it exists | stop |\n\nThe distinction is not cosmetic: it tells the client what to **do**. On `401` a client refreshes its credential and retries; on `403` a retry with the same credential is pointless, so a client that keeps retrying is a bug. An expired token means the caller is not identified at all, which is `401` — even though the caller is convinced they are logged in.\n\n`404` is the deliberate one. It is returned where the *existence* of a record is itself sensitive, so nobody can learn which ids exist by reading status codes.",
+            "ru": "| | Смысл | Что делать клиенту |\n|---|---|---|\n| `401 Unauthorized` | я не знаю, кто ты: учётных данных нет, они просрочены или неверны | аутентифицироваться и повторить |\n| `403 Forbidden` | я точно знаю, кто ты, и — нет | прекратить; повтор ничего не изменит |\n| `404 Not Found` | (намеренно) я не скажу даже, существует ли это | прекратить |\n\nРазличие не косметическое: оно говорит клиенту, что **делать**. На `401` клиент обновляет учётные данные и повторяет; на `403` повтор с теми же данными бессмыслен, поэтому клиент, который упорно повторяет, — это баг. Истёкший токен означает, что вызывающий вообще не опознан, а это `401`, — даже если он уверен, что залогинен.\n\n`404` — намеренный случай. Его возвращают там, где чувствителен сам *факт существования* записи, чтобы по кодам ответа нельзя было узнать, какие идентификаторы существуют."
+          },
+          "feedback": {
+            "correct": {
+              "en": "An expired credential means the caller is not identified — that is 401.",
+              "ru": "Истёкшие учётные данные означают, что вызывающий не опознан, — это 401."
+            },
+            "incorrect": {
+              "en": "401: the credential is missing, expired or invalid, so the API does not know who is calling.",
+              "ru": "401: учётных данных нет, они просрочены или неверны, поэтому API не знает, кто вызывает."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "401",
+                "ru": "401"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "403",
+                "ru": "403"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "403 means the caller is known and refused; an expired credential means nobody is known.",
+                "ru": "403 означает, что вызывающий известен и получил отказ; при истёкших данных никто не известен."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "400",
+                "ru": "400"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The request is well-formed; the problem is the credential, not the syntax.",
+                "ru": "Запрос корректно сформирован; проблема в учётных данных, а не в синтаксисе."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "status-p1-client-403",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A client receives 403 from an API. What should it do?",
+            "ru": "Клиент получил от API 403. Что ему делать?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "403 is a final answer about a known identity.",
+              "ru": "403 — окончательный ответ об известной личности."
+            },
+            "incorrect": {
+              "en": "Stop — the API knows who the caller is and refused; retrying with the same credential changes nothing.",
+              "ru": "Прекратить — API знает, кто вызывающий, и отказал; повтор с теми же данными ничего не изменит."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Stop — retrying with the same credential changes nothing",
+                "ru": "Прекратить — повтор с теми же учётными данными ничего не изменит"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Refresh the credential and retry",
+                "ru": "Обновить учётные данные и повторить"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the answer to 401; 403 says the identity is known and the answer is still no.",
+                "ru": "Это ответ на 401; 403 говорит, что личность известна, и ответ всё равно «нет»."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Retry with an exponential back-off",
+                "ru": "Повторять с экспоненциальной задержкой"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A back-off suits a rate limit or a transient error, not a permission refusal.",
+                "ru": "Задержка подходит для лимита частоты или временной ошибки, а не для отказа в правах."
+              }
+            }
+          ]
+        },
+        {
+          "id": "status-p2-403-record-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Returning 403 for another user's record is safer than returning 404.",
+            "ru": "Возвращать 403 на чужую запись безопаснее, чем 404."
+          },
+          "feedback": {
+            "correct": {
+              "en": "403 confirms the record exists, which is exactly what lets ids be enumerated.",
+              "ru": "403 подтверждает, что запись существует, — именно это и позволяет перебирать идентификаторы."
+            },
+            "incorrect": {
+              "en": "No — 403 confirms the record exists; return 404 when existence itself is sensitive.",
+              "ru": "Нет — 403 подтверждает существование записи; возвращайте 404, когда чувствителен сам факт существования."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "status-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each status code an API returns to what it means.",
+            "ru": "Соотнеси каждый статус, который возвращает API, с его смыслом."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Unknown, refused, or not even disclosed — three different answers to three different situations.",
+              "ru": "Неизвестен, отказано или даже не раскрыто — три разных ответа на три разные ситуации."
+            },
+            "incorrect": {
+              "en": "401 = I do not know you; 403 = I know you and no; 404 = I will not say whether it exists.",
+              "ru": "401 — я тебя не знаю; 403 — знаю, и ответ «нет»; 404 — не скажу даже, существует ли это."
+            }
+          },
+          "pairs": [
+            {
+              "id": "c401",
+              "left": {
+                "en": "401",
+                "ru": "401"
+              },
+              "right": {
+                "en": "Credential missing, expired or invalid — authenticate and retry",
+                "ru": "Учётных данных нет, они просрочены или неверны — аутентифицироваться и повторить"
+              }
+            },
+            {
+              "id": "c403",
+              "left": {
+                "en": "403",
+                "ru": "403"
+              },
+              "right": {
+                "en": "Identity known, permission refused — retrying changes nothing",
+                "ru": "Личность известна, в правах отказано — повтор ничего не изменит"
+              }
+            },
+            {
+              "id": "c404",
+              "left": {
+                "en": "404",
+                "ru": "404"
+              },
+              "right": {
+                "en": "Existence itself is deliberately not disclosed",
+                "ru": "Сам факт существования намеренно не раскрывается"
+              }
+            }
+          ]
+        },
+        {
+          "id": "status-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the three status codes.",
+            "ru": "Впиши три кода статуса."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Each code tells the client something different to do next.",
+              "ru": "Каждый код говорит клиенту сделать что-то своё."
+            },
+            "incorrect": {
+              "en": "401 for an unknown caller, 403 for a known one without permission, 404 when existence is sensitive.",
+              "ru": "401 — вызывающий неизвестен, 403 — известен, но без прав, 404 — когда чувствительно само существование."
+            }
+          },
+          "text": {
+            "en": "Unknown or invalid credential -> ___; known caller without permission -> ___; another user's record, when existence is sensitive -> ___.",
+            "ru": "Неизвестные или неверные учётные данные -> ___; известный вызывающий без прав -> ___; чужая запись, когда чувствительно само существование -> ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "401"
+              ],
+              "ru": [
+                "401"
+              ]
+            },
+            {
+              "en": [
+                "403"
+              ],
+              "ru": [
+                "403"
+              ]
+            },
+            {
+              "en": [
+                "404"
+              ],
+              "ru": [
+                "404"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "object-level-authorization",
+      "title": {
+        "en": "Object-level authorization",
+        "ru": "Авторизация на уровне объекта"
+      },
+      "summary": {
+        "en": "Passing the URL rules does not prove the record belongs to the caller — the check has to involve the record itself.",
+        "ru": "Прохождение правил по URL не доказывает, что запись принадлежит вызывающему, — в проверке должна участвовать сама запись."
+      },
+      "discovery": [
+        {
+          "id": "object-d1-predict",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Bob is logged in with role `USER` and requests order 43, which belongs to Alice. What does he get?",
+            "ru": "Боб залогинен с ролью `USER` и запрашивает заказ 43, который принадлежит Алисе. Что он получит?"
+          },
+          "code": "// rule list: /api/orders/** -> hasRole(\"USER\")\n@GetMapping(\"/api/orders/{id}\")\npublic OrderDto get(@PathVariable long id) {\n    return toDto(orders.findById(id).orElseThrow());\n}\n\n// Bob (role USER) calls GET /api/orders/43 — order 43 belongs to Alice.",
+          "codeLang": "java",
+          "reveal": {
+            "en": "This is **broken object level authorization** (the name OWASP gives it), and it is the most common API vulnerability there is.\n\nEvery earlier gate passed: Bob is authenticated, he has role `USER`, and `/api/orders/**` allows `USER`. Nothing anywhere said that order 43 is *his*. Changing one digit in the URL is the entire exploit — there is no error in the logs, and the response is a perfectly successful `200`.\n\n```mermaid\nflowchart LR\n  A[\"authenticated: Bob\"] --> R[\"role USER allowed on /api/orders/**\"] --> O[\"owner of order 43: Alice\"] --> X[\"nobody compared these two\"]\n```\n\nThe fix is a check that involves the record: load it and compare the owner, or better, **scope the query itself** — `findByIdAndOwner(id, principal)` — so the authorization sits in the same statement as the fetch and cannot be forgotten. Return **`404`** rather than `403` for someone else's record, so an attacker cannot enumerate which ids exist.\n\nThe same reasoning extends to **fields**: a `PATCH` that binds the whole body to the entity lets a user set `role: ADMIN` on themselves.",
+            "ru": "Это **broken object level authorization** (так её называет OWASP), и это самая частая уязвимость API из существующих.\n\nВсе предыдущие проверки пройдены: Боб аутентифицирован, у него роль `USER`, а `/api/orders/**` разрешает `USER`. Нигде не сказано, что заказ 43 — *его*. Весь эксплойт — поменять одну цифру в URL: ошибки в логах нет, а ответ — совершенно успешный `200`.\n\n```mermaid\nflowchart LR\n  A[\"аутентифицирован: Боб\"] --> R[\"роль USER разрешена на /api/orders/**\"] --> O[\"владелец заказа 43: Алиса\"] --> X[\"эти двое нигде не сравнивались\"]\n```\n\nЛечится проверкой, в которой участвует сама запись: загрузить её и сравнить владельца или — лучше — **сузить сам запрос**, `findByIdAndOwner(id, principal)`, чтобы авторизация оказалась в том же выражении, что и выборка, и её нельзя было забыть. На чужую запись возвращайте **`404`**, а не `403`, чтобы злоумышленник не мог перебрать существующие идентификаторы.\n\nТо же рассуждение распространяется на **поля**: `PATCH`, привязывающий всё тело к сущности, позволяет пользователю выставить себе `role: ADMIN`."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Every written gate passed; the one that would have stopped him was never written.",
+              "ru": "Все написанные проверки пройдены; та, что остановила бы его, не написана вовсе."
+            },
+            "incorrect": {
+              "en": "200 with Alice's order — nothing in this code compares the order's owner with the caller.",
+              "ru": "200 с заказом Алисы — ничто в этом коде не сравнивает владельца заказа с вызывающим."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "200 with Alice's order",
+                "ru": "200 с заказом Алисы"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "403, because the order is not his",
+                "ru": "403, потому что заказ не его"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing here compares the order's owner with the caller, so there is no check to refuse him.",
+                "ru": "Здесь ничто не сравнивает владельца заказа с вызывающим, поэтому отказывать некому."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "401, because the token says nothing about order 43",
+                "ru": "401, потому что токен ничего не говорит про заказ 43"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Bob is authenticated; tokens carry claims about the user, not a list of records.",
+                "ru": "Боб аутентифицирован; токены несут поля о пользователе, а не список записей."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "object-p1-missing-check",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A logged-in user edits `/api/orders/42` into `/api/orders/43` and receives another customer's data with status 200. Which check is missing?",
+            "ru": "Залогиненный пользователь меняет `/api/orders/42` на `/api/orders/43` и получает данные другого клиента со статусом 200. Какой проверки не хватает?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Identity and role were fine; whose record it is was never asked.",
+              "ru": "С личностью и ролью всё в порядке; вопрос, чья это запись, никто не задал."
+            },
+            "incorrect": {
+              "en": "Object-level authorization — the check that compares the record's owner with the caller.",
+              "ru": "Авторизация на уровне объекта — проверка, сравнивающая владельца записи с вызывающим."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Object-level authorization: whether this record belongs to this caller",
+                "ru": "Авторизация на уровне объекта: принадлежит ли эта запись этому вызывающему"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Authentication — the caller has to log in first",
+                "ru": "Аутентификация — вызывающий должен сначала войти"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The caller is logged in; that is exactly why every earlier gate let the request through.",
+                "ru": "Вызывающий залогинен; именно поэтому все предыдущие проверки его и пропустили."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Input validation of the id parameter",
+                "ru": "Валидация параметра id"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "43 is a perfectly valid id; the problem is ownership, not format.",
+                "ru": "43 — совершенно корректный идентификатор; проблема во владении, а не в формате."
+              }
+            }
+          ]
+        },
+        {
+          "id": "object-p2-spot-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This endpoint requires a role. What still lets one user read another user's invoice?",
+            "ru": "Этот эндпоинт требует роль. Что всё равно позволяет одному пользователю прочитать чужой счёт?"
+          },
+          "code": "@GetMapping(\"/api/invoices/{id}\")\n@PreAuthorize(\"hasRole('USER')\")\npublic InvoiceDto get(@PathVariable long id) {\n    Invoice invoice = invoices.findById(id).orElseThrow();\n    return toDto(invoice);\n}",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "A role check answers \"is this a user\", never \"is this their invoice\".",
+              "ru": "Проверка роли отвечает на вопрос «это пользователь?», но не «его ли это счёт?»."
+            },
+            "incorrect": {
+              "en": "The role check passes for every user; nothing ties the invoice id to the caller.",
+              "ru": "Проверку роли проходит любой пользователь; ничто не связывает идентификатор счёта с вызывающим."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The role check proves the caller is a user, but nothing ties invoice `id` to that caller",
+                "ru": "Проверка роли доказывает, что вызывающий — пользователь, но ничто не связывает `id` счёта с ним"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "`@PreAuthorize` should be `@Secured`",
+                "ru": "`@PreAuthorize` следует заменить на `@Secured`"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Both express the same role check, and neither one knows who owns the invoice.",
+                "ru": "Обе выражают ту же проверку роли, и ни одна не знает, кому принадлежит счёт."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The invoice should be loaded before the role check runs",
+                "ru": "Счёт нужно загружать до проверки роли"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Order changes nothing here — the owner is never compared with the caller at all.",
+                "ru": "Порядок здесь ничего не меняет — владельца с вызывающим вообще не сравнивают."
+              }
+            }
+          ]
+        },
+        {
+          "id": "object-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the safest way to enforce record ownership.",
+            "ru": "Собери самый надёжный способ проверить владение записью."
+          },
+          "feedback": {
+            "correct": {
+              "en": "In the same statement as the fetch, the check cannot be skipped or forgotten.",
+              "ru": "В том же выражении, что и выборка, проверку нельзя пропустить или забыть."
+            },
+            "incorrect": {
+              "en": "Scope the query by owner, so authorization lives in the same statement as the fetch.",
+              "ru": "Сузить запрос по владельцу, чтобы авторизация жила в том же выражении, что и выборка."
+            }
+          },
+          "tokens": {
+            "en": [
+              "scope",
+              "the",
+              "query",
+              "by",
+              "owner",
+              "so",
+              "the",
+              "check",
+              "cannot",
+              "be",
+              "forgotten"
+            ],
+            "ru": [
+              "сузить",
+              "запрос",
+              "по",
+              "владельцу,",
+              "чтобы",
+              "проверку",
+              "нельзя",
+              "было",
+              "забыть"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "afterwards"
+            ],
+            "ru": [
+              "потом"
+            ]
+          }
+        },
+        {
+          "id": "object-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the fix for broken object level authorization.",
+            "ru": "Дополни лечение broken object level authorization."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Scoping the query gives the 404 for free: not yours is indistinguishable from not there.",
+              "ru": "Сужение запроса даёт 404 само собой: «не твоё» неотличимо от «не существует»."
+            },
+            "incorrect": {
+              "en": "Scope the query by owner and answer 404, so ids cannot be enumerated.",
+              "ru": "Сузьте запрос по владельцу и отвечайте 404, чтобы идентификаторы нельзя было перебрать."
+            }
+          },
+          "text": {
+            "en": "Fetch the record with a query scoped by ___, and answer a request for someone else's record with ___.",
+            "ru": "Забирайте запись запросом, суженным по ___, а на запрос чужой записи отвечайте ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "owner"
+              ],
+              "ru": [
+                "владельцу",
+                "владелец",
+                "owner"
+              ]
+            },
+            {
+              "en": [
+                "404"
+              ],
+              "ru": [
+                "404"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "request-body",
+      "title": {
+        "en": "The request body",
+        "ru": "Тело запроса"
+      },
+      "summary": {
+        "en": "Injection, oversized payloads and mass assignment do not depend on who is calling, so only validation at the edge stops them.",
+        "ru": "Инъекции, гигантские тела и массовое присваивание не зависят от того, кто вызывает, — их останавливает только валидация на входе."
+      },
+      "discovery": [
+        {
+          "id": "body-d1-mass-assignment",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "An authenticated user sends `PATCH /api/users/42` with the body `{\"name\":\"Bob\",\"role\":\"ADMIN\"}`. What does this endpoint let them do?",
+            "ru": "Аутентифицированный пользователь отправляет `PATCH /api/users/42` с телом `{\"name\":\"Bob\",\"role\":\"ADMIN\"}`. Что позволяет ему этот эндпоинт?"
+          },
+          "code": "@PatchMapping(\"/api/users/{id}\")\npublic UserDto update(@PathVariable long id, @RequestBody User user) {\n    user.setId(id);\n    return toDto(users.save(user));\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Authentication and authorization answer *who*. Neither ever looks at the **body**, and three body risks live entirely outside them:\n\n- **Mass assignment** — binding the request body straight to the entity lets the caller write fields you never meant to expose, such as `role`. Bind to an explicit **DTO** carrying exactly the fields this endpoint accepts, never to the entity.\n- **Injection** — a fully authenticated, fully authorized caller can still send a payload that ends up inside a query. Parameterized statements, not string concatenation, are what stop that.\n- **Size and paging** — an unbounded payload, or `size=1000000` on a list endpoint, is a perfectly authorized request that costs you the service.\n\nValidate at the edge of the controller, and prefer an **allow-list** to a deny-list: enumerate what is accepted and reject everything else, because a deny-list only covers the attacks somebody already thought of.",
+            "ru": "Аутентификация и авторизация отвечают на вопрос *кто*. Ни одна из них не смотрит в **тело**, а три рисков тела живут целиком вне их:\n\n- **Массовое присваивание** — привязка тела запроса прямо к сущности позволяет вызывающему записать поля, которые вы не собирались открывать, например `role`. Привязывайтесь к явному **DTO** ровно с теми полями, которые принимает эндпоинт, а не к сущности.\n- **Инъекции** — полностью аутентифицированный и авторизованный вызывающий всё равно может прислать содержимое, которое попадёт внутрь запроса к базе. Останавливают это параметризованные выражения, а не склейка строк.\n- **Размер и постраничность** — тело без ограничения размера или `size=1000000` на списочном эндпоинте — совершенно авторизованный запрос, который стоит вам сервиса.\n\nВалидируйте на входе в контроллер и предпочитайте **белый список** чёрному: перечислите то, что принимается, и отклоняйте всё остальное, потому что чёрный список покрывает лишь те атаки, о которых кто-то уже подумал."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Whatever the body contains gets written — including fields the endpoint never meant to expose.",
+              "ru": "Записывается всё, что есть в теле, — включая поля, которые эндпоинт не собирался открывать."
+            },
+            "incorrect": {
+              "en": "The body is bound straight to the entity, so the caller can set any field of it, including `role`.",
+              "ru": "Тело привязано прямо к сущности, поэтому вызывающий может выставить любое её поле, включая `role`."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Set any field of the entity, including `role`, because the body is bound straight to it",
+                "ru": "Выставить любое поле сущности, включая `role`, потому что тело привязано прямо к ней"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing extra — a user may only edit their own record",
+                "ru": "Ничего лишнего — пользователь может править только свою запись"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That would be an ownership check, which this method also does not have; and the body still writes every field.",
+                "ru": "Это была бы проверка владения, которой здесь тоже нет; и тело всё равно записывает все поля."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing extra — the framework ignores fields the caller should not set",
+                "ru": "Ничего лишнего — фреймворк игнорирует поля, которые вызывающему нельзя ставить"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing knows which fields those are; binding writes whatever the body contains.",
+                "ru": "Никто не знает, что это за поля; привязка записывает всё, что есть в теле."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "body-p1-injection-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "An endpoint that requires authentication and the right role is safe from SQL injection.",
+            "ru": "Эндпоинт, требующий аутентификации и нужной роли, защищён от SQL-инъекций."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Injection is about the payload, and neither gate ever inspects it.",
+              "ru": "Инъекция — про содержимое запроса, а ни одна из этих проверок в него не смотрит."
+            },
+            "incorrect": {
+              "en": "No — an authorized caller can still send a malicious payload; only validation and parameterized queries stop it.",
+              "ru": "Нет — авторизованный вызывающий всё равно может прислать вредоносное содержимое; останавливают его валидация и параметризованные запросы."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "body-p2-allow-list",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Should endpoint input validation use an allow-list or a deny-list?",
+            "ru": "Что использовать для валидации входных данных эндпоинта — белый список или чёрный?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "An allow-list is closed by default, exactly like the rule list.",
+              "ru": "Белый список закрыт по умолчанию — ровно как и список правил."
+            },
+            "incorrect": {
+              "en": "An allow-list: enumerate what is accepted and reject everything else.",
+              "ru": "Белый список: перечислить то, что принимается, и отклонять всё остальное."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "An allow-list: enumerate what is accepted and reject everything else",
+                "ru": "Белый список: перечислить принимаемое и отклонять всё остальное"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A deny-list: block the patterns known to be dangerous",
+                "ru": "Чёрный список: блокировать известные опасные шаблоны"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A deny-list only covers the attacks somebody already thought of.",
+                "ru": "Чёрный список покрывает лишь те атаки, о которых кто-то уже подумал."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Neither — type binding by the framework is enough",
+                "ru": "Ни то, ни другое — достаточно привязки типов фреймворком"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Type binding says a value is a number, not that it is an acceptable one.",
+                "ru": "Привязка типов говорит, что значение — число, но не что оно допустимое."
+              }
+            }
+          ]
+        },
+        {
+          "id": "body-p3-fill-dto",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the defence against mass assignment.",
+            "ru": "Дополни защиту от массового присваивания."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The DTO is the allow-list of fields for that endpoint.",
+              "ru": "DTO — это и есть белый список полей для эндпоинта."
+            },
+            "incorrect": {
+              "en": "Bind to an explicit DTO, never straight to the entity — otherwise the body can set fields like `role`.",
+              "ru": "Привязывайтесь к явному DTO, а не прямо к сущности, иначе тело сможет выставить поля вроде `role`."
+            }
+          },
+          "text": {
+            "en": "Bind a request body to an explicit ___ with exactly the fields the endpoint accepts, never straight to the ___.",
+            "ru": "Привязывайте тело запроса к явному ___ ровно с теми полями, которые принимает эндпоинт, а не прямо к ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "DTO",
+                "dto"
+              ],
+              "ru": [
+                "DTO",
+                "dto"
+              ]
+            },
+            {
+              "en": [
+                "entity"
+              ],
+              "ru": [
+                "сущности",
+                "сущность",
+                "entity"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rate-limiting",
+      "title": {
+        "en": "Rate limiting",
+        "ru": "Ограничение частоты"
+      },
+      "summary": {
+        "en": "Brute force, credential stuffing and scraping are made of individually valid requests, so only a limit on their rate sees them.",
+        "ru": "Перебор паролей, перебор украденных учётных данных и выкачивание данных состоят из по отдельности корректных запросов — их видит только ограничение частоты."
+      },
+      "discovery": [
+        {
+          "id": "rate-d1-brute-force",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "An attacker sends 50 000 login requests with different passwords. Each one is well formed and each is answered with 401. Which part of the security chain notices the attack?",
+            "ru": "Атакующий отправляет 50 000 запросов на вход с разными паролями. Каждый корректно сформирован, на каждый приходит 401. Какая часть цепочки безопасности видит атаку?"
+          },
+          "reveal": {
+            "en": "Password guessing, credential stuffing and scraping consist entirely of requests that are individually valid. No single one is an anomaly, so no gate that looks at one request can see the attack — only its **rate** is the attack.\n\nA rate limit is therefore a separate control, and where you put it matters:\n\n```mermaid\nflowchart LR\n  R[\"request\"] --> L[\"rate limit\"] --> V[\"token verification, database lookups\"]\n  L -.->|\"limit exceeded\"| E[\"429 Too Many Requests\"]\n```\n\nPut it **in front of** the expensive gates — a limiter that runs after signature verification and a database round trip has already paid for the attack. Key it by **client** and by **route**, so one noisy caller cannot exhaust everyone's budget and a cheap endpoint is not limited like an expensive one.\n\nIt is also what protects the endpoints that are legitimately public, since those have no authentication to lean on at all.",
+            "ru": "Подбор паролей, перебор украденных учётных данных и выкачивание данных состоят целиком из по отдельности корректных запросов. Ни один из них не аномалия, поэтому ни одна проверка, смотрящая на один запрос, атаку не увидит — атака это её **частота**.\n\nПоэтому ограничение частоты — отдельное средство, и место для него важно:\n\n```mermaid\nflowchart LR\n  R[\"запрос\"] --> L[\"лимит частоты\"] --> V[\"проверка токена, обращения к базе\"]\n  L -.->|\"лимит превышен\"| E[\"429 Too Many Requests\"]\n```\n\nСтавьте его **перед** дорогими проверками — лимитер, работающий после проверки подписи и похода в базу, уже оплатил атаку. Считайте лимит по **клиенту** и по **маршруту**, чтобы один шумный вызывающий не съел общий бюджет, а дешёвый эндпоинт не ограничивался как дорогой.\n\nИменно он же защищает эндпоинты, которые законно публичны: у них аутентификации нет вовсе."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Every request is valid on its own; only the rate is the attack.",
+              "ru": "Каждый запрос корректен сам по себе; атака — только их частота."
+            },
+            "incorrect": {
+              "en": "Rate limiting — the gates that look at one request at a time cannot see 50 000 of them.",
+              "ru": "Ограничение частоты — проверки, смотрящие на один запрос, не видят 50 000 запросов."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Rate limiting — every request is individually valid, so only their rate is the attack",
+                "ru": "Ограничение частоты — каждый запрос по отдельности корректен, атака только в их частоте"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Authentication — it already rejects each one",
+                "ru": "Аутентификация — она и так отвергает каждый"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It rejects them one at a time and has no idea there were 50 000; eventually one attempt may succeed.",
+                "ru": "Она отвергает их по одному и не знает, что их было 50 000; в какой-то момент одна попытка может удаться."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Authorization — the caller has no role",
+                "ru": "Авторизация — у вызывающего нет роли"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Authorization never runs here: there is no principal yet, and it sees one request at a time anyway.",
+                "ru": "Авторизация здесь вообще не запускается: principal ещё нет, да и видит она по одному запросу."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "rate-p1-perf-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Rate limiting is a performance feature rather than a security control.",
+            "ru": "Ограничение частоты — это про производительность, а не средство защиты."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It is the only control that sees brute force, credential stuffing and scraping at all.",
+              "ru": "Это единственное средство, которое вообще видит перебор паролей, перебор учётных данных и выкачивание данных."
+            },
+            "incorrect": {
+              "en": "No — it is the only control that sees attacks made entirely of individually valid requests.",
+              "ru": "Нет — это единственное средство, которое видит атаки, целиком состоящие из корректных запросов."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "rate-p2-placement",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Where in the request chain does a rate limit belong?",
+            "ru": "Где в цепочке обработки запроса место ограничению частоты?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "A limiter behind the expensive work has already paid for the attack it was meant to stop.",
+              "ru": "Лимитер за дорогими шагами уже оплатил ту атаку, которую должен был остановить."
+            },
+            "incorrect": {
+              "en": "In front of the expensive gates — token verification and database lookups must not run for a flood.",
+              "ru": "Перед дорогими проверками — проверка токена и обращения к базе не должны выполняться для потока мусора."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "In front of the expensive checks, such as token verification and database lookups",
+                "ru": "Перед дорогими проверками — проверкой токена и обращениями к базе"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "After authorization, so that only real users are counted",
+                "ru": "После авторизации, чтобы считать только настоящих пользователей"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "By then you have already paid for every attack request that arrived.",
+                "ru": "К этому моменту вы уже оплатили каждый пришедший запрос атаки."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Inside the handler, next to the business logic",
+                "ru": "Внутри обработчика, рядом с бизнес-логикой"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The handler is the most expensive point in the chain; the limit must run long before it.",
+                "ru": "Обработчик — самая дорогая точка цепочки; лимит должен срабатывать задолго до него."
+              }
+            }
+          ]
+        },
+        {
+          "id": "rate-p3-fill-keys",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete how a rate limit is keyed and answered.",
+            "ru": "Дополни, по чему считается лимит частоты и чем отвечают на его превышение."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Per client so one caller cannot starve the rest, per route so cheap and expensive endpoints differ.",
+              "ru": "По клиенту — чтобы один не съел бюджет остальных, по маршруту — чтобы дешёвые и дорогие эндпоинты отличались."
+            },
+            "incorrect": {
+              "en": "Key it by client and by route, and answer an exceeded limit with 429.",
+              "ru": "Считайте по клиенту и по маршруту, а на превышение отвечайте 429."
+            }
+          },
+          "text": {
+            "en": "Key a rate limit by ___ and by ___, and answer a request over the limit with ___.",
+            "ru": "Считайте лимит частоты по ___ и по ___, а на запрос сверх лимита отвечайте ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "client",
+                "caller"
+              ],
+              "ru": [
+                "клиенту",
+                "клиент",
+                "client"
+              ]
+            },
+            {
+              "en": [
+                "route",
+                "endpoint"
+              ],
+              "ru": [
+                "маршруту",
+                "маршрут",
+                "route"
+              ]
+            },
+            {
+              "en": [
+                "429"
+              ],
+              "ru": [
+                "429"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "transport-and-secrets",
+      "title": {
+        "en": "Transport and secrets",
+        "ru": "Транспорт и секреты"
+      },
+      "summary": {
+        "en": "TLS keeps a credential off the wire, but a token in a URL or a secret in the repository leaks without touching the wire at all.",
+        "ru": "TLS убирает учётные данные из сети, но токен в URL или секрет в репозитории утекают вообще без сети."
+      },
+      "discovery": [
+        {
+          "id": "transport-d1-plaintext",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A client sends its API token to your service over plain HTTP by mistake. Your service rejects the request. Is that token still safe to keep using?",
+            "ru": "Клиент по ошибке отправил свой API-токен вашему сервису по обычному HTTP. Сервис отклонил запрос. Можно ли дальше пользоваться этим токеном?"
+          },
+          "reveal": {
+            "en": "TLS everywhere, plus **HSTS** so a browser will not try plaintext in the first place. But be precise about what TLS buys: it protects a credential **in transit**, and nothing else.\n\n- A credential sent over plain HTTP is **compromised** whether or not you rejected the request. Rejecting does not un-send it — whoever was on the path already has it. The fix is to rotate the credential.\n- Never put a token in a **query string**. Query strings land in access logs, on proxies and in `Referer` headers — all *after* TLS has done its job perfectly. Put the token in a header.\n- Your API's own secrets and signing keys live in an environment-specific store, are rotated, and are never in the repository. Rotation has to work without a redeploy, or in practice it will not happen.\n\nEverything else in the chain — the rule list, authentication, authorization, the object check — is still entirely your problem after TLS has decrypted the request.",
+            "ru": "TLS везде плюс **HSTS**, чтобы браузер вообще не пытался ходить открытым текстом. Но важно понимать, что именно даёт TLS: он защищает учётные данные **в пути**, и только это.\n\n- Учётные данные, отправленные по обычному HTTP, **скомпрометированы** независимо от того, отклонили вы запрос или нет. Отклонение не отменяет отправки — тот, кто был на пути, уже их получил. Лечится это заменой этих учётных данных.\n- Никогда не кладите токен в **query string**. Query string оседает в логах доступа, на прокси и в заголовках `Referer` — и всё это *после* того, как TLS безупречно отработал. Токену место в заголовке.\n- Собственные секреты и ключи подписи API живут в хранилище по окружениям, ротируются и никогда не лежат в репозитории. Ротация обязана работать без передеплоя, иначе на практике её не будет.\n\nВсё остальное в цепочке — список правил, аутентификация, авторизация, проверка объекта — остаётся целиком вашей задачей после того, как TLS расшифровал запрос."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Rejecting a request does not un-send what already travelled.",
+              "ru": "Отклонение запроса не отменяет того, что уже ушло по сети."
+            },
+            "incorrect": {
+              "en": "No — the token already travelled in plaintext, so it is compromised and must be rotated.",
+              "ru": "Нет — токен уже прошёл открытым текстом, значит он скомпрометирован и его нужно заменить."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "No — it was already on the wire in plaintext, so it has to be rotated",
+                "ru": "Нет — он уже прошёл по сети открытым текстом, поэтому его нужно заменить"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Yes — you rejected the request, so nothing happened",
+                "ru": "Да — вы отклонили запрос, значит ничего не произошло"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Rejecting does not un-send it; anyone on the network path already has the token.",
+                "ru": "Отклонение не отменяет отправки; у любого на сетевом пути токен уже есть."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Yes — the next request will go over TLS",
+                "ru": "Да — следующий запрос пойдёт по TLS"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "TLS from now on protects future traffic, not the credential that already travelled.",
+                "ru": "TLS с этого момента защищает будущий трафик, а не те данные, которые уже ушли."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "transport-p1-query-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Putting an access token in the query string is fine as long as the request goes over TLS.",
+            "ru": "Класть access-токен в query string нормально, если запрос идёт по TLS."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The URL is stored and forwarded after decryption — access logs, proxies, Referer headers.",
+              "ru": "URL сохраняется и передаётся уже после расшифровки — логи доступа, прокси, заголовки Referer."
+            },
+            "incorrect": {
+              "en": "No — the URL lands in access logs, on proxies and in Referer headers, all after TLS has done its job.",
+              "ru": "Нет — URL оседает в логах доступа, на прокси и в заголовках Referer, уже после работы TLS."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "transport-p2-secrets",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Where do an API's own secrets and signing keys belong?",
+            "ru": "Где должны жить собственные секреты и ключи подписи API?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Rotation has to work without a redeploy, or it never happens.",
+              "ru": "Ротация обязана работать без передеплоя, иначе её не будет никогда."
+            },
+            "incorrect": {
+              "en": "In an environment-specific store, rotated, and never in the repository.",
+              "ru": "В хранилище по окружениям, с ротацией и никогда в репозитории."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "In an environment-specific store, rotated, outside the repository",
+                "ru": "В хранилище по окружениям, с ротацией, вне репозитория"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "In a config file committed next to the code, so every environment matches",
+                "ru": "В конфиге рядом с кодом в репозитории, чтобы окружения совпадали"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Anything in the repository is readable by everyone with the code and cannot differ per environment.",
+                "ru": "Всё, что в репозитории, доступно каждому, у кого есть код, и не может отличаться по окружениям."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Hard-coded in the service, so no store can be misconfigured",
+                "ru": "Захардкожены в сервисе, чтобы нельзя было неверно настроить хранилище"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Then rotation means a code change and a redeploy, which is exactly why it never happens.",
+                "ru": "Тогда ротация — это правка кода и передеплой, поэтому её и не делают."
+              }
+            }
+          ]
+        },
+        {
+          "id": "transport-p3-fill-query",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the rule about where a token must not go.",
+            "ru": "Дополни правило о том, куда токен класть нельзя."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Headers are not logged the way URLs are.",
+              "ru": "Заголовки не логируются так, как логируются URL."
+            },
+            "incorrect": {
+              "en": "Never in the query string — it lands in access logs, proxies and Referer headers. Use a header.",
+              "ru": "Никогда в query string — он оседает в логах доступа, на прокси и в заголовках Referer. Используйте заголовок."
+            }
+          },
+          "text": {
+            "en": "Never put a token in the ___ string — it lands in access logs, on proxies and in Referer headers.",
+            "ru": "Никогда не кладите токен в ___ string — он оседает в логах доступа, на прокси и в заголовках Referer."
+          },
+          "blanks": [
+            {
+              "en": [
+                "query"
+              ],
+              "ru": [
+                "query"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cookies-csrf-cors",
+      "title": {
+        "en": "Cookies, CSRF and CORS",
+        "ru": "Куки, CSRF и CORS"
+      },
+      "summary": {
+        "en": "Cookie authentication needs CSRF defence, header authentication largely does not, and CORS protects the user's browser rather than the API.",
+        "ru": "Аутентификация через куки требует защиты от CSRF, через заголовок — в основном нет, а CORS защищает браузер пользователя, а не API."
+      },
+      "discovery": [
+        {
+          "id": "browser-d1-csrf",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "An API authenticates with a session cookie. A logged-in user opens evil.com, whose page silently submits a form to `POST https://api.example.com/api/transfers`. What does the browser do?",
+            "ru": "API аутентифицирует по сессионной куке. Залогиненный пользователь открывает evil.com, страница которого молча отправляет форму на `POST https://api.example.com/api/transfers`. Что сделает браузер?"
+          },
+          "reveal": {
+            "en": "The browser attaches cookies by **destination**, not by which page triggered the request. So the request arrives fully authenticated, and any page in the world can make it on the user's behalf. That is **CSRF** (cross-site request forgery).\n\nThe defences are `SameSite` cookies, which tell the browser not to attach the cookie on cross-site requests, and CSRF tokens — a value the attacker's page cannot read or guess.\n\nIf the API authenticates with an `Authorization` **header** instead, the browser attaches nothing by itself: the attacker's page would have to know the token, so CSRF largely disappears. That is the real difference between the two places to carry a credential in a browser.\n\n**CORS is not part of your authorization.** It tells a browser which origins may *read a response* from your API. It protects the user, not your data — `curl`, a script or any non-browser client ignores it completely:\n\n```mermaid\nflowchart LR\n  B[\"browser\"] --> C[\"CORS: may this page read the response?\"]\n  S[\"curl or any script\"] --> I[\"CORS ignored entirely\"]\n```",
+            "ru": "Браузер прикрепляет куки по **адресу назначения**, а не по тому, какая страница вызвала запрос. Поэтому запрос приходит полностью аутентифицированным, и любая страница в мире может сделать его от имени пользователя. Это **CSRF** (межсайтовая подделка запроса).\n\nЗащита — куки с `SameSite`, которые запрещают браузеру прикреплять куку к межсайтовым запросам, и CSRF-токены: значение, которое страница атакующего не может прочитать или угадать.\n\nЕсли API аутентифицирует по **заголовку** `Authorization`, браузер сам ничего не прикрепляет: странице атакующего пришлось бы знать токен, поэтому CSRF в основном исчезает. В этом и состоит настоящая разница между двумя местами хранения учётных данных в браузере.\n\n**CORS не является частью вашей авторизации.** Он говорит браузеру, каким источникам можно *прочитать ответ* вашего API. Он защищает пользователя, а не ваши данные: `curl`, скрипт и любой не-браузерный клиент игнорируют его полностью:\n\n```mermaid\nflowchart LR\n  B[\"браузер\"] --> C[\"CORS: можно ли этой странице прочитать ответ?\"]\n  S[\"curl или любой скрипт\"] --> I[\"CORS полностью игнорируется\"]\n```"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Cookies are attached by destination, so the forged request arrives authenticated.",
+              "ru": "Куки прикрепляются по адресу назначения, поэтому подделанный запрос приходит аутентифицированным."
+            },
+            "incorrect": {
+              "en": "It sends the request with the session cookie attached — that is exactly what CSRF exploits.",
+              "ru": "Он отправит запрос вместе с сессионной кукой — именно это и эксплуатирует CSRF."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It sends the request with the session cookie attached, so the API sees an authenticated call",
+                "ru": "Он отправит запрос с сессионной кукой, и API увидит аутентифицированный вызов"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It blocks the request, because evil.com is a different origin",
+                "ru": "Он заблокирует запрос, потому что evil.com — другой источник"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The browser may hide the response from evil.com, but the request is still sent and still executed.",
+                "ru": "Браузер может скрыть ответ от evil.com, но запрос всё равно отправлен и всё равно выполнен."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It sends the request without the cookie, because the page is not yours",
+                "ru": "Он отправит запрос без куки, потому что страница не ваша"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Cookies are attached by destination, not by which page triggered the request.",
+                "ru": "Куки прикрепляются по адресу назначения, а не по тому, какая страница вызвала запрос."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "browser-p1-cors-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A strict CORS policy stops non-browser clients from calling your API.",
+            "ru": "Строгая политика CORS не даёт не-браузерным клиентам вызывать ваш API."
+          },
+          "feedback": {
+            "correct": {
+              "en": "CORS is enforced by the browser; curl and any script ignore it.",
+              "ru": "CORS применяет браузер; curl и любой скрипт его игнорируют."
+            },
+            "incorrect": {
+              "en": "No — CORS protects the user's browser. Anything that is not a browser ignores it completely.",
+              "ru": "Нет — CORS защищает браузер пользователя. Всё, что не браузер, игнорирует его полностью."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "browser-p2-switch-to-cookies",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "An API authenticates with an `Authorization` header and switches to session cookies. What does it now need that it did not need before?",
+            "ru": "API аутентифицировал по заголовку `Authorization` и переходит на сессионные куки. Что ему теперь нужно, чего не требовалось раньше?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The browser now sends the credential by itself, which is what CSRF relies on.",
+              "ru": "Теперь браузер отправляет учётные данные сам — на этом и держится CSRF."
+            },
+            "incorrect": {
+              "en": "CSRF defence — SameSite cookies and CSRF tokens, because the browser now attaches the credential automatically.",
+              "ru": "Защиту от CSRF — куки с SameSite и CSRF-токены, ведь теперь браузер прикрепляет учётные данные автоматически."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "CSRF defence: SameSite cookies and CSRF tokens",
+                "ru": "Защиту от CSRF: куки с SameSite и CSRF-токены"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A CORS policy in place of its authorization rules",
+                "ru": "Политику CORS вместо своих правил авторизации"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "CORS is not authorization at all; the new problem is that the browser now sends the credential by itself.",
+                "ru": "CORS — вовсе не авторизация; новая проблема в том, что браузер теперь сам отправляет учётные данные."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — a cookie is just another place to carry the same credential",
+                "ru": "Ничего — кука это просто другое место для тех же учётных данных"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The difference is that a browser attaches a cookie automatically, which is exactly what CSRF exploits.",
+                "ru": "Разница в том, что браузер прикрепляет куку автоматически, — именно это эксплуатирует CSRF."
+              }
+            }
+          ]
+        },
+        {
+          "id": "browser-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each browser-related mechanism to what it actually does.",
+            "ru": "Соотнеси каждый браузерный механизм с тем, что он на самом деле делает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One protects the user's browser, the other two deal with a credential the browser sends on its own.",
+              "ru": "Один защищает браузер пользователя, два других — про учётные данные, которые браузер шлёт сам."
+            },
+            "incorrect": {
+              "en": "CORS is a browser rule; SameSite and CSRF tokens answer automatic cookies; a header is not sent automatically.",
+              "ru": "CORS — правило для браузера; SameSite и CSRF-токены отвечают на автоматические куки; заголовок автоматически не отправляется."
+            }
+          },
+          "pairs": [
+            {
+              "id": "cors",
+              "left": {
+                "en": "CORS policy",
+                "ru": "политика CORS"
+              },
+              "right": {
+                "en": "A rule the user's browser enforces; a non-browser client ignores it",
+                "ru": "Правило, которое применяет браузер пользователя; не-браузерный клиент его игнорирует"
+              }
+            },
+            {
+              "id": "csrf",
+              "left": {
+                "en": "SameSite and CSRF tokens",
+                "ru": "SameSite и CSRF-токены"
+              },
+              "right": {
+                "en": "Needed because a browser attaches a cookie automatically",
+                "ru": "Нужны, потому что браузер прикрепляет куку автоматически"
+              }
+            },
+            {
+              "id": "header",
+              "left": {
+                "en": "Authorization header",
+                "ru": "заголовок Authorization"
+              },
+              "right": {
+                "en": "Not attached by the browser on its own, so CSRF largely disappears",
+                "ru": "Браузер не прикрепляет его сам, поэтому CSRF в основном исчезает"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "audit-and-tests",
+      "title": {
+        "en": "Audit log and tests",
+        "ru": "Аудит и тесты"
+      },
+      "summary": {
+        "en": "An over-permissive scheme answers 200 with no error at all, so every decision is logged and every rule has a test.",
+        "ru": "Слишком разрешительная схема молча отвечает 200 без единой ошибки, поэтому каждое решение логируется, а на каждое правило есть тест."
+      },
+      "discovery": [
+        {
+          "id": "audit-d1-silent",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A rule-ordering mistake lets any logged-in user reach an admin endpoint. Nobody wrote a test for that rule. What does your monitoring show?",
+            "ru": "Ошибка в порядке правил пускает любого залогиненного пользователя на админский эндпоинт. Теста на это правило никто не написал. Что покажет мониторинг?"
+          },
+          "reveal": {
+            "en": "An over-permissive scheme produces `200`s. There is no exception, no anomaly and nothing to alert on — which is why two things are part of the design rather than extras.\n\n**The audit log.** Every decision, allowed *and* refused, is a line with the principal, the route, the decision and a correlation id. It is how a breach is discovered at all. It must **never** contain the token, the password or personal data: logs are copied, shipped and read by far more people than the database is.\n\n**A test per rule.** Minutes to write, and it survives every refactoring of the security config:\n\n- an anonymous request to a protected endpoint gets `401`\n- an authenticated caller without the required role gets `403`\n- a caller asking for another user's record gets `404`\n\nThose assertions are what stops a regression from shipping, because rule-ordering and missing-rule bugs are exactly the ones code review reliably misses.",
+            "ru": "Слишком разрешительная схема отдаёт `200`. Ни исключения, ни аномалии, ни повода для алерта — поэтому две вещи входят в проект, а не идут дополнением.\n\n**Журнал аудита.** Каждое решение, и разрешение, *и* отказ, — это строка с principal, маршрутом, решением и идентификатором корреляции. Именно так утечку вообще обнаруживают. В ней **никогда** не должно быть токена, пароля или персональных данных: логи копируют, пересылают и читает куда больше людей, чем базу.\n\n**Тест на каждое правило.** Пишется за минуты и переживает любой рефакторинг конфигурации безопасности:\n\n- анонимный запрос к защищённому эндпоинту получает `401`\n- аутентифицированный вызывающий без нужной роли получает `403`\n- вызывающий, запросивший чужую запись, получает `404`\n\nИменно эти проверки не дают уехать регрессии, потому что ошибки в порядке правил и забытые правила — ровно то, что ревью стабильно пропускает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "An over-permissive scheme succeeds — that is what makes it invisible.",
+              "ru": "Слишком разрешительная схема отрабатывает успешно — поэтому она и невидима."
+            },
+            "incorrect": {
+              "en": "Nothing unusual — the requests succeed, so there is no exception and no alert to see.",
+              "ru": "Ничего необычного — запросы успешны, поэтому нет ни исключения, ни алерта."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Nothing unusual — successful 200 responses, no exception, no alert",
+                "ru": "Ничего необычного — успешные ответы 200, ни исключений, ни алертов"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A spike of 500 errors",
+                "ru": "Всплеск ошибок 500"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing fails; the request is served exactly as if it were allowed.",
+                "ru": "Ничего не падает; запрос обслуживается ровно так, как будто он разрешён."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "403s in the log from the callers who were blocked",
+                "ru": "Записи 403 в логе от заблокированных вызывающих"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nobody is blocked — that is precisely the defect.",
+                "ru": "Никого не блокируют — в этом и дефект."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "audit-p1-never-log",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which of these must never appear in a security audit log?",
+            "ru": "Что из этого никогда не должно попадать в журнал аудита безопасности?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Logs are copied, shipped and read by more people than the database is.",
+              "ru": "Логи копируют, пересылают и читает больше людей, чем базу данных."
+            },
+            "incorrect": {
+              "en": "The credential itself — the principal, route and decision are exactly what the line is for.",
+              "ru": "Сами учётные данные — а principal, маршрут и решение это как раз то, ради чего строка и пишется."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The token or password used in the request",
+                "ru": "Токен или пароль, использованный в запросе"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The principal the decision was made about",
+                "ru": "Principal, о котором принято решение"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Without the principal the line cannot answer who did what.",
+                "ru": "Без principal строка не отвечает на вопрос, кто что сделал."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The route and the decision that was taken",
+                "ru": "Маршрут и принятое решение"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Those are the whole point of an audit line.",
+                "ru": "Ради этого строка аудита и существует."
+              }
+            }
+          ]
+        },
+        {
+          "id": "audit-p2-match-tests",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each security test case to the status it should assert.",
+            "ru": "Соотнеси каждый тест-кейс безопасности со статусом, который он должен проверять."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Four assertions covering identity, permission, ownership and the happy path.",
+              "ru": "Четыре проверки: личность, права, владение и успешный сценарий."
+            },
+            "incorrect": {
+              "en": "Anonymous 401, wrong role 403, another user's record 404, own record 200.",
+              "ru": "Анонимный — 401, не та роль — 403, чужая запись — 404, своя запись — 200."
+            }
+          },
+          "pairs": [
+            {
+              "id": "anon",
+              "left": {
+                "en": "anonymous request to a protected endpoint",
+                "ru": "анонимный запрос к защищённому эндпоинту"
+              },
+              "right": {
+                "en": "assert 401",
+                "ru": "проверить 401"
+              }
+            },
+            {
+              "id": "role",
+              "left": {
+                "en": "authenticated caller without the required role",
+                "ru": "аутентифицированный вызывающий без нужной роли"
+              },
+              "right": {
+                "en": "assert 403",
+                "ru": "проверить 403"
+              }
+            },
+            {
+              "id": "other",
+              "left": {
+                "en": "caller asking for another user's record",
+                "ru": "вызывающий запрашивает чужую запись"
+              },
+              "right": {
+                "en": "assert 404",
+                "ru": "проверить 404"
+              }
+            },
+            {
+              "id": "own",
+              "left": {
+                "en": "caller asking for their own record",
+                "ru": "вызывающий запрашивает свою запись"
+              },
+              "right": {
+                "en": "assert 200",
+                "ru": "проверить 200"
+              }
+            }
+          ]
+        },
+        {
+          "id": "audit-p3-fill-line",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete what a security audit line does and does not carry.",
+            "ru": "Дополни, что строка аудита безопасности несёт, а что — нет."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Enough to reconstruct the decision, never enough to replay it.",
+              "ru": "Достаточно, чтобы восстановить решение, и никогда — чтобы его повторить."
+            },
+            "incorrect": {
+              "en": "It carries the principal, route, decision and correlation id — never the token, password or personal data.",
+              "ru": "Она несёт principal, маршрут, решение и идентификатор корреляции — и никогда токен, пароль или персональные данные."
+            }
+          },
+          "text": {
+            "en": "An audit line carries the ___, the route, the decision and a correlation id — and never the ___.",
+            "ru": "Строка аудита несёт ___, маршрут, решение и идентификатор корреляции — и никогда ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "principal"
+              ],
+              "ru": [
+                "principal",
+                "принципал"
+              ]
+            },
+            {
+              "en": [
+                "token",
+                "password",
+                "credential"
+              ],
+              "ru": [
+                "токен",
+                "пароль",
+                "token"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gateway-and-service",
+      "title": {
+        "en": "Gateway and service",
+        "ru": "Шлюз и сервис"
+      },
+      "summary": {
+        "en": "The gateway does what is identical everywhere; each service still enforces its own rules and object checks, and services authenticate each other.",
+        "ru": "Шлюз делает то, что одинаково везде; каждый сервис всё равно применяет свои правила и проверки объектов, а сервисы аутентифицируют друг друга."
+      },
+      "discovery": [
+        {
+          "id": "gateway-d1-forwarded-header",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A gateway verifies the token and forwards `X-User-Id` to the service behind it. When may that service trust the header?",
+            "ru": "Шлюз проверяет токен и передаёт `X-User-Id` сервису за собой. Когда сервис может доверять этому заголовку?"
+          },
+          "reveal": {
+            "en": "```mermaid\nsequenceDiagram\n  participant C as Client\n  participant G as Gateway\n  participant S as Service\n  C->>G: GET /api/orders/42 + Bearer token + X-User-Role: ADMIN\n  Note over G: strips the client's X-User-* headers\n  G->>G: verify signature, iss, aud, exp\n  G->>S: forwards the request with a verified identity\n  S->>S: re-checks the token, then who owns order 42\n```\n\nThe header is trustworthy only under two conditions: the gateway **strips** the client's own `X-User-*` headers and re-adds its own, and nothing can reach the service **around** the gateway. Both are one network change away from being false — a new port, a shared cluster, an SSRF that turns an outside request into an inside one. That is why zero-trust designs re-verify at the service.\n\nThe division of labour is otherwise simple. At the edge goes what is identical everywhere and cheap to do once: TLS termination, rate limiting, token verification, CORS. Inside each service stays what only it can know: the role and scope rules of its own endpoints, and every object-level check — a gateway cannot know that order 42 belongs to Bob.\n\nAnd services authenticate **each other**, with mutual TLS (**mTLS**) or a service token. \"The network is private\" is an assumption, not a security control.",
+            "ru": "```mermaid\nsequenceDiagram\n  participant C as Клиент\n  participant G as Шлюз\n  participant S as Сервис\n  C->>G: GET /api/orders/42 + Bearer token + X-User-Role: ADMIN\n  Note over G: вырезает клиентские заголовки X-User-*\n  G->>G: проверяет подпись, iss, aud, exp\n  G->>S: передаёт запрос с проверенной личностью\n  S->>S: перепроверяет токен, затем владельца заказа 42\n```\n\nЗаголовку можно доверять только при двух условиях: шлюз **вырезает** собственные заголовки `X-User-*` клиента и добавляет свои, и до сервиса нельзя дотянуться **в обход** шлюза. Оба нарушаются одним изменением в сети — новый порт, общий кластер, SSRF, превращающий внешний запрос во внутренний. Поэтому в zero-trust-схемах сервис перепроверяет всё сам.\n\nВ остальном разделение труда простое. На границу выносят то, что одинаково везде и дёшево сделать один раз: терминацию TLS, ограничение частоты, проверку токена, CORS. Внутри каждого сервиса остаётся то, что знает только он: правила по ролям и scope для его собственных эндпоинтов и все проверки на уровне объекта — шлюз не может знать, что заказ 42 принадлежит Бобу.\n\nА сервисы аутентифицируют **друг друга** — взаимным TLS (**mTLS**) или сервисным токеном. «Сеть приватная» — это предположение, а не средство защиты."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Both conditions are about the network, and both can quietly stop being true.",
+              "ru": "Оба условия — про сеть, и оба могут тихо перестать выполняться."
+            },
+            "incorrect": {
+              "en": "Only if the gateway strips the client's own X-User-* headers and nothing can reach the service around it.",
+              "ru": "Только если шлюз вырезает собственные заголовки X-User-* клиента и до сервиса нельзя дотянуться в обход."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Only if the gateway strips the client's own `X-User-*` headers and nothing can reach the service around the gateway",
+                "ru": "Только если шлюз вырезает клиентские заголовки `X-User-*` и до сервиса нельзя дотянуться в обход шлюза"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Always — the header arrived from the gateway, which is inside the network",
+                "ru": "Всегда — заголовок пришёл от шлюза, а он внутри сети"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Unless the gateway strips it, the client's own header is forwarded verbatim and the service cannot tell the difference.",
+                "ru": "Если шлюз его не вырезает, клиентский заголовок передаётся как есть, и сервис не отличит одно от другого."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Never — identity can only ever travel in a signed token",
+                "ru": "Никогда — личность может передаваться только в подписанном токене"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It is acceptable under two conditions; the point is that both depend on the network staying as it is today.",
+                "ru": "Это допустимо при двух условиях; суть в том, что оба зависят от того, что сеть останется прежней."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "gateway-p1-private-network-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A service behind an API gateway does not need its own authentication, because the network is private.",
+            "ru": "Сервису за API-шлюзом не нужна собственная аутентификация, потому что сеть приватная."
+          },
+          "feedback": {
+            "correct": {
+              "en": "\"The network is private\" is an assumption, not a control — services authenticate each other.",
+              "ru": "«Сеть приватная» — это предположение, а не средство защиты; сервисы аутентифицируют друг друга."
+            },
+            "incorrect": {
+              "en": "No — it breaks the first time a port is exposed, a shared cluster is used, or an SSRF turns an outside request into an inside one.",
+              "ru": "Нет — это ломается в первый же раз, когда откроют порт, задеплоят в общий кластер или SSRF превратит внешний запрос во внутренний."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "gateway-p2-cannot-do",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which check can an API gateway NOT perform on behalf of the service behind it?",
+            "ru": "Какую проверку API-шлюз НЕ может выполнить за сервис, который стоит за ним?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Ownership lives in the service's own data, which the gateway never sees.",
+              "ru": "Владение живёт в данных самого сервиса, которых шлюз не видит."
+            },
+            "incorrect": {
+              "en": "Whether record 42 belongs to the caller — a gateway does not know who owns a record.",
+              "ru": "Принадлежит ли запись 42 вызывающему — шлюз не знает, кто владеет записью."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Whether record 42 belongs to the caller",
+                "ru": "Принадлежит ли запись 42 вызывающему"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Verifying the token's signature",
+                "ru": "Проверку подписи токена"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is identical for every service and is exactly what an edge is good at doing once.",
+                "ru": "Это одинаково для всех сервисов — ровно то, что хорошо делается на границе один раз."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Rate limiting per client and per route",
+                "ru": "Ограничение частоты по клиенту и маршруту"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Also a natural edge concern — cheap to do once, in front of everything else.",
+                "ru": "Тоже естественная задача границы — дёшево сделать один раз, перед всем остальным."
+              }
+            }
+          ]
+        },
+        {
+          "id": "gateway-p3-match-responsibilities",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each part of a distributed security scheme to its role.",
+            "ru": "Соотнеси каждую часть распределённой схемы безопасности с её ролью."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Shared and cheap at the edge, record-specific in the service, and no trust granted by topology.",
+              "ru": "Общее и дешёвое — на границе, специфичное для записей — в сервисе, и никакого доверия из-за топологии."
+            },
+            "incorrect": {
+              "en": "The edge does what is identical everywhere; the service does what only it can know.",
+              "ru": "Граница делает то, что одинаково везде; сервис — то, что знает только он."
+            }
+          },
+          "pairs": [
+            {
+              "id": "edge",
+              "left": {
+                "en": "the API gateway",
+                "ru": "API-шлюз"
+              },
+              "right": {
+                "en": "TLS termination, rate limiting, token verification, CORS",
+                "ru": "Терминация TLS, ограничение частоты, проверка токена, CORS"
+              }
+            },
+            {
+              "id": "service",
+              "left": {
+                "en": "each service",
+                "ru": "каждый сервис"
+              },
+              "right": {
+                "en": "Its own role and scope rules, and every object-level check",
+                "ru": "Свои правила по ролям и scope и все проверки на уровне объекта"
+              }
+            },
+            {
+              "id": "mtls",
+              "left": {
+                "en": "mTLS or a service token",
+                "ru": "mTLS или сервисный токен"
+              },
+              "right": {
+                "en": "How two services prove their identity to each other",
+                "ru": "Как два сервиса доказывают свою личность друг другу"
+              }
+            },
+            {
+              "id": "assumption",
+              "left": {
+                "en": "\"the network is private\"",
+                "ru": "«сеть приватная»"
+              },
+              "right": {
+                "en": "An assumption, not a security control",
+                "ru": "Предположение, а не средство защиты"
+              }
+            }
+          ]
+        },
+        {
+          "id": "gateway-p4-fill-mtls",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name how two services authenticate each other.",
+            "ru": "Назови, как два сервиса аутентифицируют друг друга."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Each side proves its identity with a certificate, so neither trusts the network alone.",
+              "ru": "Каждая сторона доказывает личность сертификатом, поэтому никто не полагается на одну лишь сеть."
+            },
+            "incorrect": {
+              "en": "mTLS — mutual TLS, where both sides present a certificate; a service token is the other option.",
+              "ru": "mTLS — взаимный TLS, где сертификат предъявляют обе стороны; второй вариант — сервисный токен."
+            }
+          },
+          "text": {
+            "en": "Services authenticate each other with a service token or with ___ (mutual TLS).",
+            "ru": "Сервисы аутентифицируют друг друга сервисным токеном или через ___ (взаимный TLS)."
+          },
+          "blanks": [
+            {
+              "en": [
+                "mTLS",
+                "mtls"
+              ],
+              "ru": [
+                "mTLS",
+                "mtls"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "whole-scheme",
+      "title": {
+        "en": "The whole scheme end to end",
+        "ru": "Вся схема от начала до конца"
+      },
+      "summary": {
+        "en": "One request walks TLS, rate limit, rule match, authentication, authorization and the object check, and each gate answers a different question with a different refusal.",
+        "ru": "Один запрос проходит TLS, лимит частоты, подбор правила, аутентификацию, авторизацию и проверку объекта — и каждая проверка отвечает на свой вопрос своим отказом."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "cap-d1-full-request",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Bob is authenticated with a valid token and calls this endpoint for order 43, which belongs to Alice. What does he get?",
+            "ru": "Боб аутентифицирован корректным токеном и обращается к этому эндпоинту за заказом 43, который принадлежит Алисе. Что он получит?"
+          },
+          "code": "GET /api/orders/43\nAuthorization: Bearer <signature ok, iss ok, aud ok, not expired, sub=bob, role=USER, scope=orders:read>\n\nrule list:\n  /api/orders/**  ->  hasRole(\"USER\")\n  anyRequest()    ->  denyAll()\n\nhandler:\n  return orders.findById(43);   // order 43 belongs to alice",
+          "codeLang": "text",
+          "reveal": {
+            "en": "The whole chain in one picture, with what each gate refuses with:\n\n```mermaid\nflowchart LR\n  R[\"request\"] --> T[\"TLS\"] --> L[\"rate limit: 429\"] --> M[\"rule match: deny by default\"] --> A[\"authentication: 401\"] --> Z[\"authorization: role + scope, 403\"] --> O[\"object check: 404\"] --> H[\"handler + audit\"]\n```\n\nBob passes every one of them. TLS is fine, he is under the limit, `/api/orders/**` has a rule, his token verifies (signature, `iss`, `aud`, `exp`), his role and scope both allow a read — and then the handler fetches order 43 without ever asking whose it is. The bug is not inside any gate; it is the gate nobody wrote.\n\nThe fix is one line at the fetch — `orders.findByIdAndOwner(43, principal)` with `404` when it finds nothing — so the ownership check sits inside the same statement as the query, cannot be forgotten, and the response does not reveal that order 43 exists.\n\nThat is also the shape of the interview answer: walk the chain in order, say what each gate is for, and name the gate people forget.",
+            "ru": "Вся цепочка в одной картинке, с отказом каждой проверки:\n\n```mermaid\nflowchart LR\n  R[\"запрос\"] --> T[\"TLS\"] --> L[\"лимит частоты: 429\"] --> M[\"подбор правила: запрет по умолчанию\"] --> A[\"аутентификация: 401\"] --> Z[\"авторизация: роль + scope, 403\"] --> O[\"проверка объекта: 404\"] --> H[\"обработчик + аудит\"]\n```\n\nБоб проходит все. С TLS всё в порядке, он в пределах лимита, у `/api/orders/**` есть правило, его токен проверяется (подпись, `iss`, `aud`, `exp`), роль и scope разрешают чтение — а затем обработчик достаёт заказ 43, ни разу не спросив, чей он. Ошибка не внутри какой-то проверки; ошибка — это проверка, которую не написали.\n\nЛечится одной строкой на выборке — `orders.findByIdAndOwner(43, principal)` и `404`, если ничего не нашлось, — тогда проверка владения оказывается в том же выражении, что и запрос, её нельзя забыть, а ответ не раскрывает, что заказ 43 существует.\n\nЭто же и форма ответа на собеседовании: пройти по цепочке по порядку, сказать, зачем каждая проверка, и назвать ту, о которой забывают."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Every written gate passed; the missing one was never written.",
+              "ru": "Все написанные проверки пройдены; та, которой не хватает, не была написана вовсе."
+            },
+            "incorrect": {
+              "en": "200 with Alice's order — a URL rule cannot express whose record it is, and nothing else checked.",
+              "ru": "200 с заказом Алисы — правило по URL не может выразить, чья это запись, а больше никто не проверял."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "200 with Alice's order",
+                "ru": "200 с заказом Алисы"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "403 — the rule list only lets him read his own orders",
+                "ru": "403 — список правил разрешает ему читать только свои заказы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The rule says `hasRole(\"USER\")`; a URL rule cannot express whose record it is.",
+                "ru": "Правило говорит `hasRole(\"USER\")`; правило по URL не может выразить, чья это запись."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "401 — the token says nothing about order 43",
+                "ru": "401 — токен ничего не говорит о заказе 43"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Bob is authenticated: signature, iss, aud and exp all check out. Tokens do not list records.",
+                "ru": "Боб аутентифицирован: подпись, iss, aud и exp в порядке. Токены не перечисляют записи."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cap-p1-status-leak",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This endpoint does check ownership. What is still wrong with it?",
+            "ru": "Этот эндпоинт владение проверяет. Что с ним всё равно не так?"
+          },
+          "code": "@GetMapping(\"/api/orders/{id}\")\npublic OrderDto get(@PathVariable long id, Principal caller) {\n    Order order = orders.findById(id).orElseThrow();\n    if (!order.getOwner().equals(caller.getName())) {\n        throw new ForbiddenException();   // -> 403\n    }\n    return toDto(order);\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Object-level authorization and the status code are one decision, not two. `403` says \"this record exists and it is not yours\" — and existence is exactly the fact you were trying not to disclose. An attacker walks the ids and reads the difference between `403` and `404` as a map of what exists.\n\nScoping the query gives you the right answer for free:\n\n```java\nreturn orders.findByIdAndOwner(id, caller.getName())\n        .map(this::toDto)\n        .orElseThrow(NotFoundException::new);   // -> 404\n```\n\nA record that is not yours is now indistinguishable from a record that does not exist, and the check cannot be forgotten, because it is part of the query rather than a step somebody has to remember to add after it.",
+            "ru": "Авторизация на уровне объекта и код ответа — одно решение, а не два. `403` говорит: «эта запись существует, и она не твоя», — а существование это ровно тот факт, который вы старались не раскрывать. Атакующий перебирает идентификаторы и читает разницу между `403` и `404` как карту того, что существует.\n\nСужение запроса даёт правильный ответ само собой:\n\n```java\nreturn orders.findByIdAndOwner(id, caller.getName())\n        .map(this::toDto)\n        .orElseThrow(NotFoundException::new);   // -> 404\n```\n\nТеперь чужая запись неотличима от несуществующей, а проверку нельзя забыть, потому что она часть запроса, а не шаг, который кто-то должен не забыть добавить после."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The check is right; the answer leaks. 403 confirms the record exists.",
+              "ru": "Проверка верна; утечка в ответе. 403 подтверждает, что запись существует."
+            },
+            "incorrect": {
+              "en": "The 403 confirms that this id exists, which lets an attacker enumerate ids — return 404 instead.",
+              "ru": "403 подтверждает, что этот идентификатор существует, и позволяет их перебирать — возвращайте 404."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The 403 confirms that order `id` exists, so ids can be enumerated — return 404 instead",
+                "ru": "403 подтверждает, что заказ с этим `id` существует, и идентификаторы можно перебрать — нужно 404"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The owner should be compared with `==` instead of `equals`",
+                "ru": "Владельца нужно сравнивать через `==`, а не `equals`"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Reference comparison would break the check itself; the defect here is what the response reveals.",
+                "ru": "Сравнение ссылок сломало бы саму проверку; дефект здесь в том, что раскрывает ответ."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing is wrong — the ownership check is present",
+                "ru": "Всё в порядке — проверка владения на месте"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The check is right, but the answer leaks: 403 tells an attacker the record exists.",
+                "ru": "Проверка верна, но ответ утекает: 403 сообщает атакующему, что запись существует."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p2-audience-predict",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The orders API trusts the issuer `https://auth.example.com`, and its own audience is `orders-api`. What should it answer to this call?",
+            "ru": "API заказов доверяет издателю `https://auth.example.com`, а его собственная аудитория — `orders-api`. Что он должен ответить на этот вызов?"
+          },
+          "code": "POST /api/orders\nAuthorization: Bearer <signature valid, iss=https://auth.example.com, aud=billing-api, exp in 5 minutes, role=ADMIN>",
+          "codeLang": "text",
+          "feedback": {
+            "correct": {
+              "en": "The audience check fails during authentication, so no principal is ever established.",
+              "ru": "Проверка аудитории падает на аутентификации, поэтому principal вообще не появляется."
+            },
+            "incorrect": {
+              "en": "401 — the token was minted for another API, so this one has not authenticated anybody.",
+              "ru": "401 — токен выпущен для другого API, поэтому этот никого не аутентифицировал."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "401 — the token was minted for another API, so this API has authenticated nobody",
+                "ru": "401 — токен выпущен для другого API, поэтому этот API никого не аутентифицировал"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "200 — the signature is valid and the token has not expired",
+                "ru": "200 — подпись корректна и токен не истёк"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A valid signature only proves who signed it; `aud` says which API the token was for.",
+                "ru": "Корректная подпись доказывает лишь, кто подписал; `aud` говорит, для какого API токен."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "403 — the caller is known but lacks permission",
+                "ru": "403 — вызывающий известен, но у него нет прав"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nobody is known: the audience check fails during authentication, before any permission is looked at.",
+                "ru": "Никто не известен: проверка аудитории падает на аутентификации, до всякого разбора прав."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p3-sort-full-chain",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the gates of a complete endpoint security chain, from the wire to the handler.",
+            "ru": "Расставь по порядку проверки полной цепочки безопасности эндпоинта — от сети до обработчика."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Cheap shared checks, then identity, then permission, then the record itself.",
+              "ru": "Сначала дешёвые общие проверки, затем личность, потом права, потом сама запись."
+            },
+            "incorrect": {
+              "en": "TLS, rate limit, rule match, authentication, authorization, then the owner-scoped fetch and the audit line.",
+              "ru": "TLS, лимит частоты, подбор правила, аутентификация, авторизация, затем выборка по владельцу и строка аудита."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Terminate TLS and refuse credentials sent in plaintext",
+                "ru": "Терминировать TLS и не принимать учётные данные открытым текстом"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Apply the rate limit for this client and this route",
+                "ru": "Применить лимит частоты для этого клиента и этого маршрута"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Match the rule list; a request matching no rule is denied",
+                "ru": "Подобрать правило из списка; запрос без правила запрещается"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Authenticate: verify signature, iss, aud and exp, then build the principal",
+                "ru": "Аутентифицировать: проверить подпись, iss, aud и exp, затем построить principal"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "Authorize: check the user's role and the token's scope",
+                "ru": "Авторизовать: проверить роль пользователя и scope токена"
+              }
+            },
+            {
+              "id": "s6",
+              "text": {
+                "en": "Load the record with a query scoped by owner, then log the decision",
+                "ru": "Загрузить запись запросом, суженным по владельцу, затем записать решение в лог"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p4-match-gates",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each part of an endpoint security scheme to the question it settles.",
+            "ru": "Соотнеси каждую часть схемы безопасности эндпоинтов с вопросом, который она закрывает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Five different questions, five different refusals — that is why one gate cannot replace another.",
+              "ru": "Пять разных вопросов и пять разных отказов — поэтому одна проверка не заменяет другую."
+            },
+            "incorrect": {
+              "en": "Rate limit bounds volume, authentication answers who, authorization what, the object check whose, and the default stance covers the rest.",
+              "ru": "Лимит ограничивает объём, аутентификация отвечает «кто», авторизация «что», проверка объекта «чьё», а позиция по умолчанию закрывает остальное."
+            }
+          },
+          "pairs": [
+            {
+              "id": "rate",
+              "left": {
+                "en": "rate limiting",
+                "ru": "ограничение частоты"
+              },
+              "right": {
+                "en": "How many requests arrive, however valid each one is (429)",
+                "ru": "Сколько приходит запросов, какими бы корректными они ни были (429)"
+              }
+            },
+            {
+              "id": "authn",
+              "left": {
+                "en": "authentication",
+                "ru": "аутентификация"
+              },
+              "right": {
+                "en": "Who is calling; missing or invalid credential (401)",
+                "ru": "Кто вызывает; учётных данных нет или они неверны (401)"
+              }
+            },
+            {
+              "id": "authz",
+              "left": {
+                "en": "authorization",
+                "ru": "авторизация"
+              },
+              "right": {
+                "en": "Whether that role and that token's scope allow the operation (403)",
+                "ru": "Разрешают ли эта роль и scope этого токена данную операцию (403)"
+              }
+            },
+            {
+              "id": "object",
+              "left": {
+                "en": "object-level check",
+                "ru": "проверка на уровне объекта"
+              },
+              "right": {
+                "en": "Whether this particular record belongs to the caller (404)",
+                "ru": "Принадлежит ли эта конкретная запись вызывающему (404)"
+              }
+            },
+            {
+              "id": "default",
+              "left": {
+                "en": "deny by default",
+                "ru": "запрет по умолчанию"
+              },
+              "right": {
+                "en": "What happens to an endpoint nobody wrote a rule for",
+                "ru": "Что происходит с эндпоинтом, для которого правило не написали"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p5-fill-decisions",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill in the four decisions of an endpoint security scheme.",
+            "ru": "Впиши четыре решения схемы безопасности эндпоинтов."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Three answers to three different situations, and a default that covers everything else.",
+              "ru": "Три ответа на три разные ситуации и умолчание, которое покрывает всё остальное."
+            },
+            "incorrect": {
+              "en": "401 unknown, 403 known and refused, 404 when existence is sensitive, and the last rule denies everything unmatched.",
+              "ru": "401 — неизвестен, 403 — известен и отказано, 404 — когда чувствительно существование, а последнее правило запрещает всё без совпадений."
+            }
+          },
+          "text": {
+            "en": "An unknown caller gets ___; a known caller without permission gets ___; a request for someone else's record gets ___; and the last rule in the list must ___ everything that matched nothing.",
+            "ru": "Неизвестный вызывающий получает ___; известный вызывающий без прав получает ___; запрос чужой записи получает ___; а последнее правило в списке обязано ___ всё, что не совпало ни с чем."
+          },
+          "blanks": [
+            {
+              "en": [
+                "401"
+              ],
+              "ru": [
+                "401"
+              ]
+            },
+            {
+              "en": [
+                "403"
+              ],
+              "ru": [
+                "403"
+              ]
+            },
+            {
+              "en": [
+                "404"
+              ],
+              "ru": [
+                "404"
+              ]
+            },
+            {
+              "en": [
+                "deny",
+                "denyAll",
+                "refuse",
+                "block"
+              ],
+              "ru": [
+                "запретить",
+                "отклонить",
+                "закрыть",
+                "deny",
+                "denyAll"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

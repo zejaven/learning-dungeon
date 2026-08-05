@@ -1,0 +1,3321 @@
+{
+  "schemaVersion": 1,
+  "topicId": "hibernate-n-plus-one",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "n-plus-one-shape",
+      "title": {
+        "en": "What N+1 means",
+        "ru": "Что значит N+1"
+      },
+      "summary": {
+        "en": "One query loads N entities and each of them triggers one more query: 1 + N round trips instead of 1 or 2.",
+        "ru": "Один запрос грузит N сущностей, и каждая из них вызывает ещё один запрос: 1 + N обращений к базе вместо 1 или 2."
+      },
+      "discovery": [
+        {
+          "id": "nplus1-d1-count-queries",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The database holds 50 orders, and `Order.lines` is a lazy collection. How many SELECT statements does this code run?",
+            "ru": "В базе 50 заказов, а `Order.lines` — ленивая коллекция. Сколько SELECT-запросов выполнит этот код?"
+          },
+          "code": "List<Order> orders = repo.findAll();\nint total = 0;\nfor (Order o : orders) {\n    total += o.getLines().size();\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "**N+1** names a query count, not a Java exception. One query loads the list of **N** entities; then, for each of those N, Hibernate fires **one more** query to load an association. That is `1 + N` **round trips** — one full request/response exchange with the database — where 1 or 2 would do.\n\nHere `findAll()` is the **1** (`SELECT * FROM orders`), and the 50 `getLines()` reads are the **N** (`SELECT * FROM lines WHERE order_id = ?`, fifty times). Total: 51.\n\n```mermaid\nflowchart TD\n  A[\"findAll(): 1 SELECT loads N orders\"] --> B[\"loop over each order\"]\n  B --> C[\"touch order.getLines()\"]\n  C --> D[\"SELECT * FROM lines WHERE order_id = ?\"]\n  D --> E[\"N extra queries = the N of N+1\"]\n```\n\nEvery one of those statements is tiny. What costs you is the 51 exchanges, not the work inside them.",
+            "ru": "**N+1** — это про количество запросов, а не про исключение в Java. Один запрос грузит список из **N** сущностей; затем для каждой из этих N Hibernate выполняет **ещё один** запрос, чтобы подгрузить связь. Получается `1 + N` **обращений к базе** — полных обменов «запрос/ответ» — там, где хватило бы 1 или 2.\n\nЗдесь `findAll()` — это **1** (`SELECT * FROM orders`), а 50 чтений `getLines()` — это **N** (`SELECT * FROM lines WHERE order_id = ?`, пятьдесят раз). Итого: 51.\n\n```mermaid\nflowchart TD\n  A[\"findAll(): 1 SELECT грузит N заказов\"] --> B[\"цикл по каждому заказу\"]\n  B --> C[\"обращение к order.getLines()\"]\n  C --> D[\"SELECT * FROM lines WHERE order_id = ?\"]\n  D --> E[\"N лишних запросов = это N в N+1\"]\n```\n\nКаждый из этих запросов крошечный. Дорого стоят 51 обращение к базе, а не работа внутри них."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — 1 query for the orders plus 50 for the lines.",
+              "ru": "Верно — 1 запрос за заказами плюс 50 за строками."
+            },
+            "incorrect": {
+              "en": "It is 51: one query for the list, then one per order.",
+              "ru": "Это 51: один запрос за списком, затем по одному на каждый заказ."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "51",
+                "ru": "51"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "1",
+                "ru": "1"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "findAll() loads only the orders; each getLines() read needs its own query.",
+                "ru": "findAll() грузит только заказы; каждое чтение getLines() требует своего запроса."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "50",
+                "ru": "50"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Close — but the query that loaded the list counts too; that is the \"+1\".",
+                "ru": "Почти — но запрос, загрузивший список, тоже считается; это и есть «+1»."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "2",
+                "ru": "2"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing here asks for the lines in advance, so they load one order at a time.",
+                "ru": "Здесь никто не просит строки заранее, поэтому они грузятся по одному заказу."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "nplus1-p1-definition-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In JPA/Hibernate, the N+1 problem means one query loads a list of N entities and then one extra query runs for each of them.",
+            "ru": "В JPA/Hibernate проблема N+1 означает, что один запрос грузит список из N сущностей, а затем на каждую из них выполняется ещё один запрос."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Exactly: 1 + N round trips where 1 or 2 would do.",
+              "ru": "Именно: 1 + N обращений к базе там, где хватило бы 1 или 2."
+            },
+            "incorrect": {
+              "en": "It is true — the 1 loads the list, the N fill in each entity's association.",
+              "ru": "Это правда — «1» грузит список, «N» заполняют связь каждой сущности."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "nplus1-p2-what-n-counts",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In the name \"N+1\" as used for the JPA/Hibernate problem, what does N count?",
+            "ru": "В названии «N+1» применительно к проблеме JPA/Hibernate — что именно считает N?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "N is the extra statements — one per entity the first query returned.",
+              "ru": "N — это лишние запросы, по одному на каждую сущность из первого запроса."
+            },
+            "incorrect": {
+              "en": "N counts the extra queries: one per entity returned by the first query.",
+              "ru": "N считает лишние запросы: по одному на каждую сущность из первого запроса."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The extra queries — one per entity returned by the first query",
+                "ru": "Лишние запросы — по одному на каждую сущность из первого запроса"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The number of tables joined inside the query",
+                "ru": "Количество таблиц, соединённых внутри запроса"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "N+1 counts round trips to the database, not joins inside one statement.",
+                "ru": "N+1 считает обращения к базе, а не джойны внутри одного запроса."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The number of columns selected",
+                "ru": "Количество выбираемых столбцов"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Column count is irrelevant here; N+1 is about how many statements run.",
+                "ru": "Количество столбцов тут не при чём; N+1 — про число выполненных запросов."
+              }
+            }
+          ]
+        },
+        {
+          "id": "nplus1-p3-match-parts",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each part of the JPA/Hibernate N+1 problem to what it stands for.",
+            "ru": "Соотнеси каждую часть проблемы N+1 в JPA/Hibernate с тем, что она обозначает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The 1 is the list query, the N are the per-entity queries, and 1 or 2 is the goal.",
+              "ru": "«1» — запрос за списком, «N» — запросы на каждую сущность, а 1 или 2 — цель."
+            },
+            "incorrect": {
+              "en": "1 = the list query, N = one query per parent, 1 + N = what you actually pay, 1 or 2 = the goal.",
+              "ru": "1 — запрос за списком, N — по запросу на родителя, 1 + N — что вы платите, 1 или 2 — цель."
+            }
+          },
+          "pairs": [
+            {
+              "id": "one",
+              "left": {
+                "en": "the 1",
+                "ru": "«1»"
+              },
+              "right": {
+                "en": "The single query that loads the parent list",
+                "ru": "Единственный запрос, который грузит список родителей"
+              }
+            },
+            {
+              "id": "n",
+              "left": {
+                "en": "the N",
+                "ru": "«N»"
+              },
+              "right": {
+                "en": "One extra query per parent to load its association",
+                "ru": "По одному лишнему запросу на родителя, чтобы подгрузить его связь"
+              }
+            },
+            {
+              "id": "total",
+              "left": {
+                "en": "1 + N",
+                "ru": "1 + N"
+              },
+              "right": {
+                "en": "The total round trips the endpoint actually makes",
+                "ru": "Общее число обращений к базе, которое реально делает эндпойнт"
+              }
+            },
+            {
+              "id": "goal",
+              "left": {
+                "en": "1 or 2",
+                "ru": "1 или 2"
+              },
+              "right": {
+                "en": "The round trips a correct fetch strategy needs",
+                "ru": "Сколько обращений нужно правильной стратегии загрузки"
+              }
+            }
+          ]
+        },
+        {
+          "id": "nplus1-p4-fill-count",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Compute the query count.",
+            "ru": "Посчитай количество запросов."
+          },
+          "feedback": {
+            "correct": {
+              "en": "1 for the list plus 50 for the collections = 51.",
+              "ru": "1 за список плюс 50 за коллекции = 51."
+            },
+            "incorrect": {
+              "en": "It is 51: one query for the 50 parents, then one per parent.",
+              "ru": "Это 51: один запрос за 50 родителями, затем по одному на каждого."
+            }
+          },
+          "text": {
+            "en": "In JPA/Hibernate, a query that loads 50 parents plus one lazy-collection read per parent runs ___ queries in total.",
+            "ru": "В JPA/Hibernate запрос, который грузит 50 родителей, плюс по одному чтению ленивой коллекции на каждого, выполняет всего ___ запросов."
+          },
+          "blanks": [
+            {
+              "en": [
+                "51"
+              ],
+              "ru": [
+                "51"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "lazy-proxy-trigger",
+      "title": {
+        "en": "Lazy proxies fire the extra query",
+        "ru": "Лишний запрос порождает ленивый прокси"
+      },
+      "summary": {
+        "en": "Collections are LAZY by default: the collection is an uninitialized proxy, and the first read fires SELECT ... WHERE order_id = ?.",
+        "ru": "Коллекции по умолчанию LAZY: коллекция — неинициализированный прокси, и первое чтение выполняет SELECT ... WHERE order_id = ?."
+      },
+      "discovery": [
+        {
+          "id": "lazy-d1-touch",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "`Order.lines` is a `@OneToMany` with no fetch type set. What does the last line do?",
+            "ru": "`Order.lines` — это `@OneToMany` без указанного типа загрузки. Что делает последняя строка?"
+          },
+          "code": "@OneToMany(mappedBy = \"order\")\nprivate List<Line> lines;\n\n// ...\nList<Order> orders = repo.findAll();\nint n = orders.get(0).getLines().size();",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Collection associations are **LAZY by default** in JPA. `SELECT o FROM Order o` loads the orders and leaves each `order.getLines()` as an uninitialized **proxy**: a stand-in object that knows *how* to load its contents but has not done it yet.\n\nThe moment your code **reads** that collection — a loop, `.size()`, mapping it to a DTO — the proxy has to go and fetch the real contents, and that is a brand-new statement:\n\n```\nSELECT * FROM lines WHERE order_id = ?\n```\n\n```mermaid\nflowchart LR\n  L[\"order.getLines()\"] --> Q{\"initialized?\"}\n  Q -->|\"no: still a proxy\"| S[\"SELECT * FROM lines WHERE order_id = ?\"]\n  Q -->|\"yes\"| N[\"no extra query\"]\n```\n\nSo the extra query is not something Hibernate does behind your back for no reason — the read triggers it. Do that read inside a loop over N parents and you get N statements.",
+            "ru": "Связи-коллекции в JPA по умолчанию **LAZY** (ленивые). `SELECT o FROM Order o` грузит заказы и оставляет каждый `order.getLines()` неинициализированным **прокси**: объектом-заместителем, который знает, *как* загрузить содержимое, но ещё этого не сделал.\n\nКак только код **читает** эту коллекцию — цикл, `.size()`, маппинг в DTO — прокси вынужден пойти за реальным содержимым, а это совершенно новый запрос:\n\n```\nSELECT * FROM lines WHERE order_id = ?\n```\n\n```mermaid\nflowchart LR\n  L[\"order.getLines()\"] --> Q{\"инициализирована?\"}\n  Q -->|\"нет: всё ещё прокси\"| S[\"SELECT * FROM lines WHERE order_id = ?\"]\n  Q -->|\"да\"| N[\"лишнего запроса нет\"]\n```\n\nЗначит, лишний запрос — не самодеятельность Hibernate: его запускает само чтение. Сделайте такое чтение в цикле по N родителям — получите N запросов."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Reading a lazy collection is what triggers its query.",
+              "ru": "Именно чтение ленивой коллекции запускает её запрос."
+            },
+            "incorrect": {
+              "en": "It fires a new SELECT: the collection was an uninitialized proxy until it was read.",
+              "ru": "Она выполняет новый SELECT: до чтения коллекция была неинициализированным прокси."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Fires a new SELECT against the lines table for that one order",
+                "ru": "Выполняет новый SELECT к таблице lines для этого одного заказа"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Reads lines that findAll() already loaded",
+                "ru": "Читает строки, которые findAll() уже загрузил"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "findAll() loaded only the orders; it does not fill in a lazy collection.",
+                "ru": "findAll() загрузил только заказы; ленивую коллекцию он не заполняет."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Returns 0, because the collection was never loaded",
+                "ru": "Возвращает 0, потому что коллекция не была загружена"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The collection is not empty — it loads on demand the moment you read it.",
+                "ru": "Коллекция не пуста — она грузится по требованию, как только её читают."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "lazy-p1-default-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In JPA, collection associations are LAZY by default.",
+            "ru": "В JPA связи-коллекции по умолчанию загружаются лениво (LAZY)."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That default is why an untouched collection costs nothing — and why touching it costs a query.",
+              "ru": "Из-за этого умолчания нетронутая коллекция бесплатна — а обращение к ней стоит запрос."
+            },
+            "incorrect": {
+              "en": "They are: collections start as uninitialized proxies and load when read.",
+              "ru": "Да, ленивые: коллекции начинают как неинициализированные прокси и грузятся при чтении."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "lazy-p2-trigger",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In Hibernate, what makes a lazy collection load its contents?",
+            "ru": "Что в Hibernate заставляет ленивую коллекцию загрузить своё содержимое?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The first read initializes it — that read is where the extra query comes from.",
+              "ru": "Первое чтение инициализирует её — именно оттуда берётся лишний запрос."
+            },
+            "incorrect": {
+              "en": "The first read of the collection triggers it: a loop, .size(), or mapping it to a DTO.",
+              "ru": "Её запускает первое чтение коллекции: цикл, .size() или маппинг в DTO."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The first read of the collection — a loop, .size(), or mapping it to a DTO",
+                "ru": "Первое чтение коллекции — цикл, .size() или маппинг в DTO"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The repository call that loaded the parent entity",
+                "ru": "Вызов репозитория, который загрузил родительскую сущность"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That call loads only the parent; the collection stays an uninitialized proxy.",
+                "ru": "Этот вызов грузит только родителя; коллекция остаётся неинициализированным прокси."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Committing the transaction",
+                "ru": "Коммит транзакции"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing loads on commit; the load is triggered by reading the collection.",
+                "ru": "При коммите ничего не грузится; загрузку запускает чтение коллекции."
+              }
+            }
+          ]
+        },
+        {
+          "id": "lazy-p3-sort-trigger",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order what happens when Hibernate code loops over orders and reads each order's lazy lines collection.",
+            "ru": "Расставь по порядку, что происходит, когда код на Hibernate идёт в цикле по заказам и читает ленивую коллекцию lines каждого заказа."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One query for the parents, then one per parent as each proxy initializes.",
+              "ru": "Один запрос за родителями, затем по одному на каждого, когда прокси инициализируется."
+            },
+            "incorrect": {
+              "en": "The parents load first, the collections stay proxies, and each read fires its own SELECT.",
+              "ru": "Сначала грузятся родители, коллекции остаются прокси, и каждое чтение выполняет свой SELECT."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "One SELECT loads the orders",
+                "ru": "Один SELECT грузит заказы"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Each order.getLines() is left as an uninitialized proxy",
+                "ru": "Каждый order.getLines() остаётся неинициализированным прокси"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "The loop reads getLines() on one order",
+                "ru": "Цикл читает getLines() у одного заказа"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Hibernate fires SELECT * FROM lines WHERE order_id = ? for that order",
+                "ru": "Hibernate выполняет SELECT * FROM lines WHERE order_id = ? для этого заказа"
+              }
+            }
+          ]
+        },
+        {
+          "id": "lazy-p4-fill-proxy",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing term.",
+            "ru": "Впиши пропущенный термин."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A proxy stands in for the real contents until something reads it.",
+              "ru": "Прокси подменяет реальное содержимое, пока его никто не прочитал."
+            },
+            "incorrect": {
+              "en": "It is a proxy: a stand-in that loads the real contents on first read.",
+              "ru": "Это прокси: заместитель, который грузит реальное содержимое при первом чтении."
+            }
+          },
+          "text": {
+            "en": "Until it is read, a lazy Hibernate collection is an uninitialized ___.",
+            "ru": "Пока её не прочитали, ленивая коллекция в Hibernate — это неинициализированный ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "proxy"
+              ],
+              "ru": [
+                "прокси",
+                "proxy"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "why-it-hides",
+      "title": {
+        "en": "Why N+1 hides",
+        "ru": "Почему N+1 незаметен"
+      },
+      "summary": {
+        "en": "Every one of the queries is fast and correct; only the count scales, so 5,000 orders mean 5,001 queries.",
+        "ru": "Каждый из запросов быстрый и корректный; растёт только их число, поэтому 5000 заказов дают 5001 запрос."
+      },
+      "discovery": [
+        {
+          "id": "hides-d1-tests-pass",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "An endpoint with an N+1 loop passes every test against a 3-row test database, then times out in production. Why?",
+            "ru": "Эндпойнт с циклом, дающим N+1, проходит все тесты на тестовой базе из 3 строк, а в проде отваливается по таймауту. Почему?"
+          },
+          "reveal": {
+            "en": "N+1 is easy to miss precisely because **every individual query is fast and correct**. Nothing throws, nothing returns wrong data, and a fixture with 3 rows runs 4 queries — invisible.\n\nThe bug lives in how the count *scales*, because N is the size of the result list:\n\n```mermaid\nflowchart LR\n  A[\"3 rows in a test\"] --> B[\"4 queries: nobody notices\"]\n  C[\"5000 rows in production\"] --> D[\"5001 queries: the endpoint times out\"]\n```\n\nAnd it is **not** a database problem. These are ordinary **prepared statements** — a statement compiled once and reused with different parameters — so each is cheap. What you pay for is the number of round trips the application chose to make. Indexes and a faster database will not remove them; only fetching differently will.",
+            "ru": "N+1 легко упустить именно потому, что **каждый отдельный запрос быстрый и корректный**. Ничего не падает, данные верные, а на фикстуре из 3 строк выполняется 4 запроса — незаметно.\n\nБаг живёт в том, как *масштабируется* это число, ведь N — это размер результирующего списка:\n\n```mermaid\nflowchart LR\n  A[\"3 строки в тесте\"] --> B[\"4 запроса: никто не замечает\"]\n  C[\"5000 строк в проде\"] --> D[\"5001 запрос: эндпойнт отваливается\"]\n```\n\nИ это **не** проблема базы. Это обычные **prepared statements** — запрос компилируется один раз и переиспользуется с разными параметрами — поэтому каждый дёшев. Платите вы за число обращений к базе, которое решило сделать приложение. Индексы и более быстрая база их не уберут; уберёт только другая стратегия загрузки."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The query count follows the row count, and only production has the rows.",
+              "ru": "Число запросов следует за числом строк, а строки есть только в проде."
+            },
+            "incorrect": {
+              "en": "The count scales with the data: 3 rows means 4 queries, 5,000 orders mean 5,001.",
+              "ru": "Число растёт вместе с данными: 3 строки — 4 запроса, 5000 заказов — 5001."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The query count grows with the data: 5,000 orders mean 5,001 queries",
+                "ru": "Число запросов растёт вместе с данными: 5000 заказов дают 5001 запрос"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The individual queries stop being correct at scale",
+                "ru": "На больших объёмах отдельные запросы перестают быть корректными"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Each statement stays correct — only how many of them run changes.",
+                "ru": "Каждый запрос остаётся корректным — меняется только их количество."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The database slows down as tables grow, and that is the real cause",
+                "ru": "База замедляется с ростом таблиц, и это и есть настоящая причина"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The database handles each small query fine; the cost is the number of round trips.",
+                "ru": "База прекрасно справляется с каждым мелким запросом; цена — число обращений к ней."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "hides-p1-db-problem-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "The N+1 problem is a database performance problem: adding indexes or moving to a faster database fixes it.",
+            "ru": "Проблема N+1 — это проблема производительности базы данных: её решают индексы или переход на более быструю базу."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Each query is already cheap; the cost is the number of round trips the application makes.",
+              "ru": "Каждый запрос и так дёшев; цена — число обращений к базе, которые делает приложение."
+            },
+            "incorrect": {
+              "en": "No — the queries are fine; only the application can stop making 1 + N of them.",
+              "ru": "Нет — с запросами всё в порядке; перестать делать их 1 + N может только приложение."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "hides-p2-match-scale",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "In a JPA/Hibernate N+1 loop with one lazy read per row, match the data size to the total number of queries.",
+            "ru": "Для цикла с N+1 в JPA/Hibernate, где на каждую строку одно ленивое чтение, соотнеси объём данных с общим числом запросов."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Always 1 + N, so the count tracks the row count exactly.",
+              "ru": "Всегда 1 + N, поэтому число запросов точно повторяет число строк."
+            },
+            "incorrect": {
+              "en": "The rule is 1 + N: 3 rows means 4, 50 rows means 51, 5,000 rows means 5,001.",
+              "ru": "Правило — 1 + N: 3 строки дают 4, 50 строк — 51, 5000 строк — 5001."
+            }
+          },
+          "pairs": [
+            {
+              "id": "three",
+              "left": {
+                "en": "3 rows",
+                "ru": "3 строки"
+              },
+              "right": {
+                "en": "4 queries",
+                "ru": "4 запроса"
+              }
+            },
+            {
+              "id": "fifty",
+              "left": {
+                "en": "50 rows",
+                "ru": "50 строк"
+              },
+              "right": {
+                "en": "51 queries",
+                "ru": "51 запрос"
+              }
+            },
+            {
+              "id": "many",
+              "left": {
+                "en": "5,000 rows",
+                "ru": "5000 строк"
+              },
+              "right": {
+                "en": "5,001 queries",
+                "ru": "5001 запрос"
+              }
+            }
+          ]
+        },
+        {
+          "id": "hides-p3-fill-5001",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Compute the production query count.",
+            "ru": "Посчитай число запросов в проде."
+          },
+          "feedback": {
+            "correct": {
+              "en": "1 + 5,000: the same code that ran 4 queries in the test.",
+              "ru": "1 + 5000: тот же код, который в тесте выполнял 4 запроса."
+            },
+            "incorrect": {
+              "en": "It is 5001 — one query for the list plus one per order.",
+              "ru": "Это 5001 — один запрос за списком плюс по одному на заказ."
+            }
+          },
+          "text": {
+            "en": "In JPA/Hibernate, an N+1 endpoint over 5,000 orders runs ___ queries.",
+            "ru": "В JPA/Hibernate эндпойнт с N+1 по 5000 заказам выполняет ___ запросов."
+          },
+          "blanks": [
+            {
+              "en": [
+                "5001"
+              ],
+              "ru": [
+                "5001"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "detecting-n-plus-one",
+      "title": {
+        "en": "Detecting it",
+        "ru": "Как его обнаружить"
+      },
+      "summary": {
+        "en": "Log the SQL and look for the same SELECT repeating with different ids, and assert a statement count per request in a test.",
+        "ru": "Логируйте SQL и ищите повторение одного и того же SELECT с разными id, а в тесте утверждайте количество запросов на один вызов."
+      },
+      "discovery": [
+        {
+          "id": "detect-d1-log-pattern",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "You switch on SQL logging for a slow endpoint. Which pattern in the log identifies an N+1?",
+            "ru": "Вы включили логирование SQL для медленного эндпойнта. Какая картина в логе указывает на N+1?"
+          },
+          "reveal": {
+            "en": "Two practical detectors.\n\n**1. Read the SQL log.** Switch on `hibernate.show_sql`, or better the `org.hibernate.SQL` logger together with `p6spy` or `datasource-proxy`, which also show the bound parameters. The N+1 smell is unmistakable — **the same statement repeating, only the id changing**:\n\n```\nSELECT * FROM orders\nSELECT * FROM lines WHERE order_id = 1\nSELECT * FROM lines WHERE order_id = 2\nSELECT * FROM lines WHERE order_id = 3\n...\n```\n\n**2. Assert the count in a test.** A query-counting tool — for example Hypersistence Utils' `SQLStatementCountValidator` — lets a test state \"this endpoint runs at most 2 queries\". That turns an N+1 regression into a build failure instead of a production incident, which is the only kind of detection that keeps working after you stop looking.",
+            "ru": "Два практических способа.\n\n**1. Читать SQL-лог.** Включите `hibernate.show_sql` или, лучше, логгер `org.hibernate.SQL` вместе с `p6spy` или `datasource-proxy` — они показывают ещё и подставленные параметры. Запах N+1 не спутать ни с чем: **один и тот же запрос повторяется, меняется только id**:\n\n```\nSELECT * FROM orders\nSELECT * FROM lines WHERE order_id = 1\nSELECT * FROM lines WHERE order_id = 2\nSELECT * FROM lines WHERE order_id = 3\n...\n```\n\n**2. Утверждать количество в тесте.** Инструмент подсчёта запросов — например, `SQLStatementCountValidator` из Hypersistence Utils — позволяет тесту заявить: «этот эндпойнт выполняет не более 2 запросов». Так регрессия N+1 превращается в падение сборки, а не в инцидент в проде — и это единственный вид обнаружения, который продолжает работать, когда вы перестали смотреть."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Many identical fast queries, not one slow query — that is the signature.",
+              "ru": "Много одинаковых быстрых запросов, а не один медленный — вот подпись N+1."
+            },
+            "incorrect": {
+              "en": "Look for the same SELECT repeating with only the id parameter changing.",
+              "ru": "Ищите повторение одного и того же SELECT, где меняется только параметр id."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The same SELECT repeating, with only the id parameter changing",
+                "ru": "Повторение одного и того же SELECT, где меняется только параметр id"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "One long SELECT with many joins",
+                "ru": "Один длинный SELECT с множеством джойнов"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A single joined statement is what a fix looks like, not the problem.",
+                "ru": "Один запрос с джойном — это как выглядит решение, а не проблема."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A single SELECT that takes several seconds",
+                "ru": "Один SELECT, который выполняется несколько секунд"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is a slow query — a different problem. N+1 is many fast queries.",
+                "ru": "Это медленный запрос — другая проблема. N+1 — это много быстрых запросов."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "detect-p1-repeat-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In a Hibernate SQL log, the same SELECT repeating with only the id parameter changing is the classic sign of an N+1 problem.",
+            "ru": "В SQL-логе Hibernate повторение одного и того же SELECT, где меняется только параметр id, — классический признак проблемы N+1."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That repetition is the whole smell — one statement per parent.",
+              "ru": "Это повторение и есть весь запах — по запросу на каждого родителя."
+            },
+            "incorrect": {
+              "en": "It is true — that repetition is exactly the per-parent lazy load.",
+              "ru": "Это правда — такое повторение и есть ленивая загрузка на каждого родителя."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "detect-p2-fail-build",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What makes an N+1 regression in a JPA/Hibernate endpoint fail the build automatically?",
+            "ru": "Что заставит регрессию N+1 в эндпойнте на JPA/Hibernate автоматически ронять сборку?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "A statement-count assertion is the only detector that keeps watching for you.",
+              "ru": "Утверждение о числе запросов — единственный детектор, который следит за вас."
+            },
+            "incorrect": {
+              "en": "A test that asserts the number of SQL statements the endpoint runs.",
+              "ru": "Тест, утверждающий, сколько SQL-запросов выполняет эндпойнт."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A test that asserts the number of SQL statements the endpoint runs",
+                "ru": "Тест, который утверждает количество SQL-запросов, выполняемых эндпойнтом"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Enabling hibernate.show_sql in production",
+                "ru": "Включение hibernate.show_sql в проде"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Logging shows the problem but nothing fails; a human still has to read it.",
+                "ru": "Лог покажет проблему, но ничего не упадёт; читать всё равно должен человек."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Re-reading the SQL log manually after each release",
+                "ru": "Ручной просмотр SQL-лога после каждого релиза"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Manual review is not automatic and cannot fail a build.",
+                "ru": "Ручной просмотр не автоматичен и не может уронить сборку."
+              }
+            }
+          ]
+        },
+        {
+          "id": "detect-p3-match-tools",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each Hibernate diagnostic tool or setting to what it gives you.",
+            "ru": "Соотнеси каждый диагностический инструмент или настройку Hibernate с тем, что они дают."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Three ways to see the SQL, one way to assert it.",
+              "ru": "Три способа увидеть SQL и один — утвердить его количество."
+            },
+            "incorrect": {
+              "en": "show_sql prints SQL, org.hibernate.SQL logs it, p6spy adds parameters, the validator asserts a count.",
+              "ru": "show_sql печатает SQL, org.hibernate.SQL логирует его, p6spy добавляет параметры, валидатор утверждает количество."
+            }
+          },
+          "pairs": [
+            {
+              "id": "showsql",
+              "left": {
+                "en": "hibernate.show_sql",
+                "ru": "hibernate.show_sql"
+              },
+              "right": {
+                "en": "Prints the generated SQL",
+                "ru": "Печатает сгенерированный SQL"
+              }
+            },
+            {
+              "id": "logger",
+              "left": {
+                "en": "the org.hibernate.SQL logger",
+                "ru": "логгер org.hibernate.SQL"
+              },
+              "right": {
+                "en": "Routes the SQL through the logging framework",
+                "ru": "Пропускает SQL через фреймворк логирования"
+              }
+            },
+            {
+              "id": "proxy",
+              "left": {
+                "en": "p6spy / datasource-proxy",
+                "ru": "p6spy / datasource-proxy"
+              },
+              "right": {
+                "en": "SQL logging that also shows the bound parameters",
+                "ru": "Логирование SQL, показывающее и подставленные параметры"
+              }
+            },
+            {
+              "id": "counter",
+              "left": {
+                "en": "SQLStatementCountValidator",
+                "ru": "SQLStatementCountValidator"
+              },
+              "right": {
+                "en": "Asserts a statement count inside a test",
+                "ru": "Утверждает количество запросов внутри теста"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detect-p4-fill-limit",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the number that guards against an N+1 regression.",
+            "ru": "Впиши число, которое страхует от регрессии N+1."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A correctly fetched endpoint needs 1 or 2 queries, so the assertion holds at 2.",
+              "ru": "Правильно загружающему эндпойнту нужно 1–2 запроса, поэтому утверждение держится на 2."
+            },
+            "incorrect": {
+              "en": "It is 2: a correct fetch strategy needs 1 or 2 queries, never 1 + N.",
+              "ru": "Это 2: правильной стратегии загрузки нужно 1 или 2 запроса, а не 1 + N."
+            }
+          },
+          "text": {
+            "en": "A query-counting test can assert that a JPA endpoint runs at most ___ queries, so an N+1 regression fails the build.",
+            "ru": "Тест с подсчётом запросов может утверждать, что JPA-эндпойнт выполняет не более ___ запросов, — тогда регрессия N+1 уронит сборку."
+          },
+          "blanks": [
+            {
+              "en": [
+                "2",
+                "two"
+              ],
+              "ru": [
+                "2",
+                "два"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "join-fetch",
+      "title": {
+        "en": "Fix 1: JOIN FETCH",
+        "ru": "Решение 1: JOIN FETCH"
+      },
+      "summary": {
+        "en": "JOIN FETCH loads the association in the same query as the root, so 1 + N collapses to 1.",
+        "ru": "JOIN FETCH грузит связь тем же запросом, что и корень, поэтому 1 + N сворачивается в 1."
+      },
+      "discovery": [
+        {
+          "id": "joinfetch-d1-count",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "This JPQL returns 50 orders. How many SELECT statements run, and are the `lines` collections initialized?",
+            "ru": "Этот JPQL возвращает 50 заказов. Сколько выполнится SELECT-запросов и будут ли коллекции `lines` инициализированы?"
+          },
+          "code": "SELECT o FROM Order o JOIN FETCH o.lines WHERE o.status = :s",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "`JOIN FETCH` asks for the association **in the same query as the root**. Hibernate folds the children into one SQL join, and the collections come back **already initialized** — so reading them later fires nothing.\n\n```\nSELECT o FROM Order o JOIN FETCH o.lines WHERE o.status = :s\n```\n\n`1 + N` collapses to **1**.\n\n```mermaid\nflowchart LR\n  A[\"1 + N lazy queries\"] -->|\"JOIN FETCH o.lines\"| B[\"1 query, collections initialized\"]\n```\n\nTwo details worth remembering:\n\n- `JOIN FETCH` is an inner join, so a parent with **no** children disappears from the result. Use `LEFT JOIN FETCH` when you want to keep it.\n- The fetch is declared on **this query only**. The mapping stays LAZY, so every other finder is unaffected — which is the whole point.",
+            "ru": "`JOIN FETCH` запрашивает связь **тем же запросом, что и корень**. Hibernate сворачивает детей в один SQL-джойн, и коллекции возвращаются **уже инициализированными** — поэтому их последующее чтение ничего не выполняет.\n\n```\nSELECT o FROM Order o JOIN FETCH o.lines WHERE o.status = :s\n```\n\n`1 + N` сворачивается в **1**.\n\n```mermaid\nflowchart LR\n  A[\"1 + N ленивых запросов\"] -->|\"JOIN FETCH o.lines\"| B[\"1 запрос, коллекции инициализированы\"]\n```\n\nДве детали, которые стоит помнить:\n\n- `JOIN FETCH` — это inner join, поэтому родитель **без** детей исчезает из результата. Используйте `LEFT JOIN FETCH`, если хотите его сохранить.\n- Загрузка объявлена **только для этого запроса**. Маппинг остаётся LAZY, поэтому остальные finder'ы не затронуты — в этом весь смысл."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One statement, and nothing is lazy afterwards.",
+              "ru": "Один запрос, и после него ничего не остаётся ленивым."
+            },
+            "incorrect": {
+              "en": "One statement: FETCH folds the children into the same join and initializes the collections.",
+              "ru": "Один запрос: FETCH сворачивает детей в тот же джойн и инициализирует коллекции."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "1 statement, and lines is already initialized",
+                "ru": "1 запрос, и lines уже инициализирована"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "1 statement, but lines is still a lazy proxy",
+                "ru": "1 запрос, но lines всё ещё ленивый прокси"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "FETCH is exactly what initializes it; without FETCH it would stay lazy.",
+                "ru": "Именно FETCH её и инициализирует; без FETCH она осталась бы ленивой."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "51 statements — the lines still load one order at a time",
+                "ru": "51 запрос — строки всё равно грузятся по одному заказу"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The children come back inside the same join, so there is no per-order query.",
+                "ru": "Дети возвращаются внутри того же джойна, поэтому запроса на каждый заказ нет."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "joinfetch-p1-initialized-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A JPQL `JOIN FETCH` returns the fetched collection already initialized, so reading it later fires no extra query.",
+            "ru": "`JOIN FETCH` в JPQL возвращает загруженную коллекцию уже инициализированной, поэтому её последующее чтение не выполняет лишних запросов."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That is what collapses 1 + N into a single query.",
+              "ru": "Именно это и сворачивает 1 + N в один запрос."
+            },
+            "incorrect": {
+              "en": "It is true — that is exactly what FETCH adds to a plain join.",
+              "ru": "Это правда — именно это FETCH добавляет к простому джойну."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "joinfetch-p2-left",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In JPQL, you need parents that have no children to still appear in the result of a fetch query. What do you write?",
+            "ru": "В JPQL нужно, чтобы родители без детей всё равно попадали в результат запроса с загрузкой. Что вы напишете?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "LEFT keeps childless parents; the plain form is an inner join.",
+              "ru": "LEFT сохраняет родителей без детей; обычная форма — это inner join."
+            },
+            "incorrect": {
+              "en": "It is LEFT JOIN FETCH: a plain JOIN FETCH is an inner join and drops childless parents.",
+              "ru": "Это LEFT JOIN FETCH: обычный JOIN FETCH — inner join, он выбрасывает родителей без детей."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "LEFT JOIN FETCH o.lines",
+                "ru": "LEFT JOIN FETCH o.lines"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "JOIN FETCH o.lines",
+                "ru": "JOIN FETCH o.lines"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is an inner join — parents without children are filtered out.",
+                "ru": "Это inner join — родители без детей отфильтровываются."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "JOIN o.lines",
+                "ru": "JOIN o.lines"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A plain join both drops childless parents and leaves the collection lazy.",
+                "ru": "Простой джойн и выбрасывает родителей без детей, и оставляет коллекцию ленивой."
+              }
+            }
+          ]
+        },
+        {
+          "id": "joinfetch-p3-assemble",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the JPQL that loads orders together with their lines and keeps orders that have none.",
+            "ru": "Собери JPQL, который грузит заказы вместе с их строками и сохраняет заказы без строк."
+          },
+          "feedback": {
+            "correct": {
+              "en": "LEFT keeps the childless parents; FETCH is what initializes the collection.",
+              "ru": "LEFT сохраняет родителей без детей; инициализирует коллекцию именно FETCH."
+            },
+            "incorrect": {
+              "en": "SELECT o FROM Order o LEFT JOIN FETCH o.lines — LEFT for childless parents, FETCH to initialize.",
+              "ru": "SELECT o FROM Order o LEFT JOIN FETCH o.lines — LEFT для родителей без детей, FETCH для инициализации."
+            }
+          },
+          "tokens": {
+            "en": [
+              "SELECT",
+              "o",
+              "FROM",
+              "Order",
+              "o",
+              "LEFT",
+              "JOIN",
+              "FETCH",
+              "o.lines"
+            ],
+            "ru": [
+              "SELECT",
+              "o",
+              "FROM",
+              "Order",
+              "o",
+              "LEFT",
+              "JOIN",
+              "FETCH",
+              "o.lines"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "EAGER"
+            ],
+            "ru": [
+              "EAGER"
+            ]
+          }
+        },
+        {
+          "id": "joinfetch-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing JPQL keywords.",
+            "ru": "Впиши два пропущенных ключевых слова JPQL."
+          },
+          "feedback": {
+            "correct": {
+              "en": "JOIN alone would only filter; FETCH is what loads the association.",
+              "ru": "Один JOIN только фильтровал бы; связь загружает именно FETCH."
+            },
+            "incorrect": {
+              "en": "It is JOIN FETCH: the join brings the rows, FETCH loads them into the association.",
+              "ru": "Это JOIN FETCH: джойн приносит строки, а FETCH грузит их в связь."
+            }
+          },
+          "text": {
+            "en": "To load an association in the same query as its root, JPQL writes ___ ___ o.lines.",
+            "ru": "Чтобы загрузить связь тем же запросом, что и корень, в JPQL пишут ___ ___ o.lines."
+          },
+          "blanks": [
+            {
+              "en": [
+                "JOIN",
+                "join"
+              ],
+              "ru": [
+                "JOIN",
+                "join"
+              ]
+            },
+            {
+              "en": [
+                "FETCH",
+                "fetch"
+              ],
+              "ru": [
+                "FETCH",
+                "fetch"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "plain-join-vs-fetch",
+      "title": {
+        "en": "JOIN vs JOIN FETCH",
+        "ru": "JOIN против JOIN FETCH"
+      },
+      "summary": {
+        "en": "A plain JOIN only filters rows; only JOIN FETCH initializes the association.",
+        "ru": "Простой JOIN только фильтрует строки; связь инициализирует только JOIN FETCH."
+      },
+      "discovery": [
+        {
+          "id": "joinvs-d1-predict",
+          "type": "predict_output",
+          "prompt": {
+            "en": "This query uses `JOIN` without `FETCH` and returns 30 distinct orders. Predict how many SELECT statements the whole snippet runs.",
+            "ru": "Этот запрос использует `JOIN` без `FETCH` и возвращает 30 различных заказов. Предскажи, сколько SELECT-запросов выполнит весь фрагмент."
+          },
+          "code": "List<Order> orders = em.createQuery(\n    \"SELECT o FROM Order o JOIN o.lines l WHERE l.qty > 10\", Order.class)\n  .getResultList();\nint total = 0;\nfor (Order o : orders) {\n    total += o.getLines().size();\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "`JOIN` and `JOIN FETCH` look almost identical and do different jobs.\n\n`JOIN o.lines l` joins the tables so you can **filter** or sort on child columns. That is all it does: the entity's collection is untouched and stays a lazy proxy, so the N+1 is still waiting for you in the loop — 1 query for the orders plus 30 for the collections.\n\n`JOIN FETCH o.lines` joins **and** loads the children into the collection, initializing it.\n\n```mermaid\nflowchart LR\n  J[\"JOIN o.lines\"] --> F[\"filters rows only, collection stays lazy\"]\n  JF[\"JOIN FETCH o.lines\"] --> I[\"filters rows and initializes the collection\"]\n```\n\nThe word `FETCH` is the only thing that changes *what is loaded*. That is exactly why this one is so easy to get wrong: the query looks like it already has the data, and the SQL log proves it did not.",
+            "ru": "`JOIN` и `JOIN FETCH` выглядят почти одинаково, а делают разное.\n\n`JOIN o.lines l` соединяет таблицы, чтобы можно было **фильтровать** или сортировать по столбцам детей. И всё: коллекция сущности не тронута и остаётся ленивым прокси, поэтому N+1 по-прежнему ждёт вас в цикле — 1 запрос за заказами плюс 30 за коллекциями.\n\n`JOIN FETCH o.lines` соединяет **и** грузит детей в коллекцию, инициализируя её.\n\n```mermaid\nflowchart LR\n  J[\"JOIN o.lines\"] --> F[\"только фильтрует строки, коллекция остаётся ленивой\"]\n  JF[\"JOIN FETCH o.lines\"] --> I[\"фильтрует строки и инициализирует коллекцию\"]\n```\n\nСлово `FETCH` — единственное, что меняет то, *что загружено*. Именно поэтому здесь так легко ошибиться: запрос выглядит так, будто данные уже есть, а SQL-лог доказывает обратное."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A join without FETCH changes which rows are selected, not what is loaded.",
+              "ru": "Джойн без FETCH меняет, какие строки выбраны, а не то, что загружено."
+            },
+            "incorrect": {
+              "en": "It is 31: the plain join filtered rows but initialized nothing, so the loop still fires 30 queries.",
+              "ru": "Это 31: простой джойн отфильтровал строки, но ничего не инициализировал, поэтому цикл выполняет 30 запросов."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "31 — the plain join did not initialize anything",
+                "ru": "31 — простой джойн ничего не инициализировал"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "1 — the join already loaded the lines",
+                "ru": "1 — джойн уже загрузил строки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A join without FETCH changes which rows are selected, not what is loaded into the entities.",
+                "ru": "Джойн без FETCH меняет выбор строк, а не то, что загружается в сущности."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The query fails: a JPQL join on a collection requires FETCH",
+                "ru": "Запрос упадёт: джойн по коллекции в JPQL требует FETCH"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A plain join on an association is perfectly legal JPQL; it just does not initialize it.",
+                "ru": "Простой джойн по связи — совершенно легальный JPQL; он просто её не инициализирует."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "joinvs-p1-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In JPQL, a plain `JOIN` (without `FETCH`) initializes the joined collection.",
+            "ru": "В JPQL простой `JOIN` (без `FETCH`) инициализирует присоединённую коллекцию."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A bare join only filters rows; the collection stays a lazy proxy.",
+              "ru": "Голый джойн только фильтрует строки; коллекция остаётся ленивым прокси."
+            },
+            "incorrect": {
+              "en": "No — only JOIN FETCH initializes it; a bare join just filters rows.",
+              "ru": "Нет — инициализирует только JOIN FETCH; голый джойн лишь фильтрует строки."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "joinvs-p2-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each JPQL join clause to what it does to the collection.",
+            "ru": "Соотнеси каждую конструкцию JPQL с тем, что она делает с коллекцией."
+          },
+          "feedback": {
+            "correct": {
+              "en": "FETCH adds initialization; LEFT adds the childless parents.",
+              "ru": "FETCH добавляет инициализацию; LEFT добавляет родителей без детей."
+            },
+            "incorrect": {
+              "en": "Plain JOIN filters only; JOIN FETCH initializes; LEFT JOIN FETCH also keeps childless parents.",
+              "ru": "Простой JOIN только фильтрует; JOIN FETCH инициализирует; LEFT JOIN FETCH ещё и сохраняет родителей без детей."
+            }
+          },
+          "pairs": [
+            {
+              "id": "plain",
+              "left": {
+                "en": "JOIN o.lines",
+                "ru": "JOIN o.lines"
+              },
+              "right": {
+                "en": "Filters rows only; the collection stays lazy",
+                "ru": "Только фильтрует строки; коллекция остаётся ленивой"
+              }
+            },
+            {
+              "id": "fetch",
+              "left": {
+                "en": "JOIN FETCH o.lines",
+                "ru": "JOIN FETCH o.lines"
+              },
+              "right": {
+                "en": "Filters rows and initializes the collection",
+                "ru": "Фильтрует строки и инициализирует коллекцию"
+              }
+            },
+            {
+              "id": "left",
+              "left": {
+                "en": "LEFT JOIN FETCH o.lines",
+                "ru": "LEFT JOIN FETCH o.lines"
+              },
+              "right": {
+                "en": "Initializes the collection and keeps parents that have none",
+                "ru": "Инициализирует коллекцию и сохраняет родителей без детей"
+              }
+            }
+          ]
+        },
+        {
+          "id": "joinvs-p3-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the rule that separates the two clauses.",
+            "ru": "Дополни правило, различающее две конструкции."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One word, FETCH, is the whole difference between filtering and loading.",
+              "ru": "Одно слово, FETCH, — вся разница между фильтрацией и загрузкой."
+            },
+            "incorrect": {
+              "en": "A plain JOIN filters; only JOIN FETCH initializes the association.",
+              "ru": "Простой JOIN фильтрует; инициализирует связь только JOIN FETCH."
+            }
+          },
+          "text": {
+            "en": "In JPQL a plain JOIN only ___ rows; the association is initialized only by JOIN ___.",
+            "ru": "В JPQL простой JOIN только ___ строки; связь инициализирует только JOIN ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "filters",
+                "filter"
+              ],
+              "ru": [
+                "фильтрует",
+                "filters"
+              ]
+            },
+            {
+              "en": [
+                "FETCH",
+                "fetch"
+              ],
+              "ru": [
+                "FETCH",
+                "fetch"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "duplicate-parents",
+      "title": {
+        "en": "Duplicated parents",
+        "ru": "Дубликаты родителей"
+      },
+      "summary": {
+        "en": "A collection JOIN FETCH repeats the parent once per child row; DISTINCT or a Set collapses them.",
+        "ru": "JOIN FETCH коллекции повторяет родителя по разу на каждую строку ребёнка; схлопывают их DISTINCT или Set."
+      },
+      "discovery": [
+        {
+          "id": "dup-d1-predict",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The table holds exactly two orders: order 1 has 3 lines, order 2 has 2 lines. Predict the printed size.",
+            "ru": "В таблице ровно два заказа: у заказа 1 три строки, у заказа 2 — две. Предскажи напечатанный размер."
+          },
+          "code": "List<Order> result = em.createQuery(\n    \"SELECT o FROM Order o JOIN FETCH o.lines\", Order.class)\n  .getResultList();\nSystem.out.println(result.size());",
+          "codeLang": "java",
+          "reveal": {
+            "en": "A collection `JOIN FETCH` **multiplies rows**. The SQL join returns one row per child, so a parent with 3 children appears in 3 rows — and the JPQL result list repeats that parent 3 times. 3 + 2 = **5** elements for two orders.\n\n```mermaid\nflowchart LR\n  R[\"joined rows\"] --> R1[\"order 1 + line A\"]\n  R --> R2[\"order 1 + line B\"]\n  R --> R3[\"order 1 + line C\"]\n  R --> R4[\"order 2 + line D\"]\n  R --> R5[\"order 2 + line E\"]\n```\n\nThe entities themselves are fine — it is the *same* `Order` instance repeated, not three copies, and each one's collection is correct. Only the list shape is wrong. Two ways to collapse it:\n\n- add `DISTINCT` to the JPQL: `SELECT DISTINCT o FROM Order o JOIN FETCH o.lines`;\n- or collect into a `Set`, which drops the repeats.\n\nThis is a fetch-join-only problem: the row multiplication is the price of getting everything in one trip, and it is also what makes pagination and a second collection fetch go wrong.",
+            "ru": "`JOIN FETCH` коллекции **размножает строки**. SQL-джойн возвращает по строке на каждого ребёнка, поэтому родитель с 3 детьми попадает в 3 строки — и результирующий список JPQL повторяет этого родителя 3 раза. 3 + 2 = **5** элементов на два заказа.\n\n```mermaid\nflowchart LR\n  R[\"строки джойна\"] --> R1[\"заказ 1 + строка A\"]\n  R --> R2[\"заказ 1 + строка B\"]\n  R --> R3[\"заказ 1 + строка C\"]\n  R --> R4[\"заказ 2 + строка D\"]\n  R --> R5[\"заказ 2 + строка E\"]\n```\n\nС самими сущностями всё в порядке — это *один и тот же* объект `Order`, повторённый, а не три копии, и коллекция у каждого корректна. Неверна только форма списка. Схлопнуть его можно двумя способами:\n\n- добавить `DISTINCT` в JPQL: `SELECT DISTINCT o FROM Order o JOIN FETCH o.lines`;\n- или собрать результат в `Set`, который отбросит повторы.\n\nЭто проблема исключительно fetch-джойна: размножение строк — плата за то, чтобы привезти всё за один рейс, и именно из-за него ломаются пагинация и загрузка второй коллекции."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One element per joined row: 3 + 2 = 5.",
+              "ru": "По элементу на каждую строку джойна: 3 + 2 = 5."
+            },
+            "incorrect": {
+              "en": "It is 5: a collection fetch join repeats each parent once per child row.",
+              "ru": "Это 5: fetch-джойн коллекции повторяет каждого родителя по разу на строку ребёнка."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "5",
+                "ru": "5"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "2",
+                "ru": "2"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Hibernate does not collapse the parents on its own — you have to ask for DISTINCT or use a Set.",
+                "ru": "Hibernate сам родителей не схлопывает — нужно попросить DISTINCT или использовать Set."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "3",
+                "ru": "3"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The list has one element per joined row, not per child of the largest parent.",
+                "ru": "В списке по элементу на строку джойна, а не по числу детей самого крупного родителя."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "dup-p1-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In JPQL, a collection JOIN FETCH can return the same parent entity several times, once per child row.",
+            "ru": "В JPQL fetch-джойн коллекции может вернуть одну и ту же родительскую сущность несколько раз — по разу на строку ребёнка."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The join multiplies rows, and the result list mirrors those rows.",
+              "ru": "Джойн размножает строки, а результирующий список повторяет эти строки."
+            },
+            "incorrect": {
+              "en": "It is true — one row per child means one list element per child.",
+              "ru": "Это правда — по строке на ребёнка означает по элементу списка на ребёнка."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "dup-p2-fix",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In JPQL, how do you collapse the duplicated parents produced by a collection JOIN FETCH?",
+            "ru": "Как в JPQL схлопнуть дубликаты родителей, возникшие из-за fetch-джойна коллекции?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "DISTINCT in the query, or a Set on the Java side — either removes the repeats.",
+              "ru": "DISTINCT в запросе или Set на стороне Java — любой из них убирает повторы."
+            },
+            "incorrect": {
+              "en": "Add DISTINCT to the query, or collect the result into a Set.",
+              "ru": "Добавьте DISTINCT в запрос или соберите результат в Set."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Add DISTINCT to the query, or collect the result into a Set",
+                "ru": "Добавить DISTINCT в запрос или собрать результат в Set"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Switch the association to FetchType.EAGER",
+                "ru": "Переключить связь на FetchType.EAGER"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "EAGER changes when the children load, not the row multiplication of a fetch join.",
+                "ru": "EAGER меняет, когда грузятся дети, а не размножение строк fetch-джойном."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Add setMaxResults to trim the list",
+                "ru": "Добавить setMaxResults, чтобы обрезать список"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That limits how many rows come back; the ones that remain are still duplicated parents.",
+                "ru": "Это ограничит число возвращённых строк; оставшиеся всё равно будут дубликатами родителей."
+              }
+            }
+          ]
+        },
+        {
+          "id": "dup-p3-assemble",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the JPQL that fetches the lines and returns each order exactly once.",
+            "ru": "Собери JPQL, который загружает строки и возвращает каждый заказ ровно один раз."
+          },
+          "feedback": {
+            "correct": {
+              "en": "DISTINCT collapses the parents that the fetch join multiplied.",
+              "ru": "DISTINCT схлопывает родителей, которых размножил fetch-джойн."
+            },
+            "incorrect": {
+              "en": "SELECT DISTINCT o FROM Order o JOIN FETCH o.lines — DISTINCT removes the repeated parents.",
+              "ru": "SELECT DISTINCT o FROM Order o JOIN FETCH o.lines — DISTINCT убирает повторы родителей."
+            }
+          },
+          "tokens": {
+            "en": [
+              "SELECT",
+              "DISTINCT",
+              "o",
+              "FROM",
+              "Order",
+              "o",
+              "JOIN",
+              "FETCH",
+              "o.lines"
+            ],
+            "ru": [
+              "SELECT",
+              "DISTINCT",
+              "o",
+              "FROM",
+              "Order",
+              "o",
+              "JOIN",
+              "FETCH",
+              "o.lines"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "EAGER"
+            ],
+            "ru": [
+              "EAGER"
+            ]
+          }
+        },
+        {
+          "id": "dup-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two ways to remove the duplicates.",
+            "ru": "Впиши два способа убрать дубликаты."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Both work: DISTINCT in the JPQL, or a Set as the result type.",
+              "ru": "Работают оба: DISTINCT в JPQL или Set как тип результата."
+            },
+            "incorrect": {
+              "en": "Add DISTINCT to the JPQL, or collect into a Set.",
+              "ru": "Добавьте DISTINCT в JPQL или соберите результат в Set."
+            }
+          },
+          "text": {
+            "en": "Add ___ to the JPQL, or collect into a ___, to remove parents duplicated by a collection JOIN FETCH.",
+            "ru": "Добавьте ___ в JPQL или соберите результат в ___, чтобы убрать родителей, размноженных fetch-джойном коллекции."
+          },
+          "blanks": [
+            {
+              "en": [
+                "DISTINCT",
+                "distinct"
+              ],
+              "ru": [
+                "DISTINCT",
+                "distinct"
+              ]
+            },
+            {
+              "en": [
+                "Set",
+                "set"
+              ],
+              "ru": [
+                "Set",
+                "set"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "entity-graph",
+      "title": {
+        "en": "Fix 2: entity graph",
+        "ru": "Решение 2: entity graph"
+      },
+      "summary": {
+        "en": "An entity graph declares which associations to fetch for one specific query, without editing the mapping.",
+        "ru": "Entity graph объявляет, какие связи подтянуть для одного конкретного запроса, не меняя маппинг."
+      },
+      "discovery": [
+        {
+          "id": "graph-d1-what",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "How does this Spring Data method differ from a plain `findByStatus(Status status)`?",
+            "ru": "Чем этот метод Spring Data отличается от обычного `findByStatus(Status status)`?"
+          },
+          "code": "@EntityGraph(attributePaths = \"lines\")\nList<Order> findByStatus(Status status);",
+          "codeLang": "java",
+          "reveal": {
+            "en": "A JPA **entity graph** is a declaration of *which associations to pull* for a specific query — a fetch plan attached to the call, not to the mapping. Spring Data exposes it as `@EntityGraph` on a repository method:\n\n```\n@EntityGraph(attributePaths = \"lines\")\nList<Order> findByStatus(Status status);\n```\n\nThe result is the same as `JOIN FETCH`: **one query**, collections initialized. What differs is where the decision lives.\n\n```mermaid\nflowchart LR\n  Q1[\"findByStatus + @EntityGraph\"] --> L[\"loads orders AND lines\"]\n  Q2[\"every other finder\"] --> O[\"loads orders only\"]\n```\n\nWhy this matters: fetching is a property of the **use case**, not of the entity. A detail screen needs the lines; a list screen does not. An entity graph lets one finder ask for more while every other finder stays lean — and it is declarative and reusable, so you are not repeating a JPQL string in five places.",
+            "ru": "**Entity graph** в JPA — это объявление того, *какие связи подтянуть* для конкретного запроса: план загрузки, привязанный к вызову, а не к маппингу. Spring Data выставляет его как `@EntityGraph` на методе репозитория:\n\n```\n@EntityGraph(attributePaths = \"lines\")\nList<Order> findByStatus(Status status);\n```\n\nРезультат тот же, что у `JOIN FETCH`: **один запрос**, коллекции инициализированы. Отличается место, где живёт решение.\n\n```mermaid\nflowchart LR\n  Q1[\"findByStatus + @EntityGraph\"] --> L[\"грузит заказы И строки\"]\n  Q2[\"все остальные finder'ы\"] --> O[\"грузят только заказы\"]\n```\n\nПочему это важно: загрузка — свойство **сценария использования**, а не сущности. Экрану деталей строки нужны, экрану списка — нет. Entity graph позволяет одному finder'у запросить больше, пока все остальные остаются лёгкими, — и делает это декларативно и переиспользуемо, без копирования JPQL-строки в пять мест."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The fetch plan is attached to this finder, not to the entity.",
+              "ru": "План загрузки привязан к этому finder'у, а не к сущности."
+            },
+            "incorrect": {
+              "en": "It loads lines in the same query, and only for this finder — the mapping is untouched.",
+              "ru": "Он грузит строки тем же запросом и только для этого finder'а — маппинг не тронут."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It loads `lines` in the same query — for this finder only",
+                "ru": "Он грузит `lines` тем же запросом — только для этого finder'а"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It makes `lines` load eagerly for every query in the application",
+                "ru": "Он заставляет `lines` грузиться жадно для каждого запроса в приложении"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That would be FetchType.EAGER on the mapping; an entity graph applies per query.",
+                "ru": "Так работал бы FetchType.EAGER на маппинге; entity graph действует на один запрос."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It loads `lines` lazily, in groups of 10",
+                "ru": "Он грузит `lines` лениво, группами по 10"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Grouped lazy loading is what a batch size does; an entity graph fetches in the same query.",
+                "ru": "Групповая ленивая загрузка — это про batch size; entity graph грузит тем же запросом."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "graph-p1-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Putting `@EntityGraph(attributePaths = \"lines\")` on one Spring Data repository method also changes how `lines` is fetched by every other query.",
+            "ru": "Если поставить `@EntityGraph(attributePaths = \"lines\")` на один метод репозитория Spring Data, это изменит загрузку `lines` и во всех остальных запросах."
+          },
+          "feedback": {
+            "correct": {
+              "en": "An entity graph is per query; the mapping and other finders are untouched.",
+              "ru": "Entity graph действует на один запрос; маппинг и другие finder'ы не затронуты."
+            },
+            "incorrect": {
+              "en": "No — it applies to that finder only. Global fetching is what FetchType.EAGER does.",
+              "ru": "Нет — он действует только на этот finder. Глобально грузит FetchType.EAGER."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "graph-p2-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "In JPA/Hibernate, match each fetching mechanism to where the decision is declared.",
+            "ru": "Соотнеси каждый механизм загрузки в JPA/Hibernate с тем, где объявляется решение."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The first two decide per query; the last two decide on the mapping.",
+              "ru": "Первые два решают на уровне запроса; последние два — на уровне маппинга."
+            },
+            "incorrect": {
+              "en": "JOIN FETCH lives in the JPQL, @EntityGraph on the finder, EAGER and @BatchSize on the mapping.",
+              "ru": "JOIN FETCH живёт в JPQL, @EntityGraph — на finder'е, EAGER и @BatchSize — на маппинге."
+            }
+          },
+          "pairs": [
+            {
+              "id": "jpql",
+              "left": {
+                "en": "JOIN FETCH",
+                "ru": "JOIN FETCH"
+              },
+              "right": {
+                "en": "Declared inside a JPQL query",
+                "ru": "Объявляется внутри JPQL-запроса"
+              }
+            },
+            {
+              "id": "graph",
+              "left": {
+                "en": "@EntityGraph",
+                "ru": "@EntityGraph"
+              },
+              "right": {
+                "en": "Declared on a repository method, mapping untouched",
+                "ru": "Объявляется на методе репозитория, маппинг не тронут"
+              }
+            },
+            {
+              "id": "eager",
+              "left": {
+                "en": "FetchType.EAGER",
+                "ru": "FetchType.EAGER"
+              },
+              "right": {
+                "en": "Declared on the mapping, forced for every query",
+                "ru": "Объявляется на маппинге, действует для каждого запроса"
+              }
+            },
+            {
+              "id": "batch",
+              "left": {
+                "en": "@BatchSize",
+                "ru": "@BatchSize"
+              },
+              "right": {
+                "en": "Declared on the mapping; stays lazy but loads in IN (...) groups",
+                "ru": "Объявляется на маппинге; остаётся ленивой, но грузит группами IN (...)"
+              }
+            }
+          ]
+        },
+        {
+          "id": "graph-p3-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the annotation and the attribute.",
+            "ru": "Впиши аннотацию и её атрибут."
+          },
+          "feedback": {
+            "correct": {
+              "en": "attributePaths names exactly the associations this query should pull.",
+              "ru": "attributePaths перечисляет именно те связи, которые должен подтянуть этот запрос."
+            },
+            "incorrect": {
+              "en": "It is @EntityGraph with attributePaths.",
+              "ru": "Это @EntityGraph с атрибутом attributePaths."
+            }
+          },
+          "text": {
+            "en": "In Spring Data, a JPA entity graph is declared with the ___ annotation and its ___ attribute.",
+            "ru": "В Spring Data entity graph объявляется аннотацией ___ и её атрибутом ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "@EntityGraph",
+                "EntityGraph"
+              ],
+              "ru": [
+                "@EntityGraph",
+                "EntityGraph"
+              ]
+            },
+            {
+              "en": [
+                "attributePaths"
+              ],
+              "ru": [
+                "attributePaths"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "batch-size",
+      "title": {
+        "en": "Fix 3: batch size",
+        "ru": "Решение 3: batch size"
+      },
+      "summary": {
+        "en": "@BatchSize keeps the association lazy but loads it in IN (...) groups, cutting N queries to ceil(N / size).",
+        "ru": "@BatchSize сохраняет ленивость связи, но грузит её группами IN (...), сокращая N запросов до ceil(N / size)."
+      },
+      "discovery": [
+        {
+          "id": "batch-d1-count",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "50 orders are loaded and the code then reads every order's `lines`. With this mapping, how many statements load the lines?",
+            "ru": "Загружены 50 заказов, и затем код читает `lines` у каждого. Сколько запросов загрузит строки при таком маппинге?"
+          },
+          "code": "@BatchSize(size = 10)\n@OneToMany(mappedBy = \"order\")\nprivate List<Line> lines;",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Sometimes you *want* the association to stay lazy — but not as N separate statements. `@BatchSize(size = n)` (or the global `hibernate.default_batch_fetch_size`) keeps the collection lazy and tells Hibernate to initialize it **in groups**: instead of one `WHERE order_id = ?` per parent, one statement for up to `n` parents at a time:\n\n```\nSELECT * FROM lines WHERE order_id IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n```\n\nWith 50 parents and size 10, the children load in `ceil(50 / 10)` = **5** statements instead of 50.\n\n```mermaid\nflowchart LR\n  A[\"50 lazy parents\"] --> B[\"strategy?\"]\n  B -->|\"plain lazy\"| C[\"50 child queries\"]\n  B -->|\"JOIN FETCH / entity graph\"| D[\"1 query\"]\n  B -->|\"@BatchSize 10\"| E[\"5 IN (...) queries\"]\n```\n\nBe precise about what this buys you. Batching **reduces** N to `ceil(N / size)`; it does not get you to a single query. In exchange the collection stays lazy, so it avoids the row multiplication of a fetch join — which means it works where `JOIN FETCH` cannot: with pagination, and with more than one collection. It is the safety net that turns any stray N+1 into an N/size.",
+            "ru": "Иногда ленивость связи *нужна* — но не в виде N отдельных запросов. `@BatchSize(size = n)` (или глобальный `hibernate.default_batch_fetch_size`) сохраняет ленивость коллекции и велит Hibernate инициализировать её **группами**: вместо одного `WHERE order_id = ?` на каждого родителя — один запрос сразу для до `n` родителей:\n\n```\nSELECT * FROM lines WHERE order_id IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n```\n\nПри 50 родителях и размере 10 дети грузятся за `ceil(50 / 10)` = **5** запросов вместо 50.\n\n```mermaid\nflowchart LR\n  A[\"50 ленивых родителей\"] --> B[\"стратегия?\"]\n  B -->|\"просто lazy\"| C[\"50 запросов детей\"]\n  B -->|\"JOIN FETCH / entity graph\"| D[\"1 запрос\"]\n  B -->|\"@BatchSize 10\"| E[\"5 запросов IN (...)\"]\n```\n\nВажно точно понимать, что вы получаете. Батчинг **сокращает** N до `ceil(N / size)`, но не приводит к одному запросу. Зато коллекция остаётся ленивой, поэтому он не размножает строки, как fetch-джойн, — а значит работает там, где `JOIN FETCH` не может: с пагинацией и с несколькими коллекциями. Это страховочная сетка, превращающая любой случайный N+1 в N/size."
+          },
+          "feedback": {
+            "correct": {
+              "en": "ceil(50 / 10) = 5 grouped statements instead of 50 single ones.",
+              "ru": "ceil(50 / 10) = 5 групповых запросов вместо 50 одиночных."
+            },
+            "incorrect": {
+              "en": "It is 5: batching loads up to 10 parents' collections per IN (...) statement.",
+              "ru": "Это 5: батчинг грузит коллекции до 10 родителей за один запрос с IN (...)."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "5",
+                "ru": "5"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "1",
+                "ru": "1"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Only a fetch join or an entity graph gets you to a single query; batching still runs several.",
+                "ru": "К одному запросу приводит только fetch-джойн или entity graph; батчинг всё равно делает несколько."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "50",
+                "ru": "50"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the unbatched count — grouping those reads is exactly what @BatchSize does.",
+                "ru": "Это число без батчинга — @BatchSize как раз и группирует эти чтения."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "10",
+                "ru": "10"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "10 is the group size, not the number of groups: 50 parents / 10 = 5 statements.",
+                "ru": "10 — размер группы, а не число групп: 50 родителей / 10 = 5 запросов."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "batch-p1-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In Hibernate, @BatchSize removes the extra queries completely, leaving a single query.",
+            "ru": "В Hibernate @BatchSize полностью убирает лишние запросы, оставляя один."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It reduces them to ceil(N / size); only JOIN FETCH or an entity graph reaches one query.",
+              "ru": "Он сокращает их до ceil(N / size); к одному запросу приводят только JOIN FETCH или entity graph."
+            },
+            "incorrect": {
+              "en": "No — batching reduces N queries to ceil(N / size), it does not eliminate them.",
+              "ru": "Нет — батчинг сокращает N запросов до ceil(N / size), но не устраняет их."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "batch-p2-compute",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "100 lazy parents are loaded and every one's collection is read, with `@BatchSize(size = 25)` on the association. How many statements load the collections?",
+            "ru": "Загружены 100 ленивых родителей, и у каждого читается коллекция; на связи стоит `@BatchSize(size = 25)`. Сколько запросов загрузит коллекции?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "ceil(100 / 25) = 4 grouped statements.",
+              "ru": "ceil(100 / 25) = 4 групповых запроса."
+            },
+            "incorrect": {
+              "en": "It is 4: ceil(100 / 25) — the batch size is how many parents share one statement.",
+              "ru": "Это 4: ceil(100 / 25) — batch size задаёт, сколько родителей делят один запрос."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "4",
+                "ru": "4"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "1",
+                "ru": "1"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Only a fetch join or an entity graph reaches a single query.",
+                "ru": "К одному запросу приводит только fetch-джойн или entity graph."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "100",
+                "ru": "100"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the unbatched count; batching groups 25 parents per statement.",
+                "ru": "Это число без батчинга; батчинг группирует по 25 родителей на запрос."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "25",
+                "ru": "25"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "25 is the group size; 100 / 25 = 4 statements.",
+                "ru": "25 — размер группы; 100 / 25 = 4 запроса."
+              }
+            }
+          ]
+        },
+        {
+          "id": "batch-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "For 50 lazy parents whose collections are all read, match each Hibernate strategy to the total number of statements.",
+            "ru": "Для 50 ленивых родителей, у каждого из которых читается коллекция, соотнеси стратегию Hibernate с общим числом запросов."
+          },
+          "feedback": {
+            "correct": {
+              "en": "1 + N, 1, or 1 + ceil(N / size) — three different bills for the same data.",
+              "ru": "1 + N, 1 или 1 + ceil(N / size) — три разных счёта за одни и те же данные."
+            },
+            "incorrect": {
+              "en": "Plain lazy = 51, JOIN FETCH = 1, @BatchSize(10) = 1 + ceil(50/10) = 6.",
+              "ru": "Просто lazy — 51, JOIN FETCH — 1, @BatchSize(10) — 1 + ceil(50/10) = 6."
+            }
+          },
+          "pairs": [
+            {
+              "id": "lazy",
+              "left": {
+                "en": "Plain lazy, no batching",
+                "ru": "Просто lazy, без батчинга"
+              },
+              "right": {
+                "en": "51 statements",
+                "ru": "51 запрос"
+              }
+            },
+            {
+              "id": "fetch",
+              "left": {
+                "en": "JOIN FETCH the collection",
+                "ru": "JOIN FETCH коллекции"
+              },
+              "right": {
+                "en": "1 statement",
+                "ru": "1 запрос"
+              }
+            },
+            {
+              "id": "batch",
+              "left": {
+                "en": "@BatchSize(size = 10)",
+                "ru": "@BatchSize(size = 10)"
+              },
+              "right": {
+                "en": "6 statements",
+                "ru": "6 запросов"
+              }
+            }
+          ]
+        },
+        {
+          "id": "batch-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Compute the count and name the SQL operator.",
+            "ru": "Посчитай количество и назови SQL-оператор."
+          },
+          "feedback": {
+            "correct": {
+              "en": "ceil(50 / 10) = 5 statements, each an IN (...) over one group of parent ids.",
+              "ru": "ceil(50 / 10) = 5 запросов, каждый — IN (...) по одной группе id родителей."
+            },
+            "incorrect": {
+              "en": "5 statements, each using WHERE order_id IN (?, ?, ...).",
+              "ru": "5 запросов, каждый через WHERE order_id IN (?, ?, ...)."
+            }
+          },
+          "text": {
+            "en": "With 50 parents and @BatchSize(size = 10), the collections load in ___ statements that use WHERE order_id ___ (?, ?, ...).",
+            "ru": "При 50 родителях и @BatchSize(size = 10) коллекции грузятся за ___ запросов, использующих WHERE order_id ___ (?, ?, ...)."
+          },
+          "blanks": [
+            {
+              "en": [
+                "5"
+              ],
+              "ru": [
+                "5"
+              ]
+            },
+            {
+              "en": [
+                "IN",
+                "in"
+              ],
+              "ru": [
+                "IN",
+                "in"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "batch-p5-fill-global",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the global Hibernate property.",
+            "ru": "Впиши глобальное свойство Hibernate."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Set once, it batches lazy loads everywhere without annotating each association.",
+              "ru": "Заданное один раз, оно батчит ленивые загрузки везде без аннотирования каждой связи."
+            },
+            "incorrect": {
+              "en": "It is hibernate.default_batch_fetch_size — the global equivalent of @BatchSize.",
+              "ru": "Это hibernate.default_batch_fetch_size — глобальный аналог @BatchSize."
+            }
+          },
+          "text": {
+            "en": "The application-wide equivalent of @BatchSize is the Hibernate property hibernate.___",
+            "ru": "Аналог @BatchSize для всего приложения — свойство Hibernate hibernate.___"
+          },
+          "blanks": [
+            {
+              "en": [
+                "default_batch_fetch_size"
+              ],
+              "ru": [
+                "default_batch_fetch_size"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "eager-is-not-the-fix",
+      "title": {
+        "en": "EAGER is not the fix",
+        "ru": "EAGER — не решение"
+      },
+      "summary": {
+        "en": "FetchType.EAGER on the mapping makes the fetch global and permanent; keep the mapping LAZY and fetch per query.",
+        "ru": "FetchType.EAGER на маппинге делает загрузку глобальной и постоянной; держите маппинг LAZY и грузите по запросу."
+      },
+      "discovery": [
+        {
+          "id": "eager-d1-consequence",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A developer \"fixes\" an N+1 by changing the mapping as shown. What is the effect on the rest of the application?",
+            "ru": "Разработчик «починил» N+1, изменив маппинг вот так. Как это отразится на остальном приложении?"
+          },
+          "code": "@OneToMany(mappedBy = \"order\", fetch = FetchType.EAGER)\nprivate List<Line> lines;",
+          "codeLang": "java",
+          "reveal": {
+            "en": "`FetchType.EAGER` on the mapping does not remove the extra work — it moves it earlier and makes it **always on**. Every query that loads an `Order`, in every screen and every service, now also loads the lines, whether or not anyone reads them. An N+1 in one endpoint becomes wasted loading in all of them, and there is no way to opt out at the call site.\n\nThe rule this leads to: **the fetch strategy belongs to the query, not to the entity.** Keep the mapping LAZY, then choose per query.\n\n```mermaid\nflowchart LR\n  M[\"mapping stays LAZY\"] --> A[\"list query: orders only\"]\n  M --> B[\"detail query: JOIN FETCH / @EntityGraph\"]\n  M --> C[\"stray lazy read: @BatchSize safety net\"]\n```\n\nThat way the list screen stays cheap, the detail screen gets its one joined query, and nothing is decided globally on your behalf.",
+            "ru": "`FetchType.EAGER` на маппинге не убирает лишнюю работу — он сдвигает её раньше и делает **постоянно включённой**. Каждый запрос, загружающий `Order`, на любом экране и в любом сервисе, теперь тянет и строки — читает их кто-нибудь или нет. N+1 в одном эндпойнте превращается в напрасную загрузку во всех, и отказаться от неё на месте вызова нельзя.\n\nОтсюда правило: **стратегия загрузки принадлежит запросу, а не сущности.** Держите маппинг LAZY, а затем выбирайте под каждый запрос.\n\n```mermaid\nflowchart LR\n  M[\"маппинг остаётся LAZY\"] --> A[\"запрос списка: только заказы\"]\n  M --> B[\"запрос деталей: JOIN FETCH / @EntityGraph\"]\n  M --> C[\"случайное ленивое чтение: страховка @BatchSize\"]\n```\n\nТак экран списка остаётся дешёвым, экран деталей получает свой единственный запрос с джойном, и ничего не решается глобально за вас."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The mapping is global: every query that loads the entity now pays for the children.",
+              "ru": "Маппинг глобален: теперь за детей платит каждый запрос, загружающий сущность."
+            },
+            "incorrect": {
+              "en": "EAGER applies to every query that loads an Order, including screens that never show the lines.",
+              "ru": "EAGER действует на каждый запрос, загружающий Order, включая экраны, которые строки не показывают."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Every query that loads an Order now drags its lines too, including screens that never show them",
+                "ru": "Теперь каждый запрос, загружающий Order, тянет и строки — включая экраны, которые их не показывают"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Only the endpoint that had the N+1 changes; other queries keep loading orders alone",
+                "ru": "Изменится только эндпойнт с N+1; остальные запросы продолжат грузить одни заказы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The mapping is global — it applies to every query that loads the entity.",
+                "ru": "Маппинг глобален — он применяется к каждому запросу, загружающему сущность."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing changes, because collections are EAGER by default",
+                "ru": "Ничего не изменится, ведь коллекции и так EAGER по умолчанию"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Collections are LAZY by default; EAGER here is an explicit override.",
+                "ru": "Коллекции по умолчанию LAZY; EAGER здесь — явное переопределение."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "eager-p1-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Marking a JPA association FetchType.EAGER is the recommended fix for an N+1 problem.",
+            "ru": "Помечать связь в JPA как FetchType.EAGER — рекомендуемое решение проблемы N+1."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It makes the loading global and permanent; fetch per query instead.",
+              "ru": "Это делает загрузку глобальной и постоянной; грузите лучше по запросу."
+            },
+            "incorrect": {
+              "en": "No — EAGER applies to every query, so keep the mapping LAZY and fetch per query.",
+              "ru": "Нет — EAGER действует на каждый запрос, поэтому держите маппинг LAZY и грузите по запросу."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "eager-p2-scenario",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In a JPA application, a list screen shows only order headers while a detail screen also shows the lines. Which strategy serves both?",
+            "ru": "В приложении на JPA экран списка показывает только заголовки заказов, а экран деталей — ещё и строки. Какая стратегия обслужит оба?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "One mapping, two fetch decisions — that is what per-query fetching gives you.",
+              "ru": "Один маппинг, два решения о загрузке — это и даёт загрузка под запрос."
+            },
+            "incorrect": {
+              "en": "Keep lines LAZY and JOIN FETCH it only in the detail query.",
+              "ru": "Держите lines LAZY и делайте JOIN FETCH только в запросе деталей."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Keep lines LAZY and JOIN FETCH it only in the detail query",
+                "ru": "Держать lines LAZY и делать JOIN FETCH только в запросе деталей"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Mark lines EAGER so the detail screen always has them",
+                "ru": "Пометить lines как EAGER, чтобы у экрана деталей они всегда были"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Then the list screen pays for lines it never displays, on every request.",
+                "ru": "Тогда экран списка платит за строки, которые никогда не показывает, на каждом запросе."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Mark lines EAGER and add DISTINCT to the list query",
+                "ru": "Пометить lines как EAGER и добавить DISTINCT в запрос списка"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "DISTINCT only collapses duplicated rows; the list still loads lines it does not need.",
+                "ru": "DISTINCT лишь схлопывает дубликаты строк; список всё равно грузит ненужные ему строки."
+              }
+            }
+          ]
+        },
+        {
+          "id": "eager-p3-assemble",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the rule for choosing a fetch strategy in JPA.",
+            "ru": "Собери правило выбора стратегии загрузки в JPA."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The mapping stays neutral; each query states what it needs.",
+              "ru": "Маппинг остаётся нейтральным; каждый запрос сам говорит, что ему нужно."
+            },
+            "incorrect": {
+              "en": "Keep the mapping LAZY and fetch per query.",
+              "ru": "Держите маппинг LAZY и грузите по запросу."
+            }
+          },
+          "tokens": {
+            "en": [
+              "keep",
+              "the",
+              "mapping",
+              "LAZY",
+              "and",
+              "fetch",
+              "per",
+              "query"
+            ],
+            "ru": [
+              "держите",
+              "маппинг",
+              "LAZY",
+              "и",
+              "грузите",
+              "по",
+              "запросу"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "EAGER"
+            ],
+            "ru": [
+              "EAGER"
+            ]
+          }
+        },
+        {
+          "id": "eager-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the reason to avoid EAGER.",
+            "ru": "Дополни причину избегать EAGER."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A mapping-level decision cannot be undone at the call site.",
+              "ru": "Решение на уровне маппинга нельзя отменить на месте вызова."
+            },
+            "incorrect": {
+              "en": "EAGER applies to every query that loads the entity, so keep the mapping LAZY.",
+              "ru": "EAGER применяется к каждому запросу, загружающему сущность, поэтому держите маппинг LAZY."
+            }
+          },
+          "text": {
+            "en": "FetchType.EAGER on a mapping applies to ___ query that loads the entity, so keep the mapping ___ instead.",
+            "ru": "FetchType.EAGER на маппинге применяется к ___ запросу, который грузит сущность, поэтому держите маппинг ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "every",
+                "each"
+              ],
+              "ru": [
+                "каждому",
+                "любому"
+              ]
+            },
+            {
+              "en": [
+                "LAZY",
+                "lazy"
+              ],
+              "ru": [
+                "LAZY",
+                "lazy"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "multiple-bag-fetch",
+      "title": {
+        "en": "MultipleBagFetchException",
+        "ru": "MultipleBagFetchException"
+      },
+      "summary": {
+        "en": "You cannot JOIN FETCH two List collections in one query; fetch one per query, map them as Set, or use a batch size.",
+        "ru": "Нельзя сделать JOIN FETCH двух коллекций List в одном запросе; грузите по одной за запрос, используйте Set или batch size."
+      },
+      "discovery": [
+        {
+          "id": "bag-d1-throw",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "`Order.lines` and `Order.payments` are both mapped as `List`. What happens when this query runs?",
+            "ru": "И `Order.lines`, и `Order.payments` замаплены как `List`. Что произойдёт при выполнении этого запроса?"
+          },
+          "code": "SELECT o FROM Order o\n  JOIN FETCH o.lines\n  JOIN FETCH o.payments",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "Hibernate calls a `List`-mapped collection a **bag** — an unordered collection that may contain duplicates. You cannot `JOIN FETCH` **two** bags in one query, and the failure is the well-known `MultipleBagFetchException`.\n\nThe reason is row multiplication. One collection fetch already repeats the parent once per child. Fetching two multiplies them by each other: 3 lines x 4 payments = 12 rows for a single order, and nothing in those rows says which line belongs with which payment. Hibernate refuses rather than guess.\n\n```mermaid\nflowchart LR\n  O[\"1 order\"] --> L[\"3 lines\"]\n  O --> P[\"4 payments\"]\n  L --> X[\"12 joined rows: unsafe\"]\n  P --> X\n```\n\nThree ways out:\n\n- fetch **one** collection per query and run a second query for the other;\n- map the collections as `Set` instead of `List` — a `Set` is not a bag, so the restriction does not apply;\n- leave them lazy and set a **batch size**, so each collection loads in its own grouped statement.\n\nThe first collection fetch is free. The second one always costs you a decision.",
+            "ru": "Коллекцию, замапленную как `List`, Hibernate называет **bag** — неупорядоченной коллекцией, допускающей дубликаты. Сделать `JOIN FETCH` **двух** bag'ов в одном запросе нельзя, и падает это знаменитым `MultipleBagFetchException`.\n\nПричина — размножение строк. Загрузка одной коллекции уже повторяет родителя по разу на каждого ребёнка. Загрузка двух перемножает их между собой: 3 строки x 4 платежа = 12 строк на один заказ, и ничто в этих строках не говорит, какая строка относится к какому платежу. Hibernate отказывается, вместо того чтобы догадываться.\n\n```mermaid\nflowchart LR\n  O[\"1 заказ\"] --> L[\"3 строки\"]\n  O --> P[\"4 платежа\"]\n  L --> X[\"12 строк джойна: небезопасно\"]\n  P --> X\n```\n\nТри выхода:\n\n- грузить **одну** коллекцию за запрос, а вторую — вторым запросом;\n- замапить коллекции как `Set` вместо `List` — `Set` не bag, поэтому ограничение не действует;\n- оставить их ленивыми и задать **batch size**, тогда каждая коллекция загрузится своим групповым запросом.\n\nЗагрузка первой коллекции бесплатна. Вторая всегда требует решения."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two bag fetches in one query are rejected outright.",
+              "ru": "Два fetch'а bag'ов в одном запросе отвергаются сразу."
+            },
+            "incorrect": {
+              "en": "It throws MultipleBagFetchException: two List collections cannot be fetched together.",
+              "ru": "Бросается MultipleBagFetchException: две коллекции List нельзя загрузить вместе."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Hibernate throws MultipleBagFetchException",
+                "ru": "Hibernate бросит MultipleBagFetchException"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It runs and returns both collections initialized",
+                "ru": "Он выполнится и вернёт обе коллекции инициализированными"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Hibernate refuses the query rather than build the unsafe cartesian product it would need.",
+                "ru": "Hibernate отвергает запрос, вместо того чтобы строить небезопасное декартово произведение."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It runs but silently initializes only the first collection",
+                "ru": "Он выполнится, но молча инициализирует только первую коллекцию"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing is silent here — the query is rejected with an exception.",
+                "ru": "Ничего молчаливого здесь нет — запрос отвергается с исключением."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "bag-p1-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A single JPQL query can JOIN FETCH any number of collection associations.",
+            "ru": "Один запрос JPQL может сделать JOIN FETCH любого числа связей-коллекций."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two List collections already throw MultipleBagFetchException.",
+              "ru": "Уже две коллекции List бросают MultipleBagFetchException."
+            },
+            "incorrect": {
+              "en": "No — fetching two List collections at once throws MultipleBagFetchException.",
+              "ru": "Нет — загрузка двух коллекций List сразу бросает MultipleBagFetchException."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "bag-p2-fix",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A Hibernate query fetching two List collections throws MultipleBagFetchException. Which resolves it?",
+            "ru": "Запрос Hibernate, загружающий две коллекции List, бросает MultipleBagFetchException. Что это решит?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "One fetch per query, a Set mapping, or lazy plus batching — pick by context.",
+              "ru": "Одна загрузка на запрос, маппинг через Set или ленивость плюс батчинг — выбирайте по ситуации."
+            },
+            "incorrect": {
+              "en": "Fetch one collection per query, map them as Set, or leave them lazy with a batch size.",
+              "ru": "Грузите по одной коллекции за запрос, мапьте их как Set или оставьте ленивыми с batch size."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Fetch one collection per query, map them as Set, or leave them lazy with a batch size",
+                "ru": "Грузить по одной коллекции за запрос, замапить их как Set или оставить ленивыми с batch size"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Add DISTINCT to the query",
+                "ru": "Добавить DISTINCT в запрос"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "DISTINCT collapses duplicated parents; it does not make two bag fetches legal.",
+                "ru": "DISTINCT схлопывает дубликаты родителей, но не делает два fetch'а bag'ов допустимыми."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Mark both associations FetchType.EAGER",
+                "ru": "Пометить обе связи как FetchType.EAGER"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "EAGER only moves the fetch onto the mapping; two bags still cannot be fetched together.",
+                "ru": "EAGER лишь переносит загрузку на маппинг; два bag'а всё равно нельзя загрузить вместе."
+              }
+            }
+          ]
+        },
+        {
+          "id": "bag-p3-assemble",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the Hibernate restriction on fetching collections.",
+            "ru": "Собери ограничение Hibernate на загрузку коллекций."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two List fetches at once are exactly what MultipleBagFetchException reports.",
+              "ru": "Два fetch'а List сразу — это ровно то, о чём сообщает MultipleBagFetchException."
+            },
+            "incorrect": {
+              "en": "You cannot JOIN FETCH two List collections at once.",
+              "ru": "Нельзя сделать JOIN FETCH двух коллекций List сразу."
+            }
+          },
+          "tokens": {
+            "en": [
+              "you",
+              "cannot",
+              "JOIN",
+              "FETCH",
+              "two",
+              "List",
+              "collections",
+              "at",
+              "once"
+            ],
+            "ru": [
+              "нельзя",
+              "сделать",
+              "JOIN",
+              "FETCH",
+              "двух",
+              "коллекций",
+              "List",
+              "сразу"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "Set"
+            ],
+            "ru": [
+              "Set"
+            ]
+          }
+        },
+        {
+          "id": "bag-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the collection type and the exception.",
+            "ru": "Впиши тип коллекции и исключение."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A List-mapped collection is a bag, which is where the exception name comes from.",
+              "ru": "Коллекция, замапленная как List, — это bag; отсюда и название исключения."
+            },
+            "incorrect": {
+              "en": "Two List collections in one fetch throw MultipleBagFetchException.",
+              "ru": "Две коллекции List в одной загрузке бросают MultipleBagFetchException."
+            }
+          },
+          "text": {
+            "en": "JOIN FETCH-ing two ___ collections in one Hibernate query throws ___.",
+            "ru": "JOIN FETCH двух коллекций ___ в одном запросе Hibernate бросает ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "List",
+                "list"
+              ],
+              "ru": [
+                "List",
+                "list"
+              ]
+            },
+            {
+              "en": [
+                "MultipleBagFetchException"
+              ],
+              "ru": [
+                "MultipleBagFetchException"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fetch-plus-pagination",
+      "title": {
+        "en": "JOIN FETCH + pagination",
+        "ru": "JOIN FETCH и пагинация"
+      },
+      "summary": {
+        "en": "A collection fetch multiplies rows, so setMaxResults limits rows, not parents, and Hibernate paginates in memory.",
+        "ru": "Fetch коллекции размножает строки, поэтому setMaxResults ограничивает строки, а не родителей, и Hibernate пагинирует в памяти."
+      },
+      "discovery": [
+        {
+          "id": "page-d1-what-limits",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does `setMaxResults(20)` actually limit here?",
+            "ru": "Что в действительности ограничивает здесь `setMaxResults(20)`?"
+          },
+          "code": "List<Order> page = em.createQuery(\n    \"SELECT o FROM Order o JOIN FETCH o.lines\", Order.class)\n  .setMaxResults(20)\n  .getResultList();",
+          "codeLang": "java",
+          "reveal": {
+            "en": "A collection `JOIN FETCH` multiplies rows: one row per child. So a SQL row limit would cut the result **mid-parent** — 20 rows might be 4 orders, one of them missing half its lines. Hibernate will not silently hand you a broken collection, so it does something else: it **warns**, runs the query without the limit, loads the whole result set, and paginates **in memory**. Correct results, no pagination benefit, and every row read.\n\nThe usual handling is two queries.\n\n```mermaid\nflowchart LR\n  A[\"query 1: paginated, ids only, no fetch\"] --> B[\"query 2: JOIN FETCH ... WHERE o.id IN :ids\"]\n  B --> C[\"one page of initialized parents\"]\n```\n\nFirst page the **parent ids** with a query that fetches no collection — there a row limit really is a parent limit. Then fetch the collections for exactly those ids. The alternative is to drop the fetch join entirely and rely on a **batch size**: the parents paginate normally because nothing multiplies the rows, and the children arrive in grouped statements.",
+            "ru": "`JOIN FETCH` коллекции размножает строки: по строке на каждого ребёнка. Поэтому SQL-ограничение по строкам обрезало бы результат **посреди родителя** — 20 строк могли бы оказаться 4 заказами, у одного из которых не хватает половины строк. Hibernate не станет молча отдавать вам битую коллекцию, поэтому делает иначе: **предупреждает**, выполняет запрос без лимита, грузит весь результат и пагинирует **в памяти**. Данные верные, выгоды от пагинации нет, прочитаны все строки.\n\nОбычное решение — два запроса.\n\n```mermaid\nflowchart LR\n  A[\"запрос 1: с пагинацией, только id, без fetch\"] --> B[\"запрос 2: JOIN FETCH ... WHERE o.id IN :ids\"]\n  B --> C[\"страница инициализированных родителей\"]\n```\n\nСначала пагинируйте **id родителей** запросом, который не грузит коллекцию, — там лимит по строкам действительно равен лимиту по родителям. Затем загрузите коллекции ровно для этих id. Альтернатива — вовсе отказаться от fetch-джойна и опереться на **batch size**: родители пагинируются нормально, потому что строки никто не размножает, а дети приходят групповыми запросами."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The limit counts joined rows, so Hibernate falls back to trimming in memory.",
+              "ru": "Лимит считает строки джойна, поэтому Hibernate обрезает результат в памяти."
+            },
+            "incorrect": {
+              "en": "It limits joined rows, not orders — so Hibernate warns and paginates in memory.",
+              "ru": "Он ограничивает строки джойна, а не заказы, — поэтому Hibernate предупреждает и пагинирует в памяти."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Joined rows, not orders — so Hibernate warns and paginates in memory",
+                "ru": "Строки джойна, а не заказы — поэтому Hibernate предупреждает и пагинирует в памяти"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Orders, each with all of its lines",
+                "ru": "Заказы, каждый со всеми его строками"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is what you wanted, but a collection fetch makes a row limit stop meaning a parent limit.",
+                "ru": "Этого вы и хотели, но при загрузке коллекции лимит по строкам перестаёт быть лимитом по родителям."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The lines per order, to 20 each",
+                "ru": "Строки в каждом заказе — по 20 на заказ"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The limit applies to the query result as a whole, never per collection.",
+                "ru": "Лимит применяется к результату запроса целиком, а не к каждой коллекции."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "page-p1-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In Hibernate, combining a collection JOIN FETCH with setMaxResults paginates the parent entities correctly in SQL.",
+            "ru": "В Hibernate сочетание JOIN FETCH коллекции с setMaxResults корректно пагинирует родительские сущности на уровне SQL."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Hibernate warns and paginates in memory instead, after loading everything.",
+              "ru": "Вместо этого Hibernate предупреждает и пагинирует в памяти, загрузив всё."
+            },
+            "incorrect": {
+              "en": "No — the limit applies to joined rows, so Hibernate paginates in memory.",
+              "ru": "Нет — лимит применяется к строкам джойна, поэтому Hibernate пагинирует в памяти."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "page-p2-why",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why does a collection JOIN FETCH break setMaxResults in Hibernate?",
+            "ru": "Почему JOIN FETCH коллекции ломает setMaxResults в Hibernate?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "One row per child means the row limit no longer counts parents.",
+              "ru": "По строке на ребёнка означает, что лимит по строкам больше не считает родителей."
+            },
+            "incorrect": {
+              "en": "The fetch join returns one row per child, so a row limit is no longer a parent limit.",
+              "ru": "Fetch-джойн возвращает по строке на ребёнка, поэтому лимит по строкам перестаёт быть лимитом по родителям."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The fetch join returns one row per child, so a row limit is no longer a parent limit",
+                "ru": "Fetch-джойн возвращает по строке на ребёнка, поэтому лимит по строкам — уже не лимит по родителям"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "setMaxResults only works on associations mapped FetchType.EAGER",
+                "ru": "setMaxResults работает только со связями, помеченными FetchType.EAGER"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The limit works on any query; the problem is what a \"row\" means after a collection fetch.",
+                "ru": "Лимит работает в любом запросе; проблема в том, что значит «строка» после загрузки коллекции."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "JOIN FETCH makes the query ignore its WHERE clause",
+                "ru": "JOIN FETCH заставляет запрос игнорировать своё условие WHERE"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The WHERE clause still applies; only the number of returned rows changes.",
+                "ru": "Условие WHERE по-прежнему действует; меняется только число возвращаемых строк."
+              }
+            }
+          ]
+        },
+        {
+          "id": "page-p3-sort-recipe",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the steps of paginating parents in Hibernate when their collection must come back initialized.",
+            "ru": "Расставь по порядку шаги пагинации родителей в Hibernate, когда их коллекция должна вернуться инициализированной."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Page the ids where a row is a parent, then fetch the collections for that page.",
+              "ru": "Пагинируйте id там, где строка равна родителю, затем загрузите коллекции для этой страницы."
+            },
+            "incorrect": {
+              "en": "Page the ids first with no collection fetch, then JOIN FETCH for exactly those ids.",
+              "ru": "Сначала пагинируйте id без загрузки коллекции, затем сделайте JOIN FETCH ровно для этих id."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Run a paginated query that selects only the parent ids and fetches no collection",
+                "ru": "Выполнить запрос с пагинацией, который выбирает только id родителей и не грузит коллекцию"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Take the ids of that page",
+                "ru": "Взять id этой страницы"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Run a second query with JOIN FETCH ... WHERE o.id IN :ids",
+                "ru": "Выполнить второй запрос с JOIN FETCH ... WHERE o.id IN :ids"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Return that page of parents with initialized collections",
+                "ru": "Вернуть эту страницу родителей с инициализированными коллекциями"
+              }
+            }
+          ]
+        },
+        {
+          "id": "page-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete what goes wrong.",
+            "ru": "Дополни, что именно ломается."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Correct results, but the whole result set is loaded first.",
+              "ru": "Результат верный, но сначала грузится весь набор строк."
+            },
+            "incorrect": {
+              "en": "It limits rows, not parents, so Hibernate warns and paginates in memory.",
+              "ru": "Он ограничивает строки, а не родителей, поэтому Hibernate предупреждает и пагинирует в памяти."
+            }
+          },
+          "text": {
+            "en": "With a collection JOIN FETCH, setMaxResults limits ___, not parents, so Hibernate paginates in ___.",
+            "ru": "При JOIN FETCH коллекции setMaxResults ограничивает ___, а не родителей, поэтому Hibernate пагинирует в ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "rows",
+                "row"
+              ],
+              "ru": [
+                "строки",
+                "rows"
+              ]
+            },
+            {
+              "en": [
+                "memory"
+              ],
+              "ru": [
+                "памяти",
+                "memory"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "many-to-one-n-plus-one",
+      "title": {
+        "en": "N+1 on @ManyToOne",
+        "ru": "N+1 на @ManyToOne"
+      },
+      "summary": {
+        "en": "N+1 is not collection-only: a lazy single-valued reference read in a loop causes the same 1 + N.",
+        "ru": "N+1 не только про коллекции: ленивая одиночная ссылка, читаемая в цикле, даёт тот же 1 + N."
+      },
+      "discovery": [
+        {
+          "id": "m2o-d1-predict",
+          "type": "predict_output",
+          "prompt": {
+            "en": "`Line.order` is a lazy `@ManyToOne`, and the 200 lines reference 200 different orders. Predict the total number of SELECT statements.",
+            "ru": "`Line.order` — ленивый `@ManyToOne`, и 200 строк ссылаются на 200 разных заказов. Предскажи общее число SELECT-запросов."
+          },
+          "code": "List<Line> lines = lineRepo.findAll();   // 200 lines\nList<String> names = new ArrayList<>();\nfor (Line l : lines) {\n    names.add(l.getOrder().getCustomerName());\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "N+1 is a shape, not a collection feature. A lazy **single-valued** association — `@ManyToOne` or `@OneToOne` — read inside a loop produces exactly the same `1 + N`: one query for the 200 lines, then one `SELECT ... FROM orders WHERE id = ?` per line. 201 statements.\n\n```mermaid\nflowchart LR\n  A[\"1 query: 200 lines\"] --> B[\"loop reads l.getOrder()\"]\n  B --> C[\"200 queries: SELECT ... FROM orders WHERE id = ?\"]\n```\n\nThe same fixes apply, unchanged: `JOIN FETCH l.order` in the query, an `@EntityGraph` on the finder, or a batch size as the safety net. Note this direction has no row multiplication — each line has exactly one order — so a fetch join here is free of the duplicate-parent and pagination traps.\n\nWhenever you see a loop over a result list that reads *any* association, the question is the same one: was it fetched, or is it about to be?",
+            "ru": "N+1 — это форма проблемы, а не особенность коллекций. Ленивая **одиночная** связь — `@ManyToOne` или `@OneToOne` — читаемая в цикле, даёт ровно тот же `1 + N`: один запрос за 200 строками, затем по одному `SELECT ... FROM orders WHERE id = ?` на каждую строку. 201 запрос.\n\n```mermaid\nflowchart LR\n  A[\"1 запрос: 200 строк\"] --> B[\"цикл читает l.getOrder()\"]\n  B --> C[\"200 запросов: SELECT ... FROM orders WHERE id = ?\"]\n```\n\nРешения те же, без изменений: `JOIN FETCH l.order` в запросе, `@EntityGraph` на finder'е или batch size как страховка. Заметьте: в этом направлении строки не размножаются — у каждой строки ровно один заказ, — поэтому здесь fetch-джойн свободен от ловушек с дубликатами родителей и пагинацией.\n\nКогда вы видите цикл по списку результатов, который читает *любую* связь, вопрос всегда один: она уже загружена или вот-вот загрузится?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Same 1 + N shape, just a single-valued association instead of a collection.",
+              "ru": "Та же форма 1 + N, только связь одиночная, а не коллекция."
+            },
+            "incorrect": {
+              "en": "It is 201: one query for the lines plus one per line to load its order.",
+              "ru": "Это 201: один запрос за строками плюс по одному на строку, чтобы загрузить её заказ."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "201",
+                "ru": "201"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "1",
+                "ru": "1"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "findAll() loaded the lines only; each getOrder() has to load its parent.",
+                "ru": "findAll() загрузил только строки; каждый getOrder() вынужден загрузить своего родителя."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "2",
+                "ru": "2"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing fetched the orders in advance, so they load one at a time.",
+                "ru": "Заказы никто не загрузил заранее, поэтому они грузятся по одному."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "200",
+                "ru": "200"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Close — the query that loaded the 200 lines counts too; that is the \"+1\".",
+                "ru": "Почти — запрос, загрузивший 200 строк, тоже считается; это и есть «+1»."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "m2o-p1-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In JPA/Hibernate, the N+1 problem can only happen with collection associations.",
+            "ru": "В JPA/Hibernate проблема N+1 может возникнуть только со связями-коллекциями."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A lazy @ManyToOne read in a loop causes the same 1 + N.",
+              "ru": "Ленивый @ManyToOne, читаемый в цикле, даёт тот же 1 + N."
+            },
+            "incorrect": {
+              "en": "No — a lazy single-valued association read in a loop is exactly the same bug.",
+              "ru": "Нет — ленивая одиночная связь, читаемая в цикле, — ровно тот же баг."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "m2o-p2-assemble",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble where else the N+1 problem hides in JPA/Hibernate.",
+            "ru": "Собери, где ещё прячется проблема N+1 в JPA/Hibernate."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Single-valued associations are lazy too, and a loop reads them one by one.",
+              "ru": "Одиночные связи тоже ленивые, и цикл читает их по одной."
+            },
+            "incorrect": {
+              "en": "A lazy @ManyToOne read in a loop causes N+1.",
+              "ru": "Ленивый @ManyToOne, читаемый в цикле, вызывает N+1."
+            }
+          },
+          "tokens": {
+            "en": [
+              "a",
+              "lazy",
+              "@ManyToOne",
+              "read",
+              "in",
+              "a",
+              "loop",
+              "causes",
+              "N+1"
+            ],
+            "ru": [
+              "ленивый",
+              "@ManyToOne",
+              "в",
+              "цикле",
+              "вызывает",
+              "N+1"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "collections"
+            ],
+            "ru": [
+              "коллекции"
+            ]
+          }
+        },
+        {
+          "id": "m2o-p3-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the annotation of the single-valued association.",
+            "ru": "Впиши аннотацию одиночной связи."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Any lazy association read per row produces 1 + N, collection or not.",
+              "ru": "Любая ленивая связь, читаемая на каждой строке, даёт 1 + N — коллекция или нет."
+            },
+            "incorrect": {
+              "en": "It is @ManyToOne: a lazy single-valued reference read in a loop is the same 1 + N.",
+              "ru": "Это @ManyToOne: ленивая одиночная ссылка, читаемая в цикле, — тот же 1 + N."
+            }
+          },
+          "text": {
+            "en": "N+1 also hits single-valued associations: a lazy ___ read in a loop causes the same 1 + N.",
+            "ru": "N+1 бьёт и по одиночным связям: ленивый ___, читаемый в цикле, даёт тот же 1 + N."
+          },
+          "blanks": [
+            {
+              "en": [
+                "@ManyToOne",
+                "ManyToOne"
+              ],
+              "ru": [
+                "@ManyToOne",
+                "ManyToOne"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "putting-it-together",
+      "title": {
+        "en": "Putting it together",
+        "ru": "Собираем всё вместе"
+      },
+      "summary": {
+        "en": "Choose the fetch strategy per query: JOIN FETCH or an entity graph for one query, a batch size where a fetch join cannot go.",
+        "ru": "Выбирайте стратегию загрузки под запрос: JOIN FETCH или entity graph для одного запроса, batch size там, куда fetch-джойн не пройдёт."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "cap-d1-batched-loop",
+          "type": "predict_output",
+          "prompt": {
+            "en": "`Order.lines` is a LAZY `@OneToMany` annotated `@BatchSize(size = 10)`. Predict the total number of SELECT statements.",
+            "ru": "`Order.lines` — ленивый `@OneToMany` с аннотацией `@BatchSize(size = 10)`. Предскажи общее число SELECT-запросов."
+          },
+          "code": "List<Order> orders = repo.findAll();   // 1 query, 30 orders\nint total = 0;\nfor (Order o : orders) {\n    total += o.getLines().size();\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "The whole decision in one picture. A lazy association touched once per parent gives `1 + N`; each fix changes a different part of that count.\n\n```mermaid\nflowchart LR\n  P[\"1 query loads N parents\"] --> T[\"code reads the association\"]\n  T -->|\"lazy, no batching\"| A[\"N extra queries: 1 + N\"]\n  T -->|\"JOIN FETCH / @EntityGraph\"| B[\"already initialized: 1 query\"]\n  T -->|\"@BatchSize n\"| C[\"grouped IN (...): 1 + ceil(N/n)\"]\n```\n\nHere: 1 query for the 30 orders, then `ceil(30 / 10)` = 3 grouped statements for the lines. **4** in total.\n\nHow to choose. Use `JOIN FETCH` or an entity graph when you want a single query and the shape allows it — remembering `DISTINCT` or a `Set` for the duplicated parents, and that it cannot be combined with `setMaxResults` or with a second `List` collection. Use a batch size everywhere else: the association stays lazy, so pagination and multiple collections keep working, and the bill is `ceil(N/size)` instead of 1. And keep `FetchType.EAGER` off the mapping, because that decides for every query at once.",
+            "ru": "Всё решение на одной картинке. Ленивая связь, к которой обращаются по разу на родителя, даёт `1 + N`; каждое решение меняет свою часть этого числа.\n\n```mermaid\nflowchart LR\n  P[\"1 запрос грузит N родителей\"] --> T[\"код читает связь\"]\n  T -->|\"lazy, без батчинга\"| A[\"N лишних запросов: 1 + N\"]\n  T -->|\"JOIN FETCH / @EntityGraph\"| B[\"уже инициализировано: 1 запрос\"]\n  T -->|\"@BatchSize n\"| C[\"группами IN (...): 1 + ceil(N/n)\"]\n```\n\nЗдесь: 1 запрос за 30 заказами, затем `ceil(30 / 10)` = 3 групповых запроса за строками. Итого **4**.\n\nКак выбирать. `JOIN FETCH` или entity graph — когда нужен один запрос и форма данных это позволяет; помните про `DISTINCT` или `Set` для дубликатов родителей и про то, что это не совмещается с `setMaxResults` и со второй коллекцией `List`. Batch size — во всех остальных случаях: связь остаётся ленивой, поэтому пагинация и несколько коллекций продолжают работать, а счёт равен `ceil(N/size)` вместо 1. И держите `FetchType.EAGER` подальше от маппинга, потому что он решает сразу за все запросы."
+          },
+          "feedback": {
+            "correct": {
+              "en": "1 for the orders plus ceil(30/10) = 3 for the lines.",
+              "ru": "1 за заказами плюс ceil(30/10) = 3 за строками."
+            },
+            "incorrect": {
+              "en": "It is 4: 1 query for the orders plus ceil(30/10) = 3 batched line queries.",
+              "ru": "Это 4: 1 запрос за заказами плюс ceil(30/10) = 3 батчевых запроса за строками."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "4",
+                "ru": "4"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "31",
+                "ru": "31"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the unbatched count; @BatchSize groups the lazy reads into IN (...) statements.",
+                "ru": "Это число без батчинга; @BatchSize группирует ленивые чтения в запросы с IN (...)."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "1",
+                "ru": "1"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Only a fetch join or an entity graph reaches one query; batching still runs grouped child statements.",
+                "ru": "К одному запросу приводят только fetch-джойн или entity graph; батчинг всё равно делает групповые запросы."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "3",
+                "ru": "3"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The 3 batched child statements are right, but the query that loaded the 30 orders counts too.",
+                "ru": "Три батчевых запроса за детьми верны, но запрос, загрузивший 30 заказов, тоже считается."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cap-p1-spot-pagination",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This is meant to return the first 20 orders with their lines initialized. What is the defect?",
+            "ru": "Это должно вернуть первые 20 заказов с инициализированными строками. В чём дефект?"
+          },
+          "code": "List<Order> page = em.createQuery(\n    \"SELECT DISTINCT o FROM Order o LEFT JOIN FETCH o.lines\", Order.class)\n  .setMaxResults(20)\n  .getResultList();",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "A collection fetch and a row limit cannot coexist; page the ids first instead.",
+              "ru": "Загрузка коллекции и лимит по строкам несовместимы; сначала пагинируйте id."
+            },
+            "incorrect": {
+              "en": "setMaxResults limits joined rows, so Hibernate loads everything and paginates in memory.",
+              "ru": "setMaxResults ограничивает строки джойна, поэтому Hibernate грузит всё и пагинирует в памяти."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "setMaxResults limits joined rows, not orders, so Hibernate loads everything and paginates in memory",
+                "ru": "setMaxResults ограничивает строки джойна, а не заказы, поэтому Hibernate грузит всё и пагинирует в памяти"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "DISTINCT is what breaks the limit; remove it and the paging works",
+                "ru": "Лимит ломает DISTINCT; уберите его — и пагинация заработает"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "DISTINCT only collapses duplicated parents; the row-vs-parent mismatch comes from the collection fetch.",
+                "ru": "DISTINCT лишь схлопывает дубликаты родителей; расхождение строк и родителей даёт загрузка коллекции."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "LEFT JOIN FETCH cannot be combined with DISTINCT",
+                "ru": "LEFT JOIN FETCH нельзя сочетать с DISTINCT"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That combination is normal and correct — it is the pagination that a collection fetch breaks.",
+                "ru": "Это нормальное и правильное сочетание — загрузка коллекции ломает именно пагинацию."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p2-fetch-beats-batch",
+          "type": "predict_output",
+          "prompt": {
+            "en": "`Order.lines` is LAZY with `@BatchSize(size = 5)`, and the query returns 12 orders. Predict the total number of SELECT statements.",
+            "ru": "`Order.lines` — ленивая, с `@BatchSize(size = 5)`, и запрос возвращает 12 заказов. Предскажи общее число SELECT-запросов."
+          },
+          "code": "List<Order> orders = em.createQuery(\n    \"SELECT DISTINCT o FROM Order o JOIN FETCH o.lines\", Order.class)\n  .getResultList();\nint total = 0;\nfor (Order o : orders) {\n    total += o.getLines().size();\n}",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "A fetch join initializes the collections, so @BatchSize never comes into play.",
+              "ru": "Fetch-джойн инициализирует коллекции, поэтому @BatchSize вообще не вступает в игру."
+            },
+            "incorrect": {
+              "en": "It is 1: JOIN FETCH already initialized the collections, so the loop triggers no lazy load.",
+              "ru": "Это 1: JOIN FETCH уже инициализировал коллекции, поэтому цикл не запускает ленивую загрузку."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "1",
+                "ru": "1"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "4",
+                "ru": "4"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The batch size never applies: the fetch join already initialized the collections, so nothing is lazy to group.",
+                "ru": "Batch size не применяется: fetch-джойн уже инициализировал коллекции, группировать нечего."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "13",
+                "ru": "13"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The collections came back initialized with the join, so the loop fires nothing.",
+                "ru": "Коллекции вернулись инициализированными вместе с джойном, поэтому цикл ничего не выполняет."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p3-sort-procedure",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the steps of diagnosing and fixing an N+1 problem in a slow JPA endpoint.",
+            "ru": "Расставь по порядку шаги диагностики и устранения N+1 в медленном JPA-эндпойнте."
+          },
+          "feedback": {
+            "correct": {
+              "en": "See it, pin it, fetch per query, fall back to batching, then verify.",
+              "ru": "Увидеть, зафиксировать тестом, грузить по запросу, при необходимости батчить, затем проверить."
+            },
+            "incorrect": {
+              "en": "Log the SQL, pin the count in a test, fetch per query, use a batch size where a fetch join cannot go, verify.",
+              "ru": "Залогировать SQL, зафиксировать число в тесте, грузить по запросу, применить batch size там, где fetch-джойн не подходит, проверить."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Log the SQL and spot the same SELECT repeating with only the id changing",
+                "ru": "Залогировать SQL и заметить повтор одного и того же SELECT, где меняется только id"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Pin the count with a test that asserts how many statements the endpoint runs",
+                "ru": "Зафиксировать число тестом, утверждающим, сколько запросов выполняет эндпойнт"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Fetch the association in the query itself with JOIN FETCH or an @EntityGraph, leaving the mapping LAZY",
+                "ru": "Загрузить связь в самом запросе через JOIN FETCH или @EntityGraph, оставив маппинг LAZY"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "If the query needs pagination or a second List collection, keep it lazy and set a batch size instead",
+                "ru": "Если запросу нужна пагинация или вторая коллекция List — оставить ленивость и задать batch size"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "Re-run the test and confirm the statement count dropped",
+                "ru": "Перезапустить тест и убедиться, что число запросов упало"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p4-match-mechanisms",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "In JPA/Hibernate, match each mechanism to what it does to the query count.",
+            "ru": "Соотнеси каждый механизм JPA/Hibernate с тем, что он делает с числом запросов."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One mechanism creates the N, two remove or shrink it, one makes it global, one refuses outright.",
+              "ru": "Один механизм создаёт N, два убирают или уменьшают его, один делает глобальным, один просто отказывает."
+            },
+            "incorrect": {
+              "en": "Lazy read = 1 + N, JOIN FETCH/@EntityGraph = 1, @BatchSize = ceil(N/n), EAGER = always, two bags = exception.",
+              "ru": "Ленивое чтение — 1 + N, JOIN FETCH/@EntityGraph — 1, @BatchSize — ceil(N/n), EAGER — всегда, два bag'а — исключение."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "A lazy association read once per parent",
+                "ru": "Ленивая связь, читаемая по разу на родителя"
+              },
+              "right": {
+                "en": "Adds the N extra queries: 1 + N",
+                "ru": "Добавляет N лишних запросов: 1 + N"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "JOIN FETCH or @EntityGraph",
+                "ru": "JOIN FETCH или @EntityGraph"
+              },
+              "right": {
+                "en": "Collapses 1 + N into a single query",
+                "ru": "Сворачивает 1 + N в один запрос"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "@BatchSize(size = n)",
+                "ru": "@BatchSize(size = n)"
+              },
+              "right": {
+                "en": "Stays lazy and cuts N queries to ceil(N / n)",
+                "ru": "Сохраняет ленивость и сокращает N запросов до ceil(N / n)"
+              }
+            },
+            {
+              "id": "m4",
+              "left": {
+                "en": "FetchType.EAGER on the mapping",
+                "ru": "FetchType.EAGER на маппинге"
+              },
+              "right": {
+                "en": "Loads the association for every query, always",
+                "ru": "Грузит связь в каждом запросе, всегда"
+              }
+            },
+            {
+              "id": "m5",
+              "left": {
+                "en": "JOIN FETCH of two List collections",
+                "ru": "JOIN FETCH двух коллекций List"
+              },
+              "right": {
+                "en": "Fails with MultipleBagFetchException",
+                "ru": "Падает с MultipleBagFetchException"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p5-fill-counts",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Compute the total statement count for each strategy.",
+            "ru": "Посчитай общее число запросов для каждой стратегии."
+          },
+          "feedback": {
+            "correct": {
+              "en": "1 + N, 1, and 1 + ceil(N / size) — the three bills, in numbers.",
+              "ru": "1 + N, 1 и 1 + ceil(N / size) — три счёта в числах."
+            },
+            "incorrect": {
+              "en": "41 = 1 + 40; a fetch join is 1; @BatchSize(8) is 1 + ceil(40/8) = 6.",
+              "ru": "41 = 1 + 40; fetch-джойн — 1; @BatchSize(8) — 1 + ceil(40/8) = 6."
+            }
+          },
+          "text": {
+            "en": "40 parents in JPA, each parent's collection read: plain lazy runs ___ statements, a JOIN FETCH runs ___, and @BatchSize(size = 8) runs ___.",
+            "ru": "40 родителей в JPA, у каждого читается коллекция: при обычном lazy выполняется ___ запросов, при JOIN FETCH — ___, а при @BatchSize(size = 8) — ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "41"
+              ],
+              "ru": [
+                "41"
+              ]
+            },
+            {
+              "en": [
+                "1"
+              ],
+              "ru": [
+                "1"
+              ]
+            },
+            {
+              "en": [
+                "6"
+              ],
+              "ru": [
+                "6"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

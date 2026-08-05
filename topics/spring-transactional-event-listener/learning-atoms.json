@@ -1,0 +1,2966 @@
+{
+  "schemaVersion": 1,
+  "topicId": "spring-transactional-event-listener",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "publish-inside-transaction",
+      "title": {
+        "en": "Publishing inside the transaction",
+        "ru": "Публикация внутри транзакции"
+      },
+      "summary": {
+        "en": "publishEvent is called inside the @Transactional method, where the database work is still staged and not yet committed.",
+        "ru": "publishEvent вызывается внутри @Transactional метода, где работа с базой ещё подготовлена, но не зафиксирована."
+      },
+      "discovery": [
+        {
+          "id": "publish-d1-committed-yet",
+          "type": "predict_output",
+          "prompt": {
+            "en": "`placeOrder` is `@Transactional`. At the moment `publishEvent` runs, is the order row already committed in the database?",
+            "ru": "`placeOrder` помечен `@Transactional`. В момент вызова `publishEvent` строка заказа уже зафиксирована в базе?"
+          },
+          "code": "@Transactional\npublic void placeOrder(Order order) {\n    orderRepository.save(order);\n    publisher.publishEvent(new OrderPlaced(order.id()));\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Inside a `@Transactional` method nothing is durable yet. The transactional proxy opened the transaction before the body ran and will commit it only after the body returns, so `save(order)` merely **stages** the row inside that transaction.\n\n```mermaid\nsequenceDiagram\n  participant S as Service method\n  participant T as Transaction manager\n  participant P as ApplicationEventPublisher\n  S->>T: begin transaction\n  S->>T: save(order) is staged\n  S->>P: publishEvent(OrderPlaced)\n  S->>T: method returns\n  T->>T: commit\n```\n\nThat is why the moment of `publishEvent` is the wrong moment for a side effect that assumes saved data: an email sent here would go out even if the commit never happens. The whole point of `@TransactionalEventListener` is to move that side effect to a later point on this timeline.",
+            "ru": "Внутри `@Transactional` метода ещё нет durable data. Transactional proxy открыл транзакцию до тела метода и сделает commit только после возврата из него, поэтому `save(order)` лишь **подготавливает** строку внутри этой транзакции.\n\n```mermaid\nsequenceDiagram\n  participant S as Метод service\n  participant T as Transaction manager\n  participant P as ApplicationEventPublisher\n  S->>T: открыть транзакцию\n  S->>T: save(order) подготовлен\n  S->>P: publishEvent(OrderPlaced)\n  S->>T: метод возвращается\n  T->>T: commit\n```\n\nПоэтому момент `publishEvent` — неподходящее место для побочного действия, которое рассчитывает на сохранённые данные: письмо, отправленное здесь, уйдёт даже если commit так и не случится. Смысл `@TransactionalEventListener` как раз в том, чтобы перенести побочное действие в более позднюю точку этой шкалы."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — inside the method the row is only staged.",
+              "ru": "Верно — внутри метода строка лишь подготовлена."
+            },
+            "incorrect": {
+              "en": "Not yet — the commit happens after the method returns, at the transaction boundary.",
+              "ru": "Ещё нет — commit происходит после возврата из метода, на границе транзакции."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "No — the work is staged; the commit happens after the method returns",
+                "ru": "Нет — работа подготовлена; commit происходит после возврата из метода"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Yes — save() writes and commits the row immediately",
+                "ru": "Да — save() сразу записывает и фиксирует строку"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "save() only stages the row inside the transaction; the commit is a separate step at the boundary.",
+                "ru": "save() только подготавливает строку внутри транзакции; commit — отдельный шаг на границе."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Yes — publishEvent forces a commit before publishing",
+                "ru": "Да — publishEvent сначала принудительно делает commit"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "publishEvent only publishes an event; it never commits the transaction.",
+                "ru": "publishEvent только публикует event; он никогда не фиксирует транзакцию."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "publish-p1-save-commits-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Inside a Spring `@Transactional` method, `save()` has already committed the row to the database.",
+            "ru": "Внутри Spring `@Transactional` метода `save()` уже зафиксировал строку в базе."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The row is staged inside the transaction until the commit at the boundary.",
+              "ru": "Строка подготовлена внутри транзакции до commit на границе."
+            },
+            "incorrect": {
+              "en": "No — save() stages the row; the commit happens when the transaction ends.",
+              "ru": "Нет — save() подготавливает строку; commit происходит при завершении транзакции."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "publish-p2-who-commits",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In a Spring `@Transactional` method, what actually commits the staged database work?",
+            "ru": "Что в Spring `@Transactional` методе на самом деле фиксирует подготовленную работу с базой?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The commit belongs to the transaction boundary, not to any call inside the body.",
+              "ru": "Commit относится к границе транзакции, а не к вызовам внутри тела метода."
+            },
+            "incorrect": {
+              "en": "The transactional proxy commits after the method returns; calls inside the body only stage work.",
+              "ru": "Transactional proxy делает commit после возврата из метода; вызовы внутри тела лишь подготавливают работу."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The transactional proxy, after the method returns",
+                "ru": "Transactional proxy после возврата из метода"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The `save()` call itself",
+                "ru": "Сам вызов `save()`"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "save() writes into the transaction; it does not end it.",
+                "ru": "save() пишет внутрь транзакции, но не завершает её."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The `publishEvent()` call",
+                "ru": "Вызов `publishEvent()`"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Publishing an event has no effect on the transaction's outcome.",
+                "ru": "Публикация event никак не влияет на исход транзакции."
+              }
+            }
+          ]
+        },
+        {
+          "id": "publish-p3-sort-order",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order what happens when a Spring `@Transactional` method saves an entity and publishes an event.",
+            "ru": "Расставь по порядку, что происходит, когда Spring `@Transactional` метод сохраняет сущность и публикует event."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Begin, stage, publish, then commit at the boundary.",
+              "ru": "Открыть, подготовить, опубликовать, затем commit на границе."
+            },
+            "incorrect": {
+              "en": "The transaction is opened first, work and publishing happen inside it, and the commit is last.",
+              "ru": "Сначала открывается транзакция, работа и публикация происходят внутри неё, commit — последним."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "The transactional proxy begins the transaction",
+                "ru": "Transactional proxy открывает транзакцию"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "save(order) stages the row inside the transaction",
+                "ru": "save(order) подготавливает строку внутри транзакции"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "publishEvent(...) publishes the event, still inside the same transaction",
+                "ru": "publishEvent(...) публикует event, всё ещё внутри той же транзакции"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "The method returns and the proxy commits the transaction",
+                "ru": "Метод возвращается, и proxy фиксирует транзакцию"
+              }
+            }
+          ]
+        },
+        {
+          "id": "publish-p4-fill-commit",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing word.",
+            "ru": "Впиши пропущенное слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Staged work becomes durable only at the commit.",
+              "ru": "Подготовленная работа становится durable только на commit."
+            },
+            "incorrect": {
+              "en": "It is the commit: until then the row is only staged inside the transaction.",
+              "ru": "Это commit: до него строка лишь подготовлена внутри транзакции."
+            }
+          },
+          "text": {
+            "en": "Inside a `@Transactional` method the row is only staged; it becomes durable when the transaction does a ___.",
+            "ru": "Внутри `@Transactional` метода строка лишь подготовлена; она становится durable, когда транзакция делает ___."
+          },
+          "blanks": [
+            {
+              "en": ["commit"],
+              "ru": ["commit", "коммит"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "deferred-listener",
+      "title": {
+        "en": "The listener is deferred",
+        "ru": "Listener откладывается"
+      },
+      "summary": {
+        "en": "@TransactionalEventListener does not run at publish time: Spring registers a transaction synchronization and calls the listener when the chosen phase arrives.",
+        "ru": "@TransactionalEventListener не выполняется в момент публикации: Spring регистрирует transaction synchronization и вызывает listener, когда наступает выбранная фаза."
+      },
+      "discovery": [
+        {
+          "id": "deferred-d1-when-runs",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "`sendReceipt` is annotated `@TransactionalEventListener`. When does its body run?",
+            "ru": "`sendReceipt` помечен `@TransactionalEventListener`. Когда выполнится его тело?"
+          },
+          "code": "@Transactional\npublic void placeOrder(Order order) {\n    orderRepository.save(order);\n    publisher.publishEvent(new OrderPlaced(order.id()));   // returns immediately\n}\n\n@TransactionalEventListener\npublic void sendReceipt(OrderPlaced event) {\n    emailClient.sendReceipt(event.orderId());\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "A `@TransactionalEventListener` does not handle the event when it is published. Spring sees that the listener wants a **transaction phase** — a named point in the transaction's ending, such as \"after the commit\" — so at publish time it only registers a **transaction synchronization**: a callback the transaction manager keeps until the transaction finishes. When the requested phase arrives, the manager invokes the listener.\n\n```mermaid\nsequenceDiagram\n  participant S as Service method\n  participant P as ApplicationEventPublisher\n  participant T as Transaction manager\n  participant L as Transactional listener\n  S->>P: publishEvent(OrderPlaced)\n  P->>T: register synchronization\n  S->>T: method returns\n  T->>T: commit\n  T-->>L: invoke listener\n```\n\nSo publishing stays cheap and stays inside the transaction, while the listener body runs later, at a point the transaction manager controls rather than the business method.",
+            "ru": "`@TransactionalEventListener` не обрабатывает event в момент публикации. Spring видит, что listener хочет **фазу транзакции** — именованную точку в её завершении, например «после commit», — поэтому при публикации лишь регистрирует **transaction synchronization**: callback, который transaction manager держит до конца транзакции. Когда нужная фаза наступает, manager вызывает listener.\n\n```mermaid\nsequenceDiagram\n  participant S as Метод service\n  participant P as ApplicationEventPublisher\n  participant T as Transaction manager\n  participant L as Transactional listener\n  S->>P: publishEvent(OrderPlaced)\n  P->>T: зарегистрировать synchronization\n  S->>T: метод возвращается\n  T->>T: commit\n  T-->>L: вызвать listener\n```\n\nПоэтому публикация остаётся дешёвой и происходит внутри транзакции, а тело listener выполняется позже — в точке, которой управляет transaction manager, а не бизнес-метод."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — publishing only registers it; the phase triggers the call.",
+              "ru": "Верно — публикация лишь регистрирует его; вызов запускает фаза."
+            },
+            "incorrect": {
+              "en": "It is deferred: Spring registers a synchronization and calls the listener at the chosen phase.",
+              "ru": "Он отложен: Spring регистрирует synchronization и вызывает listener в выбранной фазе."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "When the transaction reaches the chosen phase — not at the publishEvent call",
+                "ru": "Когда транзакция достигает выбранной фазы — а не на вызове publishEvent"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Immediately, inside the publishEvent call",
+                "ru": "Сразу, внутри вызова publishEvent"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is what a plain listener does; the transactional one is deferred to a phase.",
+                "ru": "Так делает обычный listener; transactional отложен до фазы."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "On the next call to the service, together with the next event",
+                "ru": "При следующем вызове service, вместе со следующим event"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The phase of the surrounding transaction decides, not a later call.",
+                "ru": "Решает фаза окружающей транзакции, а не более поздний вызов."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "deferred-p1-at-publish",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In Spring, what happens at the moment an event is published to a `@TransactionalEventListener` inside an active transaction?",
+            "ru": "Что происходит в Spring в момент публикации event для `@TransactionalEventListener` внутри активной транзакции?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Publishing registers a callback; the transaction manager calls it later.",
+              "ru": "Публикация регистрирует callback; transaction manager вызовет его позже."
+            },
+            "incorrect": {
+              "en": "Spring registers a transaction synchronization and defers the listener to its phase.",
+              "ru": "Spring регистрирует transaction synchronization и откладывает listener до его фазы."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Spring registers a transaction synchronization and defers the listener",
+                "ru": "Spring регистрирует transaction synchronization и откладывает listener"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The listener body runs and finishes before publishEvent returns",
+                "ru": "Тело listener выполняется и завершается до возврата из publishEvent"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the plain listener behaviour; the transactional one waits for a phase.",
+                "ru": "Это поведение обычного listener; transactional ждёт фазу."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The event is queued in a message broker until the commit",
+                "ru": "Event складывается в message broker до commit"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Everything stays inside the Spring application; no broker is involved.",
+                "ru": "Всё остаётся внутри Spring-приложения; broker не участвует."
+              }
+            }
+          ]
+        },
+        {
+          "id": "deferred-p2-body-runs-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A `@TransactionalEventListener` method body finishes before the `publishEvent(...)` call returns.",
+            "ru": "Тело метода `@TransactionalEventListener` завершается до возврата из вызова `publishEvent(...)`."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Publishing only registers the listener; the phase invokes it later.",
+              "ru": "Публикация лишь регистрирует listener; фаза вызывает его позже."
+            },
+            "incorrect": {
+              "en": "No — publishEvent returns immediately and the listener waits for its phase.",
+              "ru": "Нет — publishEvent возвращается сразу, а listener ждёт свою фазу."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "deferred-p3-fill-synchronization",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill in both missing terms.",
+            "ru": "Впиши оба пропущенных термина."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A synchronization is registered at publish time; the phase decides when it fires.",
+              "ru": "Synchronization регистрируется при публикации; фаза решает, когда он сработает."
+            },
+            "incorrect": {
+              "en": "Spring registers a transaction synchronization and invokes the listener when the chosen phase arrives.",
+              "ru": "Spring регистрирует transaction synchronization и вызывает listener, когда наступает выбранная фаза."
+            }
+          },
+          "text": {
+            "en": "At publish time Spring registers a transaction ___, and invokes the transactional listener when the chosen ___ arrives.",
+            "ru": "При публикации Spring регистрирует transaction ___ и вызывает transactional listener, когда наступает выбранная ___."
+          },
+          "blanks": [
+            {
+              "en": ["synchronization", "synchronisation"],
+              "ru": ["synchronization", "синхронизацию", "синхронизация"]
+            },
+            {
+              "en": ["phase"],
+              "ru": ["фаза", "фазу", "phase"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "plain-vs-transactional-listener",
+      "title": {
+        "en": "@EventListener vs @TransactionalEventListener",
+        "ru": "@EventListener против @TransactionalEventListener"
+      },
+      "summary": {
+        "en": "@EventListener handles the event immediately, still inside the open transaction, while @TransactionalEventListener waits for a transaction phase.",
+        "ru": "@EventListener обрабатывает event сразу, ещё внутри открытой транзакции, а @TransactionalEventListener ждёт фазу транзакции."
+      },
+      "discovery": [
+        {
+          "id": "plain-vs-d1-email-sent",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The method throws after publishing, so the transaction rolls back. Was the receipt email sent?",
+            "ru": "Метод бросает exception после публикации, поэтому транзакция откатывается. Было ли отправлено письмо с чеком?"
+          },
+          "code": "@Transactional\npublic void placeOrder(Order order) {\n    orderRepository.save(order);\n    publisher.publishEvent(new OrderPlaced(order.id()));\n    throw new IllegalStateException(\"stock check failed\");\n}\n\n@EventListener\npublic void sendReceipt(OrderPlaced event) {\n    emailClient.sendReceipt(event.orderId());\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "`@EventListener` is the plain, synchronous listener: the publisher calls it immediately, in the same thread, while the transaction is still open. Its side effect therefore happens **before anyone knows whether the transaction commits** — and a rollback only discards database work. It cannot recall an email, an HTTP call or a message.\n\n```mermaid\nflowchart TD\n  A[\"publishEvent(event)\"] --> B[\"@EventListener runs now, inside the open transaction\"]\n  A --> C[\"@TransactionalEventListener is registered and waits\"]\n  C --> D{\"transaction outcome\"}\n  D -->|\"commit\"| E[\"runs on the commit phase\"]\n  D -->|\"rollback\"| F[\"runs only if it asked for the rollback phase\"]\n```\n\nSo the choice is about dependency on the outcome: `@EventListener` for work that should be part of the same unit of work, `@TransactionalEventListener` when the side effect must depend on whether the transaction committed.",
+            "ru": "`@EventListener` — обычный синхронный listener: publisher вызывает его сразу, в том же потоке, пока транзакция ещё открыта. Значит, его побочное действие происходит **до того, как вообще известно, будет ли commit**, а rollback отбрасывает только работу с базой. Он не может отозвать письмо, HTTP-вызов или сообщение.\n\n```mermaid\nflowchart TD\n  A[\"publishEvent(event)\"] --> B[\"@EventListener выполняется сразу, внутри открытой транзакции\"]\n  A --> C[\"@TransactionalEventListener зарегистрирован и ждёт\"]\n  C --> D{\"исход транзакции\"}\n  D -->|\"commit\"| E[\"выполняется в фазе commit\"]\n  D -->|\"rollback\"| F[\"выполняется только если просил фазу rollback\"]\n```\n\nВыбор — про зависимость от исхода: `@EventListener` для работы, которая должна быть частью той же единицы работы, `@TransactionalEventListener` — когда побочное действие обязано зависеть от того, был ли commit."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Yes — it ran inside the transaction, and a rollback cannot unsend it.",
+              "ru": "Да — он выполнился внутри транзакции, а rollback не может «отправить обратно» письмо."
+            },
+            "incorrect": {
+              "en": "It was sent: a plain @EventListener runs immediately, before the outcome is known.",
+              "ru": "Оно было отправлено: обычный @EventListener выполняется сразу, до того как известен исход."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Yes — the plain listener already ran inside the transaction, before the rollback",
+                "ru": "Да — обычный listener уже выполнился внутри транзакции, до rollback"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "No — the rollback cancels the listener too",
+                "ru": "Нет — rollback отменяет и listener"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A rollback undoes database work; it cannot recall an email that was already sent.",
+                "ru": "Rollback отменяет работу с базой; он не может отозвать уже отправленное письмо."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "No — every Spring listener waits for the commit",
+                "ru": "Нет — любой listener в Spring ждёт commit"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Only @TransactionalEventListener waits for a phase; @EventListener runs at once.",
+                "ru": "Только @TransactionalEventListener ждёт фазу; @EventListener выполняется сразу."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "plain-vs-p1-choose",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A notification must go out only if the database changes are really saved. Which Spring listener fits?",
+            "ru": "Уведомление должно уходить только если изменения в базе действительно сохранены. Какой listener в Spring подходит?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Only a transactional listener can be tied to the outcome.",
+              "ru": "Только transactional listener можно привязать к исходу."
+            },
+            "incorrect": {
+              "en": "Use @TransactionalEventListener: a plain @EventListener runs before the outcome is known.",
+              "ru": "Используй @TransactionalEventListener: обычный @EventListener выполняется до того, как исход известен."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "@TransactionalEventListener, which defers the listener to a transaction phase",
+                "ru": "@TransactionalEventListener, который откладывает listener до фазы транзакции"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "@EventListener, because it runs inside the transaction",
+                "ru": "@EventListener, потому что он выполняется внутри транзакции"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Running inside the transaction means running before the commit decision exists.",
+                "ru": "Выполнение внутри транзакции означает выполнение до того, как решение о commit существует."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "@EventListener plus a check of the transaction status inside the listener",
+                "ru": "@EventListener плюс проверка статуса транзакции внутри listener"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The outcome is not decided yet at that point, so the check cannot help.",
+                "ru": "В этот момент исход ещё не определён, поэтому проверка не поможет."
+              }
+            }
+          ]
+        },
+        {
+          "id": "plain-vs-p2-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each Spring element with when it acts relative to the transaction.",
+            "ru": "Сопоставь каждый элемент Spring с тем, когда он действует относительно транзакции."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Plain listener now, transactional listener at a phase, publishing never commits.",
+              "ru": "Обычный listener — сейчас, transactional — в фазе, публикация не фиксирует ничего."
+            },
+            "incorrect": {
+              "en": "@EventListener runs immediately, @TransactionalEventListener waits for a phase, publishEvent only publishes.",
+              "ru": "@EventListener выполняется сразу, @TransactionalEventListener ждёт фазу, publishEvent только публикует."
+            }
+          },
+          "pairs": [
+            {
+              "id": "p1",
+              "left": {
+                "en": "@EventListener",
+                "ru": "@EventListener"
+              },
+              "right": {
+                "en": "Invoked immediately, in the publishing thread, inside the open transaction",
+                "ru": "Вызывается сразу, в потоке публикации, внутри открытой транзакции"
+              }
+            },
+            {
+              "id": "p2",
+              "left": {
+                "en": "@TransactionalEventListener",
+                "ru": "@TransactionalEventListener"
+              },
+              "right": {
+                "en": "Invoked by the transaction manager when the chosen phase arrives",
+                "ru": "Вызывается transaction manager, когда наступает выбранная фаза"
+              }
+            },
+            {
+              "id": "p3",
+              "left": {
+                "en": "publishEvent(...) inside a @Transactional method",
+                "ru": "publishEvent(...) внутри @Transactional метода"
+              },
+              "right": {
+                "en": "Publishes the event while the database work is still staged",
+                "ru": "Публикует event, пока работа с базой ещё подготовлена"
+              }
+            }
+          ]
+        },
+        {
+          "id": "plain-vs-p3-skipped-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In Spring, a plain `@EventListener` is skipped when the surrounding transaction rolls back.",
+            "ru": "В Spring обычный `@EventListener` пропускается, когда окружающая транзакция откатывается."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It already ran; nothing can un-run it.",
+              "ru": "Он уже выполнился; отменить это невозможно."
+            },
+            "incorrect": {
+              "en": "No — it ran immediately at publish time, long before the rollback.",
+              "ru": "Нет — он выполнился сразу при публикации, задолго до rollback."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "plain-vs-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing annotation name.",
+            "ru": "Впиши имя пропущенной аннотации."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That is the annotation that binds a listener to a transaction phase.",
+              "ru": "Это аннотация, которая привязывает listener к фазе транзакции."
+            },
+            "incorrect": {
+              "en": "It is @TransactionalEventListener; @EventListener has no phase at all.",
+              "ru": "Это @TransactionalEventListener; у @EventListener фазы нет вообще."
+            }
+          },
+          "text": {
+            "en": "To delay a listener until the surrounding transaction reaches a phase, annotate it with @___ instead of @EventListener.",
+            "ru": "Чтобы отложить listener до фазы окружающей транзакции, помечай его @___ вместо @EventListener."
+          },
+          "blanks": [
+            {
+              "en": ["TransactionalEventListener"],
+              "ru": ["TransactionalEventListener"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "default-phase-after-commit",
+      "title": {
+        "en": "AFTER_COMMIT is the default",
+        "ru": "AFTER_COMMIT — фаза по умолчанию"
+      },
+      "summary": {
+        "en": "AFTER_COMMIT is the default phase, so the listener runs only after the transaction committed and the data is durable.",
+        "ru": "AFTER_COMMIT — фаза по умолчанию, поэтому listener выполняется только после commit транзакции, когда данные durable."
+      },
+      "discovery": [
+        {
+          "id": "after-commit-d1-no-phase",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "No phase attribute is configured here. When does this listener run?",
+            "ru": "Атрибут фазы здесь не задан. Когда выполнится этот listener?"
+          },
+          "code": "@Component\nclass ReceiptListener {\n\n    @TransactionalEventListener\n    public void sendReceipt(OrderPlaced event) {\n        emailClient.sendReceipt(event.orderId());\n    }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "`AFTER_COMMIT` is the default phase, which is why the annotation is usually written without attributes. It is the phase you want for almost every side effect: it runs only when the database work is committed and durable, so you never notify anyone about data that was never saved.\n\nThe `TransactionPhase` enum has four values, and the next atoms drill each one:\n\n```mermaid\nflowchart TD\n  A[\"method returns\"] --> B[\"BEFORE_COMMIT listeners\"]\n  B --> C{\"transaction outcome\"}\n  C -->|\"commit\"| D[\"AFTER_COMMIT listeners\"]\n  C -->|\"rollback\"| E[\"AFTER_ROLLBACK listeners\"]\n  D --> F[\"AFTER_COMPLETION listeners\"]\n  E --> F\n```\n\nTypical `AFTER_COMMIT` work: notifications and emails, cache eviction for the rows just written, search-index refresh requests, audit hooks, and domain events consumed elsewhere in the same application.",
+            "ru": "`AFTER_COMMIT` — фаза по умолчанию, поэтому аннотацию обычно пишут без атрибутов. Именно эта фаза нужна почти для любого побочного действия: она наступает только когда работа с базой зафиксирована и durable, поэтому ты никогда не уведомишь никого о данных, которые так и не сохранились.\n\nВ enum `TransactionPhase` четыре значения, и следующие атомы разберут каждое:\n\n```mermaid\nflowchart TD\n  A[\"метод возвращается\"] --> B[\"listeners BEFORE_COMMIT\"]\n  B --> C{\"исход транзакции\"}\n  C -->|\"commit\"| D[\"listeners AFTER_COMMIT\"]\n  C -->|\"rollback\"| E[\"listeners AFTER_ROLLBACK\"]\n  D --> F[\"listeners AFTER_COMPLETION\"]\n  E --> F\n```\n\nТипичная работа для `AFTER_COMMIT`: уведомления и письма, инвалидация кеша для только что записанных строк, запросы на обновление поискового индекса, audit hooks и domain events для других частей того же приложения."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — no attribute means AFTER_COMMIT.",
+              "ru": "Верно — без атрибута это AFTER_COMMIT."
+            },
+            "incorrect": {
+              "en": "The default phase is AFTER_COMMIT, so it runs after a successful commit.",
+              "ru": "Фаза по умолчанию — AFTER_COMMIT, поэтому он выполняется после успешного commit."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "After the transaction commits — AFTER_COMMIT is the default phase",
+                "ru": "После commit транзакции — AFTER_COMMIT это фаза по умолчанию"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Just before the commit is finalized",
+                "ru": "Прямо перед финализацией commit"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is BEFORE_COMMIT, and it has to be requested explicitly.",
+                "ru": "Это BEFORE_COMMIT, и его надо запрашивать явно."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "After the transaction ends, whether it committed or rolled back",
+                "ru": "После завершения транзакции — независимо от commit или rollback"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is AFTER_COMPLETION; the default fires only on a successful commit.",
+                "ru": "Это AFTER_COMPLETION; фаза по умолчанию срабатывает только при успешном commit."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "after-commit-p1-which-work",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which task is a natural fit for an AFTER_COMMIT transactional event listener?",
+            "ru": "Какая задача естественно подходит для transactional event listener в фазе AFTER_COMMIT?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Cache eviction needs the new data to be durable first.",
+              "ru": "Инвалидации кеша сначала нужны durable-данные."
+            },
+            "incorrect": {
+              "en": "AFTER_COMMIT is for side effects that require durable data, such as cache eviction or notifications.",
+              "ru": "AFTER_COMMIT — для побочных действий, которым нужны durable-данные: инвалидация кеша, уведомления."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Evicting the cache entry for the row that was just saved",
+                "ru": "Удаление из кеша записи для только что сохранённой строки"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Validating the entity before it is written",
+                "ru": "Валидация сущности до записи"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Validation must happen inside the transaction, not after the commit.",
+                "ru": "Валидация должна быть внутри транзакции, а не после commit."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Discarding the database writes of a failed transaction",
+                "ru": "Отбрасывание записей в базу у неудавшейся транзакции"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing needs discarding after a commit, and the rollback path is a different phase.",
+                "ru": "После commit отбрасывать нечего, а путь rollback — это другая фаза."
+              }
+            }
+          ]
+        },
+        {
+          "id": "after-commit-p2-default-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "`@TransactionalEventListener` written without any attributes uses the AFTER_COMMIT phase.",
+            "ru": "`@TransactionalEventListener` без атрибутов использует фазу AFTER_COMMIT."
+          },
+          "feedback": {
+            "correct": {
+              "en": "AFTER_COMMIT is the default, which is why it is rarely written out.",
+              "ru": "AFTER_COMMIT — значение по умолчанию, поэтому его редко пишут явно."
+            },
+            "incorrect": {
+              "en": "It is true: AFTER_COMMIT is the default phase.",
+              "ru": "Это правда: AFTER_COMMIT — фаза по умолчанию."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "after-commit-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the rule about the AFTER_COMMIT phase.",
+            "ru": "Собери правило про фазу AFTER_COMMIT."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The phase fires only on the successful commit path.",
+              "ru": "Фаза срабатывает только на пути успешного commit."
+            },
+            "incorrect": {
+              "en": "AFTER_COMMIT runs only after the transaction commits.",
+              "ru": "AFTER_COMMIT выполняется только после commit транзакции."
+            }
+          },
+          "tokens": {
+            "en": ["AFTER_COMMIT", "runs", "only", "after", "the", "transaction", "commits"],
+            "ru": ["AFTER_COMMIT", "выполняется", "только", "после", "commit", "транзакции"]
+          },
+          "distractors": {
+            "en": ["before", "rollback"],
+            "ru": ["до", "rollback"]
+          }
+        },
+        {
+          "id": "after-commit-p4-fill-default",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing phase name.",
+            "ru": "Впиши имя пропущенной фазы."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That is the default, chosen because side effects usually need durable data.",
+              "ru": "Это значение по умолчанию — побочным действиям обычно нужны durable-данные."
+            },
+            "incorrect": {
+              "en": "It is AFTER_COMMIT: the listener runs only after a successful commit.",
+              "ru": "Это AFTER_COMMIT: listener выполняется только после успешного commit."
+            }
+          },
+          "text": {
+            "en": "The default phase of `@TransactionalEventListener` is ___.",
+            "ru": "Фаза по умолчанию у `@TransactionalEventListener` — ___."
+          },
+          "blanks": [
+            {
+              "en": ["AFTER_COMMIT", "TransactionPhase.AFTER_COMMIT"],
+              "ru": ["AFTER_COMMIT", "TransactionPhase.AFTER_COMMIT"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "after-rollback",
+      "title": {
+        "en": "AFTER_ROLLBACK",
+        "ru": "AFTER_ROLLBACK"
+      },
+      "summary": {
+        "en": "AFTER_ROLLBACK runs only when the transaction rolls back, for compensation and non-transactional cleanup — not for undoing database writes.",
+        "ru": "AFTER_ROLLBACK выполняется только при rollback транзакции — для компенсации и нетранзакционной очистки, а не для отмены записей в базе."
+      },
+      "discovery": [
+        {
+          "id": "rollback-d1-nothing-runs",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The method throws, so the transaction rolls back. What does this AFTER_COMMIT listener do?",
+            "ru": "Метод бросает exception, поэтому транзакция откатывается. Что сделает этот listener в фазе AFTER_COMMIT?"
+          },
+          "code": "@Transactional\npublic void placeOrder(Order order) {\n    orderRepository.save(order);\n    publisher.publishEvent(new OrderPlaced(order.id()));\n    throw new IllegalStateException(\"stock check failed\");\n}\n\n@TransactionalEventListener   // AFTER_COMMIT by default\npublic void sendReceipt(OrderPlaced event) {\n    emailClient.sendReceipt(event.orderId());\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Nothing happens: the `AFTER_COMMIT` phase never arrives, so the listener method is simply not invoked. That silence is the feature — no receipt for an order that does not exist.\n\nThe mirror image is `phase = TransactionPhase.AFTER_ROLLBACK`, which fires **only** on the rollback path:\n\n```mermaid\nflowchart TD\n  A[\"transaction outcome\"] --> B[\"commit\"]\n  A --> C[\"rollback\"]\n  B --> D[\"AFTER_COMMIT listeners run\"]\n  C --> E[\"AFTER_ROLLBACK listeners run\"]\n```\n\nUse it for work that only makes sense after a failed attempt: compensation, an audit record of the failure, or releasing a reservation that was made during the attempt in some **non-transactional** system (an external service, a file, an in-memory hold). What it does *not* do is undo database writes — the rollback already discarded the staged rows before the listener was called.",
+            "ru": "Ничего: фаза `AFTER_COMMIT` так и не наступает, поэтому метод listener просто не вызывается. Эта «тишина» и есть фича — никакого чека для заказа, которого нет.\n\nЗеркальный вариант — `phase = TransactionPhase.AFTER_ROLLBACK`, который срабатывает **только** на пути rollback:\n\n```mermaid\nflowchart TD\n  A[\"исход транзакции\"] --> B[\"commit\"]\n  A --> C[\"rollback\"]\n  B --> D[\"выполняются listeners AFTER_COMMIT\"]\n  C --> E[\"выполняются listeners AFTER_ROLLBACK\"]\n```\n\nИспользуй его для работы, которая имеет смысл только после неудачной попытки: компенсация, audit-запись о сбое или освобождение резерва, созданного во время попытки в **нетранзакционной** системе (внешний сервис, файл, hold в памяти). Чего он *не* делает — не отменяет записи в базе: rollback отбросил подготовленные строки ещё до вызова listener."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the phase never arrives, so the method is not called.",
+              "ru": "Верно — фаза не наступает, поэтому метод не вызывается."
+            },
+            "incorrect": {
+              "en": "It does nothing at all: an AFTER_COMMIT listener is not invoked on the rollback path.",
+              "ru": "Он не делает ничего: listener AFTER_COMMIT не вызывается на пути rollback."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Nothing — it is not invoked at all",
+                "ru": "Ничего — он вообще не вызывается"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It runs, but the email is marked as failed",
+                "ru": "Он выполняется, но письмо помечается как неудачное"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The phase never arrives, so the method body never executes.",
+                "ru": "Фаза не наступает, поэтому тело метода не выполняется."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It runs and triggers a second rollback",
+                "ru": "Он выполняется и вызывает второй rollback"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A listener does not drive the rollback; here it is simply skipped.",
+                "ru": "Listener не управляет rollback; здесь он просто пропущен."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "rollback-p1-undo-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In Spring, an AFTER_ROLLBACK transactional event listener is what undoes the database writes of the rolled-back transaction.",
+            "ru": "В Spring именно transactional event listener в фазе AFTER_ROLLBACK отменяет записи в базе у откатившейся транзакции."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The rollback already discarded the staged writes before the listener ran.",
+              "ru": "Rollback отбросил подготовленные записи ещё до выполнения listener."
+            },
+            "incorrect": {
+              "en": "No — the database rollback did that already; the listener is for non-transactional cleanup.",
+              "ru": "Нет — это уже сделал rollback базы; listener нужен для нетранзакционной очистки."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "rollback-p2-use-case",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which task belongs in an AFTER_ROLLBACK transactional event listener?",
+            "ru": "Какая задача относится к transactional event listener в фазе AFTER_ROLLBACK?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Non-transactional state has to be compensated by hand.",
+              "ru": "Нетранзакционное состояние приходится компенсировать вручную."
+            },
+            "incorrect": {
+              "en": "It is for compensation of non-transactional work, such as releasing an external reservation.",
+              "ru": "Он нужен для компенсации нетранзакционной работы, например освобождения внешнего резерва."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Releasing a reservation made in an external, non-transactional system during the attempt",
+                "ru": "Освобождение резерва, созданного во время попытки во внешней нетранзакционной системе"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Deleting the rows the transaction inserted",
+                "ru": "Удаление строк, которые вставила транзакция"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Those rows were never committed; the rollback already discarded them.",
+                "ru": "Эти строки не были зафиксированы; rollback уже их отбросил."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Sending the customer the receipt for the order",
+                "ru": "Отправка клиенту чека по заказу"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing was saved on this path, so there is no order to confirm.",
+                "ru": "На этом пути ничего не сохранилось, значит подтверждать нечего."
+              }
+            }
+          ]
+        },
+        {
+          "id": "rollback-p3-also-commit-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A transactional event listener with `phase = AFTER_ROLLBACK` also runs after a successful commit.",
+            "ru": "Transactional event listener с `phase = AFTER_ROLLBACK` выполняется и после успешного commit."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It is the rollback-only phase; the commit path skips it.",
+              "ru": "Это фаза только для rollback; путь commit её пропускает."
+            },
+            "incorrect": {
+              "en": "No — it fires only on the rollback path. The phase for both outcomes is a different one.",
+              "ru": "Нет — он срабатывает только на пути rollback. Для обоих исходов есть другая фаза."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "rollback-p4-fill-phase",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing phase name.",
+            "ru": "Впиши имя пропущенной фазы."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That phase fires only when the transaction failed.",
+              "ru": "Эта фаза срабатывает только когда транзакция не удалась."
+            },
+            "incorrect": {
+              "en": "It is AFTER_ROLLBACK — the rollback-only phase.",
+              "ru": "Это AFTER_ROLLBACK — фаза только для rollback."
+            }
+          },
+          "text": {
+            "en": "For compensation that must happen only when the transaction fails, use `@TransactionalEventListener(phase = TransactionPhase.___)`.",
+            "ru": "Для компенсации, которая должна происходить только при сбое транзакции, используй `@TransactionalEventListener(phase = TransactionPhase.___)`."
+          },
+          "blanks": [
+            {
+              "en": ["AFTER_ROLLBACK"],
+              "ru": ["AFTER_ROLLBACK"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "before-commit",
+      "title": {
+        "en": "BEFORE_COMMIT",
+        "ru": "BEFORE_COMMIT"
+      },
+      "summary": {
+        "en": "BEFORE_COMMIT runs before the commit is finalized, so an exception thrown there can still roll the transaction back.",
+        "ru": "BEFORE_COMMIT выполняется до финализации commit, поэтому брошенный там exception ещё может откатить транзакцию."
+      },
+      "discovery": [
+        {
+          "id": "before-commit-d1-throws",
+          "type": "predict_output",
+          "prompt": {
+            "en": "This listener throws. What happens to the transaction that published the event?",
+            "ru": "Этот listener бросает exception. Что произойдёт с транзакцией, опубликовавшей event?"
+          },
+          "code": "@TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)\npublic void checkInvariants(OrderPlaced event) {\n    throw new IllegalStateException(\"invariant violated\");\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "`BEFORE_COMMIT` runs while the transaction is still open: the method body has returned, but the commit has not been finalized. The listener is therefore *inside* the transaction boundary, and an exception from it can still turn the outcome into a rollback.\n\n```mermaid\nflowchart LR\n  A[\"method returns\"] --> B[\"BEFORE_COMMIT listener\"]\n  B -->|\"returns normally\"| C[\"commit\"]\n  B -->|\"throws\"| D[\"rollback\"]\n```\n\nThat is exactly why the phase needs care. Two problems come with it: a failing listener can destroy an otherwise successful transaction, and the data is not durable yet, so any external side effect placed here can act on data that never lands. Reserve `BEFORE_COMMIT` for checks that genuinely must be part of the transaction boundary.",
+            "ru": "`BEFORE_COMMIT` выполняется, пока транзакция ещё открыта: тело метода уже вернулось, но commit не финализирован. Значит, listener находится *внутри* границы транзакции, и exception из него ещё может превратить исход в rollback.\n\n```mermaid\nflowchart LR\n  A[\"метод вернулся\"] --> B[\"listener BEFORE_COMMIT\"]\n  B -->|\"вернулся нормально\"| C[\"commit\"]\n  B -->|\"бросил exception\"| D[\"rollback\"]\n```\n\nИменно поэтому с этой фазой нужна осторожность. Проблем две: падающий listener может разрушить в остальном успешную транзакцию, а данные ещё не durable, поэтому любое внешнее побочное действие здесь может сработать по данным, которые так и не сохранятся. Оставляй `BEFORE_COMMIT` для проверок, которым действительно нужно быть частью границы транзакции."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the commit was not finalized, so the outcome can still flip.",
+              "ru": "Верно — commit не был финализирован, поэтому исход ещё может поменяться."
+            },
+            "incorrect": {
+              "en": "It can still roll back: BEFORE_COMMIT runs inside the transaction boundary.",
+              "ru": "Она ещё может откатиться: BEFORE_COMMIT выполняется внутри границы транзакции."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It can still roll back — the commit had not been finalized yet",
+                "ru": "Она ещё может откатиться — commit не был финализирован"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It commits anyway; the exception is only logged",
+                "ru": "Она всё равно фиксируется; exception только логируется"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The listener runs inside the boundary, so its failure can prevent the commit.",
+                "ru": "Listener выполняется внутри границы, поэтому его сбой может помешать commit."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It commits and Spring compensates the change automatically",
+                "ru": "Она фиксируется, а Spring автоматически компенсирует изменение"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no automatic compensation; the failure happens before the outcome is final.",
+                "ru": "Автоматической компенсации нет; сбой случается до того, как исход стал финальным."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "before-commit-p1-safer-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "BEFORE_COMMIT is the safest phase for sending an email, because it runs closest to the commit.",
+            "ru": "BEFORE_COMMIT — самая безопасная фаза для отправки письма, потому что она ближе всего к commit."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The data is not durable there, and the send could still be followed by a rollback.",
+              "ru": "Там данные ещё не durable, и после отправки всё ещё может случиться rollback."
+            },
+            "incorrect": {
+              "en": "No — it runs before the data is durable, and the transaction can still roll back afterwards.",
+              "ru": "Нет — она выполняется до того, как данные durable, и транзакция ещё может откатиться."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "before-commit-p2-why-careful",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why should the BEFORE_COMMIT phase of a transactional event listener be used carefully?",
+            "ru": "Почему фазу BEFORE_COMMIT у transactional event listener нужно использовать осторожно?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "It sits inside the boundary, so it can both fail the commit and act on non-durable data.",
+              "ru": "Она внутри границы: может и сорвать commit, и сработать по ещё не durable данным."
+            },
+            "incorrect": {
+              "en": "A failure there can roll back an otherwise successful transaction, and the data is not durable yet.",
+              "ru": "Сбой там может откатить в остальном успешную транзакцию, а данные ещё не durable."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A failure there can roll back an otherwise successful transaction, and the data is not durable yet",
+                "ru": "Сбой там может откатить в остальном успешную транзакцию, а данные ещё не durable"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It runs on a different thread than the transaction",
+                "ru": "Она выполняется в другом потоке, чем транзакция"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It runs in the same thread, inside the transaction boundary.",
+                "ru": "Она выполняется в том же потоке, внутри границы транзакции."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It runs twice — once for the commit path and once for the rollback path",
+                "ru": "Она выполняется дважды — на пути commit и на пути rollback"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It fires once, before the outcome is decided; the outcome phases are separate.",
+                "ru": "Она срабатывает один раз, до определения исхода; фазы исхода — отдельные."
+              }
+            }
+          ]
+        },
+        {
+          "id": "before-commit-p3-sort-phases",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the points the transaction manager reaches on a successful commit, after a `@Transactional` method returns.",
+            "ru": "Расставь по порядку точки, которые transaction manager проходит при успешном commit после возврата из `@Transactional` метода."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Before the commit, the commit itself, then the two after-phases.",
+              "ru": "До commit, сам commit, затем две фазы после."
+            },
+            "incorrect": {
+              "en": "BEFORE_COMMIT, then the commit, then AFTER_COMMIT, and AFTER_COMPLETION last.",
+              "ru": "BEFORE_COMMIT, затем commit, затем AFTER_COMMIT, и AFTER_COMPLETION последним."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "BEFORE_COMMIT listeners run",
+                "ru": "Выполняются listeners BEFORE_COMMIT"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "The transaction commits the database work",
+                "ru": "Транзакция фиксирует работу с базой"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "AFTER_COMMIT listeners run",
+                "ru": "Выполняются listeners AFTER_COMMIT"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "AFTER_COMPLETION listeners run",
+                "ru": "Выполняются listeners AFTER_COMPLETION"
+              }
+            }
+          ]
+        },
+        {
+          "id": "before-commit-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing phase name.",
+            "ru": "Впиши имя пропущенной фазы."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Only that phase still sits inside the transaction boundary.",
+              "ru": "Только эта фаза всё ещё внутри границы транзакции."
+            },
+            "incorrect": {
+              "en": "It is BEFORE_COMMIT: an exception from it can still cause a rollback.",
+              "ru": "Это BEFORE_COMMIT: exception из него ещё может привести к rollback."
+            }
+          },
+          "text": {
+            "en": "A check that must still be able to prevent the commit belongs in the ___ phase.",
+            "ru": "Проверка, которая ещё должна уметь предотвратить commit, относится к фазе ___."
+          },
+          "blanks": [
+            {
+              "en": ["BEFORE_COMMIT", "TransactionPhase.BEFORE_COMMIT"],
+              "ru": ["BEFORE_COMMIT", "TransactionPhase.BEFORE_COMMIT"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "after-completion",
+      "title": {
+        "en": "AFTER_COMPLETION",
+        "ru": "AFTER_COMPLETION"
+      },
+      "summary": {
+        "en": "AFTER_COMPLETION runs after both outcomes, for cleanup or logging that does not care whether the transaction committed.",
+        "ru": "AFTER_COMPLETION выполняется после обоих исходов — для очистки или логирования, которым не важно, был ли commit."
+      },
+      "discovery": [
+        {
+          "id": "completion-d1-both-outcomes",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A temporary lock must be released whether the transaction committed or rolled back. Which single phase does that in one listener?",
+            "ru": "Временный lock надо освободить независимо от того, был commit или rollback. Какая одна фаза делает это в одном listener?"
+          },
+          "reveal": {
+            "en": "`AFTER_COMPLETION` fires after the transaction has finished, on **both** paths — it runs after `AFTER_COMMIT` on a successful commit and after `AFTER_ROLLBACK` on a failed one.\n\n```mermaid\nflowchart TD\n  A{\"transaction outcome\"} -->|\"commit\"| B[\"AFTER_COMMIT\"]\n  A -->|\"rollback\"| C[\"AFTER_ROLLBACK\"]\n  B --> D[\"AFTER_COMPLETION\"]\n  C --> D\n```\n\nUse it when the outcome is irrelevant: releasing a resource or lock taken for the attempt, clearing a thread-local or temporary state, or logging the final status of the unit of work. If the work differs per outcome, you want the two outcome-specific phases instead — `AFTER_COMPLETION` cannot tell you \"it committed\" by itself, it only tells you \"it is over\".",
+            "ru": "`AFTER_COMPLETION` срабатывает после завершения транзакции, на **обоих** путях — после `AFTER_COMMIT` при успешном commit и после `AFTER_ROLLBACK` при неудачном.\n\n```mermaid\nflowchart TD\n  A{\"исход транзакции\"} -->|\"commit\"| B[\"AFTER_COMMIT\"]\n  A -->|\"rollback\"| C[\"AFTER_ROLLBACK\"]\n  B --> D[\"AFTER_COMPLETION\"]\n  C --> D\n```\n\nИспользуй её, когда исход не важен: освободить ресурс или lock, взятый на попытку, очистить thread-local или временное состояние, залогировать финальный статус единицы работы. Если работа зависит от исхода, нужны две фазы конкретного исхода — сама по себе `AFTER_COMPLETION` не сообщает «был commit», она сообщает только «всё закончилось»."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — it is the only phase that fires on both paths.",
+              "ru": "Верно — это единственная фаза, которая срабатывает на обоих путях."
+            },
+            "incorrect": {
+              "en": "AFTER_COMPLETION runs after commit and after rollback, so one listener covers both.",
+              "ru": "AFTER_COMPLETION выполняется и после commit, и после rollback, поэтому один listener покрывает оба."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "AFTER_COMPLETION",
+                "ru": "AFTER_COMPLETION"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "AFTER_COMMIT",
+                "ru": "AFTER_COMMIT"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It fires only on the commit path, so a rollback would leak the lock.",
+                "ru": "Она срабатывает только на пути commit, поэтому при rollback lock утечёт."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "BEFORE_COMMIT",
+                "ru": "BEFORE_COMMIT"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It runs before the outcome is decided, and a failure there can flip the outcome.",
+                "ru": "Она выполняется до определения исхода, а сбой там может изменить исход."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "completion-p1-only-commit-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "AFTER_COMPLETION transactional event listeners run only when the transaction commits.",
+            "ru": "Transactional event listeners в фазе AFTER_COMPLETION выполняются только при commit транзакции."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It runs after either outcome — that is the point of the phase.",
+              "ru": "Она выполняется после любого исхода — в этом и смысл фазы."
+            },
+            "incorrect": {
+              "en": "No — it runs after both commit and rollback.",
+              "ru": "Нет — она выполняется и после commit, и после rollback."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "completion-p2-match-phases",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each `TransactionPhase` value with when the listener runs.",
+            "ru": "Сопоставь каждое значение `TransactionPhase` с моментом выполнения listener."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One phase inside the boundary, two per outcome, one after either.",
+              "ru": "Одна фаза внутри границы, две по исходу, одна после любого исхода."
+            },
+            "incorrect": {
+              "en": "BEFORE_COMMIT is inside the boundary; AFTER_COMMIT and AFTER_ROLLBACK are outcome-specific; AFTER_COMPLETION covers both.",
+              "ru": "BEFORE_COMMIT — внутри границы; AFTER_COMMIT и AFTER_ROLLBACK зависят от исхода; AFTER_COMPLETION покрывает оба."
+            }
+          },
+          "pairs": [
+            {
+              "id": "p1",
+              "left": {
+                "en": "BEFORE_COMMIT",
+                "ru": "BEFORE_COMMIT"
+              },
+              "right": {
+                "en": "Before the commit is finalized; a failure can still cause a rollback",
+                "ru": "До финализации commit; сбой ещё может привести к rollback"
+              }
+            },
+            {
+              "id": "p2",
+              "left": {
+                "en": "AFTER_COMMIT",
+                "ru": "AFTER_COMMIT"
+              },
+              "right": {
+                "en": "Only after the transaction committed",
+                "ru": "Только после commit транзакции"
+              }
+            },
+            {
+              "id": "p3",
+              "left": {
+                "en": "AFTER_ROLLBACK",
+                "ru": "AFTER_ROLLBACK"
+              },
+              "right": {
+                "en": "Only after the transaction rolled back",
+                "ru": "Только после rollback транзакции"
+              }
+            },
+            {
+              "id": "p4",
+              "left": {
+                "en": "AFTER_COMPLETION",
+                "ru": "AFTER_COMPLETION"
+              },
+              "right": {
+                "en": "After the transaction finished, on either outcome",
+                "ru": "После завершения транзакции, при любом исходе"
+              }
+            }
+          ]
+        },
+        {
+          "id": "completion-p3-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing phase name.",
+            "ru": "Впиши имя пропущенной фазы."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One listener, both outcomes covered.",
+              "ru": "Один listener покрывает оба исхода."
+            },
+            "incorrect": {
+              "en": "It is AFTER_COMPLETION — the phase that fires after commit and after rollback.",
+              "ru": "Это AFTER_COMPLETION — фаза, которая срабатывает и после commit, и после rollback."
+            }
+          },
+          "text": {
+            "en": "Cleanup that must happen after either outcome of the transaction belongs in the ___ phase.",
+            "ru": "Очистка, которая должна происходить при любом исходе транзакции, относится к фазе ___."
+          },
+          "blanks": [
+            {
+              "en": ["AFTER_COMPLETION", "TransactionPhase.AFTER_COMPLETION"],
+              "ru": ["AFTER_COMPLETION", "TransactionPhase.AFTER_COMPLETION"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "no-active-transaction",
+      "title": {
+        "en": "No transaction, no listener",
+        "ru": "Нет транзакции — нет listener"
+      },
+      "summary": {
+        "en": "With no active transaction a @TransactionalEventListener is skipped silently, unless fallbackExecution = true makes it run immediately.",
+        "ru": "Без активной транзакции @TransactionalEventListener молча пропускается, если fallbackExecution = true не заставит его выполниться сразу."
+      },
+      "discovery": [
+        {
+          "id": "no-tx-d1-skipped",
+          "type": "predict_output",
+          "prompt": {
+            "en": "`importOrder` has no `@Transactional` and no transaction is active. Does `sendReceipt` run?",
+            "ru": "У `importOrder` нет `@Transactional`, и активной транзакции нет. Выполнится ли `sendReceipt`?"
+          },
+          "code": "public void importOrder(Order order) {          // no @Transactional\n    publisher.publishEvent(new OrderPlaced(order.id()));\n}\n\n@TransactionalEventListener\npublic void sendReceipt(OrderPlaced event) {\n    emailClient.sendReceipt(event.orderId());\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "It does not run. A transactional listener waits for a phase of a transaction, and here there is no transaction to have a phase — so Spring skips the listener, quietly. No exception, no warning.\n\n```mermaid\nflowchart TD\n  A[\"publishEvent(event)\"] --> B{\"transaction active?\"}\n  B -->|\"yes\"| C[\"register synchronization and wait for the phase\"]\n  B -->|\"no\"| D{\"fallbackExecution?\"}\n  D -->|\"true\"| E[\"run the listener immediately\"]\n  D -->|\"false\"| F[\"skip the listener\"]\n```\n\nThis silence is a classic production surprise: the same event works from the transactional service path and does nothing from a scheduled job, a message consumer, or a test that has no transaction. If a listener must also handle those cases, set `fallbackExecution = true` — then, with no transaction, it runs immediately like a plain listener.",
+            "ru": "Не выполнится. Transactional listener ждёт фазу транзакции, а здесь транзакции, у которой была бы фаза, нет — поэтому Spring молча пропускает listener. Ни exception, ни предупреждения.\n\n```mermaid\nflowchart TD\n  A[\"publishEvent(event)\"] --> B{\"транзакция активна?\"}\n  B -->|\"да\"| C[\"зарегистрировать synchronization и ждать фазу\"]\n  B -->|\"нет\"| D{\"fallbackExecution?\"}\n  D -->|\"true\"| E[\"запустить listener сразу\"]\n  D -->|\"false\"| F[\"пропустить listener\"]\n```\n\nЭта тишина — классический production-сюрприз: один и тот же event работает из транзакционного пути service и ничего не делает из scheduled job, консьюмера сообщений или теста без транзакции. Если listener должен обрабатывать и такие случаи, поставь `fallbackExecution = true` — тогда без транзакции он выполнится сразу, как обычный listener."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — no transaction means no phase, so it is skipped.",
+              "ru": "Верно — нет транзакции, значит нет фазы, и он пропускается."
+            },
+            "incorrect": {
+              "en": "It is skipped silently; only fallbackExecution = true would make it run.",
+              "ru": "Он молча пропускается; выполниться его заставил бы только fallbackExecution = true."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "No — there is no phase to wait for, so it is skipped silently",
+                "ru": "Нет — ждать нечего, фазы нет, поэтому он молча пропускается"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Yes — with no transaction it falls back to running immediately",
+                "ru": "Да — без транзакции он по умолчанию выполняется сразу"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That happens only when fallbackExecution = true is set explicitly.",
+                "ru": "Так происходит только если явно задан fallbackExecution = true."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "No — publishEvent throws because no transaction is active",
+                "ru": "Нет — publishEvent бросает exception, потому что нет активной транзакции"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Publishing works fine; only the transactional listener is not invoked.",
+                "ru": "Публикация работает нормально; просто transactional listener не вызывается."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "no-tx-p1-always-runs-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A `@TransactionalEventListener` always runs when its event is published.",
+            "ru": "`@TransactionalEventListener` всегда выполняется, когда его event публикуется."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Without an active transaction it is skipped by default.",
+              "ru": "Без активной транзакции он по умолчанию пропускается."
+            },
+            "incorrect": {
+              "en": "No — with no active transaction it is skipped unless fallbackExecution = true.",
+              "ru": "Нет — без активной транзакции он пропускается, если не задан fallbackExecution = true."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "no-tx-p2-attribute",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "How do you make a `@TransactionalEventListener` also handle events published without an active transaction?",
+            "ru": "Как заставить `@TransactionalEventListener` обрабатывать и events, опубликованные без активной транзакции?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "That attribute is the explicit opt-in for the no-transaction case.",
+              "ru": "Этот атрибут — явное согласие на случай без транзакции."
+            },
+            "incorrect": {
+              "en": "Set fallbackExecution = true; otherwise the listener is skipped.",
+              "ru": "Задай fallbackExecution = true; иначе listener пропускается."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Set `fallbackExecution = true`",
+                "ru": "Задать `fallbackExecution = true`"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Set `phase = TransactionPhase.AFTER_COMPLETION`",
+                "ru": "Задать `phase = TransactionPhase.AFTER_COMPLETION`"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A phase only chooses when to run inside a transaction; with none, there is still no phase.",
+                "ru": "Фаза лишь выбирает момент внутри транзакции; без транзакции фазы всё равно нет."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — Spring logs a warning and runs it anyway",
+                "ru": "Ничего — Spring логирует предупреждение и всё равно его выполняет"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It is skipped silently; there is no automatic fallback.",
+                "ru": "Он пропускается молча; автоматического fallback нет."
+              }
+            }
+          ]
+        },
+        {
+          "id": "no-tx-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the default behaviour when no transaction is active.",
+            "ru": "Собери поведение по умолчанию, когда активной транзакции нет."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Skipped, and nothing tells you about it.",
+              "ru": "Пропускается, и об этом ничего не сообщает."
+            },
+            "incorrect": {
+              "en": "Without an active transaction the listener is skipped.",
+              "ru": "Без активной транзакции listener пропускается."
+            }
+          },
+          "tokens": {
+            "en": ["without", "an", "active", "transaction", "the", "listener", "is", "skipped"],
+            "ru": ["без", "активной", "транзакции", "listener", "пропускается"]
+          },
+          "distractors": {
+            "en": ["runs", "immediately"],
+            "ru": ["выполняется", "сразу"]
+          }
+        },
+        {
+          "id": "no-tx-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing attribute name.",
+            "ru": "Впиши имя пропущенного атрибута."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That attribute turns the skip into an immediate call.",
+              "ru": "Этот атрибут превращает пропуск в немедленный вызов."
+            },
+            "incorrect": {
+              "en": "It is fallbackExecution = true.",
+              "ru": "Это fallbackExecution = true."
+            }
+          },
+          "text": {
+            "en": "Setting `___ = true` makes a transactional event listener run immediately when no transaction is active.",
+            "ru": "`___ = true` заставляет transactional event listener выполниться сразу, когда активной транзакции нет."
+          },
+          "blanks": [
+            {
+              "en": ["fallbackExecution"],
+              "ru": ["fallbackExecution"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "after-commit-cannot-undo",
+      "title": {
+        "en": "After the commit there is no going back",
+        "ru": "После commit пути назад нет"
+      },
+      "summary": {
+        "en": "An AFTER_COMMIT listener runs once the transaction is finished, so an exception from it cannot undo the committed changes.",
+        "ru": "Listener AFTER_COMMIT выполняется, когда транзакция уже завершена, поэтому exception из него не может отменить зафиксированные изменения."
+      },
+      "discovery": [
+        {
+          "id": "cannot-undo-d1-throws",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The email provider is down, so this AFTER_COMMIT listener throws. Is the order row still in the database?",
+            "ru": "Email provider недоступен, поэтому этот listener AFTER_COMMIT бросает exception. Останется ли строка заказа в базе?"
+          },
+          "code": "@TransactionalEventListener   // AFTER_COMMIT by default\npublic void sendReceipt(OrderPlaced event) {\n    emailClient.sendReceipt(event.orderId());   // throws MailException\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Yes, the row is there. `AFTER_COMMIT` means the transaction boundary is already closed: the database work is committed and durable before the listener is even called. An exception thrown now has nothing to roll back, and it does not travel back into the business method, which returned long ago.\n\n```mermaid\nflowchart LR\n  A[\"commit succeeds\"] --> B[\"transaction boundary closed\"]\n  B --> C[\"AFTER_COMMIT listener throws\"]\n  C --> D[\"committed data stays committed\"]\n```\n\nSo the honest description of this phase is: the data is safe, the side effect is not. That leaves the state split — the order exists, the receipt was never sent — and you have to choose a guarantee explicitly: retry inside the listener, a separate transaction for the listener's own writes, or a durable record that another process finishes later.",
+            "ru": "Да, строка на месте. `AFTER_COMMIT` означает, что граница транзакции уже закрыта: работа с базой зафиксирована и durable ещё до вызова listener. Брошенному сейчас exception нечего откатывать, и он не возвращается в бизнес-метод, который завершился давно.\n\n```mermaid\nflowchart LR\n  A[\"commit успешен\"] --> B[\"граница транзакции закрыта\"]\n  B --> C[\"listener AFTER_COMMIT бросает exception\"]\n  C --> D[\"зафиксированные данные остаются зафиксированными\"]\n```\n\nЧестное описание этой фазы такое: данные в безопасности, побочное действие — нет. Состояние оказывается расщеплённым: заказ есть, чек не отправлен, — и гарантию приходится выбирать явно: retry внутри listener, отдельная транзакция для собственных записей listener или durable-запись, которую позже доведёт другой процесс."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the commit is final before the listener even starts.",
+              "ru": "Верно — commit финален ещё до старта listener."
+            },
+            "incorrect": {
+              "en": "It stays: the commit already finished, so the listener's exception changes nothing in the database.",
+              "ru": "Она остаётся: commit уже завершён, поэтому exception listener ничего не меняет в базе."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Yes — the commit already happened and the listener cannot undo it",
+                "ru": "Да — commit уже произошёл, и listener не может его отменить"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "No — the exception propagates and rolls the transaction back",
+                "ru": "Нет — exception выходит наружу и откатывает транзакцию"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The transaction is already finished; there is nothing left to roll back.",
+                "ru": "Транзакция уже завершена; откатывать нечего."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "No — Spring re-runs the whole transaction",
+                "ru": "Нет — Spring перезапускает всю транзакцию"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no automatic retry or re-run of a committed transaction.",
+                "ru": "Автоматического retry или перезапуска зафиксированной транзакции нет."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cannot-undo-p1-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "An exception thrown by an AFTER_COMMIT transactional event listener rolls back the transaction that published the event.",
+            "ru": "Exception, брошенный transactional event listener в фазе AFTER_COMMIT, откатывает транзакцию, опубликовавшую event."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The boundary closed before the listener ran.",
+              "ru": "Граница закрылась до выполнения listener."
+            },
+            "incorrect": {
+              "en": "No — the commit is already final when an AFTER_COMMIT listener runs.",
+              "ru": "Нет — на момент выполнения listener AFTER_COMMIT commit уже финален."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "cannot-undo-p2-state",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "An AFTER_COMMIT transactional event listener fails while notifying an external system. What is the resulting state?",
+            "ru": "Transactional event listener в фазе AFTER_COMMIT падает при уведомлении внешней системы. Какое состояние получится?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The database part is durable, the side effect is missing.",
+              "ru": "Часть в базе durable, побочного действия нет."
+            },
+            "incorrect": {
+              "en": "The database change stays committed and the notification simply did not happen.",
+              "ru": "Изменение в базе остаётся зафиксированным, а уведомление просто не случилось."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The database change is committed, but the notification did not happen",
+                "ru": "Изменение в базе зафиксировано, но уведомления не было"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Both the database change and the notification are undone",
+                "ru": "И изменение в базе, и уведомление отменяются"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The commit cannot be undone by a later failure outside the transaction.",
+                "ru": "Более поздний сбой вне транзакции не может отменить commit."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Both succeed, because Spring retries the listener automatically",
+                "ru": "Оба успешны, потому что Spring автоматически повторяет listener"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no automatic retry; you have to add one yourself.",
+                "ru": "Автоматического retry нет; его нужно добавить самому."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cannot-undo-p3-strategy",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A side effect in an AFTER_COMMIT transactional event listener keeps failing. Which response actually helps?",
+            "ru": "Побочное действие в transactional event listener фазы AFTER_COMMIT постоянно падает. Какой ответ реально помогает?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "You cannot undo the commit, so you make the side effect recoverable.",
+              "ru": "Отменить commit нельзя, поэтому побочное действие делают восстановимым."
+            },
+            "incorrect": {
+              "en": "Retry it, or record it durably so another process can finish it — the commit itself is final.",
+              "ru": "Повторяй его или сохрани durable-запись, чтобы другой процесс довёл дело — сам commit финален."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Retry it, or record it durably so a separate process can finish it",
+                "ru": "Повторять его или сохранить durable-запись, чтобы его довёл отдельный процесс"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Throw a RuntimeException from the listener so the commit is reverted",
+                "ru": "Бросить RuntimeException из listener, чтобы commit откатился"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The commit is final; throwing changes nothing in the database.",
+                "ru": "Commit финален; бросок exception ничего не меняет в базе."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Move the side effect to BEFORE_COMMIT so a failure rolls everything back",
+                "ru": "Перенести побочное действие в BEFORE_COMMIT, чтобы сбой всё откатил"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Then the side effect can act on data that never commits, and its failure kills good transactions.",
+                "ru": "Тогда побочное действие сработает по данным, которые не зафиксируются, а его сбой убьёт нормальные транзакции."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "requires-new-for-writes",
+      "title": {
+        "en": "Writes from the listener need their own transaction",
+        "ru": "Записи из listener нужна своя транзакция"
+      },
+      "summary": {
+        "en": "A listener that must persist its own row after the commit needs a new transaction, typically @Transactional(propagation = REQUIRES_NEW).",
+        "ru": "Listener, который должен сохранить свою строку после commit, нуждается в новой транзакции — обычно @Transactional(propagation = REQUIRES_NEW)."
+      },
+      "discovery": [
+        {
+          "id": "requires-new-d1-spot-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "The audit row must really be persisted. What is wrong with this listener?",
+            "ru": "Audit-строка обязана действительно сохраниться. Что не так с этим listener?"
+          },
+          "code": "@Component\nclass AuditListener {\n\n    @TransactionalEventListener   // AFTER_COMMIT by default\n    public void writeAudit(OrderPlaced event) {\n        auditRepository.save(new AuditRow(event.orderId()));\n    }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "The listener runs after the original transaction has committed, so there is no transaction left for `save` to take part in. The write is not covered by any boundary you control — the transaction it might have joined is already finished.\n\nGive the listener its own transaction:\n\n```java\n@TransactionalEventListener\n@Transactional(propagation = Propagation.REQUIRES_NEW)\npublic void writeAudit(OrderPlaced event) {\n    auditRepository.save(new AuditRow(event.orderId()));\n}\n```\n\n`REQUIRES_NEW` always starts a fresh transaction instead of trying to join an existing one, which is exactly what is needed here. It also makes the independence explicit: this new transaction commits or rolls back on its own, and either way the original commit stands. That is the price of being after the boundary — two transactions, two outcomes.",
+            "ru": "Listener выполняется после commit исходной транзакции, поэтому транзакции, в которой мог бы участвовать `save`, уже нет. Запись не покрыта границей, которой ты управляешь — та транзакция, к которой он мог бы присоединиться, уже завершена.\n\nДай listener свою транзакцию:\n\n```java\n@TransactionalEventListener\n@Transactional(propagation = Propagation.REQUIRES_NEW)\npublic void writeAudit(OrderPlaced event) {\n    auditRepository.save(new AuditRow(event.orderId()));\n}\n```\n\n`REQUIRES_NEW` всегда открывает новую транзакцию вместо попытки присоединиться к существующей — именно это здесь и нужно. Это также делает независимость явной: новая транзакция фиксируется или откатывается сама по себе, и в любом случае исходный commit остаётся. Это цена работы за границей — две транзакции и два исхода."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — after the commit the listener has no transaction of its own.",
+              "ru": "Верно — после commit у listener нет своей транзакции."
+            },
+            "incorrect": {
+              "en": "The original transaction is already committed, so the write needs a new transaction (REQUIRES_NEW).",
+              "ru": "Исходная транзакция уже зафиксирована, поэтому записи нужна новая транзакция (REQUIRES_NEW)."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It runs after the original transaction finished, so its write has no transaction — it needs a new one",
+                "ru": "Он выполняется после завершения исходной транзакции, поэтому у записи нет транзакции — нужна новая"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It should use @EventListener so it shares the original transaction",
+                "ru": "Надо использовать @EventListener, чтобы разделить исходную транзакцию"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That would run before the commit, so the audit row could describe an order that never exists.",
+                "ru": "Тогда он выполнится до commit, и audit-строка могла бы описывать несуществующий заказ."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — the AFTER_COMMIT phase still runs inside the original transaction",
+                "ru": "Ничего — фаза AFTER_COMMIT всё ещё выполняется внутри исходной транзакции"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The phase runs after the commit; the boundary is closed by then.",
+                "ru": "Фаза выполняется после commit; к этому моменту граница закрыта."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "requires-new-p1-inside-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "An AFTER_COMMIT transactional event listener still runs inside the transaction that published the event.",
+            "ru": "Transactional event listener в фазе AFTER_COMMIT всё ещё выполняется внутри транзакции, опубликовавшей event."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That transaction is finished; the listener is outside it.",
+              "ru": "Та транзакция завершена; listener находится вне неё."
+            },
+            "incorrect": {
+              "en": "No — it runs after that transaction committed, so it has no transaction of its own.",
+              "ru": "Нет — он выполняется после commit той транзакции, поэтому своей транзакции у него нет."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "requires-new-p2-why",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why should database writes inside an AFTER_COMMIT transactional event listener use `REQUIRES_NEW`?",
+            "ru": "Почему записи в базу внутри transactional event listener фазы AFTER_COMMIT должны использовать `REQUIRES_NEW`?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "There is nothing to join, so a fresh transaction is the only option.",
+              "ru": "Присоединяться не к чему, поэтому новая транзакция — единственный вариант."
+            },
+            "incorrect": {
+              "en": "The original transaction is already complete, so the write needs a transaction of its own.",
+              "ru": "Исходная транзакция уже завершена, поэтому записи нужна собственная транзакция."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The original transaction is already complete, so the write needs a transaction of its own",
+                "ru": "Исходная транзакция уже завершена, поэтому записи нужна своя транзакция"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Because REQUIRES_NEW makes the write part of the original commit",
+                "ru": "Потому что REQUIRES_NEW делает запись частью исходного commit"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It is a separate transaction; it cannot join one that already committed.",
+                "ru": "Это отдельная транзакция; присоединиться к уже зафиксированной нельзя."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Because it moves the listener onto a background thread",
+                "ru": "Потому что она переносит listener в фоновый поток"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Propagation has nothing to do with threads.",
+                "ru": "Propagation никак не связана с потоками."
+              }
+            }
+          ]
+        },
+        {
+          "id": "requires-new-p3-fill-two",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill in the phase and the propagation.",
+            "ru": "Впиши фазу и propagation."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Durable data first, then a transaction of the listener's own.",
+              "ru": "Сначала durable-данные, затем собственная транзакция listener."
+            },
+            "incorrect": {
+              "en": "AFTER_COMMIT for durable data, REQUIRES_NEW so the listener's write has its own transaction.",
+              "ru": "AFTER_COMMIT для durable-данных, REQUIRES_NEW чтобы у записи listener была своя транзакция."
+            }
+          },
+          "text": {
+            "en": "A listener that saves its own row after a successful commit combines `@TransactionalEventListener(phase = TransactionPhase.___)` with `@Transactional(propagation = Propagation.___)`.",
+            "ru": "Listener, который сохраняет свою строку после успешного commit, совмещает `@TransactionalEventListener(phase = TransactionPhase.___)` с `@Transactional(propagation = Propagation.___)`."
+          },
+          "blanks": [
+            {
+              "en": ["AFTER_COMMIT"],
+              "ru": ["AFTER_COMMIT"]
+            },
+            {
+              "en": ["REQUIRES_NEW"],
+              "ru": ["REQUIRES_NEW"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "not-a-replacement-for-outbox",
+      "title": {
+        "en": "Not a replacement for the Outbox pattern",
+        "ru": "Не замена Outbox pattern"
+      },
+      "summary": {
+        "en": "A crash between the commit and the external send still loses the event, so reliable external messaging needs the Outbox pattern.",
+        "ru": "Падение между commit и отправкой во внешнюю систему всё равно теряет event, поэтому надёжной внешней доставке нужен Outbox pattern."
+      },
+      "discovery": [
+        {
+          "id": "outbox-d1-crash",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The transaction commits, the AFTER_COMMIT listener starts, and the process is killed before the Kafka send completes. What is the state afterwards?",
+            "ru": "Транзакция сделала commit, listener AFTER_COMMIT начал работу, и процесс убит до завершения отправки в Kafka. Какое состояние получится?"
+          },
+          "code": "@TransactionalEventListener   // AFTER_COMMIT by default\npublic void publishToKafka(OrderPlaced event) {\n    kafkaTemplate.send(\"orders\", event);   // process dies here\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "The order row is committed and the message is gone. Nothing durable ever recorded the intention to send it, so after a restart there is nothing to resume from. A database commit and a remote call simply cannot be one atomic operation.\n\nThe **Outbox pattern** is the standard fix: store the outgoing message as a row in the **same transaction** as the business data, then let a separate publisher read unsent rows, send them, and mark them sent — retrying until it succeeds.\n\n```mermaid\nflowchart LR\n  A[\"one transaction: order row + outbox row\"] --> B[\"commit\"]\n  B --> C[\"publisher reads unsent outbox rows\"]\n  C --> D[\"send to the broker, retry on failure\"]\n  D --> E[\"mark the row as sent\"]\n```\n\nSo `@TransactionalEventListener` is a **timing hook inside one Spring application**, not a delivery guarantee. It is the right tool for in-process side effects; it is not a durable message broker, and it is not an outbox.",
+            "ru": "Строка заказа зафиксирована, а сообщение потеряно. Ничто durable не зафиксировало намерение отправить его, поэтому после перезапуска возобновлять нечего. Database commit и удалённый вызов просто не могут быть одной атомарной операцией.\n\n**Outbox pattern** — стандартное решение: сохрани исходящее сообщение строкой в **той же транзакции**, что и бизнес-данные, а отдельный publisher пусть читает неотправленные строки, отправляет их и помечает отправленными, повторяя до успеха.\n\n```mermaid\nflowchart LR\n  A[\"одна транзакция: строка заказа + строка outbox\"] --> B[\"commit\"]\n  B --> C[\"publisher читает неотправленные строки outbox\"]\n  C --> D[\"отправка в broker, retry при сбое\"]\n  D --> E[\"пометить строку отправленной\"]\n```\n\nЗначит, `@TransactionalEventListener` — это **timing hook внутри одного Spring-приложения**, а не гарантия доставки. Он подходит для побочных действий внутри процесса; он не durable message broker и не outbox."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the commit survived the crash, the message did not.",
+              "ru": "Верно — commit пережил падение, сообщение — нет."
+            },
+            "incorrect": {
+              "en": "The row is committed and the message is lost: nothing durable recorded the send.",
+              "ru": "Строка зафиксирована, сообщение потеряно: отправку ничто durable не зафиксировало."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The database change is committed and the message is lost",
+                "ru": "Изменение в базе зафиксировано, а сообщение потеряно"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Kafka receives the message when the process restarts",
+                "ru": "Kafka получит сообщение при перезапуске процесса"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing durable recorded the intent to send, so there is nothing to resume.",
+                "ru": "Намерение отправить нигде durable не сохранено, значит возобновлять нечего."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The database change is rolled back during recovery",
+                "ru": "Изменение в базе откатывается при восстановлении"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A committed transaction is not undone by a crash.",
+                "ru": "Зафиксированная транзакция не отменяется из-за падения процесса."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "outbox-p1-guarantee-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "`@TransactionalEventListener` guarantees that a message sent to Kafka after the commit is never lost.",
+            "ru": "`@TransactionalEventListener` гарантирует, что сообщение, отправляемое в Kafka после commit, никогда не потеряется."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It is a timing hook, not a delivery guarantee.",
+              "ru": "Это timing hook, а не гарантия доставки."
+            },
+            "incorrect": {
+              "en": "No — a crash between the commit and the send loses the message.",
+              "ru": "Нет — падение между commit и отправкой теряет сообщение."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "outbox-p2-difference",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does the Outbox pattern add that an AFTER_COMMIT transactional event listener cannot provide?",
+            "ru": "Что даёт Outbox pattern, чего не может transactional event listener в фазе AFTER_COMMIT?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The message becomes durable data, committed with the business data.",
+              "ru": "Сообщение становится durable-данными, зафиксированными вместе с бизнес-данными."
+            },
+            "incorrect": {
+              "en": "It adds a durable record of the outgoing message that a separate publisher retries.",
+              "ru": "Он добавляет durable-запись исходящего сообщения, которую повторяет отдельный publisher."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A durable record of the outgoing message, committed with the data, that a separate publisher retries",
+                "ru": "Durable-запись исходящего сообщения, зафиксированную вместе с данными, которую повторяет отдельный publisher"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Faster delivery of the message to the broker",
+                "ru": "Более быструю доставку сообщения в broker"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It usually adds latency; what it adds on purpose is durability.",
+                "ru": "Обычно он добавляет задержку; намеренно он добавляет durability."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Automatic rollback of the business data if the send fails",
+                "ru": "Автоматический rollback бизнес-данных при сбое отправки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The data stays committed; the outbox retries the send instead.",
+                "ru": "Данные остаются зафиксированными; вместо отката outbox повторяет отправку."
+              }
+            }
+          ]
+        },
+        {
+          "id": "outbox-p3-sort",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the steps of the Outbox pattern.",
+            "ru": "Расставь по порядку шаги Outbox pattern."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The message is committed with the data, then delivered by a separate worker.",
+              "ru": "Сообщение фиксируется вместе с данными, затем доставляется отдельным worker."
+            },
+            "incorrect": {
+              "en": "Save data and the outbox row together, commit, then a separate publisher sends and marks the row.",
+              "ru": "Сохрани данные и строку outbox вместе, сделай commit, затем отдельный publisher отправляет и помечает строку."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Save the business data and an outbox row in the same transaction",
+                "ru": "Сохранить бизнес-данные и строку outbox в одной транзакции"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Commit the transaction, so both are durable",
+                "ru": "Сделать commit транзакции, чтобы оба стали durable"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "A separate publisher reads the unsent outbox rows",
+                "ru": "Отдельный publisher читает неотправленные строки outbox"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "It sends each message to the external system, retrying on failure",
+                "ru": "Он отправляет каждое сообщение во внешнюю систему, повторяя при сбое"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "It marks the outbox row as sent",
+                "ru": "Он помечает строку outbox как отправленную"
+              }
+            }
+          ]
+        },
+        {
+          "id": "outbox-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing pattern name.",
+            "ru": "Впиши имя пропущенного паттерна."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The message is stored as data, so a retry is always possible.",
+              "ru": "Сообщение хранится как данные, поэтому retry всегда возможен."
+            },
+            "incorrect": {
+              "en": "It is the Outbox pattern: the message is committed together with the data.",
+              "ru": "Это Outbox pattern: сообщение фиксируется вместе с данными."
+            }
+          },
+          "text": {
+            "en": "Reliable external delivery stores the outgoing message in the same transaction as the data — the ___ pattern.",
+            "ru": "Надёжная внешняя доставка сохраняет исходящее сообщение в той же транзакции, что и данные — это ___ pattern."
+          },
+          "blanks": [
+            {
+              "en": ["outbox"],
+              "ru": ["outbox", "аутбокс"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "async-transactional-listener",
+      "title": {
+        "en": "Adding @Async to the listener",
+        "ru": "Добавляем @Async к listener"
+      },
+      "summary": {
+        "en": "@Async moves the listener body to another thread, and the original transaction context does not travel with it.",
+        "ru": "@Async переносит тело listener в другой поток, и исходный transaction context туда не переезжает."
+      },
+      "discovery": [
+        {
+          "id": "async-d1-context",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What is true once this transactional event listener is also asynchronous?",
+            "ru": "Что верно, если этот transactional event listener стал ещё и асинхронным?"
+          },
+          "code": "@Async\n@TransactionalEventListener   // AFTER_COMMIT by default\npublic void reindex(OrderPlaced event) {\n    searchIndex.refresh(event.orderId());\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "The two annotations answer different questions. The phase decides **when** the work is triggered (still after the commit); `@Async` decides **where** it runs — the call is handed to an executor and continues on another thread.\n\n```mermaid\nflowchart LR\n  A[\"commit\"] --> B[\"AFTER_COMMIT phase reached\"]\n  B --> C[\"task submitted to the executor\"]\n  C --> D[\"listener body runs on another thread\"]\n```\n\nWhat you lose on that thread hop: transaction context is thread-bound, so the async listener has no transaction of its own — a write there needs one explicitly. The caller is also gone, so an exception ends in the executor instead of reaching the publisher, which makes async listeners easy to lose silently. And because `@Async` is proxy-based, the usual proxy rules apply: it must be a bean method called through the proxy, not a self-invocation.",
+            "ru": "Эти две аннотации отвечают на разные вопросы. Фаза решает, **когда** работа запускается (всё так же после commit); `@Async` решает, **где** она выполняется — вызов передаётся executor и продолжается в другом потоке.\n\n```mermaid\nflowchart LR\n  A[\"commit\"] --> B[\"наступила фаза AFTER_COMMIT\"]\n  B --> C[\"задача отправлена в executor\"]\n  C --> D[\"тело listener выполняется в другом потоке\"]\n```\n\nЧто теряется при переходе на другой поток: transaction context привязан к потоку, поэтому у async listener нет своей транзакции — записи она нужна явно. Вызывающего кода тоже нет, поэтому exception остаётся в executor, а не доходит до publisher, — из-за этого async listeners легко потерять незаметно. А так как `@Async` работает через proxy, действуют обычные правила proxy: это должен быть метод бина, вызванный через proxy, а не self-invocation."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the phase decides when, @Async decides on which thread.",
+              "ru": "Верно — фаза решает когда, @Async решает в каком потоке."
+            },
+            "incorrect": {
+              "en": "It still runs after the commit, but on another thread and without the original transaction context.",
+              "ru": "Он всё равно выполняется после commit, но в другом потоке и без исходного transaction context."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It runs on another thread after the commit, without the original transaction context",
+                "ru": "Он выполняется в другом потоке после commit, без исходного transaction context"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It carries the original transaction, so its writes join that commit",
+                "ru": "Он переносит исходную транзакцию, поэтому его записи попадают в тот же commit"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Transaction context is thread-bound, and that transaction has already committed anyway.",
+                "ru": "Transaction context привязан к потоку, и та транзакция всё равно уже зафиксирована."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It runs at publish time, because the async task starts earlier",
+                "ru": "Он выполняется при публикации, потому что async-задача стартует раньше"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The phase still decides when the task is submitted; async only changes the thread.",
+                "ru": "Фаза всё равно решает, когда задача отправляется; async меняет только поток."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "async-p1-context-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Adding `@Async` to a transactional event listener carries the original transaction context into the new thread.",
+            "ru": "Добавление `@Async` к transactional event listener переносит исходный transaction context в новый поток."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Transaction context is thread-bound and does not follow the task.",
+              "ru": "Transaction context привязан к потоку и за задачей не следует."
+            },
+            "incorrect": {
+              "en": "No — the context stays on the original thread; the async listener has none.",
+              "ru": "Нет — context остаётся в исходном потоке; у async listener его нет."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "async-p2-consequence",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What changes when a transactional event listener is also annotated `@Async`?",
+            "ru": "Что меняется, когда transactional event listener дополнительно помечен `@Async`?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Same trigger, different thread — and nobody left to report failures to.",
+              "ru": "Тот же триггер, другой поток — и сообщать о сбоях больше некому."
+            },
+            "incorrect": {
+              "en": "The phase still decides when, but the body runs on another thread with no transaction and no caller.",
+              "ru": "Фаза по-прежнему решает когда, но тело выполняется в другом потоке без транзакции и без вызывающего кода."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The phase still decides when the work starts, but it runs on another thread with no transaction context and no caller to receive its exception",
+                "ru": "Фаза по-прежнему решает, когда работа стартует, но она выполняется в другом потоке без transaction context и без вызывающего кода, который получил бы exception"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The phase is ignored and the listener runs at publish time",
+                "ru": "Фаза игнорируется, и listener выполняется в момент публикации"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The phase is unchanged; @Async only moves the execution to another thread.",
+                "ru": "Фаза не меняется; @Async лишь переносит выполнение в другой поток."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The commit waits until the async listener has finished",
+                "ru": "Commit ждёт, пока async listener не завершится"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The commit does not wait; the task is handed to an executor and the caller moves on.",
+                "ru": "Commit не ждёт; задача уходит в executor, а вызывающий код продолжает работу."
+              }
+            }
+          ]
+        },
+        {
+          "id": "async-p3-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing word.",
+            "ru": "Впиши пропущенное слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Nothing transactional follows the task to the new thread.",
+              "ru": "Ничего транзакционного за задачей в новый поток не переходит."
+            },
+            "incorrect": {
+              "en": "It needs its own transaction: the context is thread-bound and stays behind.",
+              "ru": "Ему нужна своя транзакция: context привязан к потоку и остаётся позади."
+            }
+          },
+          "text": {
+            "en": "Transaction context is thread-bound, so an `@Async` listener needs its own ___ if it must write to the database.",
+            "ru": "Transaction context привязан к потоку, поэтому `@Async` listener нужна своя ___, если он должен писать в базу."
+          },
+          "blanks": [
+            {
+              "en": ["transaction"],
+              "ru": ["транзакция", "транзакцию", "transaction"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "keep-the-listener-small",
+      "title": {
+        "en": "Keep the listener small",
+        "ru": "Держи listener маленьким"
+      },
+      "summary": {
+        "en": "By default the listener runs synchronously on the commit path, so slow external work should be queued instead of blocking it.",
+        "ru": "По умолчанию listener выполняется синхронно на пути commit, поэтому медленную внешнюю работу лучше поставить в очередь, а не блокировать этот путь."
+      },
+      "discovery": [
+        {
+          "id": "small-d1-slow-call",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "This AFTER_COMMIT listener makes a slow call to an external provider. What is the effect on the request that placed the order?",
+            "ru": "Этот listener AFTER_COMMIT делает медленный вызов внешнего провайдера. Как это влияет на запрос, оформивший заказ?"
+          },
+          "code": "@TransactionalEventListener   // AFTER_COMMIT by default\npublic void notifyPartner(OrderPlaced event) {\n    partnerClient.notify(event.orderId());   // ~3 seconds\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "The request waits. Unless you add `@Async`, the listener is invoked synchronously by the transaction manager in the same thread that ran the transaction — so its duration is added to the caller's response time, and the thread and connection resources stay occupied.\n\n```mermaid\nflowchart LR\n  A[\"commit\"] --> B[\"AFTER_COMMIT listener, same thread\"]\n  B --> C[\"caller waits for it to finish\"]\n  C --> D[\"service method call returns\"]\n```\n\nThat is why the good fits are small in-process side effects: cache eviction, notification triggers, search-index refresh requests, audit hooks, domain events consumed inside the same application. For slow or unreliable external work, hand it off instead — queue it, make it async, or record it in an outbox for a separate worker — rather than parking a long side effect on the commit path.",
+            "ru": "Запрос ждёт. Если не добавить `@Async`, transaction manager вызывает listener синхронно в том же потоке, где выполнялась транзакция — его длительность добавляется ко времени ответа, а поток и ресурсы соединения остаются занятыми.\n\n```mermaid\nflowchart LR\n  A[\"commit\"] --> B[\"listener AFTER_COMMIT, тот же поток\"]\n  B --> C[\"вызывающий код ждёт его завершения\"]\n  C --> D[\"вызов метода service возвращается\"]\n```\n\nПоэтому хорошо подходят небольшие побочные действия внутри процесса: инвалидация кеша, триггеры уведомлений, запросы на обновление поискового индекса, audit hooks, domain events для того же приложения. Медленную или ненадёжную внешнюю работу лучше передать дальше — в очередь, в async или в outbox для отдельного worker — а не оставлять долгое побочное действие на пути commit."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — by default the listener shares the caller's thread.",
+              "ru": "Верно — по умолчанию listener делит поток с вызывающим кодом."
+            },
+            "incorrect": {
+              "en": "The caller waits: the listener runs synchronously, in the same thread, right after the commit.",
+              "ru": "Вызывающий код ждёт: listener выполняется синхронно, в том же потоке, сразу после commit."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It waits — the listener runs synchronously on the commit path, in the same thread",
+                "ru": "Он ждёт — listener выполняется синхронно на пути commit, в том же потоке"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "None — AFTER_COMMIT listeners always run on a background thread",
+                "ru": "Никак — listeners AFTER_COMMIT всегда выполняются в фоновом потоке"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Only @Async moves them off the caller's thread; by default they are synchronous.",
+                "ru": "Только @Async уводит их с потока вызывающего кода; по умолчанию они синхронные."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The transaction stays open for those three seconds",
+                "ru": "Транзакция остаётся открытой все эти три секунды"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The transaction already committed; what is blocked is the caller, not the transaction.",
+                "ru": "Транзакция уже зафиксирована; блокируется вызывающий код, а не транзакция."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "small-p1-thread-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "By default a `@TransactionalEventListener` runs on a separate background thread.",
+            "ru": "По умолчанию `@TransactionalEventListener` выполняется в отдельном фоновом потоке."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It is synchronous unless you add @Async.",
+              "ru": "Он синхронный, если не добавить @Async."
+            },
+            "incorrect": {
+              "en": "No — it runs synchronously in the transaction's thread; only @Async changes that.",
+              "ru": "Нет — он выполняется синхронно в потоке транзакции; это меняет только @Async."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "small-p2-good-fit",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which side effect is a good fit for a small AFTER_COMMIT transactional event listener inside one Spring application?",
+            "ru": "Какое побочное действие хорошо подходит для небольшого transactional event listener фазы AFTER_COMMIT внутри одного Spring-приложения?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Short, in-process work that needs durable data first.",
+              "ru": "Короткая работа внутри процесса, которой сначала нужны durable-данные."
+            },
+            "incorrect": {
+              "en": "Small in-process work such as cache eviction or a search-index refresh request.",
+              "ru": "Небольшая работа внутри процесса: инвалидация кеша или запрос на обновление поискового индекса."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Evicting a cache entry or requesting a search-index refresh",
+                "ru": "Удаление записи из кеша или запрос на обновление поискового индекса"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A long synchronous report build against a slow external service",
+                "ru": "Долгая синхронная сборка отчёта через медленный внешний сервис"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That blocks the commit path; queue it or move it to a worker instead.",
+                "ru": "Это блокирует путь commit; лучше отправить в очередь или отдать worker."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Validating the incoming request payload",
+                "ru": "Валидация входящих данных запроса"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Validation belongs before the write, inside the transaction.",
+                "ru": "Валидация относится к этапу до записи, внутри транзакции."
+              }
+            }
+          ]
+        },
+        {
+          "id": "small-p3-match-work",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each kind of post-commit work with where it should run.",
+            "ru": "Сопоставь каждый вид работы после commit с тем, где её выполнять."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Small work inline, slow work elsewhere, reliable messages in an outbox.",
+              "ru": "Маленькая работа — на месте, медленная — в другом месте, надёжные сообщения — в outbox."
+            },
+            "incorrect": {
+              "en": "Keep the listener small; slow work goes to a worker and reliable messages go through an outbox row.",
+              "ru": "Держи listener маленьким; медленная работа уходит worker, а надёжные сообщения — через строку outbox."
+            }
+          },
+          "pairs": [
+            {
+              "id": "p1",
+              "left": {
+                "en": "Evicting a cache entry after a save",
+                "ru": "Удаление записи из кеша после сохранения"
+              },
+              "right": {
+                "en": "A small AFTER_COMMIT listener",
+                "ru": "Небольшой listener AFTER_COMMIT"
+              }
+            },
+            {
+              "id": "p2",
+              "left": {
+                "en": "A slow call to an external provider",
+                "ru": "Медленный вызов внешнего провайдера"
+              },
+              "right": {
+                "en": "Queued work or a background worker, off the commit path",
+                "ru": "Очередь или фоновый worker, вне пути commit"
+              }
+            },
+            {
+              "id": "p3",
+              "left": {
+                "en": "A message that must reach an external broker",
+                "ru": "Сообщение, которое обязано дойти до внешнего broker"
+              },
+              "right": {
+                "en": "An outbox row committed together with the data",
+                "ru": "Строка outbox, зафиксированная вместе с данными"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "putting-it-together",
+      "title": {
+        "en": "Putting it together",
+        "ru": "Собираем всё вместе"
+      },
+      "summary": {
+        "en": "One event end to end: staged work at publish time, the phase chosen by the outcome, the silent skip with no transaction, and what the listener can and cannot guarantee.",
+        "ru": "Один event целиком: подготовленная работа при публикации, фаза по исходу, молчаливый пропуск без транзакции и то, что listener может и не может гарантировать."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "cap-d1-full-flow",
+          "type": "predict_output",
+          "prompt": {
+            "en": "`placeOrder` returns normally and the email provider is down. What is the final state?",
+            "ru": "`placeOrder` завершается нормально, а email provider недоступен. Какое итоговое состояние?"
+          },
+          "code": "@Transactional\npublic void placeOrder(Order order) {\n    orderRepository.save(order);\n    publisher.publishEvent(new OrderPlaced(order.id()));\n}\n\n@TransactionalEventListener   // AFTER_COMMIT by default\npublic void sendReceipt(OrderPlaced e) {\n    emailClient.sendReceipt(e.orderId());       // throws MailException\n}\n\n@TransactionalEventListener(phase = TransactionPhase.AFTER_ROLLBACK)\npublic void releaseReservation(OrderPlaced e) {\n    reservations.release(e.orderId());\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Three separate decisions produce this answer, and each one is a different atom:\n\n1. **The publish is deferred.** A transaction was active, so both listeners were registered as synchronizations instead of running immediately.\n2. **The outcome selects the phase.** The method returned normally, so the transaction committed: `AFTER_COMMIT` fires, `AFTER_ROLLBACK` never does. A failing listener is not a rollback.\n3. **The commit is final.** The email failure happens outside the closed boundary, so the order row stays.\n\n```mermaid\nflowchart TD\n  A[\"publishEvent inside @Transactional\"] --> B{\"transaction active?\"}\n  B -->|\"no\"| S[\"skipped unless fallbackExecution\"]\n  B -->|\"yes\"| C[\"register synchronization\"]\n  C --> D{\"outcome\"}\n  D -->|\"commit\"| E[\"AFTER_COMMIT: side effect, cannot undo the commit\"]\n  D -->|\"rollback\"| F[\"AFTER_ROLLBACK: compensation only\"]\n  E --> G[\"AFTER_COMPLETION\"]\n  F --> G\n```\n\nThe committed row plus the missing email is exactly the gap that the listener does not close for you: for its own database writes use `REQUIRES_NEW`, and for messages that must reach an external system use an outbox.",
+            "ru": "К этому ответу ведут три отдельных решения, и каждое — свой атом:\n\n1. **Публикация отложена.** Транзакция была активна, поэтому оба listeners зарегистрировались как synchronizations, а не выполнились сразу.\n2. **Исход выбирает фазу.** Метод вернулся нормально, значит был commit: срабатывает `AFTER_COMMIT`, а `AFTER_ROLLBACK` — никогда. Сбой listener не является rollback.\n3. **Commit финален.** Сбой отправки письма происходит вне закрытой границы, поэтому строка заказа остаётся.\n\n```mermaid\nflowchart TD\n  A[\"publishEvent внутри @Transactional\"] --> B{\"транзакция активна?\"}\n  B -->|\"нет\"| S[\"пропуск, если нет fallbackExecution\"]\n  B -->|\"да\"| C[\"зарегистрировать synchronization\"]\n  C --> D{\"исход\"}\n  D -->|\"commit\"| E[\"AFTER_COMMIT: побочное действие, commit не отменить\"]\n  D -->|\"rollback\"| F[\"AFTER_ROLLBACK: только компенсация\"]\n  E --> G[\"AFTER_COMPLETION\"]\n  F --> G\n```\n\nЗафиксированная строка плюс неотправленное письмо — это ровно тот разрыв, который listener за тебя не закрывает: для его собственных записей в базу используй `REQUIRES_NEW`, а для сообщений, которые обязаны дойти во внешнюю систему — outbox."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — committed data, missing side effect, and no rollback phase.",
+              "ru": "Верно — данные зафиксированы, побочного действия нет, фаза rollback не наступила."
+            },
+            "incorrect": {
+              "en": "The row is committed, no email was sent, and the AFTER_ROLLBACK listener never ran.",
+              "ru": "Строка зафиксирована, письмо не отправлено, а listener AFTER_ROLLBACK не выполнялся."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The order row is committed, no email was sent, and releaseReservation never ran",
+                "ru": "Строка заказа зафиксирована, письмо не отправлено, releaseReservation не выполнялся"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The order row is rolled back, because the email listener failed",
+                "ru": "Строка заказа откатывается, потому что упал listener письма"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The commit finished before the AFTER_COMMIT listener ran; it cannot be undone.",
+                "ru": "Commit завершился до выполнения listener AFTER_COMMIT; отменить его нельзя."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The order row is committed and releaseReservation runs to compensate",
+                "ru": "Строка заказа зафиксирована, а releaseReservation выполняется для компенсации"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "AFTER_ROLLBACK fires only when the transaction rolls back, not when a listener fails.",
+                "ru": "AFTER_ROLLBACK срабатывает только при rollback транзакции, а не при сбое listener."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "Nothing happens: both listeners are skipped because a transaction was active",
+                "ru": "Ничего не происходит: оба listeners пропускаются, потому что транзакция была активна"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "An active transaction is what makes the phases work; skipping happens when there is none.",
+                "ru": "Именно активная транзакция и заставляет фазы работать; пропуск бывает, когда её нет."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cap-p1-no-transaction-spot",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "The author expects a daily digest email per imported order. Nothing is ever sent. Why?",
+            "ru": "Автор ожидает письмо-дайджест по каждому импортированному заказу. Ничего не отправляется. Почему?"
+          },
+          "code": "@Scheduled(cron = \"0 0 3 * * *\")\npublic void importOrders() {                 // no @Transactional\n    for (Order order : feed.read()) {\n        orderRepository.save(order);\n        publisher.publishEvent(new OrderPlaced(order.id()));\n    }\n}\n\n@TransactionalEventListener\npublic void sendDigest(OrderPlaced event) {\n    emailClient.sendDigest(event.orderId());\n}",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "No transaction, no phase, no listener — and no warning either.",
+              "ru": "Нет транзакции — нет фазы — нет listener, и предупреждения тоже нет."
+            },
+            "incorrect": {
+              "en": "The scheduled method has no transaction, so the transactional listener is skipped silently.",
+              "ru": "У scheduled-метода нет транзакции, поэтому transactional listener молча пропускается."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "With no active transaction the listener is skipped; it needs a transaction or fallbackExecution = true",
+                "ru": "Без активной транзакции listener пропускается; нужна транзакция или fallbackExecution = true"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The listener runs immediately, so the digest is sent before the row is saved",
+                "ru": "Listener выполняется сразу, поэтому дайджест уходит до сохранения строки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no automatic fallback: without a transaction the listener is not invoked at all.",
+                "ru": "Автоматического fallback нет: без транзакции listener не вызывается вообще."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "publishEvent throws because no transaction is active, so the loop stops",
+                "ru": "publishEvent бросает exception из-за отсутствия транзакции, и цикл останавливается"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Publishing works fine; only the transactional listener is silently skipped.",
+                "ru": "Публикация работает нормально; молча пропускается только transactional listener."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p2-before-commit-send",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The listener runs, and then the commit fails on a unique-constraint violation. What is the final state?",
+            "ru": "Listener выполнился, а затем commit упал на нарушении unique-constraint. Какое итоговое состояние?"
+          },
+          "code": "@TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)\npublic void sendReceipt(OrderPlaced event) {\n    emailClient.sendReceipt(event.orderId());   // succeeds\n}\n// the commit then fails: duplicate key violates a unique constraint",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "That is the BEFORE_COMMIT risk: a side effect on data that never landed.",
+              "ru": "Это и есть риск BEFORE_COMMIT: побочное действие по данным, которые не сохранились."
+            },
+            "incorrect": {
+              "en": "The email is out and no order row exists — BEFORE_COMMIT runs before the data is durable.",
+              "ru": "Письмо ушло, а строки заказа нет — BEFORE_COMMIT выполняется до того, как данные durable."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The email was already sent, but no order row exists",
+                "ru": "Письмо уже отправлено, но строки заказа нет"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing happened: the failed commit also cancels the email",
+                "ru": "Ничего не произошло: неудавшийся commit отменяет и письмо"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A rollback discards database work; it cannot recall a sent email.",
+                "ru": "Rollback отбрасывает работу с базой; он не может отозвать отправленное письмо."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The email is sent a second time on the AFTER_ROLLBACK phase",
+                "ru": "Письмо отправляется второй раз в фазе AFTER_ROLLBACK"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That phase invokes rollback listeners; it does not repeat BEFORE_COMMIT work.",
+                "ru": "Эта фаза вызывает listeners для rollback; она не повторяет работу BEFORE_COMMIT."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "The order row is committed anyway, because the listener succeeded",
+                "ru": "Строка заказа всё равно фиксируется, потому что listener отработал успешно"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A successful listener does not fix a failing commit; the constraint still rejects the row.",
+                "ru": "Успешный listener не исправит падающий commit; constraint всё равно отвергает строку."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p3-sort-lifecycle",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the complete life of an event published inside a Spring `@Transactional` method that commits successfully.",
+            "ru": "Расставь по порядку всю жизнь event, опубликованного внутри Spring `@Transactional` метода, который успешно фиксируется."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Register while inside, then let the outcome drive the phases.",
+              "ru": "Зарегистрировать внутри, затем позволить исходу вести фазы."
+            },
+            "incorrect": {
+              "en": "Begin, stage and publish, register a synchronization, BEFORE_COMMIT, commit, then AFTER_COMMIT and AFTER_COMPLETION.",
+              "ru": "Открыть, подготовить и опубликовать, зарегистрировать synchronization, BEFORE_COMMIT, commit, затем AFTER_COMMIT и AFTER_COMPLETION."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "The proxy begins the transaction and the method stages its database work",
+                "ru": "Proxy открывает транзакцию, метод подготавливает работу с базой"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "publishEvent registers a transaction synchronization instead of invoking the listener",
+                "ru": "publishEvent регистрирует transaction synchronization вместо вызова listener"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "The method returns and BEFORE_COMMIT listeners run",
+                "ru": "Метод возвращается, выполняются listeners BEFORE_COMMIT"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "The transaction commits the database work",
+                "ru": "Транзакция фиксирует работу с базой"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "AFTER_COMMIT listeners run, outside the closed boundary",
+                "ru": "Выполняются listeners AFTER_COMMIT, вне закрытой границы"
+              }
+            },
+            {
+              "id": "s6",
+              "text": {
+                "en": "AFTER_COMPLETION listeners run last",
+                "ru": "Последними выполняются listeners AFTER_COMPLETION"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p4-match-tools",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each setting or pattern with the guarantee it provides around a transactional event listener.",
+            "ru": "Сопоставь каждую настройку или паттерн с гарантией, которую он даёт вокруг transactional event listener."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Each knob solves exactly one problem — phase, fallback, own transaction, durability.",
+              "ru": "Каждая настройка решает ровно одну задачу — фаза, fallback, своя транзакция, durability."
+            },
+            "incorrect": {
+              "en": "Phases pick the outcome, fallbackExecution covers the no-transaction case, REQUIRES_NEW gives the write a transaction, the outbox gives durability.",
+              "ru": "Фазы выбирают исход, fallbackExecution закрывает случай без транзакции, REQUIRES_NEW даёт записи транзакцию, outbox даёт durability."
+            }
+          },
+          "pairs": [
+            {
+              "id": "p1",
+              "left": {
+                "en": "phase = AFTER_COMMIT",
+                "ru": "phase = AFTER_COMMIT"
+              },
+              "right": {
+                "en": "A side effect only for data that really committed",
+                "ru": "Побочное действие только для данных, которые реально зафиксированы"
+              }
+            },
+            {
+              "id": "p2",
+              "left": {
+                "en": "phase = AFTER_ROLLBACK",
+                "ru": "phase = AFTER_ROLLBACK"
+              },
+              "right": {
+                "en": "Compensation only for a failed attempt",
+                "ru": "Компенсация только для неудавшейся попытки"
+              }
+            },
+            {
+              "id": "p3",
+              "left": {
+                "en": "fallbackExecution = true",
+                "ru": "fallbackExecution = true"
+              },
+              "right": {
+                "en": "Also handle events published with no active transaction",
+                "ru": "Обрабатывать и events, опубликованные без активной транзакции"
+              }
+            },
+            {
+              "id": "p4",
+              "left": {
+                "en": "propagation = REQUIRES_NEW",
+                "ru": "propagation = REQUIRES_NEW"
+              },
+              "right": {
+                "en": "Give the listener's own database write a transaction of its own",
+                "ru": "Дать собственной записи listener в базу отдельную транзакцию"
+              }
+            },
+            {
+              "id": "p5",
+              "left": {
+                "en": "Outbox pattern",
+                "ru": "Outbox pattern"
+              },
+              "right": {
+                "en": "Durable retry for a message that must reach an external system",
+                "ru": "Durable-повторы для сообщения, которое обязано дойти во внешнюю систему"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p5-fill-three",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill in the three missing values.",
+            "ru": "Впиши три пропущенных значения."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Default phase, silent skip, and a fresh transaction for the listener's write.",
+              "ru": "Фаза по умолчанию, молчаливый пропуск и новая транзакция для записи listener."
+            },
+            "incorrect": {
+              "en": "AFTER_COMMIT by default; skipped without a transaction; REQUIRES_NEW for the listener's own write.",
+              "ru": "По умолчанию AFTER_COMMIT; без транзакции пропускается; для собственной записи — REQUIRES_NEW."
+            }
+          },
+          "text": {
+            "en": "By default `@TransactionalEventListener` uses the ___ phase; with no active transaction it is ___ unless `fallbackExecution = true`; and a database write inside such a listener needs `propagation = ___`.",
+            "ru": "По умолчанию `@TransactionalEventListener` использует фазу ___; без активной транзакции он ___, если не задан `fallbackExecution = true`; а записи в базу внутри такого listener нужен `propagation = ___`."
+          },
+          "blanks": [
+            {
+              "en": ["AFTER_COMMIT", "TransactionPhase.AFTER_COMMIT"],
+              "ru": ["AFTER_COMMIT", "TransactionPhase.AFTER_COMMIT"]
+            },
+            {
+              "en": ["skipped", "not invoked", "not called"],
+              "ru": ["пропускается", "не вызывается", "skipped"]
+            },
+            {
+              "en": ["REQUIRES_NEW", "Propagation.REQUIRES_NEW"],
+              "ru": ["REQUIRES_NEW", "Propagation.REQUIRES_NEW"]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

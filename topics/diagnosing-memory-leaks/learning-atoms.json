@@ -1,0 +1,3518 @@
+{
+  "schemaVersion": 1,
+  "topicId": "diagnosing-memory-leaks",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "what-is-a-leak",
+      "title": {
+        "en": "What a leak actually is",
+        "ru": "Что такое утечка на самом деле"
+      },
+      "summary": {
+        "en": "A leak is live objects the garbage collector cannot reclaim because something still references them.",
+        "ru": "Утечка — это живые объекты, которые сборщик мусора не может освободить, потому что на них кто-то ещё ссылается."
+      },
+      "discovery": [
+        {
+          "id": "leak-d1-definition",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A service holds 2 GB of objects that its code will never use again. Which statement describes a memory leak in Java?",
+            "ru": "Сервис держит 2 ГБ объектов, которые его код больше никогда не использует. Какое утверждение описывает утечку памяти в Java?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Objects stay reachable through some reference, so the garbage collector may not free them",
+                "ru": "Объекты остаются достижимыми по какой-то ссылке, поэтому сборщик мусора не может их освободить"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The heap is close to its maximum size",
+                "ru": "Heap близок к своему максимальному размеру"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A full heap that GC can clean is normal; being full is not the same as leaking.",
+                "ru": "Полный heap, который GC может почистить, — это норма; заполненность не равна утечке."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The garbage collector has a bug and forgets objects",
+                "ru": "В сборщике мусора есть баг, и он забывает объекты"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The collector behaves correctly — it keeps whatever is still referenced.",
+                "ru": "Сборщик работает правильно — он сохраняет всё, на что ещё есть ссылки."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "Native memory outside the heap was allocated and not returned",
+                "ru": "Была выделена и не возвращена нативная память вне heap"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The classic Java leak is about reachable heap objects, not about native allocation.",
+                "ru": "Классическая java-утечка — про достижимые объекты в heap, а не про нативные аллокации."
+              }
+            }
+          ],
+          "reveal": {
+            "en": "A **memory leak** in Java is not \"memory is high right now\". It means **live objects the garbage collector cannot reclaim, because something in the program still references them**.\n\nThe collector frees only what is *unreachable*. If any live path still points at an object, keeping it is the correct behaviour — even when your code will never touch it again.\n\n```mermaid\nflowchart LR\n  R[\"live reference (static field)\"] --> O[\"object you forgot about\"]\n  O --> K[\"GC must keep it alive\"]\n```\n\nThis is also why `System.gc()` never fixes a leak: it only requests a collection, and a still-referenced object is not garbage. The only fix is to **break the reference** that keeps the object alive.",
+            "ru": "**Утечка памяти** в Java — это не «сейчас много памяти». Это **живые объекты, которые сборщик мусора не может освободить, потому что на них всё ещё ссылается что-то в программе**.\n\nСборщик освобождает только *недостижимое*. Если на объект ведёт хоть один живой путь, сохранить его — правильное поведение, даже если код больше никогда к нему не обратится.\n\n```mermaid\nflowchart LR\n  R[\"живая ссылка (static-поле)\"] --> O[\"объект, о котором вы забыли\"]\n  O --> K[\"GC обязан держать его живым\"]\n```\n\nПоэтому же `System.gc()` никогда не чинит утечку: он лишь просит выполнить сборку, а объект со ссылкой — не мусор. Единственное лечение — **разорвать ссылку**, которая держит объект живым."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Reachable means kept: that is the whole definition of a leak.",
+              "ru": "Достижим — значит сохранён: в этом и вся суть утечки."
+            },
+            "incorrect": {
+              "en": "A leak means the objects are still referenced, so the collector cannot free them.",
+              "ru": "Утечка означает, что на объекты всё ещё ссылаются, и сборщик не может их освободить."
+            }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "leak-p1-system-gc",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A Java service's heap keeps growing. Will calling System.gc() fix a memory leak?",
+            "ru": "Heap java-сервиса продолжает расти. Починит ли вызов System.gc() утечку памяти?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "No — a still-referenced object is not garbage, so no collection can free it",
+                "ru": "Нет — объект, на который есть ссылка, не мусор, и никакая сборка его не освободит"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Yes — a forced full collection reclaims everything unused",
+                "ru": "Да — принудительная полная сборка освободит всё неиспользуемое"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "GC reclaims the unreachable, not the unused; a leaked object is still reachable.",
+                "ru": "GC освобождает недостижимое, а не неиспользуемое; утёкший объект всё ещё достижим."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Yes, but only if it is called on every node at the same time",
+                "ru": "Да, но только если вызвать его одновременно на всех узлах"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Timing changes nothing: reachability, not scheduling, is what blocks collection.",
+                "ru": "Момент вызова ничего не меняет: сборке мешает достижимость, а не расписание."
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Only breaking the reference helps; the collector is not the problem.",
+              "ru": "Помогает только разрыв ссылки; проблема не в сборщике."
+            },
+            "incorrect": {
+              "en": "No — the collector cannot free a reachable object, however often you ask it.",
+              "ru": "Нет — сборщик не может освободить достижимый объект, сколько его ни проси."
+            }
+          }
+        },
+        {
+          "id": "leak-p2-unreachable-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In Java, an object that is unreachable from every live reference can still cause a memory leak.",
+            "ru": "В Java объект, недостижимый ни по одной живой ссылке, всё ещё может вызывать утечку памяти."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": {
+              "en": "Unreachable means collectable; a leak requires a surviving reference.",
+              "ru": "Недостижим — значит может быть собран; для утечки нужна сохранившаяся ссылка."
+            },
+            "incorrect": {
+              "en": "No — unreachable objects are exactly what the collector frees; a leak needs a live reference.",
+              "ru": "Нет — недостижимые объекты сборщик как раз освобождает; для утечки нужна живая ссылка."
+            }
+          }
+        },
+        {
+          "id": "leak-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the definition of a memory leak in Java.",
+            "ru": "Собери определение утечки памяти в Java."
+          },
+          "tokens": {
+            "en": [
+              "live",
+              "objects",
+              "the",
+              "collector",
+              "cannot",
+              "free",
+              "because",
+              "something",
+              "still",
+              "references",
+              "them"
+            ],
+            "ru": [
+              "живые",
+              "объекты,",
+              "которые",
+              "сборщик",
+              "не",
+              "может",
+              "освободить,",
+              "потому",
+              "что",
+              "на",
+              "них",
+              "ссылаются"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "unreachable",
+              "sorted"
+            ],
+            "ru": [
+              "недостижимые",
+              "отсортированные"
+            ]
+          },
+          "feedback": {
+            "correct": {
+              "en": "Reachability is the criterion — not whether the code still needs the object.",
+              "ru": "Критерий — достижимость, а не то, нужен ли объект коду."
+            },
+            "incorrect": {
+              "en": "A leak is live objects the collector cannot free because something still references them.",
+              "ru": "Утечка — живые объекты, которые сборщик не может освободить, потому что на них ссылаются."
+            }
+          }
+        },
+        {
+          "id": "leak-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the definition.",
+            "ru": "Дополни определение."
+          },
+          "text": {
+            "en": "Objects leak when they are still ___ from a live part of the program, so the garbage collector cannot ___ them.",
+            "ru": "Объекты утекают, когда на них всё ещё есть ___ из живой части программы, поэтому сборщик мусора не может их ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "referenced",
+                "reachable"
+              ],
+              "ru": [
+                "ссылка",
+                "ссылки"
+              ]
+            },
+            {
+              "en": [
+                "reclaim",
+                "collect",
+                "free"
+              ],
+              "ru": [
+                "освободить",
+                "собрать",
+                "удалить"
+              ]
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Still referenced means still alive, so the memory is never returned.",
+              "ru": "Есть ссылка — значит объект жив, и память не возвращается."
+            },
+            "incorrect": {
+              "en": "Still referenced (reachable) objects cannot be reclaimed by any collector.",
+              "ru": "Объекты, на которые есть ссылки (достижимые), не может освободить никакой сборщик."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "sawtooth-vs-rising-floor",
+      "title": {
+        "en": "Sawtooth vs a rising floor",
+        "ru": "Пила против растущего дна"
+      },
+      "summary": {
+        "en": "A healthy heap returns to the same post-GC floor; a leak is a sawtooth whose floor keeps rising.",
+        "ru": "Здоровый heap возвращается к тому же дну после GC; утечка — пила, у которой дно постоянно растёт."
+      },
+      "discovery": [
+        {
+          "id": "sawtooth-d1-read-gc-log",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "These lines come from one service's GC logs over several hours. What do they tell you?",
+            "ru": "Эти строки — GC-логи одного сервиса за несколько часов. О чём они говорят?"
+          },
+          "code": "after GC #1   live heap = 420 MB\nafter GC #2   live heap = 700 MB\nafter GC #3   live heap = 980 MB\nafter GC #4   live heap = 1.3 GB",
+          "codeLang": "text",
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The post-GC floor is rising — this looks like a real leak",
+                "ru": "Дно после GC растёт — похоже на настоящую утечку"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A normal sawtooth: the heap fills and is swept each time",
+                "ru": "Обычная пила: heap наполняется и каждый раз чистится"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "In a normal sawtooth the level AFTER each GC returns to roughly the same value.",
+                "ru": "В нормальной пиле уровень ПОСЛЕ каждого GC возвращается примерно к одному значению."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The garbage collector is not running at all",
+                "ru": "Сборщик мусора вообще не работает"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It is running — these are post-GC numbers; it simply frees less each time.",
+                "ru": "Он работает — это цифры после GC; просто освобождает всё меньше."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "Nothing can be said without a heap dump",
+                "ru": "Ничего нельзя сказать без heap dump"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The trend alone already answers \"is it leaking?\" — the dump answers \"what is leaking?\".",
+                "ru": "Один тренд уже отвечает на вопрос «утекает ли?» — дамп отвечает на «что именно утекает?»."
+              }
+            }
+          ],
+          "reveal": {
+            "en": "A healthy heap is a **sawtooth**: it fills up, GC sweeps it, and used memory drops back to roughly the **same floor** every time. The number that matters is the **live heap after GC** — the post-GC floor.\n\n```\nhealthy:  420 MB -> 430 MB -> 425 MB -> 428 MB   (flat floor)\nleaking:  420 MB -> 700 MB -> 980 MB -> 1.3 GB   (floor climbs)\n```\n\nA leak is a sawtooth whose *floor keeps rising*: each collection frees less than the last, because more objects have become permanently reachable. Two other signals point the same way — GC starts taking a growing share of wall-clock time, and the **Old generation** (where long-lived objects end up) keeps filling.\n\nIf the floor is flat, it is **not** a leak. The service may simply need a bigger heap or fewer concurrent requests.",
+            "ru": "Здоровый heap — это **пила**: он наполняется, GC его чистит, и занятая память каждый раз падает примерно к одному и тому же **дну**. Важна цифра **живого heap после GC** — дно после сборки.\n\n```\nздоровый:  420 MB -> 430 MB -> 425 MB -> 428 MB   (дно ровное)\nутечка:    420 MB -> 700 MB -> 980 MB -> 1.3 GB   (дно растёт)\n```\n\nУтечка — это пила, у которой *дно постоянно растёт*: каждая сборка освобождает меньше предыдущей, потому что всё больше объектов стали достижимыми навсегда. Туда же указывают два других признака: GC начинает отнимать всё большую долю времени, а поколение **Old** (куда попадают долгоживущие объекты) продолжает заполняться.\n\nЕсли дно ровное — это **не** утечка. Сервису может просто требоваться больший heap или меньше одновременных запросов."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Rising post-GC floor is the signature of a leak.",
+              "ru": "Растущее дно после GC — характерный признак утечки."
+            },
+            "incorrect": {
+              "en": "Each GC frees less than the last, so the floor climbs — that is a leak, not a sawtooth.",
+              "ru": "Каждый GC освобождает меньше предыдущего, дно растёт — это утечка, а не пила."
+            }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "sawtooth-p1-healthy-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A heap that repeatedly fills up and then drops back to the same level after each GC indicates a memory leak.",
+            "ru": "Heap, который постоянно наполняется и после каждого GC падает к тому же уровню, указывает на утечку памяти."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": {
+              "en": "That is a healthy sawtooth; only a rising floor is a leak.",
+              "ru": "Это здоровая пила; утечка — только растущее дно."
+            },
+            "incorrect": {
+              "en": "No — returning to the same floor is exactly what a healthy heap does.",
+              "ru": "Нет — возврат к одному и тому же дну — это как раз поведение здорового heap."
+            }
+          }
+        },
+        {
+          "id": "sawtooth-p2-which-number",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which number over time best distinguishes a memory leak from merely high memory usage?",
+            "ru": "Какая величина во времени лучше всего отличает утечку памяти от просто высокого потребления?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Used heap measured after each GC",
+                "ru": "Занятый heap, измеренный после каждого GC"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Peak used heap",
+                "ru": "Пиковый занятый heap"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The peak is high in a healthy service too — it is what remains after GC that matters.",
+                "ru": "Пик высок и у здорового сервиса — важно то, что остаётся после GC."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The number of objects allocated per second",
+                "ru": "Количество объектов, выделяемых в секунду"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the allocation rate; heavy allocation of short-lived objects is not a leak.",
+                "ru": "Это скорость аллокаций; активное создание короткоживущих объектов — не утечка."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "The configured maximum heap size",
+                "ru": "Настроенный максимальный размер heap"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is a static setting; it says nothing about a trend.",
+                "ru": "Это статическая настройка; о тренде она ничего не говорит."
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Post-GC live size is the trend line that reveals a leak.",
+              "ru": "Размер живых объектов после GC — та линия тренда, что выдаёт утечку."
+            },
+            "incorrect": {
+              "en": "Watch used heap AFTER GC over hours: a rising floor is the leak signal.",
+              "ru": "Следите за занятым heap ПОСЛЕ GC на длинном интервале: растущее дно — признак утечки."
+            }
+          }
+        },
+        {
+          "id": "sawtooth-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the shape a leaking heap makes over time.",
+            "ru": "Собери, как выглядит heap с утечкой во времени."
+          },
+          "tokens": {
+            "en": [
+              "a",
+              "sawtooth",
+              "whose",
+              "floor",
+              "after",
+              "GC",
+              "keeps",
+              "rising"
+            ],
+            "ru": [
+              "пила,",
+              "у",
+              "которой",
+              "дно",
+              "после",
+              "GC",
+              "постоянно",
+              "растёт"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "peak",
+              "drops"
+            ],
+            "ru": [
+              "пик",
+              "падает"
+            ]
+          },
+          "feedback": {
+            "correct": {
+              "en": "Same shape as a healthy heap, but the baseline creeps up.",
+              "ru": "Форма как у здорового heap, но базовый уровень ползёт вверх."
+            },
+            "incorrect": {
+              "en": "A leak is a sawtooth whose floor after GC keeps rising.",
+              "ru": "Утечка — это пила, у которой дно после GC постоянно растёт."
+            }
+          }
+        },
+        {
+          "id": "sawtooth-p4-fill-old",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the generation and the trend.",
+            "ru": "Назови поколение и тренд."
+          },
+          "text": {
+            "en": "A leak keeps filling the ___ generation, and shows up as a post-GC heap ___ that keeps climbing.",
+            "ru": "Утечка постепенно заполняет поколение ___ и проявляется как ___ heap после GC, которое всё время растёт."
+          },
+          "blanks": [
+            {
+              "en": [
+                "Old",
+                "old"
+              ],
+              "ru": [
+                "Old",
+                "old"
+              ]
+            },
+            {
+              "en": [
+                "floor",
+                "baseline"
+              ],
+              "ru": [
+                "дно"
+              ]
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Long-lived objects are promoted to Old, so that is where a leak accumulates.",
+              "ru": "Долгоживущие объекты продвигаются в Old, там утечка и накапливается."
+            },
+            "incorrect": {
+              "en": "Leaked objects survive collections, get promoted to Old, and raise the post-GC floor.",
+              "ru": "Утёкшие объекты переживают сборки, продвигаются в Old и поднимают дно после GC."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "confirm-before-dumping",
+      "title": {
+        "en": "Confirm the trend first",
+        "ru": "Сначала подтвердить тренд"
+      },
+      "summary": {
+        "en": "Before any dump, confirm the trend with cheap always-on tools: metrics and GC logs.",
+        "ru": "До любых дампов подтвердите тренд дешёвыми всегда включёнными средствами: метриками и GC-логами."
+      },
+      "discovery": [
+        {
+          "id": "confirm-d1-first-move",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "An alert fires: a production JVM is at 90% heap. What do you do FIRST?",
+            "ru": "Сработал алерт: прод-JVM заполнила heap на 90%. Что вы сделаете ПЕРВЫМ?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Look at metrics and GC logs for the used-heap-after-GC trend",
+                "ru": "Посмотреть метрики и GC-логи на тренд занятого heap после GC"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Take a heap dump immediately",
+                "ru": "Немедленно снять heap dump"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A dump is the expensive end of the ladder; you do not even know yet whether it is a leak.",
+                "ru": "Дамп — дорогой конец цепочки; вы ещё даже не знаете, утечка ли это."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Restart the service to clear the memory",
+                "ru": "Перезапустить сервис, чтобы освободить память"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A restart destroys the evidence and tells you nothing about the cause.",
+                "ru": "Перезапуск уничтожает улики и ничего не говорит о причине."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "Double the maximum heap size and redeploy",
+                "ru": "Удвоить максимальный heap и передеплоить"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "If it is a leak, a bigger heap only delays the OOM; confirm the trend first.",
+                "ru": "Если это утечка, больший heap лишь отсрочит OOM; сначала подтвердите тренд."
+              }
+            }
+          ],
+          "reveal": {
+            "en": "Diagnosis goes from **cheap and broad** to **expensive and precise** — never start at the expensive end.\n\n```mermaid\nflowchart TD\n  A[\"metrics and GC logs\"] --> B{\"post-GC floor rising?\"}\n  B -->|\"no\"| C[\"not a leak: tune heap size or load\"]\n  B -->|\"yes\"| D[\"low-overhead profiler\"]\n  D --> E[\"heap dump, analyzed offline\"]\n```\n\nThe cheap layer is always on and touches nothing:\n\n- **Metrics** — used heap after GC over hours or days: Micrometer with Prometheus/Grafana, your cloud provider's metrics, or `jstat -gcutil <pid>` straight on the box.\n- **GC logs** — `-Xlog:gc*` on Java 9+. A rising post-GC live size and a growing share of time spent in GC both point at a leak.\n\nOnly once the trend is confirmed do you pay for a profiler, and only after that for a heap dump.",
+            "ru": "Диагностика идёт от **дешёвого и широкого** к **дорогому и точному** — никогда не начинайте с дорогого конца.\n\n```mermaid\nflowchart TD\n  A[\"метрики и GC-логи\"] --> B{\"дно после GC растёт?\"}\n  B -->|\"нет\"| C[\"не утечка: настроить размер heap или нагрузку\"]\n  B -->|\"да\"| D[\"профилировщик с малыми накладными\"]\n  D --> E[\"heap dump, анализ офлайн\"]\n```\n\nДешёвый слой работает всегда и ничего не трогает:\n\n- **Метрики** — занятый heap после GC за часы или дни: Micrometer с Prometheus/Grafana, метрики облачного провайдера или `jstat -gcutil <pid>` прямо на машине.\n- **GC-логи** — `-Xlog:gc*` на Java 9+. Растущий размер живых объектов после GC и растущая доля времени в GC оба указывают на утечку.\n\nИ только после подтверждения тренда вы платите за профилировщик, и лишь затем — за heap dump."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Cheapest signal first: the trend decides whether anything else is needed.",
+              "ru": "Сначала самый дешёвый сигнал: тренд решает, нужно ли что-то ещё."
+            },
+            "incorrect": {
+              "en": "Start with metrics and GC logs — they show the trend without touching the process.",
+              "ru": "Начните с метрик и GC-логов — они показывают тренд, не трогая процесс."
+            }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "confirm-p1-flat-floor",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Metrics show a Java service's used heap after GC has been flat for a week, though peaks reach 95%. What do you conclude?",
+            "ru": "Метрики показывают: занятый heap java-сервиса после GC ровный уже неделю, хотя пики достигают 95%. Какой вывод?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Not a leak — at most the heap is too small for the load",
+                "ru": "Не утечка — максимум heap мал для этой нагрузки"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A slow leak that GC logs cannot show",
+                "ru": "Медленная утечка, которую GC-логи не показывают"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A leak by definition raises the post-GC floor; a flat floor over a week rules it out.",
+                "ru": "Утечка по определению поднимает дно после GC; ровное дно за неделю её исключает."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A leak, because 95% is dangerously high",
+                "ru": "Утечка, потому что 95% — опасно высоко"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "High peaks are normal; the heap is meant to fill up before a collection.",
+                "ru": "Высокие пики нормальны; heap и должен наполняться перед сборкой."
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Flat floor, no leak: consider heap sizing or concurrency instead.",
+              "ru": "Ровное дно — утечки нет: смотрите на размер heap или на параллелизм."
+            },
+            "incorrect": {
+              "en": "A flat post-GC floor means memory is reclaimed each cycle — that is not a leak.",
+              "ru": "Ровное дно после GC означает, что память освобождается каждый цикл — это не утечка."
+            }
+          }
+        },
+        {
+          "id": "confirm-p2-gc-logs-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "On Java 9+, GC logging is enabled with the -Xlog:gc* flag.",
+            "ru": "На Java 9+ логирование GC включается флагом -Xlog:gc*."
+          },
+          "answer": true,
+          "feedback": {
+            "correct": {
+              "en": "GC logs are the cheapest permanent record of the post-GC trend.",
+              "ru": "GC-логи — самая дешёвая постоянная запись тренда после сборок."
+            },
+            "incorrect": {
+              "en": "It is true: -Xlog:gc* is the unified logging flag for GC on Java 9+.",
+              "ru": "Это правда: -Xlog:gc* — флаг унифицированного логирования GC на Java 9+."
+            }
+          }
+        },
+        {
+          "id": "confirm-p3-sort-ladder",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the memory-diagnosis tools from cheapest and broadest to most expensive and precise.",
+            "ru": "Расставь инструменты диагностики памяти от самых дешёвых и широких к дорогим и точным."
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Metrics and GC logs: is the post-GC floor rising?",
+                "ru": "Метрики и GC-логи: растёт ли дно после GC?"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Low-overhead profiler on the live JVM",
+                "ru": "Профилировщик с малыми накладными на живой JVM"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Capture a heap dump",
+                "ru": "Снять heap dump"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Analyze the dump offline and fix the reference",
+                "ru": "Проанализировать дамп офлайн и починить ссылку"
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Each step costs more than the last, so each must be justified by the previous one.",
+              "ru": "Каждый шаг дороже предыдущего, поэтому каждый должен быть оправдан прошлым."
+            },
+            "incorrect": {
+              "en": "Metrics and GC logs first, then a profiler, then a dump, then offline analysis.",
+              "ru": "Сначала метрики и GC-логи, затем профилировщик, затем дамп, затем офлайн-анализ."
+            }
+          }
+        },
+        {
+          "id": "confirm-p4-fill-tools",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the two cheap always-on signals.",
+            "ru": "Назови два дешёвых всегда доступных сигнала."
+          },
+          "text": {
+            "en": "Check the trend with the `___ -gcutil <pid>` command and with GC logs enabled by `-Xlog:___*`.",
+            "ru": "Проверь тренд командой `___ -gcutil <pid>` и GC-логами, включёнными через `-Xlog:___*`."
+          },
+          "blanks": [
+            {
+              "en": [
+                "jstat"
+              ],
+              "ru": [
+                "jstat"
+              ]
+            },
+            {
+              "en": [
+                "gc"
+              ],
+              "ru": [
+                "gc"
+              ]
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Both are free, always available, and require no restart of your tooling.",
+              "ru": "Оба бесплатны, всегда доступны и не требуют перезапуска инструментов."
+            },
+            "incorrect": {
+              "en": "It is jstat -gcutil <pid> and -Xlog:gc* — the two cheapest trend signals.",
+              "ru": "Это jstat -gcutil <pid> и -Xlog:gc* — два самых дешёвых сигнала тренда."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "profilers",
+      "title": {
+        "en": "Profilers",
+        "ru": "Профилировщики"
+      },
+      "summary": {
+        "en": "A profiler samples the running JVM to show what is allocated and from which call path, at low overhead.",
+        "ru": "Профилировщик сэмплирует работающую JVM и показывает, что аллоцируется и из какого пути вызовов, с малыми накладными."
+      },
+      "discovery": [
+        {
+          "id": "profiler-d1-what-answers",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "You start Java Flight Recorder on a running production service. What question does it answer?",
+            "ru": "Вы запускаете Java Flight Recorder на работающем прод-сервисе. На какой вопрос он отвечает?"
+          },
+          "code": "jcmd 4213 JFR.start",
+          "codeLang": "text",
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "What is being allocated, and from which call path",
+                "ru": "Что аллоцируется и из какого пути вызовов"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Exactly which objects are alive right now and who holds them",
+                "ru": "Какие именно объекты живы прямо сейчас и кто их держит"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is a heap dump's freeze-frame view, not a sampling profiler's.",
+                "ru": "Это взгляд-стоп-кадр heap dump, а не сэмплирующего профилировщика."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Which thread is blocked on which lock",
+                "ru": "Какой поток заблокирован на какой блокировке"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Thread stacks and states are what a thread dump reports.",
+                "ru": "Стеки и состояния потоков сообщает thread dump."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "Whether the heap size is configured correctly",
+                "ru": "Правильно ли настроен размер heap"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Sizing is a metrics question; a profiler reports allocation behaviour.",
+                "ru": "Размер — вопрос метрик; профилировщик показывает поведение аллокаций."
+              }
+            }
+          ],
+          "reveal": {
+            "en": "A **profiler** samples a *running* JVM and reports where memory and CPU go, ideally without stopping it. It answers **\"what is being allocated, and from which call path?\"**\n\n- **JFR (Java Flight Recorder)** — built into the JDK, roughly **1% overhead**, safe to leave running in production. Start it with `jcmd <pid> JFR.start` and read the recording in **JDK Mission Control**. Being this cheap is exactly why it is the default first choice on prod.\n- **async-profiler** — low-overhead allocation and CPU flame graphs.\n- **VisualVM / JProfiler / YourKit** — richer GUIs but heavier; usually pointed at staging or a local reproduction, not a busy production node.\n\nBecause it samples over time, a profiler catches an allocation **hotspot** before the heap fills. But heavy allocation is not the same as a leak: short-lived garbage is collected fine. For *\"what is stuck and why won't it leave\"* you need a heap dump.",
+            "ru": "**Профилировщик** сэмплирует *работающую* JVM и показывает, куда уходят память и CPU, в идеале не останавливая её. Он отвечает на вопрос **«что аллоцируется и из какого пути вызовов?»**\n\n- **JFR (Java Flight Recorder)** — встроен в JDK, накладные расходы около **1%**, безопасно держать включённым на проде. Запуск: `jcmd <pid> JFR.start`, чтение записи — в **JDK Mission Control**. Именно эта дешевизна делает его выбором номер один на проде.\n- **async-profiler** — flame-графы аллокаций и CPU с малыми накладными.\n- **VisualVM / JProfiler / YourKit** — богаче по GUI, но тяжелее; обычно их наводят на staging или локальное воспроизведение, а не на нагруженный прод-узел.\n\nПоскольку профилировщик сэмплирует во времени, он ловит **горячую точку аллокаций** до того, как heap заполнится. Но активная аллокация — не то же самое, что утечка: короткоживущий мусор прекрасно собирается. Для вопроса *«что застряло и почему не уходит»* нужен heap dump."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Profilers describe the flow of allocations over time, with their call paths.",
+              "ru": "Профилировщики описывают поток аллокаций во времени вместе с путями вызовов."
+            },
+            "incorrect": {
+              "en": "A profiler answers what is allocated and from where — not what is still retained.",
+              "ru": "Профилировщик отвечает, что и откуда аллоцируется, а не что удерживается в памяти."
+            }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "profiler-p1-prod-choice",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which profiler is the usual first choice on a busy production JVM, and why?",
+            "ru": "Какой профилировщик обычно выбирают первым на нагруженной прод-JVM и почему?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "JFR — built into the JDK with about 1% overhead",
+                "ru": "JFR — встроен в JDK, накладные расходы около 1%"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "JProfiler — its GUI is the richest",
+                "ru": "JProfiler — у него самый богатый GUI"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Richer GUIs are heavier; they are normally pointed at staging or a reproduction.",
+                "ru": "Богатые GUI тяжелее; их обычно наводят на staging или воспроизведение."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "VisualVM — it ships with every JDK and is free",
+                "ru": "VisualVM — идёт с каждым JDK и бесплатен"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Cost is not the criterion — overhead on a live node is, and VisualVM is heavier than JFR.",
+                "ru": "Критерий не цена, а накладные расходы на живом узле, а VisualVM тяжелее JFR."
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "About 1% overhead is what makes it safe to leave running in production.",
+              "ru": "Около 1% накладных — то, что позволяет держать его включённым на проде."
+            },
+            "incorrect": {
+              "en": "JFR: it is in the JDK already and costs roughly 1%, so it is prod-safe.",
+              "ru": "JFR: он уже в JDK и стоит около 1%, поэтому безопасен на проде."
+            }
+          }
+        },
+        {
+          "id": "profiler-p2-alloc-leak-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A high allocation rate reported by a profiler always means the Java service has a memory leak.",
+            "ru": "Высокая скорость аллокаций, показанная профилировщиком, всегда означает утечку памяти в java-сервисе."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": {
+              "en": "Short-lived garbage is collected cheaply; allocation volume is not retention.",
+              "ru": "Короткоживущий мусор собирается дёшево; объём аллокаций — не удержание."
+            },
+            "incorrect": {
+              "en": "No — allocating a lot is fine if the objects die young; a leak is about what stays.",
+              "ru": "Нет — много аллоцировать нормально, если объекты умирают рано; утечка — про то, что остаётся."
+            }
+          }
+        },
+        {
+          "id": "profiler-p3-match-tools",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each profiling tool to its defining property.",
+            "ru": "Соотнеси каждый инструмент профилирования с его ключевым свойством."
+          },
+          "pairs": [
+            {
+              "id": "jfr",
+              "left": {
+                "en": "JFR (Java Flight Recorder)",
+                "ru": "JFR (Java Flight Recorder)"
+              },
+              "right": {
+                "en": "Built into the JDK, about 1% overhead, safe in production",
+                "ru": "Встроен в JDK, около 1% накладных, безопасен на проде"
+              }
+            },
+            {
+              "id": "jmc",
+              "left": {
+                "en": "JDK Mission Control",
+                "ru": "JDK Mission Control"
+              },
+              "right": {
+                "en": "The UI that opens and reads JFR recordings",
+                "ru": "Интерфейс, который открывает и читает записи JFR"
+              }
+            },
+            {
+              "id": "async",
+              "left": {
+                "en": "async-profiler",
+                "ru": "async-profiler"
+              },
+              "right": {
+                "en": "Low-overhead allocation and CPU flame graphs",
+                "ru": "Flame-графы аллокаций и CPU с малыми накладными"
+              }
+            },
+            {
+              "id": "gui",
+              "left": {
+                "en": "VisualVM / JProfiler / YourKit",
+                "ru": "VisualVM / JProfiler / YourKit"
+              },
+              "right": {
+                "en": "Richer GUIs but heavier — usually staging, not a busy prod node",
+                "ru": "Богаче GUI, но тяжелее — обычно staging, а не нагруженный прод-узел"
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Overhead decides where a tool may be used, not how nice its UI is.",
+              "ru": "Где можно применять инструмент, решают накладные расходы, а не красота интерфейса."
+            },
+            "incorrect": {
+              "en": "JFR is the cheap built-in recorder, Mission Control reads it, async-profiler draws flame graphs, GUI tools are heavier.",
+              "ru": "JFR — дешёвый встроенный рекордер, Mission Control его читает, async-profiler рисует flame-графы, GUI-инструменты тяжелее."
+            }
+          }
+        },
+        {
+          "id": "profiler-p4-fill-start",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing command and tool name.",
+            "ru": "Впиши пропущенную команду и имя инструмента."
+          },
+          "text": {
+            "en": "Start a Flight Recorder recording on a running JVM with `___ <pid> ___.start`.",
+            "ru": "Запусти запись Flight Recorder на работающей JVM командой `___ <pid> ___.start`."
+          },
+          "blanks": [
+            {
+              "en": [
+                "jcmd"
+              ],
+              "ru": [
+                "jcmd"
+              ]
+            },
+            {
+              "en": [
+                "JFR",
+                "jfr"
+              ],
+              "ru": [
+                "JFR",
+                "jfr"
+              ]
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "No agent, no restart — jcmd attaches to the live process.",
+              "ru": "Без агента и перезапуска — jcmd подключается к живому процессу."
+            },
+            "incorrect": {
+              "en": "It is jcmd <pid> JFR.start — the recorder is already inside the JDK.",
+              "ru": "Это jcmd <pid> JFR.start — рекордер уже внутри JDK."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "profiler-vs-heap-dump",
+      "title": {
+        "en": "Profiler vs heap dump",
+        "ru": "Профилировщик против heap dump"
+      },
+      "summary": {
+        "en": "A profiler shows allocation over time on a live JVM; a heap dump is one freeze-frame of every live object, analyzed offline.",
+        "ru": "Профилировщик показывает аллокации во времени на живой JVM; heap dump — один стоп-кадр всех живых объектов, анализируемый офлайн."
+      },
+      "discovery": [
+        {
+          "id": "pvd-d1-which-tool",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Metrics confirm the post-GC floor is rising. You now want to know WHAT is stuck in memory and WHY it will not leave. Which tool answers that?",
+            "ru": "Метрики подтвердили: дно после GC растёт. Теперь нужно понять, ЧТО застряло в памяти и ПОЧЕМУ не уходит. Какой инструмент отвечает на это?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A heap dump",
+                "ru": "Heap dump"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A profiler such as JFR",
+                "ru": "Профилировщик вроде JFR"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A profiler shows allocation over time — who creates objects, not who keeps holding them.",
+                "ru": "Профилировщик показывает аллокации во времени — кто создаёт объекты, а не кто их держит."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "More GC logs at a finer level",
+                "ru": "Более подробные GC-логи"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "GC logs give the trend, never the identity of the objects.",
+                "ru": "GC-логи дают тренд, но никогда не назовут сами объекты."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "A thread dump",
+                "ru": "Thread dump"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A thread dump reports thread stacks and states, not the contents of the heap.",
+                "ru": "Thread dump сообщает стеки и состояния потоков, а не содержимое heap."
+              }
+            }
+          ],
+          "reveal": {
+            "en": "The two tools answer different questions:\n\n```mermaid\nflowchart LR\n  P[\"profiler: allocation over time\"] --> PQ[\"who allocates, from which call path\"]\n  H[\"heap dump: one freeze-frame\"] --> HQ[\"what is still alive, and who holds it\"]\n```\n\n- A **profiler** runs *alongside* the live JVM, samples continuously, costs about 1% with JFR, and shows the flow of allocations. It is a film, not a photograph.\n- A **heap dump** is a single instant: every object, its fields and its references, written to a file and analyzed **offline** in a tool such as Eclipse MAT. It says nothing about what happened before or after that instant, but it names every surviving object and the references holding it.\n\nSo: profiler for *who allocates*, heap dump for *what is retained*. They are complementary, not interchangeable.",
+            "ru": "Эти два инструмента отвечают на разные вопросы:\n\n```mermaid\nflowchart LR\n  P[\"профилировщик: аллокации во времени\"] --> PQ[\"кто аллоцирует и из какого пути вызовов\"]\n  H[\"heap dump: один стоп-кадр\"] --> HQ[\"что ещё живо и кто это держит\"]\n```\n\n- **Профилировщик** работает *рядом* с живой JVM, непрерывно сэмплирует, стоит около 1% в случае JFR и показывает поток аллокаций. Это фильм, а не фотография.\n- **Heap dump** — один момент времени: каждый объект, его поля и ссылки, записанные в файл и разбираемые **офлайн** в инструменте вроде Eclipse MAT. Он ничего не говорит о том, что было до или после этого мгновения, зато называет каждый выживший объект и ссылки, которые его держат.\n\nИтого: профилировщик — про *кто аллоцирует*, heap dump — про *что удерживается*. Они дополняют друг друга, а не заменяют."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Retention is a freeze-frame question, and that is exactly what a dump captures.",
+              "ru": "Удержание — вопрос стоп-кадра, а именно его и фиксирует дамп."
+            },
+            "incorrect": {
+              "en": "A heap dump: it lists every live object and the references keeping it alive.",
+              "ru": "Heap dump: он перечисляет каждый живой объект и ссылки, держащие его."
+            }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "pvd-p1-question",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which question does a Java heap dump answer that a sampling profiler does not?",
+            "ru": "На какой вопрос отвечает java heap dump, но не отвечает сэмплирующий профилировщик?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Which objects are alive at one instant and which references hold them",
+                "ru": "Какие объекты живы в один момент и какие ссылки их держат"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Which call path allocates the most memory per second",
+                "ru": "Какой путь вызовов аллоцирует больше всего памяти в секунду"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is precisely the profiler's job — allocation rate with call paths.",
+                "ru": "Это как раз задача профилировщика — скорость аллокаций с путями вызовов."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "How long each garbage collection pause lasted",
+                "ru": "Сколько длилась каждая пауза сборки мусора"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Pause durations come from GC logs and metrics.",
+                "ru": "Длительности пауз берутся из GC-логов и метрик."
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "One instant, complete: every object plus every reference to it.",
+              "ru": "Один момент, но целиком: каждый объект и все ссылки на него."
+            },
+            "incorrect": {
+              "en": "A dump is a freeze-frame of live objects and the references holding them.",
+              "ru": "Дамп — это стоп-кадр живых объектов и ссылок, которые их держат."
+            }
+          }
+        },
+        {
+          "id": "pvd-p2-same-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A profiler and a heap dump are two names for the same thing.",
+            "ru": "Профилировщик и heap dump — два названия одного и того же."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": {
+              "en": "One samples over time on a live JVM; the other is a single offline snapshot.",
+              "ru": "Один сэмплирует во времени на живой JVM; другой — один офлайн-снимок."
+            },
+            "incorrect": {
+              "en": "No — a profiler samples allocation over time; a dump is one freeze-frame analyzed offline.",
+              "ru": "Нет — профилировщик сэмплирует аллокации во времени; дамп — стоп-кадр, разбираемый офлайн."
+            }
+          }
+        },
+        {
+          "id": "pvd-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the difference between the two tools.",
+            "ru": "Собери отличие между этими двумя инструментами."
+          },
+          "tokens": {
+            "en": [
+              "a",
+              "profiler",
+              "samples",
+              "over",
+              "time,",
+              "a",
+              "heap",
+              "dump",
+              "is",
+              "one",
+              "freeze-frame"
+            ],
+            "ru": [
+              "профилировщик",
+              "сэмплирует",
+              "во",
+              "времени,",
+              "heap",
+              "dump",
+              "—",
+              "это",
+              "один",
+              "стоп-кадр"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "threads",
+              "deadlock"
+            ],
+            "ru": [
+              "потоки",
+              "дедлок"
+            ]
+          },
+          "feedback": {
+            "correct": {
+              "en": "Time versus instant is the whole distinction.",
+              "ru": "Всё отличие — время против мгновения."
+            },
+            "incorrect": {
+              "en": "A profiler samples over time; a heap dump is one freeze-frame.",
+              "ru": "Профилировщик сэмплирует во времени; heap dump — это один стоп-кадр."
+            }
+          }
+        },
+        {
+          "id": "pvd-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete both halves of the comparison.",
+            "ru": "Дополни обе половины сравнения."
+          },
+          "text": {
+            "en": "A heap dump is a single freeze-frame of every ___ object; a profiler instead shows allocation over ___.",
+            "ru": "Heap dump — это один стоп-кадр каждого ___ объекта; профилировщик же показывает аллокации во ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "live",
+                "alive",
+                "reachable"
+              ],
+              "ru": [
+                "живого"
+              ]
+            },
+            {
+              "en": [
+                "time"
+              ],
+              "ru": [
+                "времени"
+              ]
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Freeze-frame of live objects versus a moving picture of allocation.",
+              "ru": "Стоп-кадр живых объектов против движущейся картины аллокаций."
+            },
+            "incorrect": {
+              "en": "A dump freezes every live object; a profiler shows allocation over time.",
+              "ru": "Дамп фиксирует каждый живой объект; профилировщик показывает аллокации во времени."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "capturing-a-heap-dump",
+      "title": {
+        "en": "Capturing a heap dump",
+        "ru": "Снятие heap dump"
+      },
+      "summary": {
+        "en": "Heap dumps come automatically from -XX:+HeapDumpOnOutOfMemoryError, or on demand from jmap and jcmd.",
+        "ru": "Heap dump снимается автоматически через -XX:+HeapDumpOnOutOfMemoryError либо по требованию через jmap и jcmd."
+      },
+      "discovery": [
+        {
+          "id": "capture-d1-before-trouble",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A service starts with these arguments. Which part gives you a heap dump automatically at the moment it runs out of heap?",
+            "ru": "Сервис стартует с такими аргументами. Какая часть даст heap dump автоматически в момент нехватки heap?"
+          },
+          "code": "java -Xmx4g \\\n     -XX:+HeapDumpOnOutOfMemoryError \\\n     -XX:HeapDumpPath=/var/dumps \\\n     -jar app.jar",
+          "codeLang": "text",
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "-XX:+HeapDumpOnOutOfMemoryError",
+                "ru": "-XX:+HeapDumpOnOutOfMemoryError"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "-Xmx4g",
+                "ru": "-Xmx4g"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That only sets the maximum heap size; it produces no file.",
+                "ru": "Он лишь задаёт максимальный размер heap и не создаёт никакого файла."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "-XX:HeapDumpPath=/var/dumps",
+                "ru": "-XX:HeapDumpPath=/var/dumps"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That chooses where the dump goes; on its own it does not request one.",
+                "ru": "Он выбирает, куда положить дамп; сам по себе он его не запрашивает."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "None — a dump always has to be taken by hand",
+                "ru": "Никакая — дамп всегда снимают вручную"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The JVM can write one itself at the exact moment of failure.",
+                "ru": "JVM может написать его сама ровно в момент сбоя."
+              }
+            }
+          ],
+          "reveal": {
+            "en": "There are two ways to get a heap dump.\n\n**Automatically, at failure** — set these *before* trouble:\n\n```\n-XX:+HeapDumpOnOutOfMemoryError\n-XX:HeapDumpPath=/var/dumps\n```\n\nThe JVM writes a dump the moment it throws `OutOfMemoryError` — the exact state you want, captured with nobody online. This is the single most useful flag to have set in advance.\n\n**On demand**, against a running process:\n\n```\njmap -dump:live,format=b,file=heap.hprof <pid>\njcmd <pid> GC.heap_dump heap.hprof\n```\n\n`live` writes only reachable objects, which is usually what you want and also makes the file smaller. On-demand capture is not free (see the next atom), so the automatic on-OOM dump is the safer default.",
+            "ru": "Получить heap dump можно двумя способами.\n\n**Автоматически при сбое** — выставьте это *до* проблем:\n\n```\n-XX:+HeapDumpOnOutOfMemoryError\n-XX:HeapDumpPath=/var/dumps\n```\n\nJVM пишет дамп в момент броска `OutOfMemoryError` — ровно то состояние, которое нужно, и без участия человека. Это самый полезный флаг, который стоит выставить заранее.\n\n**По требованию** для работающего процесса:\n\n```\njmap -dump:live,format=b,file=heap.hprof <pid>\njcmd <pid> GC.heap_dump heap.hprof\n```\n\n`live` записывает только достижимые объекты — обычно это то, что нужно, и файл получается меньше. Снятие по требованию не бесплатно (см. следующий атом), поэтому автоматический дамп при OOM — более безопасный вариант по умолчанию."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One flag, set in advance, captures the state you can never reproduce later.",
+              "ru": "Один флаг, выставленный заранее, ловит состояние, которое потом не воспроизвести."
+            },
+            "incorrect": {
+              "en": "-XX:+HeapDumpOnOutOfMemoryError is what makes the JVM write a dump at OOM.",
+              "ru": "Именно -XX:+HeapDumpOnOutOfMemoryError заставляет JVM написать дамп при OOM."
+            }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "capture-p1-on-demand",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which command takes a heap dump of a running Java process on demand?",
+            "ru": "Какая команда снимает heap dump работающего java-процесса по требованию?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "jmap -dump:live,format=b,file=heap.hprof <pid>",
+                "ru": "jmap -dump:live,format=b,file=heap.hprof <pid>"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "jstack <pid>",
+                "ru": "jstack <pid>"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "jstack prints a thread dump — stacks and states, not objects.",
+                "ru": "jstack печатает thread dump — стеки и состояния, а не объекты."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "jstat -gcutil <pid>",
+                "ru": "jstat -gcutil <pid>"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "jstat prints GC and heap utilisation numbers, not a dump file.",
+                "ru": "jstat печатает показатели GC и заполнения heap, а не файл дампа."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "jcmd <pid> JFR.start",
+                "ru": "jcmd <pid> JFR.start"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That starts a Flight Recorder profiling session instead.",
+                "ru": "Это запускает сессию профилирования Flight Recorder."
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "jcmd <pid> GC.heap_dump heap.hprof does the same job.",
+              "ru": "jcmd <pid> GC.heap_dump heap.hprof делает то же самое."
+            },
+            "incorrect": {
+              "en": "Use jmap -dump:live,... or jcmd <pid> GC.heap_dump for an on-demand heap dump.",
+              "ru": "Для дампа по требованию используйте jmap -dump:live,... или jcmd <pid> GC.heap_dump."
+            }
+          }
+        },
+        {
+          "id": "capture-p2-path-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "-XX:HeapDumpPath tells the JVM where to write an automatic heap dump.",
+            "ru": "-XX:HeapDumpPath указывает JVM, куда записать автоматический heap dump."
+          },
+          "answer": true,
+          "feedback": {
+            "correct": {
+              "en": "Point it at a volume with room for a file the size of the live heap.",
+              "ru": "Указывайте том, где хватит места на файл размером с живой heap."
+            },
+            "incorrect": {
+              "en": "It is true: the path flag chooses the destination of the on-OOM dump.",
+              "ru": "Это правда: флаг пути выбирает, куда попадёт дамп при OOM."
+            }
+          }
+        },
+        {
+          "id": "capture-p3-match-commands",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each JVM flag or command to what it does.",
+            "ru": "Соотнеси каждый флаг или команду JVM с тем, что они делают."
+          },
+          "pairs": [
+            {
+              "id": "onoom",
+              "left": {
+                "en": "-XX:+HeapDumpOnOutOfMemoryError",
+                "ru": "-XX:+HeapDumpOnOutOfMemoryError"
+              },
+              "right": {
+                "en": "Writes a dump automatically the moment the JVM runs out of heap",
+                "ru": "Пишет дамп автоматически в момент нехватки heap"
+              }
+            },
+            {
+              "id": "path",
+              "left": {
+                "en": "-XX:HeapDumpPath=/var/dumps",
+                "ru": "-XX:HeapDumpPath=/var/dumps"
+              },
+              "right": {
+                "en": "Chooses the directory that dump is written to",
+                "ru": "Выбирает каталог, куда пишется этот дамп"
+              }
+            },
+            {
+              "id": "jmap",
+              "left": {
+                "en": "jmap -dump:live,format=b,file=heap.hprof <pid>",
+                "ru": "jmap -dump:live,format=b,file=heap.hprof <pid>"
+              },
+              "right": {
+                "en": "Takes a heap dump on demand, writing only reachable objects",
+                "ru": "Снимает дамп по требованию, записывая только достижимые объекты"
+              }
+            },
+            {
+              "id": "jcmdjfr",
+              "left": {
+                "en": "jcmd <pid> JFR.start",
+                "ru": "jcmd <pid> JFR.start"
+              },
+              "right": {
+                "en": "Starts a low-overhead profiling recording, not a dump",
+                "ru": "Запускает запись профилирования с малыми накладными, а не дамп"
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Two flags for the automatic path, two commands for the on-demand path.",
+              "ru": "Два флага для автоматического пути, две команды для пути по требованию."
+            },
+            "incorrect": {
+              "en": "The OOM flag dumps at failure, HeapDumpPath picks the folder, jmap dumps on demand, JFR.start profiles.",
+              "ru": "Флаг OOM снимает дамп при сбое, HeapDumpPath выбирает папку, jmap снимает по требованию, JFR.start профилирует."
+            }
+          }
+        },
+        {
+          "id": "capture-p4-fill-flag",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the flag and the command.",
+            "ru": "Впиши флаг и команду."
+          },
+          "text": {
+            "en": "Get a dump at failure with `-XX:+___`, or take one on demand with `___ -dump:live,format=b,file=heap.hprof <pid>`.",
+            "ru": "Получи дамп при сбое через `-XX:+___` или сними по требованию через `___ -dump:live,format=b,file=heap.hprof <pid>`."
+          },
+          "blanks": [
+            {
+              "en": [
+                "HeapDumpOnOutOfMemoryError"
+              ],
+              "ru": [
+                "HeapDumpOnOutOfMemoryError"
+              ]
+            },
+            {
+              "en": [
+                "jmap"
+              ],
+              "ru": [
+                "jmap"
+              ]
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "The first costs nothing until it is needed; the second costs a pause.",
+              "ru": "Первый ничего не стоит, пока не понадобится; второй стоит паузы."
+            },
+            "incorrect": {
+              "en": "It is -XX:+HeapDumpOnOutOfMemoryError for the automatic dump and jmap for the on-demand one.",
+              "ru": "Это -XX:+HeapDumpOnOutOfMemoryError для автоматического дампа и jmap для дампа по требованию."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "heap-dump-cost",
+      "title": {
+        "en": "What a heap dump costs",
+        "ru": "Во что обходится heap dump"
+      },
+      "summary": {
+        "en": "Capturing a heap dump pauses the JVM stop-the-world and writes a file about the size of the live heap.",
+        "ru": "Снятие heap dump останавливает JVM (stop-the-world) и пишет файл размером примерно с живой heap."
+      },
+      "discovery": [
+        {
+          "id": "cost-d1-what-happens",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A node with a 4 GB live heap is serving production traffic. You run this command on it. What happens to the requests in flight?",
+            "ru": "Узел с живым heap на 4 ГБ обслуживает прод-трафик. Вы запускаете на нём эту команду. Что произойдёт с запросами в полёте?"
+          },
+          "code": "jmap -dump:live,format=b,file=heap.hprof 4213",
+          "codeLang": "text",
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "They stall: the JVM stops the world while it walks and writes the heap",
+                "ru": "Они встанут: JVM останавливает мир, пока обходит и записывает heap"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing — the dump is taken by a background thread",
+                "ru": "Ничего — дамп снимает фоновый поток"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The heap must be consistent while it is walked, so application threads are frozen.",
+                "ru": "Во время обхода heap должен быть согласован, поэтому потоки приложения замораживаются."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "They slow down by roughly 1%, like a profiler",
+                "ru": "Они замедлятся примерно на 1%, как при профилировщике"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is a sampling profiler's cost; a dump is a full stop, not sampling.",
+                "ru": "Это цена сэмплирующего профилировщика; дамп — полная остановка, а не сэмплирование."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "The JVM refuses: dumps are only possible at OOM",
+                "ru": "JVM откажет: дампы возможны только при OOM"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "On-demand dumps work fine — the point is that they are expensive, not forbidden.",
+                "ru": "Дампы по требованию работают — дело в том, что они дороги, а не запрещены."
+              }
+            }
+          ],
+          "reveal": {
+            "en": "Capturing a heap dump is **stop-the-world**: the JVM freezes every application thread while it walks the object graph, then writes a file roughly the size of the **live heap** — often several gigabytes.\n\nFor a 4 GB live heap on a busy node that means a multi-second pause, a multi-GB write, and requests timing out.\n\nSo capture deliberately:\n\n- take the node **out of the load balancer** first, then dump; or\n- rely on the automatic `-XX:+HeapDumpOnOutOfMemoryError` dump, which happens when the node is already failing anyway.\n\nPlan for the file too: it has to be moved off the box and opened in an analyzer that needs comparable memory of its own. \"Just take a dump on the live prod node\" is the classic mistake.",
+            "ru": "Снятие heap dump — это **stop-the-world**: JVM замораживает все потоки приложения, пока обходит граф объектов, а затем пишет файл размером примерно с **живой heap** — часто это гигабайты.\n\nДля живого heap в 4 ГБ на нагруженном узле это означает паузу в несколько секунд, запись нескольких гигабайт и запросы, отваливающиеся по таймауту.\n\nПоэтому снимайте осознанно:\n\n- сначала выведите узел **из балансировщика**, затем снимайте дамп; либо\n- положитесь на автоматический дамп по `-XX:+HeapDumpOnOutOfMemoryError`, который случается, когда узел и так уже падает.\n\nУчтите и сам файл: его нужно вывезти с машины и открыть в анализаторе, которому потребуется сопоставимый объём памяти. «Да просто сними дамп на живом прод-узле» — классическая ошибка."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Stop-the-world plus a multi-GB write is not something to do casually.",
+              "ru": "Stop-the-world плюс запись нескольких гигабайт — не то, что делают походя."
+            },
+            "incorrect": {
+              "en": "A dump freezes all application threads and writes a file the size of the live heap.",
+              "ru": "Дамп замораживает все потоки приложения и пишет файл размером с живой heap."
+            }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "cost-p1-safe-way",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What is the safest way to obtain a heap dump from a production Java service?",
+            "ru": "Как безопаснее всего получить heap dump с прод-сервиса на Java?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Take the node out of the load balancer first, or rely on the automatic on-OOM dump",
+                "ru": "Сначала вывести узел из балансировщика либо положиться на автоматический дамп при OOM"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Dump during the quietest hour, while still serving traffic",
+                "ru": "Снимать дамп в самый тихий час, продолжая обслуживать трафик"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Quieter helps a little, but the pause still hits every request that arrives during it.",
+                "ru": "Тише — чуть легче, но пауза всё равно бьёт по каждому запросу, пришедшему в этот момент."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Dump every node at once so the snapshots line up",
+                "ru": "Снять дамп со всех узлов сразу, чтобы снимки совпали по времени"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That pauses the entire fleet simultaneously — the worst possible outage.",
+                "ru": "Это одновременно останавливает весь флот — худший из возможных отказов."
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Out of rotation, the pause harms nobody.",
+              "ru": "Вне ротации пауза никому не вредит."
+            },
+            "incorrect": {
+              "en": "Pull the node out of rotation first, or use the automatic dump written at OOM.",
+              "ru": "Сначала выведите узел из ротации или используйте автоматический дамп при OOM."
+            }
+          }
+        },
+        {
+          "id": "cost-p2-free-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Taking a heap dump is essentially free and can be done on a live node at any time.",
+            "ru": "Снятие heap dump практически бесплатно, и его можно делать на живом узле в любой момент."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": {
+              "en": "It is stop-the-world plus a write the size of the live heap.",
+              "ru": "Это stop-the-world плюс запись объёмом с живой heap."
+            },
+            "incorrect": {
+              "en": "No — it freezes all application threads and writes a multi-gigabyte file.",
+              "ru": "Нет — оно замораживает все потоки приложения и пишет многогигабайтный файл."
+            }
+          }
+        },
+        {
+          "id": "cost-p3-size",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Roughly how large is the file produced by a Java heap dump?",
+            "ru": "Насколько велик файл, который создаёт java heap dump?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "About the size of the live heap — often gigabytes",
+                "ru": "Примерно размером с живой heap — часто гигабайты"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A few megabytes, like a log file",
+                "ru": "Несколько мегабайт, как файл лога"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is a thread dump's size; a heap dump contains every object and reference.",
+                "ru": "Столько весит thread dump; heap dump содержит каждый объект и каждую ссылку."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Whatever -XX:HeapDumpPath allows, since it is truncated to fit",
+                "ru": "Сколько позволит -XX:HeapDumpPath, так как файл обрезается по месту"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing is truncated; if the volume is too small the dump simply fails.",
+                "ru": "Ничего не обрезается; если на томе мало места, дамп просто не запишется."
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Which is why moving and opening it needs planning too.",
+              "ru": "Поэтому его перенос и открытие тоже нужно планировать."
+            },
+            "incorrect": {
+              "en": "It holds every live object, so the file is about as big as the live heap.",
+              "ru": "Он хранит каждый живой объект, поэтому файл примерно равен живому heap."
+            }
+          }
+        },
+        {
+          "id": "cost-p4-fill-stw",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the pause and the file size.",
+            "ru": "Назови тип паузы и размер файла."
+          },
+          "text": {
+            "en": "Capturing a heap dump is a ___-the-world pause and writes a file about the size of the live ___.",
+            "ru": "Снятие heap dump — это пауза типа ___-the-world, и пишется файл размером примерно с живой ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "stop"
+              ],
+              "ru": [
+                "stop"
+              ]
+            },
+            {
+              "en": [
+                "heap"
+              ],
+              "ru": [
+                "heap"
+              ]
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Both costs together are why you pull the node out of rotation.",
+              "ru": "Обе цены вместе и есть причина выводить узел из ротации."
+            },
+            "incorrect": {
+              "en": "It is a stop-the-world pause and a file the size of the live heap.",
+              "ru": "Это пауза stop-the-world и файл размером с живой heap."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "retained-vs-shallow",
+      "title": {
+        "en": "Retained size vs shallow size",
+        "ru": "Retained size против shallow size"
+      },
+      "summary": {
+        "en": "Retained size is everything freed if an object disappeared; shallow size is only the object itself.",
+        "ru": "Retained size — всё, что освободится, если объект исчезнет; shallow size — только сам объект."
+      },
+      "discovery": [
+        {
+          "id": "retained-d1-which-size",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Eclipse MAT lists a HashMap whose shallow size is 48 bytes at the very top of its Leak Suspects report. How can a 48-byte object be the main suspect?",
+            "ru": "Eclipse MAT ставит HashMap с shallow size в 48 байт на самый верх отчёта Leak Suspects. Как объект в 48 байт может быть главным подозреваемым?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It retains a huge graph: everything only it keeps alive counts as its retained size",
+                "ru": "Он удерживает огромный граф: всё, что живо только благодаря ему, входит в его retained size"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "MAT sorts by allocation count, and this map was allocated most often",
+                "ru": "MAT сортирует по числу аллокаций, а эта мапа создавалась чаще всех"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Leak Suspects ranks by retained heap, not by how often something was allocated.",
+                "ru": "Leak Suspects ранжирует по удерживаемой памяти, а не по частоте аллокаций."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The shallow size is reported wrongly for collections",
+                "ru": "Для коллекций shallow size считается неверно"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "48 bytes is correct — a map object really is tiny; its contents are separate objects.",
+                "ru": "48 байт — верно: сам объект мапы крошечный, а её содержимое — отдельные объекты."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "Small objects are always suspicious because they are hard to collect",
+                "ru": "Маленькие объекты всегда подозрительны, потому что их трудно собирать"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Object size has nothing to do with collectability; reachability does.",
+                "ru": "Размер объекта никак не связан со сборкой; связана достижимость."
+              }
+            }
+          ],
+          "reveal": {
+            "en": "**Eclipse MAT** (Memory Analyzer Tool) is the standard offline heap-dump analyzer. Two of its numbers matter:\n\n- **Shallow size** — the object itself and its own fields, nothing more. A `HashMap` object is a few dozen bytes.\n- **Retained size** — everything that would be freed **if this object disappeared**: the whole graph that only it keeps alive.\n\n```\nHashMap CACHE    shallow    48 B\n                 retained  3.1 GB   <- entries and everything they hold\n```\n\nMAT's **dominator tree** ranks objects by retained size, and **Leak Suspects** is a report built on top of it that names the few objects holding most of the heap.\n\nThat is how a 48-byte map becomes the top suspect: it is tiny, but it *retains* gigabytes. When asking \"what is filling the heap\", always read retained size — shallow size answers a different question.",
+            "ru": "**Eclipse MAT** (Memory Analyzer Tool) — стандартный офлайн-анализатор heap dump. Важны две его величины:\n\n- **Shallow size** — сам объект и его собственные поля, и ничего больше. Объект `HashMap` весит несколько десятков байт.\n- **Retained size** — всё, что освободится, **если этот объект исчезнет**: весь граф, который живёт только благодаря ему.\n\n```\nHashMap CACHE    shallow    48 B\n                 retained  3.1 GB   <- записи и всё, что они держат\n```\n\n**Dominator tree** в MAT ранжирует объекты по retained size, а **Leak Suspects** — построенный поверх него отчёт, который называет те немногие объекты, что держат большую часть heap.\n\nВот так мапа в 48 байт становится главным подозреваемым: она крошечная, но *удерживает* гигабайты. Отвечая на вопрос «что заполняет heap», всегда читайте retained size — shallow size отвечает на другой вопрос."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Small object, huge graph — that is exactly what retained size measures.",
+              "ru": "Маленький объект, огромный граф — именно это и измеряет retained size."
+            },
+            "incorrect": {
+              "en": "Its retained size is huge: it alone keeps a whole graph of entries alive.",
+              "ru": "У него огромный retained size: он один держит живым целый граф записей."
+            }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "retained-p1-definition",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In Eclipse MAT, what does the retained size of an object mean?",
+            "ru": "Что означает retained size объекта в Eclipse MAT?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Everything that would be freed if that object were removed",
+                "ru": "Всё, что освободилось бы при удалении этого объекта"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The size of the object and its own fields",
+                "ru": "Размер самого объекта и его собственных полей"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the shallow size.",
+                "ru": "Это shallow size."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "How long the object has survived, in GC cycles",
+                "ru": "Сколько циклов GC объект уже пережил"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Age is a separate notion; retained size is measured in bytes.",
+                "ru": "Возраст — отдельное понятие; retained size измеряется в байтах."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "Total bytes ever allocated by that class",
+                "ru": "Сколько байт всего когда-либо выделил этот класс"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A dump is a snapshot of what is alive now, not a history of allocation.",
+                "ru": "Дамп — снимок того, что живо сейчас, а не история аллокаций."
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "It measures the graph an object props up, which is what you must free.",
+              "ru": "Он измеряет граф, который подпирает объект, — именно его и нужно освободить."
+            },
+            "incorrect": {
+              "en": "Retained size = everything freed if the object went away, not just the object.",
+              "ru": "Retained size — всё, что освободится при исчезновении объекта, а не только сам объект."
+            }
+          }
+        },
+        {
+          "id": "retained-p2-shallow-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "The shallow size of an object includes the objects its fields point to.",
+            "ru": "Shallow size объекта включает объекты, на которые указывают его поля."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": {
+              "en": "Shallow counts the object alone; referenced objects belong to retained size.",
+              "ru": "Shallow считает только сам объект; объекты по ссылкам входят в retained size."
+            },
+            "incorrect": {
+              "en": "No — shallow is the object itself; what it points to is counted in retained size.",
+              "ru": "Нет — shallow это сам объект; то, на что он указывает, входит в retained size."
+            }
+          }
+        },
+        {
+          "id": "retained-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each Eclipse MAT concept to its meaning.",
+            "ru": "Соотнеси каждое понятие Eclipse MAT с его значением."
+          },
+          "pairs": [
+            {
+              "id": "shallow",
+              "left": {
+                "en": "Shallow size",
+                "ru": "Shallow size"
+              },
+              "right": {
+                "en": "The object itself and its own fields, nothing more",
+                "ru": "Сам объект и его собственные поля, и ничего больше"
+              }
+            },
+            {
+              "id": "retained",
+              "left": {
+                "en": "Retained size",
+                "ru": "Retained size"
+              },
+              "right": {
+                "en": "Everything that would be freed if the object disappeared",
+                "ru": "Всё, что освободилось бы при исчезновении объекта"
+              }
+            },
+            {
+              "id": "dominator",
+              "left": {
+                "en": "Dominator tree",
+                "ru": "Dominator tree"
+              },
+              "right": {
+                "en": "The view that ranks objects by retained size",
+                "ru": "Представление, ранжирующее объекты по retained size"
+              }
+            },
+            {
+              "id": "suspects",
+              "left": {
+                "en": "Leak Suspects",
+                "ru": "Leak Suspects"
+              },
+              "right": {
+                "en": "A report naming the few objects holding most of the heap",
+                "ru": "Отчёт, называющий те немногие объекты, что держат большую часть heap"
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "All four exist to answer one question: what holds the heap?",
+              "ru": "Все четыре нужны ради одного вопроса: что держит heap?"
+            },
+            "incorrect": {
+              "en": "Shallow is the object alone, retained is its whole graph, and MAT ranks by retained.",
+              "ru": "Shallow — только объект, retained — весь его граф, и MAT ранжирует по retained."
+            }
+          }
+        },
+        {
+          "id": "retained-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the size that answers \"what is filling the heap\".",
+            "ru": "Впиши величину, отвечающую на вопрос «что заполняет heap»."
+          },
+          "text": {
+            "en": "In Eclipse MAT read the ___ size, not the shallow size, to see how much heap an object holds onto.",
+            "ru": "В Eclipse MAT смотри ___ size, а не shallow size, чтобы понять, сколько heap удерживает объект."
+          },
+          "blanks": [
+            {
+              "en": [
+                "retained"
+              ],
+              "ru": [
+                "retained"
+              ]
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "A small object can retain a huge graph, so shallow size misleads.",
+              "ru": "Маленький объект может удерживать огромный граф, поэтому shallow size вводит в заблуждение."
+            },
+            "incorrect": {
+              "en": "It is retained size — shallow size only measures the object itself.",
+              "ru": "Это retained size — shallow size измеряет только сам объект."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "path-to-gc-roots",
+      "title": {
+        "en": "Path to GC roots",
+        "ru": "Путь до GC roots"
+      },
+      "summary": {
+        "en": "A leak is always something on a GC root still referencing the object; MAT's path to GC roots shows that chain.",
+        "ru": "Утечка — это всегда что-то на GC root, всё ещё ссылающееся на объект; путь до GC roots в MAT показывает эту цепочку."
+      },
+      "discovery": [
+        {
+          "id": "roots-d1-why-alive",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The dominator tree says a million User objects are retained by one map. Which view tells you WHY the collector cannot free them?",
+            "ru": "Dominator tree показывает, что миллион объектов User удерживается одной мапой. Какое представление скажет, ПОЧЕМУ сборщик не может их освободить?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Path to GC Roots",
+                "ru": "Path to GC Roots"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The histogram of object counts per class",
+                "ru": "Гистограмма количества объектов по классам"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A histogram says how many and how big, never which reference holds them.",
+                "ru": "Гистограмма говорит сколько и какого размера, но не какая ссылка их держит."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The shallow size column",
+                "ru": "Колонка shallow size"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Shallow size is one object's own bytes; it explains nothing about liveness.",
+                "ru": "Shallow size — байты самого объекта; про живучесть он ничего не объясняет."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "The GC log for the same period",
+                "ru": "GC-лог за тот же период"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "GC logs give the trend, not the reference chain inside the heap.",
+                "ru": "GC-логи дают тренд, а не цепочку ссылок внутри heap."
+              }
+            }
+          ],
+          "reveal": {
+            "en": "A **GC root** is a starting point the collector treats as always alive — a `static` field, a running thread's stack, a JNI reference. Anything reachable from a root survives collection.\n\nSo a leak is always *something on a GC root still pointing at your object*. MAT's **Path to GC Roots** prints exactly that chain:\n\n```mermaid\nflowchart LR\n  R[\"GC root: static field\"] --> M[\"static Map cache\"]\n  M --> E[\"entry\"]\n  E --> U[\"large User object\"]\n```\n\nThe dominator tree tells you *what* is retained; the path to GC roots tells you *why*. Read the chain from the object back to the root and the culprit is usually obvious — a static collection, a cache, or a `ThreadLocal`.\n\nThe fix is never `System.gc()`. It is to break one link in that chain: evict the entry, clear the `ThreadLocal`, unregister the listener.",
+            "ru": "**GC root** — это точка старта, которую сборщик считает всегда живой: `static`-поле, стек работающего потока, JNI-ссылка. Всё, что достижимо от корня, переживает сборку.\n\nПоэтому утечка — это всегда *что-то на GC root, всё ещё указывающее на ваш объект*. **Path to GC Roots** в MAT печатает ровно эту цепочку:\n\n```mermaid\nflowchart LR\n  R[\"GC root: static-поле\"] --> M[\"static Map кэш\"]\n  M --> E[\"запись\"]\n  E --> U[\"большой объект User\"]\n```\n\nDominator tree говорит, *что* удерживается; путь до GC roots — *почему*. Прочитайте цепочку от объекта назад к корню, и виновник обычно очевиден: static-коллекция, кэш или `ThreadLocal`.\n\nЛечение — никогда не `System.gc()`, а разрыв одного звена этой цепочки: вытеснить запись, очистить `ThreadLocal`, отписать слушателя."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The root path is the punchline of the whole investigation.",
+              "ru": "Путь до корня — кульминация всего расследования."
+            },
+            "incorrect": {
+              "en": "Path to GC Roots shows the reference chain that keeps the objects reachable.",
+              "ru": "Path to GC Roots показывает цепочку ссылок, которая держит объекты достижимыми."
+            }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "roots-p1-what-is-a-root",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which of these is a GC root in a Java application?",
+            "ru": "Что из этого является GC root в java-приложении?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A static field of a loaded class",
+                "ru": "Static-поле загруженного класса"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Any object stored in the Old generation",
+                "ru": "Любой объект, лежащий в поколении Old"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Being old just means it survived collections; it still needs a root to stay alive.",
+                "ru": "Нахождение в Old лишь значит, что объект пережил сборки; ему всё равно нужен корень."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The largest object in the heap dump",
+                "ru": "Самый большой объект в heap dump"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Size has nothing to do with being a root.",
+                "ru": "Размер никак не связан с тем, является ли объект корнем."
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Static fields live as long as their class, which is why static caches leak.",
+              "ru": "Static-поля живут столько же, сколько их класс, поэтому static-кэши и текут."
+            },
+            "incorrect": {
+              "en": "Static fields and live thread stacks are roots; everything reachable from them survives.",
+              "ru": "Static-поля и стеки живых потоков — корни; всё достижимое от них выживает."
+            }
+          }
+        },
+        {
+          "id": "roots-p2-fix",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "You have followed the path to GC roots and found the reference chain holding the leaked objects. What is the fix?",
+            "ru": "Вы прошли путь до GC roots и нашли цепочку ссылок, держащую утёкшие объекты. В чём заключается исправление?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Break a link in that chain, so the objects become unreachable",
+                "ru": "Разорвать звено этой цепочки, чтобы объекты стали недостижимыми"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Call System.gc() more aggressively",
+                "ru": "Чаще и агрессивнее вызывать System.gc()"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The objects are reachable, so no collection can touch them.",
+                "ru": "Объекты достижимы, поэтому никакая сборка их не тронет."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Increase -Xmx so the chain fits in memory",
+                "ru": "Увеличить -Xmx, чтобы цепочка помещалась в память"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A bigger heap only postpones the OOM if the chain keeps growing.",
+                "ru": "Больший heap лишь отсрочит OOM, если цепочка продолжает расти."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "Switch to a different garbage collector",
+                "ru": "Переключиться на другой сборщик мусора"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Every collector obeys reachability; none of them can free referenced objects.",
+                "ru": "Любой сборщик подчиняется достижимости; ни один не освободит объекты со ссылками."
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Unreachable is the only state the collector can act on.",
+              "ru": "Недостижимость — единственное состояние, с которым может работать сборщик."
+            },
+            "incorrect": {
+              "en": "Break the reference; tuning the heap or the collector cannot free reachable objects.",
+              "ru": "Разорвите ссылку; настройка heap или сборщика не освободит достижимые объекты."
+            }
+          }
+        },
+        {
+          "id": "roots-p3-sort",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the steps of analyzing a heap dump in Eclipse MAT.",
+            "ru": "Расставь по порядку шаги анализа heap dump в Eclipse MAT."
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Open the .hprof file in MAT",
+                "ru": "Открыть файл .hprof в MAT"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Read the dominator tree or Leak Suspects to find what retains most of the heap",
+                "ru": "Прочитать dominator tree или Leak Suspects, чтобы найти, что удерживает большую часть heap"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Run Path to GC Roots on the suspect",
+                "ru": "Запустить Path to GC Roots на подозреваемом"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Follow the chain back to the code that holds the reference",
+                "ru": "Пройти по цепочке назад к коду, который держит ссылку"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "Break that reference and redeploy",
+                "ru": "Разорвать эту ссылку и передеплоить"
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "What is retained, then why it is retained, then the fix.",
+              "ru": "Сначала что удерживается, потом почему, потом исправление."
+            },
+            "incorrect": {
+              "en": "Dominator tree finds the suspect, path to GC roots explains it, then you break the reference.",
+              "ru": "Dominator tree находит подозреваемого, path to GC roots объясняет его, затем вы рвёте ссылку."
+            }
+          }
+        },
+        {
+          "id": "roots-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the MAT view.",
+            "ru": "Назови представление MAT."
+          },
+          "text": {
+            "en": "The reference chain keeping a leaked object alive is shown by MAT's path to ___ ___.",
+            "ru": "Цепочку ссылок, держащую утёкший объект живым, показывает в MAT путь до ___ ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "GC",
+                "gc"
+              ],
+              "ru": [
+                "GC",
+                "gc"
+              ]
+            },
+            {
+              "en": [
+                "roots",
+                "Roots",
+                "root"
+              ],
+              "ru": [
+                "roots",
+                "Roots",
+                "root"
+              ]
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Roots are static fields, thread stacks and JNI references.",
+              "ru": "Корни — это static-поля, стеки потоков и JNI-ссылки."
+            },
+            "incorrect": {
+              "en": "It is the path to GC roots — the chain from a root down to the object.",
+              "ru": "Это путь до GC roots — цепочка от корня вниз к объекту."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "classic-leak-causes",
+      "title": {
+        "en": "Classic leak causes",
+        "ru": "Классические причины утечек"
+      },
+      "summary": {
+        "en": "Unbounded static caches, uncleared ThreadLocals, unregistered listeners and ClassLoader leaks on redeploy are the usual culprits.",
+        "ru": "Неограниченные static-кэши, неочищенные ThreadLocal, неотписанные слушатели и утечки ClassLoader при передеплое — обычные виновники."
+      },
+      "discovery": [
+        {
+          "id": "causes-d1-spot-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This runs in a service handling millions of distinct user ids. What is the memory defect?",
+            "ru": "Это работает в сервисе с миллионами разных идентификаторов пользователей. В чём дефект по памяти?"
+          },
+          "code": "class UserService {\n    private static final Map<String, User> CACHE = new HashMap<>();\n\n    User load(String id) {\n        return CACHE.computeIfAbsent(id, this::fetchFromDb);\n    }\n}",
+          "codeLang": "java",
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "CACHE is static and has no eviction, so it grows for the life of the process",
+                "ru": "CACHE статичен и не имеет вытеснения, поэтому растёт всю жизнь процесса"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "HashMap is not thread-safe, so entries are lost",
+                "ru": "HashMap не потокобезопасен, поэтому записи теряются"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A real concurrency concern, but it is not what makes memory grow forever.",
+                "ru": "Реальная проблема конкурентности, но не она заставляет память расти вечно."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "computeIfAbsent is slower than get plus put",
+                "ru": "computeIfAbsent медленнее, чем get плюс put"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Speed is irrelevant here; the defect is unbounded retention.",
+                "ru": "Скорость здесь ни при чём; дефект — неограниченное удержание."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "Nothing — the GC will drop old entries when memory gets tight",
+                "ru": "Ничего — GC выбросит старые записи, когда памяти станет мало"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A plain HashMap holds strong references; the collector never evicts from it.",
+                "ru": "Обычный HashMap держит сильные ссылки; сборщик ничего из него не вытесняет."
+              }
+            }
+          ],
+          "reveal": {
+            "en": "The path to GC roots almost always ends in one of four classics:\n\n1. **An ever-growing `static` collection or unbounded cache** — no eviction policy, no size cap. A `static` field is a GC root, so every entry survives for the life of the process.\n2. **A `ThreadLocal` never cleared on a pooled thread** — the thread returns to the pool still holding the value, so it lives as long as the pool does.\n3. **Listeners or callbacks registered and never unregistered** — the publisher keeps a reference to the subscriber forever.\n4. **ClassLoader leaks on redeploy** — a single static reference from outside the application pins the whole old app's classes and their static state.\n\nThe cache above is case 1: with millions of distinct ids it grows without limit, and the GC is powerless because every entry is reachable from a static field. The fix is a bounded cache with eviction — not a bigger heap.",
+            "ru": "Путь до GC roots почти всегда упирается в одну из четырёх классических причин:\n\n1. **Постоянно растущая `static`-коллекция или неограниченный кэш** — без политики вытеснения и лимита размера. `static`-поле является GC root, поэтому каждая запись живёт всю жизнь процесса.\n2. **`ThreadLocal`, который не очистили на потоке из пула** — поток возвращается в пул, всё ещё держа значение, и оно живёт столько же, сколько пул.\n3. **Слушатели или колбэки, зарегистрированные и никогда не отписанные** — издатель вечно держит ссылку на подписчика.\n4. **Утечки ClassLoader при передеплое** — одна static-ссылка снаружи приложения прибивает все классы старой версии и их статическое состояние.\n\nКэш выше — случай 1: с миллионами разных id он растёт без предела, и GC бессилен, потому что каждая запись достижима из static-поля. Лечение — ограниченный кэш с вытеснением, а не больший heap."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Static plus no eviction is the textbook unbounded cache.",
+              "ru": "Static плюс отсутствие вытеснения — учебниковый неограниченный кэш."
+            },
+            "incorrect": {
+              "en": "The map is static with no size cap, so every user ever loaded stays in memory.",
+              "ru": "Мапа статична и без лимита, поэтому каждый загруженный пользователь остаётся в памяти."
+            }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "causes-p1-threadlocal-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This filter runs on threads from a servlet container's pool. What is the memory defect?",
+            "ru": "Этот фильтр выполняется на потоках из пула контейнера сервлетов. В чём дефект по памяти?"
+          },
+          "code": "class RequestContextFilter implements Filter {\n    private static final ThreadLocal<User> CURRENT = new ThreadLocal<>();\n\n    public void doFilter(ServletRequest req, ServletResponse res, FilterChain chain)\n            throws IOException, ServletException {\n        CURRENT.set(authenticate(req));\n        chain.doFilter(req, res);\n    }\n}",
+          "codeLang": "java",
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "CURRENT is never cleared, so the pooled thread keeps the User after the request ends",
+                "ru": "CURRENT никогда не очищается, поэтому поток из пула держит User и после конца запроса"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "ThreadLocal cannot be static",
+                "ru": "ThreadLocal не может быть static"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A static ThreadLocal is the normal idiom; the defect is the missing cleanup.",
+                "ru": "Static ThreadLocal — обычная идиома; дефект в отсутствии очистки."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "authenticate() should be called after chain.doFilter",
+                "ru": "authenticate() следует вызывать после chain.doFilter"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Ordering does not change what stays referenced afterwards.",
+                "ru": "Порядок не меняет того, на что остаётся ссылка после."
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "A pooled thread outlives the request, so the value has to be removed explicitly.",
+              "ru": "Поток из пула живёт дольше запроса, поэтому значение нужно удалять явно."
+            },
+            "incorrect": {
+              "en": "The value must be cleared in a finally block; otherwise it lives as long as the pooled thread.",
+              "ru": "Значение нужно очищать в блоке finally; иначе оно живёт столько же, сколько поток из пула."
+            }
+          }
+        },
+        {
+          "id": "causes-p2-listener-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A listener that is registered but never unregistered can keep the object it belongs to alive indefinitely.",
+            "ru": "Слушатель, который зарегистрировали, но не отписали, может держать свой объект живым сколь угодно долго."
+          },
+          "answer": true,
+          "feedback": {
+            "correct": {
+              "en": "The publisher's list is the reference that keeps the subscriber reachable.",
+              "ru": "Список издателя — та самая ссылка, что держит подписчика достижимым."
+            },
+            "incorrect": {
+              "en": "It is true: the publisher still references the subscriber, so nothing can be collected.",
+              "ru": "Это правда: издатель всё ещё ссылается на подписчика, поэтому ничего не собирается."
+            }
+          }
+        },
+        {
+          "id": "causes-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each classic Java leak cause to what keeps the objects alive.",
+            "ru": "Соотнеси каждую классическую причину утечки в Java с тем, что держит объекты живыми."
+          },
+          "pairs": [
+            {
+              "id": "cache",
+              "left": {
+                "en": "A static collection with no size cap",
+                "ru": "Static-коллекция без ограничения размера"
+              },
+              "right": {
+                "en": "An unbounded cache reachable from a static GC root",
+                "ru": "Неограниченный кэш, достижимый из static GC root"
+              }
+            },
+            {
+              "id": "threadlocal",
+              "left": {
+                "en": "A ThreadLocal not cleared on a pooled thread",
+                "ru": "ThreadLocal, не очищенный на потоке из пула"
+              },
+              "right": {
+                "en": "The value lives as long as the thread pool does",
+                "ru": "Значение живёт столько же, сколько пул потоков"
+              }
+            },
+            {
+              "id": "listener",
+              "left": {
+                "en": "A listener registered and never unregistered",
+                "ru": "Слушатель, зарегистрированный и не отписанный"
+              },
+              "right": {
+                "en": "The publisher keeps referencing the subscriber",
+                "ru": "Издатель продолжает ссылаться на подписчика"
+              }
+            },
+            {
+              "id": "classloader",
+              "left": {
+                "en": "A static reference to the old app after redeploy",
+                "ru": "Static-ссылка на старое приложение после передеплоя"
+              },
+              "right": {
+                "en": "A ClassLoader leak pinning all of the old classes",
+                "ru": "Утечка ClassLoader, прибивающая все старые классы"
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Every one of them is just an unexpected path from a GC root.",
+              "ru": "Каждая из них — просто неожиданный путь от GC root."
+            },
+            "incorrect": {
+              "en": "Static caches, uncleared ThreadLocals, live listeners and pinned ClassLoaders are the four classics.",
+              "ru": "Static-кэши, неочищенные ThreadLocal, живые слушатели и прибитые ClassLoader — четыре классики."
+            }
+          }
+        },
+        {
+          "id": "causes-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the mechanism.",
+            "ru": "Назови механизм."
+          },
+          "text": {
+            "en": "A value stored in a ___ on a pooled thread lives as long as the thread pool unless the code clears it.",
+            "ru": "Значение, положенное в ___ на потоке из пула, живёт столько же, сколько пул, пока код его не очистит."
+          },
+          "blanks": [
+            {
+              "en": [
+                "ThreadLocal",
+                "threadlocal"
+              ],
+              "ru": [
+                "ThreadLocal",
+                "threadlocal"
+              ]
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Pooled threads are long-lived, so per-request values must be removed.",
+              "ru": "Потоки в пуле долгоживущие, поэтому значения запроса нужно удалять."
+            },
+            "incorrect": {
+              "en": "It is a ThreadLocal — the pooled thread carries the value long after the request.",
+              "ru": "Это ThreadLocal — поток из пула несёт значение задолго после запроса."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "thread-dump",
+      "title": {
+        "en": "Thread dumps",
+        "ru": "Thread dump"
+      },
+      "summary": {
+        "en": "A thread dump snapshots every thread's stack and state — for hangs, deadlocks and thread leaks, not for objects.",
+        "ru": "Thread dump снимает стек и состояние каждого потока — для зависаний, дедлоков и утечек потоков, а не для объектов."
+      },
+      "discovery": [
+        {
+          "id": "thread-d1-hung-service",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A service stops responding to requests, but its post-GC heap is flat and healthy. Which snapshot do you take?",
+            "ru": "Сервис перестал отвечать на запросы, но его heap после GC ровный и здоровый. Какой снимок вы снимете?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A thread dump",
+                "ru": "Thread dump"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A heap dump",
+                "ru": "Heap dump"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Memory is fine — a dump of objects would not explain why threads are stuck.",
+                "ru": "С памятью всё в порядке — дамп объектов не объяснит, почему потоки застряли."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A longer GC log",
+                "ru": "Более длинный GC-лог"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The GC trend is already known to be healthy.",
+                "ru": "Про тренд GC уже известно, что он здоровый."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "An allocation profile from JFR",
+                "ru": "Профиль аллокаций из JFR"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Allocation is not the symptom; you need to see what each thread is waiting on.",
+                "ru": "Симптом не в аллокациях; нужно видеть, чего ждёт каждый поток."
+              }
+            }
+          ],
+          "reveal": {
+            "en": "A **thread dump** is orthogonal to a heap dump: it snapshots every thread's **stack and state**, not the objects. Capture it with:\n\n```\njstack <pid>\njcmd <pid> Thread.print\nkill -3 <pid>          # SIGQUIT: the JVM prints the dump itself\n```\n\nIt is the right tool when the symptom is **hung, not responding, or 100% CPU**, and it shows:\n\n- **Deadlocks** — `jstack` detects and flags them explicitly.\n- Threads `BLOCKED` on a lock another thread holds.\n- Threads `WAITING` on a slow downstream call.\n- An exploding **thread count** — a thread leak from creating threads instead of reusing a pool.\n\nThat last one is the memory connection: each thread stack costs about **1 MB**, so thousands of leaked threads *look* like a memory leak, yet no heap dump would explain it. A thread dump only hints at memory through the thread count; it never lists heap objects.",
+            "ru": "**Thread dump** — про другое, чем heap dump: он снимает **стек и состояние** каждого потока, а не объекты. Снимается так:\n\n```\njstack <pid>\njcmd <pid> Thread.print\nkill -3 <pid>          # SIGQUIT: JVM печатает дамп сама\n```\n\nЭто нужный инструмент, когда симптом — **зависание, отсутствие ответа или 100% CPU**. Он показывает:\n\n- **Дедлоки** — `jstack` находит и явно помечает их.\n- Потоки в `BLOCKED` на блокировке, которую держит другой поток.\n- Потоки в `WAITING` на медленном внешнем вызове.\n- Взрывной рост **числа потоков** — утечку потоков из-за создания новых вместо переиспользования пула.\n\nПоследний пункт и есть связь с памятью: каждый стек потока стоит примерно **1 МБ**, поэтому тысячи утёкших потоков *выглядят* как утечка памяти, хотя heap dump этого не объяснит. Thread dump намекает на память лишь числом потоков; объекты heap он не перечисляет никогда."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Stacks and states are what explain a hang.",
+              "ru": "Зависание объясняют именно стеки и состояния."
+            },
+            "incorrect": {
+              "en": "A thread dump: it shows each thread's stack and state, which is what a hang is about.",
+              "ru": "Thread dump: он показывает стек и состояние каждого потока — то, из чего состоит зависание."
+            }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "thread-p1-shows",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does a Java thread dump contain?",
+            "ru": "Что содержит java thread dump?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The stack and state of every thread at one instant",
+                "ru": "Стек и состояние каждого потока в один момент"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Every live object and its references",
+                "ru": "Каждый живой объект и его ссылки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is a heap dump.",
+                "ru": "Это heap dump."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Allocation rates per call path",
+                "ru": "Скорость аллокаций по путям вызовов"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That comes from a profiler such as JFR.",
+                "ru": "Это даёт профилировщик вроде JFR."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "The heap size after each collection",
+                "ru": "Размер heap после каждой сборки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That comes from GC logs and metrics.",
+                "ru": "Это дают GC-логи и метрики."
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Stacks and states — small, cheap and text-based.",
+              "ru": "Стеки и состояния — маленький, дешёвый и текстовый снимок."
+            },
+            "incorrect": {
+              "en": "A thread dump lists thread stacks and states, not heap objects.",
+              "ru": "Thread dump перечисляет стеки и состояния потоков, а не объекты heap."
+            }
+          }
+        },
+        {
+          "id": "thread-p2-memory-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A thread dump lists the objects that are filling the Java heap.",
+            "ru": "Thread dump перечисляет объекты, которые заполняют java heap."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": {
+              "en": "It hints at memory only through an excessive thread count.",
+              "ru": "На память он намекает лишь избыточным числом потоков."
+            },
+            "incorrect": {
+              "en": "No — it shows thread stacks and states; only the thread count hints at memory.",
+              "ru": "Нет — он показывает стеки и состояния потоков; на память намекает лишь их количество."
+            }
+          }
+        },
+        {
+          "id": "thread-p3-match-findings",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each thread-dump finding to what it means.",
+            "ru": "Соотнеси каждую находку в thread dump с её смыслом."
+          },
+          "pairs": [
+            {
+              "id": "blocked",
+              "left": {
+                "en": "A thread in state BLOCKED",
+                "ru": "Поток в состоянии BLOCKED"
+              },
+              "right": {
+                "en": "Waiting to acquire a lock another thread holds",
+                "ru": "Ждёт захвата блокировки, которую держит другой поток"
+              }
+            },
+            {
+              "id": "waiting",
+              "left": {
+                "en": "A thread in state WAITING",
+                "ru": "Поток в состоянии WAITING"
+              },
+              "right": {
+                "en": "Parked waiting for another thread or a slow downstream call",
+                "ru": "Ожидает другого потока или медленного внешнего вызова"
+              }
+            },
+            {
+              "id": "deadlock",
+              "left": {
+                "en": "A deadlock",
+                "ru": "Дедлок"
+              },
+              "right": {
+                "en": "Detected and flagged explicitly by jstack",
+                "ru": "Обнаруживается и явно помечается инструментом jstack"
+              }
+            },
+            {
+              "id": "count",
+              "left": {
+                "en": "Thousands of threads in the dump",
+                "ru": "Тысячи потоков в дампе"
+              },
+              "right": {
+                "en": "A thread leak — each stack costs about 1 MB",
+                "ru": "Утечка потоков — каждый стек стоит около 1 МБ"
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "The last one is why a thread leak can masquerade as a memory leak.",
+              "ru": "Последний пункт объясняет, почему утечка потоков маскируется под утечку памяти."
+            },
+            "incorrect": {
+              "en": "BLOCKED waits for a lock, WAITING waits for someone else, jstack flags deadlocks, and a huge thread count is a thread leak.",
+              "ru": "BLOCKED ждёт блокировку, WAITING ждёт кого-то ещё, jstack помечает дедлоки, а огромное число потоков — утечка потоков."
+            }
+          }
+        },
+        {
+          "id": "thread-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the command and the signal number.",
+            "ru": "Впиши команду и номер сигнала."
+          },
+          "text": {
+            "en": "Print a thread dump with `___ <pid>`, or by sending SIGQUIT with `kill -___ <pid>`.",
+            "ru": "Напечатай thread dump командой `___ <pid>` или отправив SIGQUIT через `kill -___ <pid>`."
+          },
+          "blanks": [
+            {
+              "en": [
+                "jstack"
+              ],
+              "ru": [
+                "jstack"
+              ]
+            },
+            {
+              "en": [
+                "3"
+              ],
+              "ru": [
+                "3"
+              ]
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "jcmd <pid> Thread.print does the same thing.",
+              "ru": "jcmd <pid> Thread.print делает то же самое."
+            },
+            "incorrect": {
+              "en": "It is jstack <pid> or kill -3 <pid>, which makes the JVM print the dump itself.",
+              "ru": "Это jstack <pid> или kill -3 <pid>, после чего JVM печатает дамп сама."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "compare-two-snapshots",
+      "title": {
+        "en": "Compare two snapshots",
+        "ru": "Сравнение двух снимков"
+      },
+      "summary": {
+        "en": "One snapshot shows what is big; two snapshots compared over time show what is growing, which is the leak.",
+        "ru": "Один снимок показывает, что велико; два снимка в сравнении показывают, что растёт, — а это и есть утечка."
+      },
+      "discovery": [
+        {
+          "id": "compare-d1-why-two",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A single heap dump shows 3 million String objects, more than any other class. Have you found the leak?",
+            "ru": "Один heap dump показывает 3 миллиона объектов String — больше, чем у любого другого класса. Утечка найдена?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Not yet — a single snapshot shows what is big, not what is growing",
+                "ru": "Ещё нет — один снимок показывает, что велико, а не что растёт"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Yes — the most numerous class is the leaking one",
+                "ru": "Да — самый многочисленный класс и есть утекающий"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Most services legitimately hold millions of Strings; volume alone proves nothing.",
+                "ru": "Большинство сервисов законно держат миллионы строк; один объём ничего не доказывает."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Yes, if the Strings are in the Old generation",
+                "ru": "Да, если эти строки в поколении Old"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Long-lived data legitimately ends up in Old; that is not evidence of a leak either.",
+                "ru": "Долгоживущие данные законно оказываются в Old; это тоже не доказательство утечки."
+              }
+            }
+          ],
+          "reveal": {
+            "en": "A single heap dump shows what is **big**. It cannot show what is **growing** — and growth is the definition of a leak. Plenty of healthy services legitimately hold millions of `String`s.\n\nSo take **two dumps a few seconds or minutes apart** under comparable load, and compare them:\n\n```\n            dump A     dump B     change\nString      3.0 M      3.1 M      +3%      normal churn\nSession     120 k      480 k      +300%    <- suspect\n```\n\nWhatever *grew* between the snapshots is the suspect; whatever was merely large in both is the baseline.\n\nThe same logic works at every level: metrics compare the post-GC floor across hours, dumps compare object counts across minutes. Comparison over time is what turns \"memory is high\" into \"this class is leaking\".",
+            "ru": "Один heap dump показывает, что **велико**. Он не может показать, что **растёт**, а рост — и есть определение утечки. Множество здоровых сервисов законно держат миллионы `String`.\n\nПоэтому снимайте **два дампа с интервалом в несколько секунд или минут** при сопоставимой нагрузке и сравнивайте их:\n\n```\n            дамп A     дамп B     изменение\nString      3.0 M      3.1 M      +3%       обычная текучка\nSession     120 k      480 k      +300%     <- подозреваемый\n```\n\nТо, что *выросло* между снимками, и есть подозреваемый; то, что было просто большим в обоих, — базовый уровень.\n\nЭта логика работает на любом уровне: метрики сравнивают дно после GC за часы, дампы сравнивают количество объектов за минуты. Именно сравнение во времени превращает «памяти много» в «вот этот класс течёт»."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Growth, not size, identifies a leak.",
+              "ru": "Утечку определяет рост, а не размер."
+            },
+            "incorrect": {
+              "en": "Not yet — you need a second snapshot to see what actually grew.",
+              "ru": "Ещё нет — нужен второй снимок, чтобы увидеть, что действительно выросло."
+            }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "compare-p1-why",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why are two heap dumps taken minutes apart more useful than a single one?",
+            "ru": "Почему два heap dump, снятые с интервалом в минуты, полезнее одного?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The difference between them shows what is actually growing",
+                "ru": "Разница между ними показывает, что действительно растёт"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Two dumps are more accurate because the JVM rounds sizes",
+                "ru": "Два дампа точнее, потому что JVM округляет размеры"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Accuracy is not the issue; a single dump is exact but static.",
+                "ru": "Дело не в точности; один дамп точен, но статичен."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The second dump forces a full GC that cleans the heap",
+                "ru": "Второй дамп запускает полную сборку, которая чистит heap"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Cleaning is not the goal, and a collection cannot free leaked objects anyway.",
+                "ru": "Чистка не цель, и сборка всё равно не освободит утёкшие объекты."
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Growth over time is the only reliable signature of a leak.",
+              "ru": "Рост во времени — единственный надёжный признак утечки."
+            },
+            "incorrect": {
+              "en": "Comparing two snapshots reveals what grew; a single one only shows what is large.",
+              "ru": "Сравнение двух снимков показывает, что выросло; один снимок показывает лишь, что велико."
+            }
+          }
+        },
+        {
+          "id": "compare-p2-single-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "The class with the most instances in a single heap dump is by definition the leaking one.",
+            "ru": "Класс с наибольшим числом экземпляров в одном heap dump по определению и есть утекающий."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": {
+              "en": "Large is not the same as growing; you need a second snapshot.",
+              "ru": "Большой — не то же самое, что растущий; нужен второй снимок."
+            },
+            "incorrect": {
+              "en": "No — many services legitimately hold millions of objects; look for growth instead.",
+              "ru": "Нет — многие сервисы законно держат миллионы объектов; ищите рост."
+            }
+          }
+        },
+        {
+          "id": "compare-p3-sort",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the steps of a two-snapshot comparison.",
+            "ru": "Расставь по порядку шаги сравнения двух снимков."
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Capture snapshot A",
+                "ru": "Снять снимок A"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Let the service run under comparable load for some minutes",
+                "ru": "Дать сервису поработать под сопоставимой нагрузкой несколько минут"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Capture snapshot B",
+                "ru": "Снять снимок B"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Compare the two and pick out what grew",
+                "ru": "Сравнить оба и выделить то, что выросло"
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Comparable load between the two is what makes the delta meaningful.",
+              "ru": "Сопоставимая нагрузка между снимками и делает разницу осмысленной."
+            },
+            "incorrect": {
+              "en": "Snapshot A, run under load, snapshot B, then compare and look at the growth.",
+              "ru": "Снимок A, работа под нагрузкой, снимок B, затем сравнение и анализ роста."
+            }
+          }
+        },
+        {
+          "id": "compare-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the rule of thumb.",
+            "ru": "Дополни правило."
+          },
+          "text": {
+            "en": "Compare two snapshots taken over ___: whatever ___ between them is the suspect.",
+            "ru": "Сравни два снимка, снятых во ___: подозреваемый — то, что ___ между ними."
+          },
+          "blanks": [
+            {
+              "en": [
+                "time"
+              ],
+              "ru": [
+                "времени"
+              ]
+            },
+            {
+              "en": [
+                "grew",
+                "grows",
+                "increased"
+              ],
+              "ru": [
+                "выросло",
+                "увеличилось"
+              ]
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "The delta separates the leak from the legitimate baseline.",
+              "ru": "Разница отделяет утечку от законного базового уровня."
+            },
+            "incorrect": {
+              "en": "Take two snapshots over time; whatever grew between them is the suspect.",
+              "ru": "Снимите два снимка во времени; подозреваемый — то, что между ними выросло."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "end-to-end-diagnosis",
+      "title": {
+        "en": "The full investigation",
+        "ru": "Полное расследование"
+      },
+      "summary": {
+        "en": "Confirm the trend, profile, dump deliberately, analyze retained size and GC roots, then break the reference.",
+        "ru": "Подтвердить тренд, профилировать, снять дамп осознанно, разобрать retained size и GC roots, затем разорвать ссылку."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "cap-d1-full-scenario",
+          "type": "predict_output",
+          "prompt": {
+            "en": "This controller runs for a week under real traffic with a 4 GB heap and millions of distinct session ids. Predict what the monitoring and a heap dump will show.",
+            "ru": "Этот контроллер работает неделю под реальным трафиком с heap в 4 ГБ и миллионами разных идентификаторов сессий. Предскажи, что покажут мониторинг и heap dump."
+          },
+          "code": "@RestController\nclass SessionController {\n    private static final Map<String, Session> CACHE = new HashMap<>();\n\n    @GetMapping(\"/s/{id}\")\n    Session get(@PathVariable String id) {\n        return CACHE.computeIfAbsent(id, Session::load);\n    }\n}",
+          "codeLang": "java",
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A rising post-GC floor, and CACHE at the top of the dominator tree with a tiny shallow but huge retained size",
+                "ru": "Растущее дно после GC и CACHE на вершине dominator tree с крошечным shallow и огромным retained size"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A normal sawtooth, since GC evicts old entries from the map when memory gets tight",
+                "ru": "Обычная пила, ведь GC вытесняет из мапы старые записи, когда памяти становится мало"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A plain HashMap holds strong references; the collector never evicts entries from it.",
+                "ru": "Обычный HashMap держит сильные ссылки; сборщик никогда не вытесняет из него записи."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A rising floor, and CACHE at the top of the dominator tree because its shallow size is the largest",
+                "ru": "Растущее дно и CACHE на вершине dominator tree, потому что у него самый большой shallow size"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The trend is right but the reason is not: the map object itself is only a few dozen bytes.",
+                "ru": "Тренд верный, но причина нет: сам объект мапы весит лишь несколько десятков байт."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "High allocation in the profiler but a flat post-GC floor, since sessions are short-lived",
+                "ru": "Высокая аллокация в профилировщике, но ровное дно после GC, ведь сессии короткоживущие"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The sessions are not short-lived here — the static map keeps every one of them reachable.",
+                "ru": "Здесь сессии не короткоживущие — static-мапа держит каждую из них достижимой."
+              }
+            }
+          ],
+          "reveal": {
+            "en": "Every piece fits into one pipeline:\n\n```mermaid\nflowchart TD\n  A[\"symptom: memory climbs or OOM\"] --> B[\"metrics and GC logs: is the post-GC floor rising?\"]\n  B --> C[\"profiler such as JFR: what allocates, from which call path\"]\n  C --> D[\"heap dump: on OOM, or on a node out of rotation\"]\n  D --> E[\"MAT: dominator tree, ranked by retained size\"]\n  E --> F[\"path to GC roots: the reference holding it\"]\n  F --> G[\"break that reference\"]\n```\n\nIn this code `CACHE` is `static`, so it is reachable from a GC root, and it has no eviction. Every distinct session id adds an entry that can never be collected.\n\nOver a week the post-GC floor climbs steadily, the Old generation fills, GC starts consuming more wall-clock time, and eventually the JVM throws `OutOfMemoryError`. A heap dump would show `CACHE` at the top of the dominator tree — a few dozen bytes shallow, gigabytes retained — with the path to GC roots ending at the static field.\n\nThe fix is a bounded cache with eviction. Not a bigger heap, not a different collector, and not `System.gc()`.",
+            "ru": "Все части складываются в один конвейер:\n\n```mermaid\nflowchart TD\n  A[\"симптом: память растёт или OOM\"] --> B[\"метрики и GC-логи: растёт ли дно после GC?\"]\n  B --> C[\"профилировщик вроде JFR: что аллоцирует и откуда\"]\n  C --> D[\"heap dump: при OOM или на узле вне ротации\"]\n  D --> E[\"MAT: dominator tree, сортировка по retained size\"]\n  E --> F[\"путь до GC roots: ссылка, которая держит\"]\n  F --> G[\"разорвать эту ссылку\"]\n```\n\nВ этом коде `CACHE` объявлен `static`, значит достижим из GC root, и у него нет вытеснения. Каждый новый идентификатор сессии добавляет запись, которую уже никогда не собрать.\n\nЗа неделю дно после GC неуклонно поднимается, поколение Old заполняется, GC начинает отнимать всё больше времени, и в итоге JVM бросает `OutOfMemoryError`. Heap dump показал бы `CACHE` на вершине dominator tree — несколько десятков байт shallow и гигабайты retained — а путь до GC roots упёрся бы в static-поле.\n\nЛечение — ограниченный кэш с вытеснением. Не больший heap, не другой сборщик и не `System.gc()`."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Static root, no eviction, unbounded key space: the textbook leak.",
+              "ru": "Static-корень, отсутствие вытеснения, неограниченное множество ключей — учебниковая утечка."
+            },
+            "incorrect": {
+              "en": "The static map retains every session forever, so the post-GC floor rises and MAT ranks CACHE first by retained size.",
+              "ru": "Static-мапа удерживает каждую сессию навсегда, поэтому дно после GC растёт, а MAT ставит CACHE первым по retained size."
+            }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "cap-p1-next-step",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A Java service's post-GC heap floor has climbed steadily for three days. The node is in the load balancer and must keep serving traffic. What is the right next step?",
+            "ru": "Дно heap после GC у java-сервиса неуклонно росло три дня. Узел стоит в балансировщике и должен продолжать обслуживать трафик. Какой следующий шаг правильный?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Attach a low-overhead profiler now, and take the heap dump on a node pulled out of rotation",
+                "ru": "Подключить сейчас профилировщик с малыми накладными, а heap dump снять на узле, выведенном из ротации"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Run jmap -dump on this node right away — it only takes a few seconds",
+                "ru": "Прямо сейчас выполнить jmap -dump на этом узле — это всего несколько секунд"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is a stop-the-world pause plus a multi-gigabyte write on a node serving traffic.",
+                "ru": "Это пауза stop-the-world плюс запись нескольких гигабайт на узле под трафиком."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Call System.gc() from an admin endpoint and see whether the floor drops",
+                "ru": "Вызвать System.gc() через админский эндпоинт и посмотреть, упадёт ли дно"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The floor is already measured after GC; still-referenced objects are not collectable.",
+                "ru": "Дно и так измеряется после GC; объекты со ссылками собрать нельзя."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "Restart the node and keep watching the metrics",
+                "ru": "Перезапустить узел и продолжать смотреть метрики"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The trend is already confirmed; a restart only destroys the state you need to analyze.",
+                "ru": "Тренд уже подтверждён; перезапуск лишь уничтожит состояние, которое нужно анализировать."
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Cheap tool on the live node, expensive one where a pause is harmless.",
+              "ru": "Дешёвый инструмент на живом узле, дорогой — там, где пауза безвредна."
+            },
+            "incorrect": {
+              "en": "Profile live at about 1%, and dump only where a stop-the-world pause hurts nobody.",
+              "ru": "Профилируйте вживую примерно за 1%, а дамп снимайте там, где пауза stop-the-world никому не вредит."
+            }
+          }
+        },
+        {
+          "id": "cap-p2-listener-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "A new ReportJob is constructed for every incoming request. The post-GC heap floor rises all day. What is the defect?",
+            "ru": "Новый ReportJob создаётся на каждый входящий запрос. Дно heap после GC растёт весь день. В чём дефект?"
+          },
+          "code": "class ReportJob {\n    ReportJob(EventBus bus) {\n        bus.subscribe(this::onEvent);\n    }\n\n    void onEvent(Event e) {\n        // ...\n    }\n}",
+          "codeLang": "java",
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The bus keeps a reference to every job because nothing ever unsubscribes",
+                "ru": "Шина держит ссылку на каждую задачу, потому что никто никогда не отписывается"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing leaks: once the request ends, no application code points at the job, so GC collects it",
+                "ru": "Ничего не течёт: после конца запроса код приложения не ссылается на задачу, и GC её соберёт"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The bus still references it, and reachability from anywhere is enough to keep it alive.",
+                "ru": "Шина всё ещё ссылается на неё, а достижимости откуда угодно достаточно, чтобы объект жил."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "onEvent allocates too much, so the allocation rate is the problem",
+                "ru": "onEvent слишком много аллоцирует, и проблема в скорости аллокаций"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Allocation rate does not raise the post-GC floor; permanent retention does.",
+                "ru": "Скорость аллокаций не поднимает дно после GC; его поднимает постоянное удержание."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "Subscribing inside a constructor makes the object thread-unsafe",
+                "ru": "Подписка внутри конструктора делает объект небезопасным для потоков"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A genuine concern about publishing this early, but not what makes memory grow.",
+                "ru": "Ранняя публикация this — реальная проблема, но не она заставляет память расти."
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "The subscriber list is a live reference chain from a long-lived object.",
+              "ru": "Список подписчиков — живая цепочка ссылок от долгоживущего объекта."
+            },
+            "incorrect": {
+              "en": "The unremoved subscription keeps every job reachable, so none can be collected.",
+              "ru": "Неудалённая подписка держит каждую задачу достижимой, поэтому ни одну нельзя собрать."
+            }
+          }
+        },
+        {
+          "id": "cap-p3-match-tools",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each diagnostic tool to the question it answers.",
+            "ru": "Соотнеси каждый диагностический инструмент с вопросом, на который он отвечает."
+          },
+          "pairs": [
+            {
+              "id": "metrics",
+              "left": {
+                "en": "Metrics and GC logs",
+                "ru": "Метрики и GC-логи"
+              },
+              "right": {
+                "en": "Is memory trending upward over time?",
+                "ru": "Растёт ли память со временем?"
+              }
+            },
+            {
+              "id": "profiler",
+              "left": {
+                "en": "Profiler such as JFR",
+                "ru": "Профилировщик вроде JFR"
+              },
+              "right": {
+                "en": "What is being allocated, and from which call path?",
+                "ru": "Что аллоцируется и из какого пути вызовов?"
+              }
+            },
+            {
+              "id": "heapdump",
+              "left": {
+                "en": "Heap dump",
+                "ru": "Heap dump"
+              },
+              "right": {
+                "en": "What is still alive right now, and which reference holds it?",
+                "ru": "Что живо прямо сейчас и какая ссылка это держит?"
+              }
+            },
+            {
+              "id": "threaddump",
+              "left": {
+                "en": "Thread dump",
+                "ru": "Thread dump"
+              },
+              "right": {
+                "en": "What is every thread doing and waiting on?",
+                "ru": "Что делает и чего ждёт каждый поток?"
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Trend, allocation, retention, threads — four questions, four tools.",
+              "ru": "Тренд, аллокации, удержание, потоки — четыре вопроса, четыре инструмента."
+            },
+            "incorrect": {
+              "en": "Metrics give the trend, a profiler gives allocation, a heap dump gives retention, a thread dump gives thread state.",
+              "ru": "Метрики дают тренд, профилировщик — аллокации, heap dump — удержание, thread dump — состояние потоков."
+            }
+          }
+        },
+        {
+          "id": "cap-p4-sort-full",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the full investigation of a suspected memory leak in a production Java service.",
+            "ru": "Расставь по порядку полное расследование предполагаемой утечки памяти в прод-сервисе на Java."
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Confirm the post-GC floor is rising, using metrics and GC logs",
+                "ru": "Подтвердить рост дна после GC по метрикам и GC-логам"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Attach a low-overhead profiler to see what is allocated and from where",
+                "ru": "Подключить профилировщик с малыми накладными и посмотреть, что и откуда аллоцируется"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Capture a heap dump on OOM or on a node taken out of rotation",
+                "ru": "Снять heap dump при OOM или на узле, выведенном из ротации"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "In MAT, rank suspects by retained size in the dominator tree",
+                "ru": "В MAT отранжировать подозреваемых по retained size в dominator tree"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "Run path to GC roots on the top suspect",
+                "ru": "Запустить path to GC roots на главном подозреваемом"
+              }
+            },
+            {
+              "id": "s6",
+              "text": {
+                "en": "Break the reference that keeps the objects alive",
+                "ru": "Разорвать ссылку, которая держит объекты живыми"
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Cheap and broad first, expensive and precise last.",
+              "ru": "Сначала дешёвое и широкое, в конце — дорогое и точное."
+            },
+            "incorrect": {
+              "en": "Trend first, then profiler, then dump, then retained size, then GC roots, then the fix.",
+              "ru": "Сначала тренд, потом профилировщик, дамп, retained size, GC roots и лишь затем исправление."
+            }
+          }
+        },
+        {
+          "id": "cap-p5-fill-summary",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the three key terms of the method.",
+            "ru": "Впиши три ключевых термина методики."
+          },
+          "text": {
+            "en": "A leak shows up as a rising post-GC ___; in MAT you rank suspects by ___ size and then follow the path to GC ___.",
+            "ru": "Утечка проявляется как растущее ___ после GC; в MAT подозреваемых ранжируют по ___ size, а затем идут по пути до GC ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "floor",
+                "baseline"
+              ],
+              "ru": [
+                "дно"
+              ]
+            },
+            {
+              "en": [
+                "retained"
+              ],
+              "ru": [
+                "retained"
+              ]
+            },
+            {
+              "en": [
+                "roots",
+                "Roots",
+                "root"
+              ],
+              "ru": [
+                "roots",
+                "Roots",
+                "root"
+              ]
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Those three words are the whole answer: trend, retention, reference.",
+              "ru": "Эти три слова — весь ответ: тренд, удержание, ссылка."
+            },
+            "incorrect": {
+              "en": "Rising post-GC floor, retained size in the dominator tree, then the path to GC roots.",
+              "ru": "Растущее дно после GC, retained size в dominator tree, затем путь до GC roots."
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

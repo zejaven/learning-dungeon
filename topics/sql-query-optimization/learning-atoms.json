@@ -1,0 +1,2926 @@
+{
+  "schemaVersion": 1,
+  "topicId": "sql-query-optimization",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "measure-first",
+      "title": {
+        "en": "Measure before you guess",
+        "ru": "Сначала измеряй, а не гадай"
+      },
+      "summary": {
+        "en": "Before changing anything, run EXPLAIN (or EXPLAIN ANALYZE) to see what the database actually does.",
+        "ru": "Прежде чем что-то менять, выполни EXPLAIN (или EXPLAIN ANALYZE), чтобы увидеть, что база делает на самом деле."
+      },
+      "discovery": [
+        {
+          "id": "measure-d1-first-step",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A query is slow in production. What is the FIRST thing you do?",
+            "ru": "Запрос тормозит в проде. Что вы сделаете ПЕРВЫМ?"
+          },
+          "reveal": {
+            "en": "A **query plan** is the step-by-step strategy the database chose to execute your SQL: which tables it reads, in what order, and how it combines them.\n\n- **`EXPLAIN`** prints that plan with *estimated* costs and row counts, without running the query.\n- **`EXPLAIN ANALYZE`** actually runs the query and adds *real* timings and *real* row counts.\n\nWhy start here? Every \"fix\" has a price — an index slows down writes, a rewrite costs review time — and optimizing by intuition usually changes something that was never the bottleneck. The plan shows where the work really goes, so you change one thing and measure again.\n\n```mermaid\nflowchart LR\n  A[\"Slow query\"] --> B[\"EXPLAIN ANALYZE\"]\n  B --> C[\"Find the expensive step\"]\n  C --> D[\"Change one thing\"]\n  D --> E[\"Measure again\"]\n  E --> B\n```",
+            "ru": "**План запроса** — это пошаговая стратегия, которую база выбрала для выполнения твоего SQL: какие таблицы читает, в каком порядке и как их соединяет.\n\n- **`EXPLAIN`** печатает этот план с *оценочной* стоимостью и числом строк, не выполняя запрос.\n- **`EXPLAIN ANALYZE`** реально выполняет запрос и добавляет *настоящие* тайминги и *настоящее* число строк.\n\nПочему начинать отсюда? У любой «починки» есть цена — индекс замедляет запись, переписывание требует времени на ревью, — а оптимизация по интуиции обычно меняет то, что узким местом никогда не было. План показывает, куда реально уходит работа: меняешь одно и замеряешь снова.\n\n```mermaid\nflowchart LR\n  A[\"Медленный запрос\"] --> B[\"EXPLAIN ANALYZE\"]\n  B --> C[\"Найти дорогой шаг\"]\n  C --> D[\"Изменить одно\"]\n  D --> E[\"Замерить снова\"]\n  E --> B\n```"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — measure first; the plan tells you which change is worth making.",
+              "ru": "Верно — сначала замер; план подсказывает, какое изменение имеет смысл."
+            },
+            "incorrect": {
+              "en": "Start with EXPLAIN ANALYZE — every other step is a guess until you see the plan.",
+              "ru": "Начни с EXPLAIN ANALYZE — до просмотра плана любой шаг это догадка."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Run EXPLAIN ANALYZE and read the plan it chose",
+                "ru": "Выполнить EXPLAIN ANALYZE и прочитать выбранный план"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Add an index on every column in the WHERE clause",
+                "ru": "Добавить индекс на каждую колонку из WHERE"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A guess with a price: the index may not even be usable, and each one slows down writes.",
+                "ru": "Догадка с ценой: индекс может оказаться неприменимым, а каждый из них замедляет запись."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Rewrite the subqueries as joins",
+                "ru": "Переписать подзапросы в JOIN"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A rewrite before a measurement is a guess — the bottleneck may be somewhere else entirely.",
+                "ru": "Переписывание до замера — догадка: узкое место может быть совсем в другом."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "measure-p1-eyeball-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "You can reliably tell which of two SQL queries is faster just by reading them.",
+            "ru": "Можно надёжно определить, какой из двух SQL-запросов быстрее, просто прочитав их."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Cardinality and available indexes decide the winner — read the actual plan.",
+              "ru": "Побеждает то, что решают кардинальность и доступные индексы — читай реальный план."
+            },
+            "incorrect": {
+              "en": "No — the same SQL can be fast or slow depending on data volume and indexes; read the plan.",
+              "ru": "Нет — один и тот же SQL может быть быстрым или медленным в зависимости от объёма данных и индексов; читай план."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "measure-p2-explain-vs-analyze",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In PostgreSQL, how does EXPLAIN ANALYZE differ from plain EXPLAIN?",
+            "ru": "Чем EXPLAIN ANALYZE в PostgreSQL отличается от обычного EXPLAIN?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "EXPLAIN estimates; EXPLAIN ANALYZE executes and reports what really happened.",
+              "ru": "EXPLAIN оценивает; EXPLAIN ANALYZE выполняет и показывает, что было на самом деле."
+            },
+            "incorrect": {
+              "en": "EXPLAIN only estimates the plan; EXPLAIN ANALYZE actually runs the query and adds real timings.",
+              "ru": "EXPLAIN только оценивает план; EXPLAIN ANALYZE реально выполняет запрос и добавляет настоящие тайминги."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "EXPLAIN ANALYZE really runs the query and reports actual timings and row counts",
+                "ru": "EXPLAIN ANALYZE реально выполняет запрос и показывает настоящие тайминги и число строк"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "EXPLAIN ANALYZE refreshes the table statistics, EXPLAIN does not",
+                "ru": "EXPLAIN ANALYZE обновляет статистику таблиц, а EXPLAIN нет"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Refreshing statistics is the standalone ANALYZE command; EXPLAIN ANALYZE only measures this query.",
+                "ru": "Обновление статистики — это отдельная команда ANALYZE; EXPLAIN ANALYZE лишь измеряет этот запрос."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "They are identical; ANALYZE only changes the output formatting",
+                "ru": "Они идентичны; ANALYZE лишь меняет форматирование вывода"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The difference is real execution: plain EXPLAIN never runs the query.",
+                "ru": "Разница в реальном выполнении: обычный EXPLAIN запрос не выполняет."
+              }
+            }
+          ]
+        },
+        {
+          "id": "measure-p3-sort-pass",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the steps of a disciplined SQL optimization pass.",
+            "ru": "Расставь по порядку шаги дисциплинированного прохода оптимизации SQL."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Measure, locate the cost, change one thing, measure again.",
+              "ru": "Замерить, найти дорогое место, изменить одно, замерить снова."
+            },
+            "incorrect": {
+              "en": "The loop is: run EXPLAIN ANALYZE, find the expensive step, apply one fix, re-measure.",
+              "ru": "Цикл такой: выполнить EXPLAIN ANALYZE, найти дорогой шаг, применить одну правку, замерить снова."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Reproduce the slow query and run EXPLAIN ANALYZE on it",
+                "ru": "Воспроизвести медленный запрос и выполнить на нём EXPLAIN ANALYZE"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Find the most expensive step in the plan",
+                "ru": "Найти в плане самый дорогой шаг"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Apply one targeted change",
+                "ru": "Применить одно точечное изменение"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Run EXPLAIN ANALYZE again and compare",
+                "ru": "Снова выполнить EXPLAIN ANALYZE и сравнить"
+              }
+            }
+          ]
+        },
+        {
+          "id": "measure-p4-fill-commands",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing commands.",
+            "ru": "Впиши пропущенные команды."
+          },
+          "feedback": {
+            "correct": {
+              "en": "EXPLAIN estimates the plan; adding ANALYZE runs it for real timings.",
+              "ru": "EXPLAIN оценивает план; добавленный ANALYZE выполняет его ради реальных таймингов."
+            },
+            "incorrect": {
+              "en": "It is EXPLAIN for the estimated plan, and EXPLAIN ANALYZE for real timings.",
+              "ru": "Это EXPLAIN для оценочного плана и EXPLAIN ANALYZE для реальных таймингов."
+            }
+          },
+          "text": {
+            "en": "To see the plan the database chose, run ___; to also get real timings, run EXPLAIN ___.",
+            "ru": "Чтобы увидеть выбранный базой план, выполни ___; чтобы получить ещё и реальные тайминги — EXPLAIN ___."
+          },
+          "blanks": [
+            {
+              "en": ["EXPLAIN", "explain"],
+              "ru": ["EXPLAIN", "explain"]
+            },
+            {
+              "en": ["ANALYZE", "analyze"],
+              "ru": ["ANALYZE", "analyze"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "plan-red-flags",
+      "title": {
+        "en": "Red flags in the plan",
+        "ru": "Тревожные знаки в плане"
+      },
+      "summary": {
+        "en": "In a query plan, watch for Seq Scan over big tables, huge row estimates, and expensive sort or hash steps.",
+        "ru": "В плане запроса ищи Seq Scan по большим таблицам, огромные оценки числа строк и дорогие шаги сортировки или хэширования."
+      },
+      "discovery": [
+        {
+          "id": "plan-d1-red-flag",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "This is the EXPLAIN plan of a query over a 50-million-row `orders` table. Which part is the red flag?",
+            "ru": "Это план EXPLAIN для запроса по таблице `orders` на 50 млн строк. Какая часть — тревожный знак?"
+          },
+          "code": "Sort  (cost=1250000.00..1305000.00 rows=50000000 width=64)\n  Sort Key: o.created_at\n  ->  Seq Scan on orders o  (cost=0.00..980000.00 rows=50000000 width=64)",
+          "codeLang": "text",
+          "reveal": {
+            "en": "A **Seq Scan** (sequential scan) means the database reads *every row* of the table and checks each one. On a 50-million-row table that is the whole problem — and notice the `rows=50000000` estimate flowing upward into the `Sort`, which then has to order all of them.\n\n```mermaid\nflowchart LR\n  T[\"orders: 50M rows\"] --> SC[\"Seq Scan: read every row\"]\n  SC --> SO[\"Sort: order 50M rows\"]\n  SO --> R[\"result\"]\n```\n\nWhat to look for in any plan:\n\n- **`Seq Scan` over a big table** — usually a missing or unusable index.\n- **Huge `rows` estimates** flowing between steps — too many rows survive, so every later step is expensive.\n- **Expensive sort or hash steps** — often a symptom, not the disease: they are costly because too many rows reached them.\n\nA `Seq Scan` on a *small* table is fine and often the cheapest option — reading a few hundred rows straight through beats jumping through an index. The size of the table is what makes it a warning.\n\nAbout the numbers in `cost=0.00..980000.00`: the first is the start-up cost (before the first row appears), the second is the total. A `0.00` start-up is normal for a scan, not an error.",
+            "ru": "**Seq Scan** (последовательное сканирование) означает, что база читает *каждую строку* таблицы и проверяет её. На таблице в 50 млн строк это и есть вся проблема — и обрати внимание на оценку `rows=50000000`, которая поднимается в `Sort`, а тому приходится упорядочивать их все.\n\n```mermaid\nflowchart LR\n  T[\"orders: 50 млн строк\"] --> SC[\"Seq Scan: читаем каждую строку\"]\n  SC --> SO[\"Sort: сортируем 50 млн строк\"]\n  SO --> R[\"результат\"]\n```\n\nЧто искать в любом плане:\n\n- **`Seq Scan` по большой таблице** — обычно отсутствующий или неприменимый индекс.\n- **Огромные оценки `rows`**, текущие между шагами: слишком много строк проходит дальше, и каждый следующий шаг дорожает.\n- **Дорогие шаги сортировки или хэширования** — часто симптом, а не болезнь: они дороги потому, что до них дошло слишком много строк.\n\n`Seq Scan` по *маленькой* таблице — это нормально и часто дешевле всего: прочитать пару сотен строк подряд выгоднее, чем прыгать через индекс. Тревожным знаком его делает именно размер таблицы.\n\nПро числа в `cost=0.00..980000.00`: первое — стартовая стоимость (до появления первой строки), второе — полная. Стартовый `0.00` для скана нормален, это не ошибка."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — a full scan of 50M rows, and the sort inherits all of them.",
+              "ru": "Верно — полный проход по 50 млн строк, и сортировка получает их все."
+            },
+            "incorrect": {
+              "en": "The Seq Scan on a 50-million-row table is the red flag: the query reads the whole table.",
+              "ru": "Тревожный знак — Seq Scan по таблице в 50 млн строк: запрос читает всю таблицу."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "`Seq Scan on orders` with a 50-million-row estimate — the whole table is read",
+                "ru": "`Seq Scan on orders` с оценкой в 50 млн строк — читается вся таблица"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The `Sort Key` line — sorting is always the most expensive part of a plan",
+                "ru": "Строка `Sort Key` — сортировка всегда самая дорогая часть плана"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The sort is expensive only because 50M rows reach it; fix the scan and the sort shrinks with it.",
+                "ru": "Сортировка дорога лишь потому, что до неё доходит 50 млн строк; почини скан — и она подешевеет."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The `cost=0.00` at the start of the scan — a zero cost means the estimate failed",
+                "ru": "`cost=0.00` в начале скана — нулевая стоимость означает, что оценка не удалась"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The first number is the start-up cost; the second (980000.00) is the total. Zero start-up is normal.",
+                "ru": "Первое число — стартовая стоимость, второе (980000.00) — полная. Нулевой старт это норма."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "plan-p1-seqscan-always-bug-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In an EXPLAIN plan, a Seq Scan is always a defect that must be removed.",
+            "ru": "В плане EXPLAIN Seq Scan — всегда дефект, который нужно устранить."
+          },
+          "feedback": {
+            "correct": {
+              "en": "On a small table a straight read is often cheaper than an index lookup.",
+              "ru": "На маленькой таблице чтение подряд часто дешевле похода в индекс."
+            },
+            "incorrect": {
+              "en": "No — a Seq Scan over a small table is fine; it is a warning only on big tables.",
+              "ru": "Нет — Seq Scan по маленькой таблице нормален; тревожен он только на больших таблицах."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "plan-p2-match-signals",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each observation in an EXPLAIN plan to what it suggests.",
+            "ru": "Соотнеси каждое наблюдение в плане EXPLAIN с тем, на что оно указывает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The plan names the symptom; your job is to pick the one change that removes it.",
+              "ru": "План называет симптом; твоя задача — выбрать одно изменение, которое его снимет."
+            },
+            "incorrect": {
+              "en": "Seq Scan on a big table means a missing index; big row counts mean filtering too late; a costly sort follows from both.",
+              "ru": "Seq Scan по большой таблице — нет индекса; большие числа строк — поздняя фильтрация; дорогая сортировка следует из обоих."
+            }
+          },
+          "pairs": [
+            {
+              "id": "seqscan",
+              "left": {
+                "en": "Seq Scan over a large table",
+                "ru": "Seq Scan по большой таблице"
+              },
+              "right": {
+                "en": "Every row is read — an index is missing or unusable",
+                "ru": "Читается каждая строка — индекса нет или он неприменим"
+              }
+            },
+            {
+              "id": "rows",
+              "left": {
+                "en": "A huge rows estimate flowing into the next step",
+                "ru": "Огромная оценка rows, уходящая в следующий шаг"
+              },
+              "right": {
+                "en": "Too many rows survive — filter earlier",
+                "ru": "Слишком много строк проходит дальше — фильтруй раньше"
+              }
+            },
+            {
+              "id": "sort",
+              "left": {
+                "en": "An expensive Sort step",
+                "ru": "Дорогой шаг Sort"
+              },
+              "right": {
+                "en": "The step is ordering far more rows than the query needs",
+                "ru": "Шаг упорядочивает намного больше строк, чем нужно запросу"
+              }
+            },
+            {
+              "id": "estimate",
+              "left": {
+                "en": "Estimated rows far from the actual rows",
+                "ru": "Оценка строк сильно расходится с фактической"
+              },
+              "right": {
+                "en": "The planner's estimate is unreliable",
+                "ru": "Оценка планировщика ненадёжна"
+              }
+            }
+          ]
+        },
+        {
+          "id": "plan-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the rule for optimizing a slow query.",
+            "ru": "Собери правило оптимизации медленного запроса."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The plan is the evidence; everything before it is speculation.",
+              "ru": "План — это факты; всё до него — домыслы."
+            },
+            "incorrect": {
+              "en": "Read the plan before you change anything — otherwise you are guessing.",
+              "ru": "Читай план прежде чем что-то менять — иначе это гадание."
+            }
+          },
+          "tokens": {
+            "en": ["read", "the", "plan", "before", "you", "change", "anything"],
+            "ru": ["читай", "план", "прежде", "чем", "что-то", "менять"]
+          },
+          "distractors": {
+            "en": ["guess"],
+            "ru": ["угадывай"]
+          }
+        },
+        {
+          "id": "plan-p4-fill-seqscan",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing plan-node name.",
+            "ru": "Впиши пропущенное имя узла плана."
+          },
+          "feedback": {
+            "correct": {
+              "en": "On a big table that node is the first thing to attack.",
+              "ru": "На большой таблице именно с этого узла начинают."
+            },
+            "incorrect": {
+              "en": "It is a Seq Scan — a sequential scan that reads every row of the table.",
+              "ru": "Это Seq Scan — последовательное сканирование, читающее каждую строку таблицы."
+            }
+          },
+          "text": {
+            "en": "A plan node that reads every row of a table is a ___ Scan.",
+            "ru": "Узел плана, который читает каждую строку таблицы, — это ___ Scan."
+          },
+          "blanks": [
+            {
+              "en": ["Seq", "seq", "Sequential", "sequential"],
+              "ru": ["Seq", "seq", "Sequential", "sequential"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "index-filter-join-sort",
+      "title": {
+        "en": "Index what you filter and join on",
+        "ru": "Индексируй то, по чему фильтруешь и соединяешь"
+      },
+      "summary": {
+        "en": "The columns worth indexing are the ones used in WHERE, JOIN ... ON and ORDER BY.",
+        "ru": "Индексировать стоит колонки, используемые в WHERE, JOIN ... ON и ORDER BY."
+      },
+      "discovery": [
+        {
+          "id": "index-d1-which-columns",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The plan shows a Seq Scan on `orders` (20M rows). Which columns are the index candidates?",
+            "ru": "План показывает Seq Scan по `orders` (20 млн строк). Какие колонки — кандидаты на индекс?"
+          },
+          "code": "SELECT o.id, o.total\nFROM orders o\nJOIN customers c ON c.id = o.customer_id\nWHERE o.status = 'PAID'\nORDER BY o.created_at;",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "An **index** is a separate, ordered structure that maps column values to the rows holding them — like the index at the back of a book. Instead of reading every page, the database jumps straight to the right one.\n\nThree clauses tell you what to index:\n\n```mermaid\nflowchart LR\n  W[\"WHERE column\"] --> IDX[\"index\"]\n  J[\"JOIN ... ON column\"] --> IDX\n  O[\"ORDER BY column\"] --> IDX\n  IDX --> F[\"jump to the rows instead of reading all of them\"]\n```\n\n- **`WHERE`** — the index narrows millions of rows down to the few that match.\n- **`JOIN ... ON`** — for each row of one table the database must find the matching rows of the other; an index makes each of those lookups cheap.\n- **`ORDER BY`** — an index already stores values in order, so the database can read them in that order and skip a separate sort step.\n\nThe `SELECT` list is different: those columns are *returned*, not *searched*. Indexing them does not help the database find rows.\n\nWhether an index is **clustered** (the table rows themselves are stored in the index's order) or **non-clustered** (a separate structure pointing at the rows) changes the physical layout, which matters most for range scans — reading a contiguous span of values.",
+            "ru": "**Индекс** — это отдельная упорядоченная структура, сопоставляющая значения колонки со строками, где они лежат, — как указатель в конце книги. Вместо чтения всех страниц база сразу прыгает на нужную.\n\nЧто индексировать, подсказывают три места:\n\n```mermaid\nflowchart LR\n  W[\"колонка в WHERE\"] --> IDX[\"индекс\"]\n  J[\"колонка в JOIN ... ON\"] --> IDX\n  O[\"колонка в ORDER BY\"] --> IDX\n  IDX --> F[\"прыгнуть к строкам вместо чтения всех\"]\n```\n\n- **`WHERE`** — индекс сужает миллионы строк до тех немногих, что подходят.\n- **`JOIN ... ON`** — для каждой строки одной таблицы база должна найти подходящие строки другой; индекс делает каждый такой поиск дешёвым.\n- **`ORDER BY`** — индекс уже хранит значения по порядку, поэтому база может читать их в этом порядке и пропустить отдельный шаг сортировки.\n\nСписок `SELECT` — другое дело: эти колонки *возвращаются*, а не *ищутся*. Индекс на них не помогает базе находить строки.\n\nБудет ли индекс **кластерным** (строки таблицы физически хранятся в порядке индекса) или **некластерным** (отдельная структура со ссылками на строки), меняет физическое расположение данных, что важнее всего для сканирования диапазонов — чтения непрерывного участка значений."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — filtering, joining and ordering are what indexes accelerate.",
+              "ru": "Верно — индексы ускоряют фильтрацию, соединение и упорядочивание."
+            },
+            "incorrect": {
+              "en": "Index the columns in WHERE, JOIN ... ON and ORDER BY: status, customer_id and created_at.",
+              "ru": "Индексируй колонки из WHERE, JOIN ... ON и ORDER BY: status, customer_id и created_at."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "o.status, o.customer_id and o.created_at",
+                "ru": "o.status, o.customer_id и o.created_at"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "o.id and o.total — the columns being selected",
+                "ru": "o.id и o.total — выбираемые колонки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The SELECT list decides what comes back, not how the rows are found.",
+                "ru": "Список SELECT решает, что вернётся, а не как находятся строки."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Every column of orders, to be safe",
+                "ru": "Все колонки orders, на всякий случай"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Each index costs storage and slows every write; index deliberately, not defensively.",
+                "ru": "Каждый индекс занимает место и замедляет любую запись; индексируй осознанно, а не «на всякий случай»."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "index-p1-orderby-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "An index on a column used in ORDER BY can let the database skip a separate sort step.",
+            "ru": "Индекс на колонке из ORDER BY может позволить базе пропустить отдельный шаг сортировки."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The index already stores the values in order, so they can be read in that order.",
+              "ru": "Индекс уже хранит значения по порядку, поэтому их можно читать в этом порядке."
+            },
+            "incorrect": {
+              "en": "It can — an index keeps values ordered, so the sort step becomes unnecessary.",
+              "ru": "Может — индекс держит значения упорядоченными, и шаг сортировки становится не нужен."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "index-p2-which-index",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which single index helps this SQL query the most?",
+            "ru": "Какой один индекс сильнее всего поможет этому SQL-запросу?"
+          },
+          "code": "SELECT id, created_at FROM events WHERE user_id = 77;",
+          "codeLang": "sql",
+          "feedback": {
+            "correct": {
+              "en": "The filtered column is the one that narrows the scan.",
+              "ru": "Сужает скан именно та колонка, по которой идёт фильтрация."
+            },
+            "incorrect": {
+              "en": "Index user_id — it is the column the WHERE clause filters on.",
+              "ru": "Индексируй user_id — именно по этой колонке фильтрует WHERE."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "An index on user_id",
+                "ru": "Индекс на user_id"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "An index on id",
+                "ru": "Индекс на id"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "id is only returned here, not filtered on — nothing in the query searches by it.",
+                "ru": "id здесь только возвращается, а не фильтруется — по нему запрос ничего не ищет."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "An index on created_at",
+                "ru": "Индекс на created_at"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing filters or orders by created_at in this query; it is just a returned column.",
+                "ru": "В этом запросе по created_at нет ни фильтрации, ни сортировки — это просто возвращаемая колонка."
+              }
+            }
+          ]
+        },
+        {
+          "id": "index-p3-match-clauses",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each SQL clause to what an index on its column does.",
+            "ru": "Соотнеси каждое место в SQL с тем, что там даёт индекс на колонке."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Filter, match, order — those are the three jobs an index speeds up.",
+              "ru": "Фильтрация, сопоставление, упорядочивание — три задачи, которые ускоряет индекс."
+            },
+            "incorrect": {
+              "en": "WHERE narrows rows, JOIN ... ON matches them, ORDER BY skips the sort; SELECT only returns.",
+              "ru": "WHERE сужает строки, JOIN ... ON их сопоставляет, ORDER BY пропускает сортировку; SELECT только возвращает."
+            }
+          },
+          "pairs": [
+            {
+              "id": "where",
+              "left": {
+                "en": "WHERE",
+                "ru": "WHERE"
+              },
+              "right": {
+                "en": "Narrows the rows before anything else runs",
+                "ru": "Сужает строки до всего остального"
+              }
+            },
+            {
+              "id": "join",
+              "left": {
+                "en": "JOIN ... ON",
+                "ru": "JOIN ... ON"
+              },
+              "right": {
+                "en": "Finds the matching rows of the other table quickly",
+                "ru": "Быстро находит подходящие строки другой таблицы"
+              }
+            },
+            {
+              "id": "orderby",
+              "left": {
+                "en": "ORDER BY",
+                "ru": "ORDER BY"
+              },
+              "right": {
+                "en": "Lets the database skip a separate sort step",
+                "ru": "Позволяет базе пропустить отдельный шаг сортировки"
+              }
+            },
+            {
+              "id": "select",
+              "left": {
+                "en": "SELECT list",
+                "ru": "Список SELECT"
+              },
+              "right": {
+                "en": "Decides what is returned — not a reason to index by itself",
+                "ru": "Решает, что вернётся, — сам по себе не повод для индекса"
+              }
+            }
+          ]
+        },
+        {
+          "id": "index-p4-fill-clauses",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the three clauses whose columns are worth indexing.",
+            "ru": "Впиши три места, колонки которых стоит индексировать."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Filtering, joining and ordering — that is where an index pays off.",
+              "ru": "Фильтрация, соединение и упорядочивание — вот где индекс окупается."
+            },
+            "incorrect": {
+              "en": "Index the columns used in WHERE, JOIN ... ON and ORDER BY.",
+              "ru": "Индексируй колонки, используемые в WHERE, JOIN ... ON и ORDER BY."
+            }
+          },
+          "text": {
+            "en": "Index the columns used in ___, ___ ... ON, and ___ BY.",
+            "ru": "Индексируй колонки, используемые в ___, ___ ... ON и ___ BY."
+          },
+          "blanks": [
+            {
+              "en": ["WHERE", "where"],
+              "ru": ["WHERE", "where"]
+            },
+            {
+              "en": ["JOIN", "join"],
+              "ru": ["JOIN", "join"]
+            },
+            {
+              "en": ["ORDER", "order"],
+              "ru": ["ORDER", "order"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sargable-predicates",
+      "title": {
+        "en": "Sargable predicates",
+        "ru": "Sargable-предикаты"
+      },
+      "summary": {
+        "en": "An index is used only when the column appears bare in the predicate; wrapping it in a function disables the index.",
+        "ru": "Индекс сработает, только если колонка стоит в предикате «голой»; функция вокруг неё отключает индекс."
+      },
+      "discovery": [
+        {
+          "id": "sargable-d1-year-function",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "`orders.created_at` is indexed. Will this query use that index?",
+            "ru": "На `orders.created_at` есть индекс. Использует ли этот запрос индекс?"
+          },
+          "code": "-- index exists on orders.created_at\nSELECT id FROM orders WHERE YEAR(created_at) = 2026;",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "A predicate is **sargable** (Search-ARGument-able) when the indexed column appears *bare*, so the index can be searched directly. Wrap the column in a function and the index becomes useless.\n\nWhy? The index is sorted by the **stored** values of `created_at`. It has no entries for `YEAR(created_at)` — that value does not exist anywhere in the index. So the engine has no choice but to read every row and compute the function for each one.\n\n```mermaid\nflowchart LR\n  A[\"WHERE YEAR(created_at) = 2026\"] --> B[\"column hidden by a function\"]\n  B --> C[\"index unusable: full scan\"]\n  D[\"WHERE created_at >= ... AND < ...\"] --> E[\"column bare\"]\n  E --> F[\"index seek on a range\"]\n```\n\nThe fix is to express the same condition as a **range** on the raw column:\n\n```sql\n-- not sargable: the index cannot be used\nWHERE YEAR(created_at) = 2026\n\n-- sargable: a clean range the index can seek\nWHERE created_at >= '2026-01-01'\n  AND created_at <  '2027-01-01'\n```\n\nOther common index killers: `WHERE UPPER(name) = '...'` (a function again), and a leading wildcard in `LIKE '%abc'` — the index is ordered by the first character, so a pattern with no literal prefix gives it nothing to seek on.",
+            "ru": "Предикат называется **sargable** (Search-ARGument-able), когда индексированная колонка стоит *голой*, и по индексу можно искать напрямую. Оберни колонку функцией — и индекс станет бесполезен.\n\nПочему? Индекс отсортирован по **хранимым** значениям `created_at`. Записей для `YEAR(created_at)` в нём нет — такого значения в индексе не существует. Поэтому движку остаётся только прочитать каждую строку и вычислить функцию для каждой.\n\n```mermaid\nflowchart LR\n  A[\"WHERE YEAR(created_at) = 2026\"] --> B[\"колонка спрятана функцией\"]\n  B --> C[\"индекс неприменим: полный скан\"]\n  D[\"WHERE created_at >= ... AND < ...\"] --> E[\"колонка голая\"]\n  E --> F[\"поиск по диапазону в индексе\"]\n```\n\nЛечится записью того же условия как **диапазона** по сырой колонке:\n\n```sql\n-- не sargable: индекс использовать нельзя\nWHERE YEAR(created_at) = 2026\n\n-- sargable: чистый диапазон, по которому индекс умеет искать\nWHERE created_at >= '2026-01-01'\n  AND created_at <  '2027-01-01'\n```\n\nДругие частые убийцы индекса: `WHERE UPPER(name) = '...'` (снова функция) и ведущий символ подстановки в `LIKE '%abc'` — индекс упорядочен по первому символу, и шаблону без буквального начала не за что зацепиться."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the function hides the column, so the engine scans every row.",
+              "ru": "Верно — функция прячет колонку, и движок сканирует каждую строку."
+            },
+            "incorrect": {
+              "en": "No — YEAR(created_at) is not what the index stores, so the index cannot be used.",
+              "ru": "Нет — YEAR(created_at) не то, что хранит индекс, поэтому индекс не сработает."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "No — the function around the column makes the predicate non-sargable, so every row is scanned",
+                "ru": "Нет — функция вокруг колонки делает предикат не-sargable, и сканируется каждая строка"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Yes — the index is on created_at, so any condition on created_at uses it",
+                "ru": "Да — индекс на created_at, поэтому любое условие по created_at его использует"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The index stores raw created_at values; it has no entries for YEAR(created_at).",
+                "ru": "Индекс хранит сырые значения created_at; записей для YEAR(created_at) в нём нет."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Yes, but only if the table is small",
+                "ru": "Да, но только если таблица маленькая"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Table size is not the issue — the predicate itself is what disables the index.",
+                "ru": "Дело не в размере таблицы — индекс отключает сам предикат."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "sargable-p1-spot-upper",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "`users.email` is indexed, yet this query still scans the whole table. Why?",
+            "ru": "На `users.email` есть индекс, но запрос всё равно сканирует всю таблицу. Почему?"
+          },
+          "code": "SELECT id FROM users WHERE UPPER(email) = 'ANN@EXAMPLE.COM';",
+          "codeLang": "sql",
+          "feedback": {
+            "correct": {
+              "en": "UPPER() hides the column, so the index on email cannot be searched.",
+              "ru": "UPPER() прячет колонку, и по индексу на email искать нельзя."
+            },
+            "incorrect": {
+              "en": "UPPER(email) wraps the indexed column, making the predicate non-sargable.",
+              "ru": "UPPER(email) оборачивает индексированную колонку, и предикат перестаёт быть sargable."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "UPPER(email) wraps the indexed column, so the predicate is not sargable",
+                "ru": "UPPER(email) оборачивает индексированную колонку, предикат не sargable"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The literal should be in double quotes instead of single quotes",
+                "ru": "Литерал должен быть в двойных кавычках, а не в одинарных"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Single quotes are correct for a string literal in SQL; that is not the problem here.",
+                "ru": "Одинарные кавычки для строкового литерала в SQL корректны; проблема не в этом."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The query is missing a LIMIT clause",
+                "ru": "В запросе не хватает LIMIT"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "LIMIT caps what is returned; the engine would still evaluate UPPER(email) row by row.",
+                "ru": "LIMIT ограничивает возвращаемое; движок всё равно считал бы UPPER(email) построчно."
+              }
+            }
+          ]
+        },
+        {
+          "id": "sargable-p2-which-where",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which WHERE clause can use an index on `orders.created_at`?",
+            "ru": "Какое условие WHERE сможет использовать индекс на `orders.created_at`?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "A plain range on the raw column is exactly what an index seeks on.",
+              "ru": "Простой диапазон по сырой колонке — именно то, по чему индекс умеет искать."
+            },
+            "incorrect": {
+              "en": "Only the range on the bare column is sargable; a function or a cast around it disables the index.",
+              "ru": "Sargable только диапазон по голой колонке; функция или приведение типа вокруг неё отключают индекс."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "WHERE created_at >= '2026-01-01' AND created_at < '2027-01-01'",
+                "ru": "WHERE created_at >= '2026-01-01' AND created_at < '2027-01-01'"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "WHERE YEAR(created_at) = 2026",
+                "ru": "WHERE YEAR(created_at) = 2026"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "YEAR() hides the column; the index stores raw timestamps, not years.",
+                "ru": "YEAR() прячет колонку; индекс хранит сырые отметки времени, а не годы."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "WHERE CAST(created_at AS DATE) = '2026-05-01'",
+                "ru": "WHERE CAST(created_at AS DATE) = '2026-05-01'"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A cast wraps the column just like any other function, so the predicate is not sargable.",
+                "ru": "Приведение типа оборачивает колонку так же, как любая функция, — предикат не sargable."
+              }
+            }
+          ]
+        },
+        {
+          "id": "sargable-p3-like-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In SQL, a predicate like `name LIKE '%abc'` can still use an index on `name`.",
+            "ru": "В SQL предикат вида `name LIKE '%abc'` всё ещё может использовать индекс на `name`."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A leading wildcard leaves no literal prefix, so there is nothing for the index to seek on.",
+              "ru": "Ведущий символ подстановки не оставляет буквального начала — индексу не за что зацепиться."
+            },
+            "incorrect": {
+              "en": "No — the index is ordered by the first characters, and a leading % gives it no prefix to start from.",
+              "ru": "Нет — индекс упорядочен по первым символам, а ведущий % не даёт начала для поиска."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "sargable-p4-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the definition of a sargable predicate.",
+            "ru": "Собери определение sargable-предиката."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Bare column in, index usable; wrapped column, full scan.",
+              "ru": "Голая колонка — индекс работает; обёрнутая — полный скан."
+            },
+            "incorrect": {
+              "en": "A sargable predicate leaves the indexed column bare — no function around it.",
+              "ru": "Sargable-предикат оставляет индексированную колонку голой — без функции вокруг."
+            }
+          },
+          "tokens": {
+            "en": ["a", "sargable", "predicate", "leaves", "the", "indexed", "column", "bare"],
+            "ru": ["sargable-предикат", "оставляет", "индексированную", "колонку", "голой"]
+          },
+          "distractors": {
+            "en": ["function", "hidden"],
+            "ru": ["функцией", "скрытой"]
+          }
+        },
+        {
+          "id": "sargable-p5-fill-term",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing term and what must not wrap the column.",
+            "ru": "Впиши пропущенный термин и то, что не должно оборачивать колонку."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Sargable = Search-ARGument-able: the index can search on the value as stored.",
+              "ru": "Sargable = Search-ARGument-able: индекс может искать по значению в том виде, как оно хранится."
+            },
+            "incorrect": {
+              "en": "The term is sargable, and what breaks it is a function wrapped around the indexed column.",
+              "ru": "Термин — sargable, а ломает его функция, обёрнутая вокруг индексированной колонки."
+            }
+          },
+          "text": {
+            "en": "A predicate is ___ when the indexed column appears bare, with no ___ wrapped around it.",
+            "ru": "Предикат называется ___, когда индексированная колонка стоит голой, без ___ вокруг неё."
+          },
+          "blanks": [
+            {
+              "en": ["sargable"],
+              "ru": ["sargable", "саргабельным"]
+            },
+            {
+              "en": ["function"],
+              "ru": ["функции", "function"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "index-costs",
+      "title": {
+        "en": "What an index costs",
+        "ru": "Чего стоит индекс"
+      },
+      "summary": {
+        "en": "Every index must be maintained on INSERT/UPDATE/DELETE and takes storage, so an unused index is pure overhead.",
+        "ru": "Каждый индекс нужно поддерживать при INSERT/UPDATE/DELETE, и он занимает место, поэтому неиспользуемый индекс — чистые накладные расходы."
+      },
+      "discovery": [
+        {
+          "id": "costs-d1-twelve-indexes",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A table has 12 indexes — one on every column. What happens to its INSERT throughput?",
+            "ru": "У таблицы 12 индексов — по одному на каждую колонку. Что происходит с пропускной способностью INSERT?"
+          },
+          "reveal": {
+            "en": "An index is a **separate stored structure** that the database has to keep in sync with the table. That gives it two standing costs:\n\n```mermaid\nflowchart LR\n  R[\"SELECT on the indexed column\"] --> G[\"faster: seek instead of scan\"]\n  W[\"INSERT / UPDATE / DELETE\"] --> C[\"slower: every index maintained\"]\n  W --> S[\"more storage\"]\n```\n\n- **Writes get slower.** Every `INSERT` must add the new row to *all* 12 indexes; every `DELETE` must remove it from all of them; an `UPDATE` of an indexed column must move its entry to the right place in that index's order.\n- **Storage grows.** Each index is real data on disk, and it must be cached in memory to be fast.\n\nSo an index that no query uses is **pure overhead**: it pays nothing back on reads while still charging you on every write. Index deliberately — the columns you actually filter, join and sort on — rather than \"just in case\".",
+            "ru": "Индекс — это **отдельная хранимая структура**, которую база обязана держать в согласии с таблицей. Отсюда две постоянные издержки:\n\n```mermaid\nflowchart LR\n  R[\"SELECT по индексированной колонке\"] --> G[\"быстрее: поиск вместо скана\"]\n  W[\"INSERT / UPDATE / DELETE\"] --> C[\"медленнее: поддерживается каждый индекс\"]\n  W --> S[\"больше места\"]\n```\n\n- **Запись замедляется.** Каждый `INSERT` обязан добавить новую строку во *все* 12 индексов; каждый `DELETE` — удалить её из всех; `UPDATE` индексированной колонки должен переместить её запись в нужное место в порядке этого индекса.\n- **Растёт объём хранения.** Каждый индекс — это реальные данные на диске, и для скорости их нужно держать в памяти.\n\nПоэтому индекс, которым не пользуется ни один запрос, — **чистые накладные расходы**: на чтении он не возвращает ничего, а на каждой записи берёт своё. Индексируй осознанно — те колонки, по которым реально фильтруешь, соединяешь и сортируешь, — а не «на всякий случай»."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — one row inserted means twelve index updates.",
+              "ru": "Верно — вставка одной строки означает двенадцать обновлений индексов."
+            },
+            "incorrect": {
+              "en": "Throughput drops: every insert must also be written into all 12 indexes.",
+              "ru": "Пропускная способность падает: каждую вставку нужно записать ещё и во все 12 индексов."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It drops — every insert must also update all 12 indexes",
+                "ru": "Она падает — каждая вставка должна обновить ещё и все 12 индексов"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing changes — indexes only affect reads",
+                "ru": "Ничего не меняется — индексы влияют только на чтение"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "An index is a separate structure the database must keep in sync on every write.",
+                "ru": "Индекс — отдельная структура, которую база обязана синхронизировать при каждой записи."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It improves — the indexes help the database find where to put the new row",
+                "ru": "Она растёт — индексы помогают базе найти, куда положить новую строку"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "An insert does not need to search for a place; the indexes are extra work, not help.",
+                "ru": "Вставке не нужно искать место; индексы здесь — дополнительная работа, а не помощь."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "costs-p1-more-is-better-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Adding more indexes to a table always makes the database faster overall.",
+            "ru": "Чем больше индексов на таблице, тем быстрее база работает в целом."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Indexes trade write speed and storage for read speed — the trade is not always worth it.",
+              "ru": "Индексы меняют скорость записи и место на скорость чтения — обмен не всегда выгоден."
+            },
+            "incorrect": {
+              "en": "No — each index slows down INSERT/UPDATE/DELETE and costs storage.",
+              "ru": "Нет — каждый индекс замедляет INSERT/UPDATE/DELETE и занимает место."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "costs-p2-unused-index",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why is an index that no query ever uses still a problem?",
+            "ru": "Почему индекс, которым не пользуется ни один запрос, всё равно проблема?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "It charges the write path and the disk while returning nothing on reads.",
+              "ru": "Он берёт своё на записи и на диске, ничего не возвращая на чтении."
+            },
+            "incorrect": {
+              "en": "It still has to be maintained on every write and still occupies storage — cost with no benefit.",
+              "ru": "Его всё равно надо поддерживать при каждой записи, и он всё равно занимает место — расход без пользы."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It is still updated on every write and still occupies storage",
+                "ru": "Он всё равно обновляется при каждой записи и всё равно занимает место"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It makes the table's other indexes unusable",
+                "ru": "Он делает остальные индексы таблицы неприменимыми"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "An unused index does not disable other indexes; it is simply dead weight.",
+                "ru": "Неиспользуемый индекс не отключает другие индексы; он просто мёртвый груз."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It is not a problem — an unused index costs nothing",
+                "ru": "Это не проблема — неиспользуемый индекс ничего не стоит"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It costs on both axes: maintenance on every write, plus storage and cache space.",
+                "ru": "Он стоит по обеим осям: поддержка при каждой записи плюс место на диске и в кэше."
+              }
+            }
+          ]
+        },
+        {
+          "id": "costs-p3-match-effects",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each operation to the effect of adding an index on a column.",
+            "ru": "Соотнеси каждую операцию с эффектом от добавления индекса на колонку."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Reads win, writes and storage pay — that is the whole trade-off.",
+              "ru": "Чтение выигрывает, запись и место платят — в этом весь компромисс."
+            },
+            "incorrect": {
+              "en": "An index speeds up matching SELECTs and slows down every write, while taking extra space.",
+              "ru": "Индекс ускоряет подходящие SELECT и замедляет любую запись, занимая при этом место."
+            }
+          },
+          "pairs": [
+            {
+              "id": "select",
+              "left": {
+                "en": "SELECT filtering on the indexed column",
+                "ru": "SELECT с фильтром по индексированной колонке"
+              },
+              "right": {
+                "en": "Faster: a seek instead of a full scan",
+                "ru": "Быстрее: поиск вместо полного скана"
+              }
+            },
+            {
+              "id": "insert",
+              "left": {
+                "en": "INSERT",
+                "ru": "INSERT"
+              },
+              "right": {
+                "en": "Slower: the new row must be added to the index too",
+                "ru": "Медленнее: новую строку надо добавить ещё и в индекс"
+              }
+            },
+            {
+              "id": "update",
+              "left": {
+                "en": "UPDATE of the indexed column",
+                "ru": "UPDATE индексированной колонки"
+              },
+              "right": {
+                "en": "Slower: the index entry has to be moved",
+                "ru": "Медленнее: запись в индексе надо переместить"
+              }
+            },
+            {
+              "id": "disk",
+              "left": {
+                "en": "Disk usage",
+                "ru": "Занимаемое место"
+              },
+              "right": {
+                "en": "Grows: the index is a separate stored structure",
+                "ru": "Растёт: индекс — отдельная хранимая структура"
+              }
+            }
+          ]
+        },
+        {
+          "id": "costs-p4-fill-writes",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the three statements an index slows down.",
+            "ru": "Впиши три операции, которые индекс замедляет."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Every write path has to keep each index in sync.",
+              "ru": "Любая запись обязана держать каждый индекс в согласии с таблицей."
+            },
+            "incorrect": {
+              "en": "An index slows down INSERT, UPDATE and DELETE, because it must be maintained.",
+              "ru": "Индекс замедляет INSERT, UPDATE и DELETE, потому что его надо поддерживать."
+            }
+          },
+          "text": {
+            "en": "An index speeds up reads, but slows down ___, ___ and ___.",
+            "ru": "Индекс ускоряет чтение, но замедляет ___, ___ и ___."
+          },
+          "blanks": [
+            {
+              "en": ["INSERT", "insert"],
+              "ru": ["INSERT", "insert"]
+            },
+            {
+              "en": ["UPDATE", "update"],
+              "ru": ["UPDATE", "update"]
+            },
+            {
+              "en": ["DELETE", "delete"],
+              "ru": ["DELETE", "delete"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "select-only-what-you-need",
+      "title": {
+        "en": "SELECT only the columns you use",
+        "ru": "Выбирай только нужные колонки"
+      },
+      "summary": {
+        "en": "SELECT * moves extra bytes off disk and over the network and can stop the database from answering from an index alone.",
+        "ru": "SELECT * гоняет лишние байты с диска и по сети и может помешать базе ответить из одного индекса."
+      },
+      "discovery": [
+        {
+          "id": "cols-d1-select-star",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The screen only shows `created_at`. Why is this `SELECT *` slower than `SELECT created_at`?",
+            "ru": "На экране показывается только `created_at`. Почему этот `SELECT *` медленнее, чем `SELECT created_at`?"
+          },
+          "code": "-- index exists on events (user_id, created_at)\nSELECT * FROM events WHERE user_id = 77;",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "A **covering index** is an index that already contains every column a query needs. When that happens the database answers from the index alone and never touches the table rows at all.\n\n```mermaid\nflowchart LR\n  A[\"SELECT created_at ...\"] --> B[\"index (user_id, created_at)\"]\n  B --> C[\"answered from the index alone\"]\n  D[\"SELECT * ...\"] --> E[\"index gives row locations\"]\n  E --> F[\"then read every table row too\"]\n```\n\nHere the index on `(user_id, created_at)` covers `SELECT created_at ... WHERE user_id = 77` completely. Add `*` and it no longer covers anything: the extra columns are not in the index, so the database must follow every match back to the table row.\n\nOn top of that, `SELECT *` simply moves more data — more bytes read off disk, more bytes over the network, and more memory used if the rows have to be sorted or hashed. Name the columns you actually display.",
+            "ru": "**Покрывающий индекс** (covering index) — это индекс, который уже содержит все колонки, нужные запросу. Тогда база отвечает из одного индекса и вообще не трогает строки таблицы.\n\n```mermaid\nflowchart LR\n  A[\"SELECT created_at ...\"] --> B[\"индекс (user_id, created_at)\"]\n  B --> C[\"ответ из одного индекса\"]\n  D[\"SELECT * ...\"] --> E[\"индекс даёт расположение строк\"]\n  E --> F[\"затем читаем ещё и каждую строку таблицы\"]\n```\n\nЗдесь индекс на `(user_id, created_at)` полностью покрывает `SELECT created_at ... WHERE user_id = 77`. Поставь `*` — и он не покрывает уже ничего: лишних колонок в индексе нет, поэтому база обязана по каждому совпадению сходить в строку таблицы.\n\nСверх того `SELECT *` просто гоняет больше данных: больше байт с диска, больше байт по сети и больше памяти, если строки придётся сортировать или хэшировать. Перечисляй те колонки, которые реально показываешь."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the extra columns cost bytes and destroy the index-only answer.",
+              "ru": "Верно — лишние колонки стоят байт и убивают ответ из одного индекса."
+            },
+            "incorrect": {
+              "en": "SELECT * reads and ships every column, and forces the database to leave the index for the table rows.",
+              "ru": "SELECT * читает и отправляет все колонки и заставляет базу уйти из индекса в строки таблицы."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It reads and ships every column, and the database can no longer answer from the index alone",
+                "ru": "Он читает и отправляет все колонки, и база уже не может ответить из одного индекса"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The `*` forces the database to re-parse the query on every execution",
+                "ru": "`*` заставляет базу заново разбирать запрос при каждом выполнении"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The star is expanded when the query is planned; the cost is the extra data, not parsing.",
+                "ru": "Звёздочка раскрывается при планировании запроса; цена — лишние данные, а не разбор."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "There is no difference — the database reads whole rows anyway",
+                "ru": "Разницы нет — база всё равно читает строки целиком"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Not always: an index holding every requested column answers without touching the rows at all.",
+                "ru": "Не всегда: индекс, содержащий все запрошенные колонки, отвечает, вообще не трогая строки."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cols-p1-harmless-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "`SELECT *` is harmless, because the database has to read the whole row anyway.",
+            "ru": "`SELECT *` безвреден, потому что база всё равно читает строку целиком."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It moves extra bytes and can prevent an index-only answer.",
+              "ru": "Он гоняет лишние байты и может помешать ответить из одного индекса."
+            },
+            "incorrect": {
+              "en": "No — extra columns cost disk and network bytes, and they defeat covering indexes.",
+              "ru": "Нет — лишние колонки стоят байт на диске и в сети и убивают покрывающие индексы."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "cols-p2-covering-index",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What is a covering index?",
+            "ru": "Что такое покрывающий индекс (covering index)?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "If the index holds everything the query asks for, the table rows are never touched.",
+              "ru": "Если в индексе есть всё, о чём просит запрос, строки таблицы не трогаются вовсе."
+            },
+            "incorrect": {
+              "en": "It is an index containing every column a query needs, so the query is answered without reading the rows.",
+              "ru": "Это индекс, содержащий все нужные запросу колонки, поэтому запрос отвечается без чтения строк."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "An index containing every column a query needs, so the rows never have to be read",
+                "ru": "Индекс, содержащий все нужные запросу колонки, так что строки читать не нужно"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "An index that covers all rows of the table",
+                "ru": "Индекс, который покрывает все строки таблицы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Every index covers all rows; \"covering\" is about columns, not rows.",
+                "ru": "Все строки покрывает любой индекс; «покрывающий» — про колонки, а не про строки."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "An index created automatically for a foreign key",
+                "ru": "Индекс, создаваемый автоматически для внешнего ключа"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is unrelated: covering is about whether the index holds all the requested columns.",
+                "ru": "Это не связано: «покрывающий» — про то, содержит ли индекс все запрошенные колонки."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cols-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the rule for the SELECT list.",
+            "ru": "Собери правило для списка SELECT."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Fewer columns means fewer bytes read, shipped and sorted.",
+              "ru": "Меньше колонок — меньше байт читается, отправляется и сортируется."
+            },
+            "incorrect": {
+              "en": "Select only the columns you actually use, instead of *.",
+              "ru": "Выбирай только те колонки, которые реально используешь, вместо *."
+            }
+          },
+          "tokens": {
+            "en": ["SELECT", "only", "the", "columns", "you", "actually", "use"],
+            "ru": ["выбирай", "только", "те", "колонки,", "которые", "реально", "используешь"]
+          },
+          "distractors": {
+            "en": ["*"],
+            "ru": ["*"]
+          }
+        },
+        {
+          "id": "cols-p4-fill-covering",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing term and what stays unread.",
+            "ru": "Впиши пропущенный термин и то, что остаётся непрочитанным."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Naming your columns is what keeps an index-only answer possible.",
+              "ru": "Именно перечисление колонок сохраняет возможность ответить из одного индекса."
+            },
+            "incorrect": {
+              "en": "A covering index answers the query without reading the table rows.",
+              "ru": "Покрывающий (covering) индекс отвечает на запрос, не читая строки таблицы."
+            }
+          },
+          "text": {
+            "en": "Selecting only the columns you need lets a ___ index answer the query without reading the ___ rows.",
+            "ru": "Выбор только нужных колонок позволяет ___ индексу ответить на запрос, не читая строки ___."
+          },
+          "blanks": [
+            {
+              "en": ["covering"],
+              "ru": ["covering", "покрывающему", "покрывающий"]
+            },
+            {
+              "en": ["table"],
+              "ru": ["таблицы", "table"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "read-fewer-rows",
+      "title": {
+        "en": "Read fewer rows",
+        "ru": "Читай меньше строк"
+      },
+      "summary": {
+        "en": "Filter early and narrowly, and use LIMIT/pagination, so fewer rows survive into joins and sorts.",
+        "ru": "Фильтруй рано и узко и используй LIMIT/пагинацию, чтобы до соединений и сортировок доходило меньше строк."
+      },
+      "discovery": [
+        {
+          "id": "rows-d1-page-of-twenty",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A page shows 20 rows. The query fetches 100,000 rows and the application keeps the first 20. What is the fix?",
+            "ru": "Страница показывает 20 строк. Запрос достаёт 100 000 строк, а приложение оставляет первые 20. Что чинить?"
+          },
+          "reveal": {
+            "en": "Two levers make a query touch less data: read fewer rows, and move fewer rows.\n\n```mermaid\nflowchart LR\n  A[\"scan: 1,000,000 rows\"] --> B[\"filter early: 800 rows\"]\n  B --> C[\"join: 800 rows\"]\n  C --> D[\"sort: 800 rows\"]\n  D --> E[\"LIMIT 20\"]\n```\n\n- **Filter early and narrowly.** Push `WHERE` conditions so the database discards rows as soon as possible — before joins and sorts. Every row that survives a step is work for *every* step after it, so a filter that runs first is worth far more than the same filter running last.\n- **`LIMIT` and paginate** when the screen only shows a page. Rows the client throws away were still read from disk, sorted, and sent over the network; the database has no way to know they were unwanted.\n\nCaching the 100,000 rows in the application does not fix this — the database still does all that work, and now the data can go stale as well. The cheap fix is to not ask for the rows in the first place.",
+            "ru": "Заставить запрос трогать меньше данных помогают два рычага: читать меньше строк и перемещать меньше строк.\n\n```mermaid\nflowchart LR\n  A[\"скан: 1 000 000 строк\"] --> B[\"фильтр рано: 800 строк\"]\n  B --> C[\"join: 800 строк\"]\n  C --> D[\"сортировка: 800 строк\"]\n  D --> E[\"LIMIT 20\"]\n```\n\n- **Фильтруй рано и узко.** Двигай условия `WHERE` так, чтобы база отбрасывала строки как можно раньше — до соединений и сортировок. Каждая пережившая шаг строка — это работа для *всех* следующих шагов, поэтому фильтр, отработавший первым, стоит намного больше того же фильтра в конце.\n- **`LIMIT` и пагинация**, когда на экране всего одна страница. Строки, которые клиент выбросил, всё равно были прочитаны с диска, отсортированы и отправлены по сети; база не может догадаться, что они были не нужны.\n\nКэширование этих 100 000 строк в приложении проблему не решает — база всё равно делает всю работу, а данные вдобавок начинают устаревать. Дешёвая правка — вообще не просить эти строки."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — ask for the page you show, not for everything.",
+              "ru": "Верно — проси ту страницу, которую показываешь, а не всё подряд."
+            },
+            "incorrect": {
+              "en": "Add LIMIT and paginate: rows the client discards were still read, sorted and shipped.",
+              "ru": "Добавь LIMIT и пагинацию: выброшенные клиентом строки всё равно были прочитаны, отсортированы и отправлены."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Add LIMIT (with pagination) so the database returns only the rows the page shows",
+                "ru": "Добавить LIMIT (с пагинацией), чтобы база возвращала только показываемые строки"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Keep the query and cache the 100,000 rows in the application",
+                "ru": "Оставить запрос и закэшировать 100 000 строк в приложении"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The database still does all the work, and now the cached copy can go stale too.",
+                "ru": "База всё равно делает всю работу, а закэшированная копия ещё и устаревает."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — the database only sends rows the client actually reads",
+                "ru": "Ничего — база отправляет только те строки, которые клиент реально читает"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The full result set is produced and shipped; discarding it client-side saves nothing.",
+                "ru": "Результат формируется и отправляется целиком; выбрасывание на клиенте ничего не экономит."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "rows-p1-filter-early-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In SQL, filtering rows earlier reduces the work every later step of the query has to do.",
+            "ru": "В SQL более ранняя фильтрация строк уменьшает работу для всех последующих шагов запроса."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Fewer surviving rows means a cheaper join, a cheaper sort and less data to ship.",
+              "ru": "Меньше переживших строк — дешевле соединение, дешевле сортировка, меньше данных на отправку."
+            },
+            "incorrect": {
+              "en": "It does — rows discarded early never reach the join, the sort, or the network.",
+              "ru": "Уменьшает — отброшенные рано строки не доходят ни до соединения, ни до сортировки, ни до сети."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "rows-p2-why-limit",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why does adding LIMIT 20 help, if the application would keep only 20 rows anyway?",
+            "ru": "Зачем добавлять LIMIT 20, если приложение всё равно оставит только 20 строк?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Work avoided in the database beats work undone in the application.",
+              "ru": "Работа, которую база не сделала, лучше работы, отменённой в приложении."
+            },
+            "incorrect": {
+              "en": "LIMIT stops the database producing, sorting and shipping rows nobody will look at.",
+              "ru": "LIMIT не даёт базе формировать, сортировать и отправлять строки, на которые никто не посмотрит."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The database stops producing, sorting and shipping rows that are not needed",
+                "ru": "База перестаёт формировать, сортировать и отправлять ненужные строки"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "LIMIT makes the database use an index automatically",
+                "ru": "LIMIT заставляет базу автоматически использовать индекс"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "LIMIT neither creates nor forces an index; it only caps how many rows are produced.",
+                "ru": "LIMIT не создаёт и не навязывает индекс; он лишь ограничивает число формируемых строк."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It changes nothing in the database, only in the client",
+                "ru": "В базе он ничего не меняет, только в клиенте"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The database is exactly where the saving happens — it never builds the extra rows.",
+                "ru": "Экономия происходит именно в базе — она вообще не строит лишние строки."
+              }
+            }
+          ]
+        },
+        {
+          "id": "rows-p3-sort-funnel",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order these stages so that the least possible work is left for the later ones.",
+            "ru": "Расставь эти этапы так, чтобы для последующих оставалось как можно меньше работы."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Narrow first, then join, then sort, then return one page.",
+              "ru": "Сначала сузить, потом соединить, потом отсортировать, потом вернуть страницу."
+            },
+            "incorrect": {
+              "en": "Filter first so the join and the sort operate on a small set, then LIMIT to one page.",
+              "ru": "Сначала фильтр, чтобы соединение и сортировка работали с маленьким набором, затем LIMIT на одну страницу."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Apply the WHERE filter as early as possible",
+                "ru": "Применить фильтр WHERE как можно раньше"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Join only the rows that survived the filter",
+                "ru": "Соединить только пережившие фильтр строки"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Sort the now much smaller result",
+                "ru": "Отсортировать ставший маленьким результат"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Return a single page with LIMIT",
+                "ru": "Вернуть одну страницу через LIMIT"
+              }
+            }
+          ]
+        },
+        {
+          "id": "rows-p4-fill-limit",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing keyword.",
+            "ru": "Впиши пропущенное ключевое слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Do not pull 100,000 rows to display 20.",
+              "ru": "Не тяни 100 000 строк, чтобы показать 20."
+            },
+            "incorrect": {
+              "en": "It is LIMIT — combined with pagination, it returns only the rows the page shows.",
+              "ru": "Это LIMIT — вместе с пагинацией он возвращает только показываемые строки."
+            }
+          },
+          "text": {
+            "en": "To show one page of results, add ___ instead of fetching every row.",
+            "ru": "Чтобы показать одну страницу результатов, добавь ___ вместо выборки всех строк."
+          },
+          "blanks": [
+            {
+              "en": ["LIMIT", "limit"],
+              "ru": ["LIMIT", "limit"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "correlated-subquery-vs-join",
+      "title": {
+        "en": "Correlated subquery vs JOIN",
+        "ru": "Коррелированный подзапрос против JOIN"
+      },
+      "summary": {
+        "en": "A correlated subquery runs once per outer row; a JOIN matches everything in one set-based pass.",
+        "ru": "Коррелированный подзапрос выполняется по разу на каждую внешнюю строку; JOIN сопоставляет всё за один проход над множествами."
+      },
+      "discovery": [
+        {
+          "id": "corr-d1-how-many-times",
+          "type": "predict_output",
+          "prompt": {
+            "en": "`orders` has 1,000,000 rows. Predict how many times the inner SELECT is evaluated.",
+            "ru": "В `orders` 1 000 000 строк. Предскажи, сколько раз вычислится внутренний SELECT."
+          },
+          "code": "SELECT o.id,\n       (SELECT c.name FROM customers c WHERE c.id = o.customer_id) AS customer\nFROM orders o;",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "A **correlated subquery** is a subquery that references a column of the outer query — here `o.customer_id`. Because its result depends on the current outer row, it cannot be computed once; it is re-evaluated for every single row of `orders`.\n\n```mermaid\nflowchart TD\n  subgraph slow[\"Correlated subquery — one lookup per row\"]\n    R1[\"row 1\"] --> Q1[\"sub-query\"]\n    R2[\"row 2\"] --> Q2[\"sub-query\"]\n    R3[\"row N\"] --> Q3[\"sub-query\"]\n  end\n  subgraph fast[\"JOIN — one set-based pass\"]\n    J[\"orders + customers\"] --> RES[\"result set\"]\n  end\n```\n\nA `JOIN` states the same requirement as one **set** operation, which lets the planner choose a single efficient strategy — for example reading both tables once and matching them — instead of a million small lookups:\n\n```sql\nSELECT o.id, c.name AS customer\nFROM orders o\nJOIN customers c ON c.id = o.customer_id;\n```\n\nOne caveat worth stating in an interview: subqueries are **not** always slower than joins. An *uncorrelated* subquery does not depend on the outer row, so it is computed once and is often planned identically to the equivalent join. The trap is specifically the correlated one — and the plan is what settles it.",
+            "ru": "**Коррелированный подзапрос** — это подзапрос, ссылающийся на колонку внешнего запроса, здесь на `o.customer_id`. Его результат зависит от текущей внешней строки, поэтому вычислить его один раз нельзя: он пересчитывается для каждой строки `orders`.\n\n```mermaid\nflowchart TD\n  subgraph slow[\"Коррелированный подзапрос — по обращению на строку\"]\n    R1[\"строка 1\"] --> Q1[\"подзапрос\"]\n    R2[\"строка 2\"] --> Q2[\"подзапрос\"]\n    R3[\"строка N\"] --> Q3[\"подзапрос\"]\n  end\n  subgraph fast[\"JOIN — один проход над множествами\"]\n    J[\"orders + customers\"] --> RES[\"результат\"]\n  end\n```\n\n`JOIN` выражает то же требование как одну операцию над **множествами**, и планировщик может выбрать одну эффективную стратегию — например прочитать обе таблицы по разу и сопоставить их — вместо миллиона мелких поисков:\n\n```sql\nSELECT o.id, c.name AS customer\nFROM orders o\nJOIN customers c ON c.id = o.customer_id;\n```\n\nОговорка, которую стоит произнести на собеседовании: подзапросы **не** всегда медленнее JOIN. *Некоррелированный* подзапрос не зависит от внешней строки, вычисляется один раз и часто планируется так же, как эквивалентный join. Ловушка — именно коррелированный вариант, и решает всё план запроса."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — it depends on the outer row, so it runs once per row.",
+              "ru": "Верно — он зависит от внешней строки, поэтому выполняется по разу на строку."
+            },
+            "incorrect": {
+              "en": "It references o.customer_id, so it is re-evaluated for every outer row — up to 1,000,000 times.",
+              "ru": "Он ссылается на o.customer_id, поэтому пересчитывается для каждой внешней строки — до 1 000 000 раз."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Once per row of orders — up to 1,000,000 times",
+                "ru": "По разу на каждую строку orders — до 1 000 000 раз"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Once, before the outer query starts",
+                "ru": "Один раз, до начала внешнего запроса"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It references o.customer_id, so its result differs per outer row and cannot be computed up front.",
+                "ru": "Он ссылается на o.customer_id, поэтому результат зависит от строки и не вычисляется заранее."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Twice — once to build the plan and once to produce the result",
+                "ru": "Дважды — один раз для построения плана и один для результата"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Planning does not execute the subquery; execution runs it per outer row.",
+                "ru": "Планирование подзапрос не выполняет; при выполнении он идёт на каждую внешнюю строку."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "corr-p1-always-slower-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In SQL, every subquery is slower than the equivalent JOIN.",
+            "ru": "В SQL любой подзапрос медленнее эквивалентного JOIN."
+          },
+          "feedback": {
+            "correct": {
+              "en": "An uncorrelated subquery is computed once and is often planned like a join.",
+              "ru": "Некоррелированный подзапрос вычисляется один раз и часто планируется как join."
+            },
+            "incorrect": {
+              "en": "No — they are often equivalent; the real trap is a correlated subquery run per row.",
+              "ru": "Нет — часто они эквивалентны; настоящая ловушка — коррелированный подзапрос на каждую строку."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "corr-p2-what-makes-correlated",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What makes a subquery correlated?",
+            "ru": "Что делает подзапрос коррелированным?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The dependency on the outer row is what forces per-row evaluation.",
+              "ru": "Именно зависимость от внешней строки заставляет вычислять его построчно."
+            },
+            "incorrect": {
+              "en": "It references a column of the outer query, so it must be re-evaluated for every outer row.",
+              "ru": "Он ссылается на колонку внешнего запроса, поэтому пересчитывается для каждой внешней строки."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It references a column from the outer query",
+                "ru": "Он ссылается на колонку из внешнего запроса"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It appears in the SELECT list rather than in the FROM clause",
+                "ru": "Он стоит в списке SELECT, а не во FROM"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Position does not decide it; the reference to the outer row does.",
+                "ru": "Решает не расположение, а ссылка на внешнюю строку."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It returns more than one row",
+                "ru": "Он возвращает больше одной строки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The number of rows returned is unrelated to correlation.",
+                "ru": "Число возвращаемых строк к коррелированности отношения не имеет."
+              }
+            }
+          ]
+        },
+        {
+          "id": "corr-p3-match-shapes",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each query shape to how the database executes it.",
+            "ru": "Соотнеси каждую форму запроса с тем, как база её выполняет."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Only the correlated form scales with the number of outer rows.",
+              "ru": "Только коррелированная форма растёт вместе с числом внешних строк."
+            },
+            "incorrect": {
+              "en": "Correlated means one lookup per outer row; a JOIN is one set-based pass; uncorrelated is computed once.",
+              "ru": "Коррелированный — по поиску на внешнюю строку; JOIN — один проход над множествами; некоррелированный — один раз."
+            }
+          },
+          "pairs": [
+            {
+              "id": "correlated",
+              "left": {
+                "en": "Correlated subquery over 1M rows",
+                "ru": "Коррелированный подзапрос по 1 млн строк"
+              },
+              "right": {
+                "en": "One lookup per outer row",
+                "ru": "По одному поиску на каждую внешнюю строку"
+              }
+            },
+            {
+              "id": "join",
+              "left": {
+                "en": "JOIN",
+                "ru": "JOIN"
+              },
+              "right": {
+                "en": "One set-based pass over both tables",
+                "ru": "Один проход над множествами обеих таблиц"
+              }
+            },
+            {
+              "id": "uncorrelated",
+              "left": {
+                "en": "Uncorrelated subquery",
+                "ru": "Некоррелированный подзапрос"
+              },
+              "right": {
+                "en": "Computed once, independent of the outer rows",
+                "ru": "Вычисляется один раз, независимо от внешних строк"
+              }
+            }
+          ]
+        },
+        {
+          "id": "corr-p4-fill-correlated",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing term and unit of repetition.",
+            "ru": "Впиши пропущенный термин и единицу повторения."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Per-row execution is exactly what a JOIN replaces with one pass.",
+              "ru": "Построчное выполнение — именно то, что JOIN заменяет одним проходом."
+            },
+            "incorrect": {
+              "en": "It is called correlated, and it is re-evaluated once per outer row.",
+              "ru": "Он называется коррелированным и пересчитывается по разу на каждую внешнюю строку."
+            }
+          },
+          "text": {
+            "en": "A subquery that references a column of the outer query is called ___, and it is re-evaluated once per outer ___.",
+            "ru": "Подзапрос, ссылающийся на колонку внешнего запроса, называется ___, и он пересчитывается по разу на каждую внешнюю ___."
+          },
+          "blanks": [
+            {
+              "en": ["correlated"],
+              "ru": ["коррелированным", "коррелированный", "correlated"]
+            },
+            {
+              "en": ["row"],
+              "ru": ["строку", "строки", "row"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "exists-and-union-all",
+      "title": {
+        "en": "EXISTS and UNION ALL",
+        "ru": "EXISTS и UNION ALL"
+      },
+      "summary": {
+        "en": "For existence checks on big sets prefer EXISTS over IN (SELECT ...), and prefer UNION ALL over UNION when duplicates are acceptable.",
+        "ru": "Для проверки существования на больших множествах предпочитай EXISTS вместо IN (SELECT ...), а UNION ALL вместо UNION, когда дубликаты допустимы."
+      },
+      "discovery": [
+        {
+          "id": "sets-d1-exists-vs-in",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Both queries return the same customers, and `orders` is huge. Which is the better default, and why?",
+            "ru": "Оба запроса возвращают одних и тех же клиентов, а `orders` огромна. Что лучше по умолчанию и почему?"
+          },
+          "code": "-- A\nSELECT c.id FROM customers c\nWHERE c.id IN (SELECT o.customer_id FROM orders o);\n\n-- B\nSELECT c.id FROM customers c\nWHERE EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.id);",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "**`EXISTS`** asks a yes/no question: *is there at least one matching row?* As soon as one is found the answer is settled and the search can stop. `IN (SELECT ...)` instead asks about membership in a whole set of values, which is expensive when that set is large. For existence checks over big tables, `EXISTS` is the better default.\n\nThe same \"don't pay for work you didn't ask for\" idea applies to combining result sets:\n\n```mermaid\nflowchart LR\n  U[\"UNION\"] --> D[\"concatenate, then sort and remove duplicates\"]\n  UA[\"UNION ALL\"] --> C[\"concatenate only\"]\n```\n\n**`UNION`** removes duplicate rows, and removing duplicates requires an extra sort/dedup step over the combined result. **`UNION ALL`** simply concatenates. If you know there are no duplicates, or duplicates are acceptable, `UNION ALL` skips that whole step for free.\n\nBoth rules come from the same habit: think in **sets** and ask the database only for what you actually need.",
+            "ru": "**`EXISTS`** задаёт вопрос «да/нет»: *есть ли хотя бы одна подходящая строка?* Как только одна найдена, ответ решён и поиск можно прекратить. `IN (SELECT ...)` вместо этого спрашивает о принадлежности целому множеству значений, а это дорого, когда множество большое. Для проверок существования по большим таблицам `EXISTS` — лучший вариант по умолчанию.\n\nТа же мысль «не плати за работу, которую не просил» действует и при объединении результатов:\n\n```mermaid\nflowchart LR\n  U[\"UNION\"] --> D[\"объединить, затем отсортировать и убрать дубликаты\"]\n  UA[\"UNION ALL\"] --> C[\"только объединить\"]\n```\n\n**`UNION`** убирает дубликаты строк, а для этого нужен дополнительный шаг сортировки/дедупликации по объединённому результату. **`UNION ALL`** просто склеивает. Если дубликатов заведомо нет или они допустимы, `UNION ALL` пропускает весь этот шаг даром.\n\nОба правила растут из одной привычки: мыслить **множествами** и просить у базы только то, что реально нужно."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — an existence check can stop at the first match.",
+              "ru": "Верно — проверка существования может остановиться на первом совпадении."
+            },
+            "incorrect": {
+              "en": "B: EXISTS answers yes/no and can stop at the first matching row, which suits a big table.",
+              "ru": "B: EXISTS отвечает «да/нет» и может остановиться на первой подходящей строке — это подходит большой таблице."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "B — EXISTS can stop at the first match, so it suits an existence check on a big set",
+                "ru": "B — EXISTS может остановиться на первом совпадении, что подходит для проверки существования на большом множестве"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A — IN builds the list of values once, so it is always cheaper",
+                "ru": "A — IN строит список значений один раз, поэтому всегда дешевле"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "On a huge table that list of values is itself huge; EXISTS avoids handling the whole set.",
+                "ru": "На огромной таблице этот список значений сам огромен; EXISTS не работает со всем множеством."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Neither — they answer different questions and are not interchangeable",
+                "ru": "Ни то, ни другое — они отвечают на разные вопросы и не взаимозаменяемы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Both answer \"does this customer have at least one order?\"; the difference is how much work it takes.",
+                "ru": "Оба отвечают на «есть ли у клиента хотя бы один заказ?»; разница в объёме работы."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "sets-p1-union-same-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In SQL, UNION and UNION ALL do the same amount of work.",
+            "ru": "В SQL UNION и UNION ALL выполняют одинаковый объём работы."
+          },
+          "feedback": {
+            "correct": {
+              "en": "UNION pays for an extra dedup step that UNION ALL skips.",
+              "ru": "UNION платит за дополнительный шаг дедупликации, который UNION ALL пропускает."
+            },
+            "incorrect": {
+              "en": "No — UNION removes duplicates, which costs an extra sort/dedup step; UNION ALL just concatenates.",
+              "ru": "Нет — UNION убирает дубликаты, а это дополнительный шаг сортировки/дедупликации; UNION ALL просто склеивает."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "sets-p2-union-extra-work",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What extra work does UNION do compared with UNION ALL?",
+            "ru": "Какую дополнительную работу делает UNION по сравнению с UNION ALL?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Deduplication is not free — it needs the whole combined result first.",
+              "ru": "Дедупликация не бесплатна — для неё сначала нужен весь объединённый результат."
+            },
+            "incorrect": {
+              "en": "UNION removes duplicate rows, which requires an extra sort/dedup step.",
+              "ru": "UNION убирает дублирующиеся строки, а для этого нужен дополнительный шаг сортировки/дедупликации."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It removes duplicate rows, which needs an extra sort/dedup step",
+                "ru": "Он убирает дублирующиеся строки, для чего нужен дополнительный шаг сортировки/дедупликации"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It sorts the result by the first column, as the standard requires",
+                "ru": "Он сортирует результат по первой колонке, как требует стандарт"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "UNION promises no ordering; any sorting is a side effect of removing duplicates.",
+                "ru": "UNION не обещает никакого порядка; сортировка — побочный эффект удаления дубликатов."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It checks that both queries use the same indexes",
+                "ru": "Он проверяет, что оба запроса используют одинаковые индексы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "UNION does nothing with indexes; its extra cost is duplicate removal.",
+                "ru": "UNION никак не связан с индексами; его дополнительная цена — удаление дубликатов."
+              }
+            }
+          ]
+        },
+        {
+          "id": "sets-p3-match-constructs",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each SQL construct to what it does.",
+            "ru": "Соотнеси каждую SQL-конструкцию с тем, что она делает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Pick the construct that asks for the least work that still answers the question.",
+              "ru": "Выбирай конструкцию, которая просит минимум работы и всё ещё отвечает на вопрос."
+            },
+            "incorrect": {
+              "en": "EXISTS stops at the first match, IN handles a whole set, UNION dedups, UNION ALL does not.",
+              "ru": "EXISTS останавливается на первом совпадении, IN работает со всем множеством, UNION дедуплицирует, UNION ALL нет."
+            }
+          },
+          "pairs": [
+            {
+              "id": "exists",
+              "left": {
+                "en": "EXISTS (SELECT 1 ...)",
+                "ru": "EXISTS (SELECT 1 ...)"
+              },
+              "right": {
+                "en": "Stops at the first matching row",
+                "ru": "Останавливается на первой подходящей строке"
+              }
+            },
+            {
+              "id": "in",
+              "left": {
+                "en": "IN (SELECT ...) over a huge set",
+                "ru": "IN (SELECT ...) по огромному множеству"
+              },
+              "right": {
+                "en": "Has to handle the whole set of values",
+                "ru": "Вынужден работать со всем множеством значений"
+              }
+            },
+            {
+              "id": "union",
+              "left": {
+                "en": "UNION",
+                "ru": "UNION"
+              },
+              "right": {
+                "en": "Concatenates, then removes duplicates",
+                "ru": "Склеивает, затем убирает дубликаты"
+              }
+            },
+            {
+              "id": "unionall",
+              "left": {
+                "en": "UNION ALL",
+                "ru": "UNION ALL"
+              },
+              "right": {
+                "en": "Concatenates without deduplicating",
+                "ru": "Склеивает без дедупликации"
+              }
+            }
+          ]
+        },
+        {
+          "id": "sets-p4-fill-keywords",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing keywords.",
+            "ru": "Впиши два пропущенных ключевых слова."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Both choices skip work the query never needed.",
+              "ru": "Оба выбора пропускают работу, которая запросу не нужна."
+            },
+            "incorrect": {
+              "en": "Prefer EXISTS for existence checks, and UNION ALL when duplicates are acceptable.",
+              "ru": "Предпочитай EXISTS для проверок существования и UNION ALL, когда дубликаты допустимы."
+            }
+          },
+          "text": {
+            "en": "For an existence check on a big table prefer ___ over IN (SELECT ...); when duplicates are acceptable prefer UNION ___.",
+            "ru": "Для проверки существования на большой таблице предпочитай ___ вместо IN (SELECT ...); когда дубликаты допустимы — UNION ___."
+          },
+          "blanks": [
+            {
+              "en": ["EXISTS", "exists"],
+              "ru": ["EXISTS", "exists"]
+            },
+            {
+              "en": ["ALL", "all"],
+              "ru": ["ALL", "all"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "round-trips-and-n-plus-1",
+      "title": {
+        "en": "Round-trips, N+1 and prepared statements",
+        "ru": "Обращения к базе, N+1 и prepared statements"
+      },
+      "summary": {
+        "en": "Sending one query per row (N+1) costs a round-trip and a re-parse each time; batch the work and reuse prepared statements.",
+        "ru": "Отправка по запросу на строку (N+1) стоит обращения и повторного разбора каждый раз; делай работу пакетно и переиспользуй prepared statements."
+      },
+      "discovery": [
+        {
+          "id": "trips-d1-count-queries",
+          "type": "predict_output",
+          "prompt": {
+            "en": "This loads a list of orders and then a customer per order. For 500 orders, how many queries reach the database?",
+            "ru": "Этот код загружает список заказов, а затем по клиенту на каждый заказ. Сколько запросов для 500 заказов дойдёт до базы?"
+          },
+          "code": "List<Order> orders = repo.findAll();                 // 1 query\nfor (Order o : orders) {\n    Customer c = repo.findCustomer(o.customerId());  // 1 query each\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "This is the **N+1 problem**: 1 query for the list, plus N queries — one per row it returned. With 500 orders that is 501 statements.\n\n```mermaid\nflowchart LR\n  subgraph n1[\"N+1: 1 + N round-trips\"]\n    L[\"list query\"] --> P1[\"one query per row\"]\n  end\n  subgraph batched[\"Batched: 1 round-trip\"]\n    B[\"one query fetches everything\"]\n  end\n```\n\nEvery one of those statements is a separate **round-trip** to the database server — a network hop out and back — and each one is parsed and planned on arrival. The per-query overhead is small; multiplied by N it dominates everything else.\n\nTwo fixes, and they compose:\n\n- **Fetch in one query, or batch.** One query that returns orders *and* their customers (a `JOIN`), or one statement carrying all the ids. The same applies to writes: a batched insert instead of 1,000 single-row inserts.\n- **Reuse a prepared statement.** A **prepared statement** is SQL sent once with placeholders for its parameters: the database parses and plans it **once**, then executes it many times with different values. It also prevents SQL injection, since the parameters are never spliced into the SQL text.",
+            "ru": "Это **проблема N+1**: 1 запрос за списком плюс N запросов — по одному на каждую возвращённую строку. При 500 заказах это 501 обращение.\n\n```mermaid\nflowchart LR\n  subgraph n1[\"N+1: 1 + N обращений\"]\n    L[\"запрос за списком\"] --> P1[\"по запросу на строку\"]\n  end\n  subgraph batched[\"Пакетно: 1 обращение\"]\n    B[\"один запрос достаёт всё\"]\n  end\n```\n\nКаждое такое обращение — отдельная **поездка** на сервер базы, туда и обратно по сети, и каждое по прибытии разбирается и планируется. Накладные расходы на один запрос малы; умноженные на N, они перевешивают всё остальное.\n\nДва средства, и они сочетаются:\n\n- **Достань всё одним запросом или пакетом.** Один запрос, возвращающий заказы *и* их клиентов (`JOIN`), или один запрос со всеми идентификаторами. То же и для записи: пакетная вставка вместо 1000 вставок по строке.\n- **Переиспользуй prepared statement.** **Prepared statement** — это SQL, отправленный один раз с местами для параметров: база разбирает и планирует его **однажды**, а затем выполняет много раз с разными значениями. Он же защищает от SQL-инъекций, поскольку параметры никогда не вклеиваются в текст SQL."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — 1 for the list plus 1 per order.",
+              "ru": "Верно — 1 за списком плюс по 1 на заказ."
+            },
+            "incorrect": {
+              "en": "501: one query for the list, then one per order — the N+1 pattern.",
+              "ru": "501: один запрос за списком, затем по одному на заказ — это паттерн N+1."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "501 — one for the list plus one per order",
+                "ru": "501 — один за списком плюс по одному на заказ"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "2 — the driver merges the loop into a single query",
+                "ru": "2 — драйвер объединяет цикл в один запрос"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing merges them: each call is its own statement and its own round-trip.",
+                "ru": "Никто их не объединяет: каждый вызов — свой запрос и своё обращение к серверу."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "500 — the first query is free because its result is cached",
+                "ru": "500 — первый запрос бесплатен, потому что его результат кэшируется"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The list query is a real round-trip too; it is the \"1\" in N+1.",
+                "ru": "Запрос за списком — тоже реальное обращение; это и есть «1» в N+1."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "trips-p1-prepared-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A prepared statement lets the database parse and plan the SQL once and reuse it with different parameters.",
+            "ru": "Prepared statement позволяет базе разобрать и спланировать SQL один раз и переиспользовать его с разными параметрами."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Parse once, execute many — and the parameters never touch the SQL text.",
+              "ru": "Разбор один раз, выполнений много — и параметры никогда не попадают в текст SQL."
+            },
+            "incorrect": {
+              "en": "It does — that is exactly what makes it cheaper than re-sending an ad-hoc SQL string.",
+              "ru": "Позволяет — именно поэтому он дешевле, чем каждый раз слать новую строку SQL."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "trips-p2-what-is-n-plus-1",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What is the N+1 problem?",
+            "ru": "Что такое проблема N+1?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The cost scales with the number of rows returned by the first query.",
+              "ru": "Цена растёт вместе с числом строк, которые вернул первый запрос."
+            },
+            "incorrect": {
+              "en": "One query loads N rows, then one extra query runs for each of those rows.",
+              "ru": "Один запрос загружает N строк, а затем на каждую из них выполняется ещё один запрос."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "One query loads N rows, and then one more query runs per row",
+                "ru": "Один запрос загружает N строк, а потом на каждую строку идёт ещё один запрос"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A join accidentally returns one more row than expected",
+                "ru": "Соединение случайно возвращает на одну строку больше ожидаемого"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "N+1 is about the number of statements sent, not about the number of rows returned.",
+                "ru": "N+1 — про количество отправленных запросов, а не про количество возвращённых строк."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "An index that must be rebuilt after every N inserts",
+                "ru": "Индекс, который нужно перестраивать после каждых N вставок"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Indexes are maintained incrementally; N+1 describes a query pattern in application code.",
+                "ru": "Индексы поддерживаются инкрементально; N+1 описывает паттерн запросов в коде приложения."
+              }
+            }
+          ]
+        },
+        {
+          "id": "trips-p3-sort-fix",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the steps that turn an N+1 loop into a single round-trip.",
+            "ru": "Расставь по порядку шаги, превращающие цикл N+1 в одно обращение к базе."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Spot the per-row query, collect what it fetches, replace it with one statement, then reuse it.",
+              "ru": "Заметить построчный запрос, собрать нужное, заменить одним запросом, затем переиспользовать его."
+            },
+            "incorrect": {
+              "en": "Notice the per-row query, gather the ids, replace the loop with one query, and reuse a prepared statement.",
+              "ru": "Заметить построчный запрос, собрать идентификаторы, заменить цикл одним запросом и переиспользовать prepared statement."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Notice that the loop issues one small query per row",
+                "ru": "Заметить, что цикл шлёт по одному маленькому запросу на строку"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Collect the data the loop fetches row by row",
+                "ru": "Собрать данные, которые цикл достаёт построчно"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Replace the loop with a single query (a JOIN or a batch)",
+                "ru": "Заменить цикл одним запросом (JOIN или пакетом)"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Reuse a prepared statement so the SQL is parsed and planned once",
+                "ru": "Переиспользовать prepared statement, чтобы SQL разбирался и планировался один раз"
+              }
+            }
+          ]
+        },
+        {
+          "id": "trips-p4-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the fix for an N+1 query pattern.",
+            "ru": "Собери решение для паттерна запросов N+1."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One statement beats N statements, however small each one is.",
+              "ru": "Один запрос лучше N запросов, какими бы маленькими они ни были."
+            },
+            "incorrect": {
+              "en": "Fetch everything in a single query instead of looping row by row.",
+              "ru": "Достань всё одним запросом, а не в цикле по строкам."
+            }
+          },
+          "tokens": {
+            "en": ["fetch", "everything", "in", "a", "single", "query", "instead", "of", "looping"],
+            "ru": ["достань", "всё", "одним", "запросом,", "а", "не", "в", "цикле"]
+          },
+          "distractors": {
+            "en": ["parsing"],
+            "ru": ["разбором"]
+          }
+        },
+        {
+          "id": "trips-p5-fill-terms",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing problem name and statement kind.",
+            "ru": "Впиши пропущенное название проблемы и вид запроса."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Batching removes the round-trips; prepared statements remove the re-parsing.",
+              "ru": "Пакетность убирает обращения к серверу; prepared statements убирают повторный разбор."
+            },
+            "incorrect": {
+              "en": "It is the N+1 problem, and a prepared statement is parsed and planned only once.",
+              "ru": "Это проблема N+1, а prepared statement разбирается и планируется только один раз."
+            }
+          },
+          "text": {
+            "en": "One query plus one query per row is the ___ problem; a ___ statement lets the database parse the SQL once.",
+            "ru": "Один запрос плюс по запросу на каждую строку — это проблема ___; ___ statement позволяет базе разобрать SQL один раз."
+          },
+          "blanks": [
+            {
+              "en": ["N+1", "n+1"],
+              "ru": ["N+1", "n+1"]
+            },
+            {
+              "en": ["prepared"],
+              "ru": ["prepared"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fresh-statistics",
+      "title": {
+        "en": "Fresh statistics for the planner",
+        "ru": "Свежая статистика для планировщика"
+      },
+      "summary": {
+        "en": "The planner picks a strategy from statistics about the data, so stale statistics after a big load can produce a bad plan.",
+        "ru": "Планировщик выбирает стратегию по статистике о данных, поэтому устаревшая статистика после большой загрузки даёт плохой план."
+      },
+      "discovery": [
+        {
+          "id": "stats-d1-after-bulk-load",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "You bulk-load 10 million rows into a table that used to hold 1,000. Queries that were fast are now slow and the plan looks wrong. What is the likely cause?",
+            "ru": "Вы массово загрузили 10 млн строк в таблицу, где была 1000. Быстрые раньше запросы стали медленными, а план выглядит странно. Какова вероятная причина?"
+          },
+          "reveal": {
+            "en": "**Statistics** are the summary the database keeps about each table: roughly how many rows it has, and how many distinct values each column holds. The planner never looks at your data directly — it *estimates* from these statistics how many rows each step will produce, and picks a strategy from those estimates.\n\n```mermaid\nflowchart LR\n  S[\"table statistics\"] --> P[\"planner estimates rows\"]\n  P --> C[\"chooses scan / index / join strategy\"]\n  ST[\"stale statistics\"] --> BP[\"wrong estimate: bad plan\"]\n```\n\nThat is why the estimate matters so much. \"Only 3 rows will match\" leads to an index lookup; \"half the table will match\" leads to a sequential scan — and both are the right call *for the numbers the planner believes*.\n\nAfter a bulk load or a mass delete, the stored statistics describe data that no longer exists, so the estimates are wrong and the plan follows them off a cliff. Refresh them — in PostgreSQL, `ANALYZE`. This is also why comparing the estimated `rows` in `EXPLAIN` against the actual counts from `EXPLAIN ANALYZE` is so informative: a large gap points straight at stale statistics.",
+            "ru": "**Статистика** — это сводка, которую база хранит по каждой таблице: примерно сколько в ней строк и сколько различных значений в каждой колонке. Планировщик никогда не смотрит на данные напрямую — он *оценивает* по этой статистике, сколько строк даст каждый шаг, и выбирает стратегию исходя из оценок.\n\n```mermaid\nflowchart LR\n  S[\"статистика таблицы\"] --> P[\"планировщик оценивает число строк\"]\n  P --> C[\"выбирает скан / индекс / способ соединения\"]\n  ST[\"устаревшая статистика\"] --> BP[\"неверная оценка: плохой план\"]\n```\n\nВот почему оценка так важна. «Подойдут всего 3 строки» ведёт к поиску по индексу; «подойдёт половина таблицы» — к последовательному скану, и оба решения верны *для тех чисел, в которые планировщик верит*.\n\nПосле массовой загрузки или массового удаления сохранённая статистика описывает данные, которых больше нет, поэтому оценки неверны, и план послушно идёт за ними в обрыв. Обнови её — в PostgreSQL это `ANALYZE`. Поэтому же так полезно сравнивать оценочные `rows` из `EXPLAIN` с фактическими числами из `EXPLAIN ANALYZE`: большой разрыв прямо указывает на устаревшую статистику."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the planner is reasoning about a table that no longer exists.",
+              "ru": "Верно — планировщик рассуждает о таблице, которой больше нет."
+            },
+            "incorrect": {
+              "en": "The statistics still describe the old, tiny table, so the planner's estimates — and its plan — are wrong.",
+              "ru": "Статистика всё ещё описывает старую крошечную таблицу, поэтому оценки планировщика и его план неверны."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The planner is still using statistics that describe the old, tiny table",
+                "ru": "Планировщик всё ещё использует статистику, описывающую старую крошечную таблицу"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The bulk load dropped the table's indexes",
+                "ru": "Массовая загрузка удалила индексы таблицы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A load maintains the indexes (which is part of why it is slow); it does not remove them.",
+                "ru": "Загрузка поддерживает индексы (отчасти поэтому она и медленная), а не удаляет их."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The query text needs to be rewritten",
+                "ru": "Нужно переписать текст запроса"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The SQL did not change; what changed is the data the planner reasons about.",
+                "ru": "SQL не менялся; изменились данные, о которых рассуждает планировщик."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "stats-p1-planner-input-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A SQL planner chooses its strategy from statistics about the data, not from the SQL text alone.",
+            "ru": "Планировщик SQL выбирает стратегию по статистике о данных, а не только по тексту SQL."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The same SQL can get a different plan when the data changes.",
+              "ru": "Один и тот же SQL может получить другой план, когда меняются данные."
+            },
+            "incorrect": {
+              "en": "It does — row counts and distinct-value counts drive the estimates the plan is built from.",
+              "ru": "Именно так — число строк и число различных значений задают оценки, из которых строится план."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "stats-p2-which-command",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In PostgreSQL, which command refreshes a table's statistics?",
+            "ru": "Какая команда в PostgreSQL обновляет статистику таблицы?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "ANALYZE on its own is the statistics refresh.",
+              "ru": "Отдельная команда ANALYZE и есть обновление статистики."
+            },
+            "incorrect": {
+              "en": "It is ANALYZE — EXPLAIN only shows a plan, and EXPLAIN ANALYZE only measures one query.",
+              "ru": "Это ANALYZE — EXPLAIN лишь показывает план, а EXPLAIN ANALYZE лишь измеряет один запрос."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "ANALYZE",
+                "ru": "ANALYZE"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "EXPLAIN",
+                "ru": "EXPLAIN"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "EXPLAIN reports the plan the planner would choose; it changes nothing.",
+                "ru": "EXPLAIN показывает план, который выбрал бы планировщик; он ничего не меняет."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "EXPLAIN ANALYZE",
+                "ru": "EXPLAIN ANALYZE"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Despite the word, EXPLAIN ANALYZE only runs and measures that one query.",
+                "ru": "Несмотря на слово в названии, EXPLAIN ANALYZE лишь выполняет и измеряет этот один запрос."
+              }
+            }
+          ]
+        },
+        {
+          "id": "stats-p3-match-terms",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each term to its role in planning a SQL query.",
+            "ru": "Соотнеси каждый термин с его ролью в планировании SQL-запроса."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Statistics feed the estimates, and the estimates decide the plan.",
+              "ru": "Статистика питает оценки, а оценки решают, каким будет план."
+            },
+            "incorrect": {
+              "en": "Statistics describe the data, the row estimate is derived from them, and ANALYZE refreshes them.",
+              "ru": "Статистика описывает данные, оценка строк выводится из неё, а ANALYZE её обновляет."
+            }
+          },
+          "pairs": [
+            {
+              "id": "statistics",
+              "left": {
+                "en": "Statistics",
+                "ru": "Статистика"
+              },
+              "right": {
+                "en": "What the planner knows about your data",
+                "ru": "То, что планировщик знает о ваших данных"
+              }
+            },
+            {
+              "id": "estimate",
+              "left": {
+                "en": "The rows estimate in EXPLAIN",
+                "ru": "Оценка rows в EXPLAIN"
+              },
+              "right": {
+                "en": "The planner's guess, derived from the statistics",
+                "ru": "Догадка планировщика, выведенная из статистики"
+              }
+            },
+            {
+              "id": "stale",
+              "left": {
+                "en": "Stale statistics after a bulk load",
+                "ru": "Устаревшая статистика после массовой загрузки"
+              },
+              "right": {
+                "en": "Estimates describing data that no longer exists",
+                "ru": "Оценки описывают данные, которых больше нет"
+              }
+            },
+            {
+              "id": "analyze",
+              "left": {
+                "en": "ANALYZE",
+                "ru": "ANALYZE"
+              },
+              "right": {
+                "en": "Refreshes the statistics so estimates fit the data",
+                "ru": "Обновляет статистику, чтобы оценки соответствовали данным"
+              }
+            }
+          ]
+        },
+        {
+          "id": "stats-p4-fill-analyze",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type what the planner reads and how to refresh it.",
+            "ru": "Впиши, что читает планировщик и как это обновить."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Fresh numbers in, sensible plan out.",
+              "ru": "Свежие числа на входе — разумный план на выходе."
+            },
+            "incorrect": {
+              "en": "The planner estimates from table statistics; PostgreSQL refreshes them with ANALYZE.",
+              "ru": "Планировщик оценивает по статистике таблицы; в PostgreSQL её обновляет ANALYZE."
+            }
+          },
+          "text": {
+            "en": "The planner estimates rows from table ___; in PostgreSQL you refresh it with ___.",
+            "ru": "Планировщик оценивает число строк по табличной ___; в PostgreSQL её обновляют командой ___."
+          },
+          "blanks": [
+            {
+              "en": ["statistics", "stats"],
+              "ru": ["статистике", "статистика", "statistics"]
+            },
+            {
+              "en": ["ANALYZE", "analyze"],
+              "ru": ["ANALYZE", "analyze"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "optimization-workflow",
+      "title": {
+        "en": "The whole optimization pass",
+        "ru": "Полный проход оптимизации"
+      },
+      "summary": {
+        "en": "Measure, fix the biggest cost — index, sargability, less data, joins, fewer round-trips, fresh statistics — then measure again.",
+        "ru": "Замерить, устранить самое дорогое — индекс, sargability, меньше данных, JOIN, меньше обращений, свежая статистика — и замерить снова."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "cap-d1-predict-plan",
+          "type": "predict_output",
+          "prompt": {
+            "en": "`orders` has 40M rows and `orders.created_at` is indexed. Predict what the EXPLAIN plan of this query shows.",
+            "ru": "В `orders` 40 млн строк, на `orders.created_at` есть индекс. Предскажи, что покажет план EXPLAIN для этого запроса."
+          },
+          "code": "-- orders: 40M rows, index on orders.created_at\nSELECT *\nFROM orders o\nWHERE YEAR(o.created_at) = 2026\nORDER BY o.created_at\nLIMIT 20;",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "Four lines, three separate problems — and this is the shape almost every real slow query takes.\n\n```mermaid\nflowchart TD\n  A[\"Slow query\"] --> B[\"EXPLAIN ANALYZE\"]\n  B --> C{\"Seq Scan on a big table?\"}\n  C -->|yes| D[\"Add an index / make the predicate sargable\"]\n  C -->|no| E{\"Reading too many rows or columns?\"}\n  E -->|yes| F[\"Filter early, LIMIT, fewer columns\"]\n  E -->|no| G{\"One query per row?\"}\n  G -->|yes| H[\"Rewrite as a JOIN or batch it\"]\n  G -->|no| I[\"Refresh statistics, re-measure\"]\n  D --> I\n  F --> I\n  H --> I\n```\n\n1. **`YEAR(o.created_at)` is not sargable.** The index on `created_at` is dead, so the plan is a `Seq Scan` over 40M rows. Rewrite the condition as a range on the bare column.\n2. **`SELECT *`** ships every column and rules out an index-only answer. Name the columns the page displays.\n3. **`ORDER BY created_at` + `LIMIT 20`** are not problems in themselves — they are the reward. Once the range predicate lets the index be used, the index's own order satisfies the `ORDER BY`, and `LIMIT 20` lets the scan stop after twenty rows instead of ordering 40 million.\n\n```sql\nSELECT o.id, o.total, o.created_at\nFROM orders o\nWHERE o.created_at >= '2026-01-01'\n  AND o.created_at <  '2027-01-01'\nORDER BY o.created_at\nLIMIT 20;\n```\n\nOne fix unlocked the other two — which is exactly why you re-measure after each change instead of applying five at once.",
+            "ru": "Четыре строки — три разные проблемы, и почти любой реально медленный запрос выглядит именно так.\n\n```mermaid\nflowchart TD\n  A[\"Медленный запрос\"] --> B[\"EXPLAIN ANALYZE\"]\n  B --> C{\"Seq Scan по большой таблице?\"}\n  C -->|да| D[\"Добавить индекс / сделать предикат sargable\"]\n  C -->|нет| E{\"Читаем слишком много строк или колонок?\"}\n  E -->|да| F[\"Фильтровать раньше, LIMIT, меньше колонок\"]\n  E -->|нет| G{\"По запросу на каждую строку?\"}\n  G -->|да| H[\"Переписать как JOIN или сделать пакетно\"]\n  G -->|нет| I[\"Обновить статистику, замерить снова\"]\n  D --> I\n  F --> I\n  H --> I\n```\n\n1. **`YEAR(o.created_at)` не sargable.** Индекс на `created_at` мёртв, поэтому в плане `Seq Scan` по 40 млн строк. Перепиши условие как диапазон по голой колонке.\n2. **`SELECT *`** отправляет все колонки и исключает ответ из одного индекса. Перечисли те колонки, которые показывает страница.\n3. **`ORDER BY created_at` + `LIMIT 20`** сами по себе не проблема — это награда. Как только диапазонный предикат позволит использовать индекс, собственный порядок индекса удовлетворит `ORDER BY`, а `LIMIT 20` даст остановиться после двадцати строк вместо упорядочивания 40 миллионов.\n\n```sql\nSELECT o.id, o.total, o.created_at\nFROM orders o\nWHERE o.created_at >= '2026-01-01'\n  AND o.created_at <  '2027-01-01'\nORDER BY o.created_at\nLIMIT 20;\n```\n\nОдна правка разблокировала две другие — именно поэтому замеряют после каждого изменения, а не применяют пять сразу."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the function on the indexed column forces a full scan.",
+              "ru": "Верно — функция на индексированной колонке вынуждает полный скан."
+            },
+            "incorrect": {
+              "en": "A Seq Scan: YEAR(created_at) is not sargable, so the index on created_at cannot be used.",
+              "ru": "Seq Scan: YEAR(created_at) не sargable, поэтому индекс на created_at использовать нельзя."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A Seq Scan over all 40M rows — the function makes the predicate non-sargable",
+                "ru": "Seq Scan по всем 40 млн строк — функция делает предикат не-sargable"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "An index scan — created_at is indexed and appears in both WHERE and ORDER BY",
+                "ru": "Скан по индексу — created_at индексирована и стоит и в WHERE, и в ORDER BY"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The index stores raw created_at values, not YEAR(created_at), so it cannot be searched here.",
+                "ru": "Индекс хранит сырые значения created_at, а не YEAR(created_at), поэтому искать по нему нельзя."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A Seq Scan, because LIMIT 20 always disables index usage",
+                "ru": "Seq Scan, потому что LIMIT 20 всегда отключает использование индекса"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "LIMIT caps the output and never disables an index; the non-sargable predicate is the cause.",
+                "ru": "LIMIT ограничивает вывод и никогда не отключает индекс; причина — не-sargable предикат."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cap-p1-spot-endpoint",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This endpoint gets slower as the number of paid orders grows. What is the PRIMARY cause?",
+            "ru": "Этот эндпоинт замедляется по мере роста числа оплаченных заказов. В чём ГЛАВНАЯ причина?"
+          },
+          "code": "List<Order> orders = jdbc.query(\n        \"SELECT * FROM orders WHERE status = 'PAID'\", mapper);\nfor (Order o : orders) {\n    String name = jdbc.queryForObject(\n            \"SELECT name FROM customers WHERE id = \" + o.customerId(),\n            String.class);\n}",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "Only the loop scales with the number of orders — that is what makes it get worse over time.",
+              "ru": "С числом заказов растёт только цикл — именно поэтому со временем становится хуже."
+            },
+            "incorrect": {
+              "en": "The loop is an N+1 pattern: one round-trip per order, which a single JOIN would replace.",
+              "ru": "Цикл — это паттерн N+1: по обращению к базе на каждый заказ, что заменяется одним JOIN."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The loop issues one query per order — an N+1 pattern a single JOIN would replace",
+                "ru": "Цикл шлёт по запросу на каждый заказ — паттерн N+1, заменяемый одним JOIN"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The SELECT * in the first query",
+                "ru": "SELECT * в первом запросе"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Real but secondary: it moves extra bytes once, while the loop costs a round-trip per row.",
+                "ru": "Проблема реальная, но второстепенная: лишние байты один раз против обращения на каждую строку."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Building the inner SQL by string concatenation",
+                "ru": "Сборка внутреннего SQL конкатенацией строк"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Also real — no statement reuse, plus an injection risk — but the dominant cost is the round-trips.",
+                "ru": "Тоже реально — нет переиспользования запроса и есть риск инъекции, — но главная цена в обращениях к базе."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "Mapping rows in the application with `mapper`",
+                "ru": "Маппинг строк в приложении через `mapper`"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Row mapping is cheap; it is not what makes this endpoint degrade.",
+                "ru": "Маппинг строк дёшев; деградацию эндпоинта вызывает не он."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p2-predict-estimate",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The index exists and the predicate is sargable, yet the plan is a Seq Scan estimating 15,000,000 matches. What is the most likely explanation?",
+            "ru": "Индекс есть, предикат sargable, но в плане Seq Scan с оценкой в 15 000 000 совпадений. Какое объяснение наиболее вероятно?"
+          },
+          "code": "-- events: 30M rows, index on events.user_id\nSELECT COUNT(*) FROM events WHERE user_id = 42;\n\n-- EXPLAIN: Seq Scan on events  (rows=15000000)",
+          "codeLang": "sql",
+          "feedback": {
+            "correct": {
+              "en": "An absurd estimate is the fingerprint of stale statistics.",
+              "ru": "Абсурдная оценка — отпечаток устаревшей статистики."
+            },
+            "incorrect": {
+              "en": "The estimate is the giveaway: the planner thinks half the table matches, so it skips the index.",
+              "ru": "Выдаёт себя оценка: планировщик считает, что подходит половина таблицы, и потому обходит индекс."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The statistics are stale, so the planner over-estimates the matches and decides a scan is cheaper",
+                "ru": "Статистика устарела, планировщик переоценивает число совпадений и решает, что скан дешевле"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The index is corrupt, so the database silently ignores it",
+                "ru": "Индекс повреждён, и база молча его игнорирует"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing here points at corruption; the absurd row estimate points at the statistics.",
+                "ru": "Ничто здесь не указывает на повреждение; абсурдная оценка строк указывает на статистику."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "COUNT(*) can never use an index",
+                "ru": "COUNT(*) никогда не может использовать индекс"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The aggregate is not the issue — the planner skipped the index because of its row estimate.",
+                "ru": "Дело не в агрегате — планировщик обошёл индекс из-за своей оценки числа строк."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p3-sort-full-pass",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the complete pass for making a slow SQL query faster.",
+            "ru": "Расставь по порядку полный проход по ускорению медленного SQL-запроса."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Evidence, diagnosis, one change, evidence again — then keep it only if it earned its place.",
+              "ru": "Факты, диагноз, одно изменение, снова факты — и оставляем только то, что себя оправдало."
+            },
+            "incorrect": {
+              "en": "Measure with EXPLAIN ANALYZE, find the costly step, apply one fix, re-measure, keep only what helped.",
+              "ru": "Замерить через EXPLAIN ANALYZE, найти дорогой шаг, применить одну правку, замерить снова, оставить только полезное."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Reproduce the query and run EXPLAIN ANALYZE",
+                "ru": "Воспроизвести запрос и выполнить EXPLAIN ANALYZE"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Find the costliest step: a Seq Scan on a big table, a huge row estimate, an expensive sort",
+                "ru": "Найти самый дорогой шаг: Seq Scan по большой таблице, огромная оценка строк, дорогая сортировка"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Apply one targeted fix: an index, a sargable predicate, fewer rows and columns, or a JOIN instead of a per-row subquery",
+                "ru": "Применить одну точечную правку: индекс, sargable-предикат, меньше строк и колонок или JOIN вместо построчного подзапроса"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Run EXPLAIN ANALYZE again and compare plan and timing",
+                "ru": "Снова выполнить EXPLAIN ANALYZE и сравнить план и время"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "Keep the change only if it actually improved things",
+                "ru": "Оставить изменение, только если оно действительно улучшило ситуацию"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p4-match-mechanisms",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each SQL optimization technique to the job it does.",
+            "ru": "Соотнеси каждый приём оптимизации SQL с его ролью."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Each technique removes a different kind of waste — that is why one alone rarely fixes everything.",
+              "ru": "Каждый приём убирает свой вид лишней работы — поэтому один редко чинит всё."
+            },
+            "incorrect": {
+              "en": "EXPLAIN ANALYZE locates the cost, an index removes the scan, fewer columns move fewer bytes, a JOIN replaces per-row lookups, ANALYZE refreshes statistics.",
+              "ru": "EXPLAIN ANALYZE находит дорогое место, индекс убирает скан, меньше колонок — меньше байт, JOIN заменяет построчные поиски, ANALYZE обновляет статистику."
+            }
+          },
+          "pairs": [
+            {
+              "id": "explain",
+              "left": {
+                "en": "EXPLAIN ANALYZE",
+                "ru": "EXPLAIN ANALYZE"
+              },
+              "right": {
+                "en": "Shows where the work actually goes",
+                "ru": "Показывает, куда реально уходит работа"
+              }
+            },
+            {
+              "id": "index",
+              "left": {
+                "en": "An index plus a sargable predicate",
+                "ru": "Индекс плюс sargable-предикат"
+              },
+              "right": {
+                "en": "Turns a full scan into a seek",
+                "ru": "Превращает полный скан в точечный поиск"
+              }
+            },
+            {
+              "id": "columns",
+              "left": {
+                "en": "Naming columns instead of SELECT *",
+                "ru": "Перечисление колонок вместо SELECT *"
+              },
+              "right": {
+                "en": "Moves fewer bytes and keeps an index-only answer possible",
+                "ru": "Гоняет меньше байт и сохраняет ответ из одного индекса"
+              }
+            },
+            {
+              "id": "join",
+              "left": {
+                "en": "A JOIN instead of a correlated subquery",
+                "ru": "JOIN вместо коррелированного подзапроса"
+              },
+              "right": {
+                "en": "Replaces one lookup per row with one set-based pass",
+                "ru": "Заменяет поиск на каждую строку одним проходом над множествами"
+              }
+            },
+            {
+              "id": "analyze",
+              "left": {
+                "en": "ANALYZE",
+                "ru": "ANALYZE"
+              },
+              "right": {
+                "en": "Gives the planner fresh statistics to estimate from",
+                "ru": "Даёт планировщику свежую статистику для оценок"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p5-fill-answer",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill in the key parts of the interview answer.",
+            "ru": "Впиши ключевые части ответа для собеседования."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Measure, index a sargable predicate, think in sets, and stop paying per row.",
+              "ru": "Замерить, индексировать sargable-предикат, мыслить множествами и перестать платить за каждую строку."
+            },
+            "incorrect": {
+              "en": "EXPLAIN ANALYZE to measure, keep predicates sargable, replace a correlated subquery with a JOIN, and batch away the N+1.",
+              "ru": "EXPLAIN ANALYZE для замера, предикаты держим sargable, коррелированный подзапрос меняем на JOIN, N+1 убираем пакетностью."
+            }
+          },
+          "text": {
+            "en": "Read the plan with EXPLAIN ___; index the columns in WHERE, JOIN and ORDER BY and keep the predicate ___; replace a correlated subquery with a ___; and avoid the ___ problem by batching.",
+            "ru": "Читаем план через EXPLAIN ___; индексируем колонки из WHERE, JOIN и ORDER BY и держим предикат ___; коррелированный подзапрос заменяем на ___; проблемы ___ избегаем пакетной работой."
+          },
+          "blanks": [
+            {
+              "en": ["ANALYZE", "analyze"],
+              "ru": ["ANALYZE", "analyze"]
+            },
+            {
+              "en": ["sargable"],
+              "ru": ["sargable", "саргабельным"]
+            },
+            {
+              "en": ["JOIN", "join"],
+              "ru": ["JOIN", "join"]
+            },
+            {
+              "en": ["N+1", "n+1"],
+              "ru": ["N+1", "n+1"]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,3341 @@
+{
+  "schemaVersion": 1,
+  "topicId": "balance-in-place-vs-ledger",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "balance-is-derived",
+      "title": {
+        "en": "A balance is a conclusion",
+        "ru": "Баланс — это вывод"
+      },
+      "summary": {
+        "en": "A balance is the sum of every operation on the account, so the design choice is whether to store the conclusion or the operations behind it.",
+        "ru": "Баланс — это сумма всех операций по счёту, поэтому выбор проектирования: хранить вывод или операции, из которых он получен."
+      },
+      "discovery": [
+        {
+          "id": "bd-d1-what-column-answers",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "An account row shows `balance = 750`. A customer asks how it got there. What can this column alone answer?",
+            "ru": "В строке счёта записано `balance = 750`. Клиент спрашивает, откуда это число. Что может ответить одна эта колонка?"
+          },
+          "code": "SELECT balance FROM accounts WHERE id = 7;  -- 750",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "A **balance is not a fact** you were handed — it is a **conclusion**: the sum of every operation that ever touched the account. That summing has a name, the **fold**: walking the operations one by one and accumulating them into a single number.\n\nSo the design question is not \"how do I store a number\", it is: do I store the conclusion, or the operations I drew it from?\n\n```mermaid\nflowchart LR\n  subgraph P[\"update in place\"]\n    O1[\"operations +1000, -250\"] --> U[\"UPDATE accounts SET balance = ?\"]\n    U --> B[(\"balance = 750\")]\n  end\n  subgraph L[\"append-only ledger\"]\n    O2[\"operations +1000, -250\"] --> I[\"INSERT INTO entries\"]\n    I --> F[\"SUM\"] --> B2[\"balance = 750\"]\n  end\n```\n\nBoth models answer \"what is the balance?\" with 750. Only one can answer \"why 750?\", because only one still has the operations. `750` alone cannot tell you whether it is 1000 − 250 or 2000 − 1250. Storing the conclusion throws away the evidence for it on every write; storing the operations means the conclusion is always recomputable — and that you now pay to read it.",
+            "ru": "**Баланс — не факт**, который тебе выдали, а **вывод**: сумма всех операций, когда-либо коснувшихся счёта. У этого суммирования есть имя — **свёртка (fold)**: пройти операции одну за другой и накопить их в одно число.\n\nПоэтому вопрос проектирования не «как хранить число», а: хранить вывод или те операции, из которых он сделан?\n\n```mermaid\nflowchart LR\n  subgraph P[\"обновление на месте\"]\n    O1[\"операции +1000, -250\"] --> U[\"UPDATE accounts SET balance = ?\"]\n    U --> B[(\"balance = 750\")]\n  end\n  subgraph L[\"журнал только на добавление\"]\n    O2[\"операции +1000, -250\"] --> I[\"INSERT INTO entries\"]\n    I --> F[\"SUM\"] --> B2[\"balance = 750\"]\n  end\n```\n\nОбе модели отвечают на «какой баланс?» числом 750. Но на «почему 750?» ответит только одна — та, у которой остались операции. Само по себе `750` не скажет, это 1000 − 250 или 2000 − 1250. Хранение вывода выбрасывает подтверждающие его данные при каждой записи; хранение операций означает, что вывод всегда можно пересчитать — и что теперь за чтение приходится платить."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — a stored balance answers \"what\", never \"why\".",
+              "ru": "Верно — сохранённый баланс отвечает на «что», но не на «почему»."
+            },
+            "incorrect": {
+              "en": "The column holds one current number and nothing about the past.",
+              "ru": "В колонке лежит одно текущее число и ничего о прошлом."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Nothing about the past — only the current number",
+                "ru": "Ничего о прошлом — только текущее число"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The full list of operations that produced it",
+                "ru": "Полный список операций, которые к нему привели"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The column stores one number; the operations behind it were never written down.",
+                "ru": "В колонке одно число; операции за ним нигде не записаны."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "At least the previous balance and the last change",
+                "ru": "Хотя бы прошлый баланс и последнее изменение"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "An UPDATE overwrites the previous value in place; it leaves no trace of itself.",
+                "ru": "UPDATE затирает прошлое значение на месте и не оставляет следа о себе."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "bd-p1-conclusion-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A balance kept in a single column is a conclusion: the operations behind it cannot be recovered from that column.",
+            "ru": "Баланс в одной колонке — это вывод: операции за ним из самой колонки восстановить нельзя."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The column holds the result of the fold, not its inputs.",
+              "ru": "В колонке лежит результат свёртки, а не её входные данные."
+            },
+            "incorrect": {
+              "en": "It is true — a single number carries no information about the operations that produced it.",
+              "ru": "Это правда — одно число не несёт информации об операциях, которые его породили."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "bd-p2-how-balance-read",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In a pure append-only ledger design, how is an account's current balance obtained?",
+            "ru": "В чистой схеме «журнал только на добавление» как получают текущий баланс счёта?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The balance is derived by folding the account's operations.",
+              "ru": "Баланс выводится свёрткой операций по счёту."
+            },
+            "incorrect": {
+              "en": "It is derived: the ledger sums the account's recorded operations.",
+              "ru": "Он выводится: журнал суммирует записанные операции по счёту."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "By summing all of the account's recorded operations",
+                "ru": "Суммированием всех записанных операций по счёту"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "By reading a balance column that each operation updates",
+                "ru": "Чтением колонки баланса, которую обновляет каждая операция"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the in-place model; in a pure ledger the balance is derived, not stored.",
+                "ru": "Это модель «на месте»; в чистом журнале баланс выводится, а не хранится."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "By reading the amount of the most recent operation",
+                "ru": "Чтением суммы самой последней операции"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The newest operation is one movement, not the total of all of them.",
+                "ru": "Последняя операция — одно движение, а не итог всех."
+              }
+            }
+          ]
+        },
+        {
+          "id": "bd-p3-match-models",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each balance-storage choice to what it actually keeps.",
+            "ru": "Соотнеси каждый способ хранения баланса с тем, что он на самом деле хранит."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One model keeps the conclusion, the other keeps the facts it was drawn from.",
+              "ru": "Одна модель хранит вывод, другая — факты, из которых он сделан."
+            },
+            "incorrect": {
+              "en": "In place stores the conclusion; a ledger stores the operations and folds them on read.",
+              "ru": "«На месте» хранит вывод; журнал хранит операции и сворачивает их при чтении."
+            }
+          },
+          "pairs": [
+            {
+              "id": "in-place",
+              "left": {
+                "en": "Update in place",
+                "ru": "Обновление на месте"
+              },
+              "right": {
+                "en": "Stores the conclusion: one current number",
+                "ru": "Хранит вывод: одно текущее число"
+              }
+            },
+            {
+              "id": "ledger",
+              "left": {
+                "en": "Append-only ledger",
+                "ru": "Журнал только на добавление"
+              },
+              "right": {
+                "en": "Stores the operations and derives the number",
+                "ru": "Хранит операции и выводит из них число"
+              }
+            },
+            {
+              "id": "fold",
+              "left": {
+                "en": "The fold",
+                "ru": "Свёртка (fold)"
+              },
+              "right": {
+                "en": "Accumulating the operations into a single balance",
+                "ru": "Накопление операций в один баланс"
+              }
+            }
+          ]
+        },
+        {
+          "id": "bd-p4-fill-sum",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the query that derives a balance from recorded operations.",
+            "ru": "Дополни запрос, который выводит баланс из записанных операций."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The balance is the fold: a SUM of the account's amounts.",
+              "ru": "Баланс — это свёртка: SUM сумм по счёту."
+            },
+            "incorrect": {
+              "en": "It is SUM — the balance is the total of every recorded amount for that account.",
+              "ru": "Это SUM — баланс есть итог всех записанных сумм по этому счёту."
+            }
+          },
+          "text": {
+            "en": "SELECT COALESCE(___(amount), 0) FROM entries WHERE account_id = 7;",
+            "ru": "SELECT COALESCE(___(amount), 0) FROM entries WHERE account_id = 7;"
+          },
+          "blanks": [
+            {
+              "en": [
+                "SUM",
+                "sum"
+              ],
+              "ru": [
+                "SUM",
+                "sum"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "what-update-destroys",
+      "title": {
+        "en": "What an in-place UPDATE destroys",
+        "ru": "Что уничтожает UPDATE на месте"
+      },
+      "summary": {
+        "en": "An in-place UPDATE overwrites the only evidence of how the number was reached: no old value, no correction, no who, no when.",
+        "ru": "UPDATE на месте затирает единственное свидетельство того, как получилось число: ни старого значения, ни поправки, ни кто, ни когда."
+      },
+      "discovery": [
+        {
+          "id": "wud-d1-after-update",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The row held 1000 before this statement. Afterwards, what can the `accounts` table still tell you about the 250?",
+            "ru": "До этого оператора в строке было 1000. Что после него таблица `accounts` ещё может рассказать о 250?"
+          },
+          "code": "UPDATE accounts SET balance = balance - 250 WHERE id = 7;",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "That statement is one row, one statement, and O(1) to read afterwards — genuinely the right answer for plenty of counters. Its cost is easy to underestimate, because the loss is invisible at the moment it happens. Four things go:\n\n- **The \"why\" is gone.** The column says 750 and cannot say whether that is 1000 − 250 or 2000 − 1250.\n- **Repairs become indistinguishable from the truth.** When an operator fixes a wrong posting by retyping the total, the account ends up correct with no record that it was ever wrong — no old value, no correction, no who, no when.\n- **Every write is a read-modify-write.** Even `balance = balance + ?`, atomic in SQL, becomes a race the moment the *decision* (may this withdrawal proceed?) is made from a value read earlier.\n- **Debugging has no input.** \"Some balances were wrong last Tuesday\" is unanswerable: you can see the current state but not what produced it, so you cannot tell a data bug from a code bug from a duplicated request.\n\nThis is why the question comes up for money systems and almost nowhere else: for a balance, the history *is* part of the product. Regulators, disputes, chargebacks and reconciliation all ask \"why\", not \"what\".",
+            "ru": "Этот оператор — одна строка, один запрос и O(1) на последующее чтение; для множества счётчиков он действительно правильный ответ. Его цену легко недооценить, потому что потеря незаметна ровно в момент, когда происходит. Уходят четыре вещи:\n\n- **«Почему» исчезло.** В колонке 750, и она не скажет, это 1000 − 250 или 2000 − 1250.\n- **Исправления становятся неотличимы от правды.** Когда оператор чинит ошибочную проводку, перепечатывая итог, счёт становится верным, и нигде не остаётся записи, что он был неверным: ни старого значения, ни поправки, ни кто, ни когда.\n- **Любая запись — это read-modify-write.** Даже атомарный в SQL `balance = balance + ?` становится гонкой в момент, когда *решение* (можно ли провести списание?) принимается по значению, прочитанному раньше.\n- **Отладке не с чем работать.** «В прошлый вторник у части клиентов балансы были неверными» — вопрос без ответа: видно текущее состояние и не видно, что его породило, поэтому не отличить баг в данных от бага в коде и от задвоенного запроса.\n\nИменно поэтому вопрос возникает в денежных системах и почти нигде больше: для баланса история *является* частью продукта. Регуляторы, споры, чарджбэки и сверки спрашивают «почему», а не «что»."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Nothing — the statement changed a number without recording itself.",
+              "ru": "Ничего — оператор изменил число, не записав сам себя."
+            },
+            "incorrect": {
+              "en": "Nothing survives: the old value is overwritten and the change leaves no row behind.",
+              "ru": "Не выживает ничего: старое значение затёрто, а изменение не оставляет после себя строки."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Nothing — only that the balance is now 750",
+                "ru": "Ничего — только что баланс теперь 750"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The amount 250 and the time it was applied",
+                "ru": "Сумму 250 и время, когда её применили"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The statement changed a number; it did not record itself anywhere.",
+                "ru": "Оператор изменил число; сам себя он никуда не записал."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The previous value 1000, kept as the row's old version",
+                "ru": "Прошлое значение 1000 как старую версию строки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The old value was overwritten in place — the application can never read it again.",
+                "ru": "Старое значение затёрто на месте — приложение уже никогда его не прочитает."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "wud-p1-old-value-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "After `UPDATE accounts SET balance = ...`, the previous balance is still recoverable from the accounts table.",
+            "ru": "После `UPDATE accounts SET balance = ...` прошлый баланс всё ещё можно восстановить из таблицы accounts."
+          },
+          "feedback": {
+            "correct": {
+              "en": "In-place means overwritten: the old value is gone.",
+              "ru": "«На месте» означает «перезаписано»: старого значения больше нет."
+            },
+            "incorrect": {
+              "en": "No — the update overwrites the value; nothing in the table keeps the old one.",
+              "ru": "Нет — обновление затирает значение; в таблице ничего не хранит старое."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "wud-p2-operator-fix",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "An operator repairs a wrong balance by retyping the correct total with an UPDATE. What does an auditor see afterwards?",
+            "ru": "Оператор чинит неверный баланс, перепечатывая правильный итог через UPDATE. Что после этого видит аудитор?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "A repair is indistinguishable from the truth once the old value is gone.",
+              "ru": "Как только старое значение исчезло, исправление неотличимо от правды."
+            },
+            "incorrect": {
+              "en": "Only a correct-looking number — nothing records that the account was ever wrong.",
+              "ru": "Только выглядящее верным число — нигде не записано, что счёт был неверным."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A correct balance with no record that it was ever wrong",
+                "ru": "Верный баланс без всякой записи о том, что он был неверным"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The wrong value and the correction, in order",
+                "ru": "Неверное значение и поправку, по порядку"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing recorded the old value or the fix; the row simply holds a new number.",
+                "ru": "Ни старое значение, ни исправление не записаны; в строке просто новое число."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A validation error, because the balance was changed twice",
+                "ru": "Ошибку проверки, потому что баланс меняли дважды"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The database has no notion that one of the values was a mistake.",
+                "ru": "База не имеет понятия о том, что одно из значений было ошибкой."
+              }
+            }
+          ]
+        },
+        {
+          "id": "wud-p3-fill-rmw",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the pattern: compute a new balance from a value you read earlier, then write it back.",
+            "ru": "Назови паттерн: вычислить новый баланс из прочитанного ранее значения и записать его обратно."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Read-modify-write is what makes an in-place balance racy.",
+              "ru": "Именно read-modify-write делает баланс «на месте» подверженным гонкам."
+            },
+            "incorrect": {
+              "en": "It is read-modify-write: the decision is made from a value that may already be stale.",
+              "ru": "Это read-modify-write: решение принимается по значению, которое уже может быть устаревшим."
+            }
+          },
+          "text": {
+            "en": "Deciding from a previously read balance and writing the result back is the ___-modify-___ pattern.",
+            "ru": "Решение по ранее прочитанному балансу с записью результата обратно — это паттерн ___-modify-___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "read"
+              ],
+              "ru": [
+                "read"
+              ]
+            },
+            {
+              "en": [
+                "write"
+              ],
+              "ru": [
+                "write"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "entries-table",
+      "title": {
+        "en": "The entries table",
+        "ru": "Таблица записей"
+      },
+      "summary": {
+        "en": "An append-only ledger writes one immutable row per movement: account, signed amount in minor units, reason, operation id, timestamp.",
+        "ru": "Журнал только на добавление пишет одну неизменяемую строку на движение: счёт, сумму со знаком в минорных единицах, причину, id операции, время."
+      },
+      "discovery": [
+        {
+          "id": "et-d1-record-withdrawal",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The service must record a withdrawal of 250 from account 7 in this schema. What does it write?",
+            "ru": "Сервис должен записать списание 250 со счёта 7 в этой схеме. Что он пишет?"
+          },
+          "code": "CREATE TABLE entries (\n  id           bigserial   PRIMARY KEY,\n  account_id   bigint      NOT NULL,\n  amount       bigint      NOT NULL,   -- signed, in minor units; never a float\n  reason       text        NOT NULL,\n  operation_id uuid        NOT NULL,\n  created_at   timestamptz NOT NULL DEFAULT now()\n);",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "An **entry** is one immutable row describing one movement of money. **Append-only** means the table only ever receives `INSERT`s: no row is updated, none is deleted.\n\nThe `amount` is **signed** — the direction lives in the sign, so a deposit is `+1000` and a withdrawal is `-250`. It is stored in **minor units** (cents) as an integer, never a float, because rounding errors would accumulate across the whole fold. `operation_id` is the id of the business action that caused the entry.\n\nThe balance is then read, not written:\n\n```sql\nSELECT COALESCE(SUM(amount), 0) FROM entries WHERE account_id = 7;\n-- rows: +1000, -250  ->  750\n```\n\nFrom \"nothing is ever overwritten\" four properties follow directly: the balance is **provable** (any reported number itemizes down to the operations that caused it), corrections become appends, concurrent writes stop conflicting, and any past state is rebuildable — a new report is just a different fold over data you already have, not a migration that works only going forward.",
+            "ru": "**Запись (entry)** — одна неизменяемая строка, описывающая одно движение денег. **Append-only** («только на добавление») означает, что таблица получает лишь `INSERT`: ни одна строка не обновляется и не удаляется.\n\nПоле `amount` — **со знаком**: направление живёт в знаке, поэтому пополнение это `+1000`, а списание `-250`. Хранится оно в **минорных единицах** (копейках) целым числом, никогда не float, потому что ошибки округления накапливались бы по всей свёртке. `operation_id` — идентификатор бизнес-операции, породившей запись.\n\nБаланс после этого читают, а не пишут:\n\n```sql\nSELECT COALESCE(SUM(amount), 0) FROM entries WHERE account_id = 7;\n-- строки: +1000, -250  ->  750\n```\n\nИз принципа «ничего никогда не перезаписывается» напрямую следуют четыре свойства: баланс **доказуем** (любое названное число раскладывается вплоть до породивших его операций), исправления превращаются в добавления, параллельные записи перестают конфликтовать, а любое прошлое состояние восстановимо — новый отчёт это просто другая свёртка по уже имеющимся данным, а не миграция, работающая только начиная с сегодня."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One new row, with the direction carried by the sign.",
+              "ru": "Одна новая строка, направление несёт знак."
+            },
+            "incorrect": {
+              "en": "Append-only means one new row per movement; the sign carries the direction.",
+              "ru": "Append-only означает одну новую строку на движение; направление несёт знак."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "One new row with amount = -250",
+                "ru": "Одну новую строку с amount = -250"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "An update of the account's existing entry row",
+                "ru": "Обновление существующей строки записи по счёту"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing in an append-only table is updated; every movement is a new row.",
+                "ru": "В таблице «только на добавление» ничего не обновляется; каждое движение — новая строка."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "One row with amount = 250 and a separate direction flag",
+                "ru": "Одну строку с amount = 250 и отдельным флагом направления"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The amount is signed, so the sign carries the direction; there is no such flag here.",
+                "ru": "Сумма со знаком, и знак несёт направление; такого флага здесь нет."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "et-p1-money-integers",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why does a ledger store money as an integer in minor units rather than as a floating-point number?",
+            "ru": "Почему журнал хранит деньги целым числом в минорных единицах, а не числом с плавающей точкой?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Every read folds the whole history, so rounding error compounds.",
+              "ru": "Каждое чтение сворачивает всю историю, поэтому ошибка округления накапливается."
+            },
+            "incorrect": {
+              "en": "Because rounding errors accumulate across the fold over the entire history.",
+              "ru": "Потому что ошибки округления накапливаются по свёртке всей истории."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Rounding errors would accumulate across the fold",
+                "ru": "Ошибки округления накапливались бы по всей свёртке"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "SUM() cannot be applied to floating-point columns",
+                "ru": "SUM() нельзя применить к колонкам с плавающей точкой"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It can — it just accumulates rounding error over the history.",
+                "ru": "Можно — просто по истории накопится ошибка округления."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Integers are required for the table's ordering",
+                "ru": "Целые числа нужны для упорядочивания таблицы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Ordering comes from the id or sequence, not from the amount's type.",
+                "ru": "Порядок задаёт id или последовательность, а не тип суммы."
+              }
+            }
+          ]
+        },
+        {
+          "id": "et-p2-sort-record",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order what a pure append-only ledger does when an operation of -250 arrives for an account.",
+            "ru": "Расставь по порядку, что делает чистый журнал только на добавление, когда по счёту приходит операция -250."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Write one row, commit, and let reads derive the balance.",
+              "ru": "Записать одну строку, зафиксировать, а чтения пусть выводят баланс."
+            },
+            "incorrect": {
+              "en": "A ledger inserts one row and commits; the balance is derived later by reads.",
+              "ru": "Журнал вставляет одну строку и фиксирует её; баланс выводят позже при чтении."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Validate the incoming operation",
+                "ru": "Проверить входящую операцию"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "INSERT one new entry with amount = -250",
+                "ru": "Вставить одну новую запись с amount = -250"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "COMMIT — the row is now part of the history",
+                "ru": "Зафиксировать — строка теперь часть истории"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Later reads derive the balance with SUM(amount)",
+                "ru": "Последующие чтения выводят баланс через SUM(amount)"
+              }
+            }
+          ]
+        },
+        {
+          "id": "et-p3-fill-minor-units",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the rule for storing money in a ledger.",
+            "ru": "Дополни правило хранения денег в журнале."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Integers in cents, or NUMERIC — never a float.",
+              "ru": "Целые в копейках или NUMERIC — никогда не float."
+            },
+            "incorrect": {
+              "en": "Money is stored as integers in minor units (cents), never as a float.",
+              "ru": "Деньги хранят целыми числами в минорных единицах (копейках), никогда не float."
+            }
+          },
+          "text": {
+            "en": "Money is stored as ___ in minor units (cents), never as a ___.",
+            "ru": "Деньги хранят как ___ в минорных единицах (копейках), никогда не как ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "integers",
+                "integer"
+              ],
+              "ru": [
+                "целые",
+                "целые числа",
+                "integers"
+              ]
+            },
+            {
+              "en": [
+                "float"
+              ],
+              "ru": [
+                "float"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "corrections-are-appends",
+      "title": {
+        "en": "Corrections are appends",
+        "ru": "Исправление — это добавление"
+      },
+      "summary": {
+        "en": "A wrong posting is repaired with a reversing entry plus the right one, so the mistake stays visible in the book.",
+        "ru": "Ошибочная проводка чинится сторнирующей записью плюс правильной, поэтому ошибка остаётся видимой в книге."
+      },
+      "discovery": [
+        {
+          "id": "caa-d1-wrong-amount",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "An entry was recorded as -250 but the operation was actually -150. In an append-only ledger, how do you fix it?",
+            "ru": "Запись внесли как -250, хотя операция была на -150. Как это чинят в журнале только на добавление?"
+          },
+          "code": "-- entries for account 7\n-- id 41: +1000\n-- id 42: -250   <- wrong, should have been -150",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "In an append-only ledger a mistake is never edited away. It is cancelled by a **reversing entry**: a new row with the opposite amount, followed by a new row with the correct amount. This is the accountant's move, and it keeps the mistake in the book.\n\n```sql\n-- id 41: +1000   original\n-- id 42:  -250   wrong posting\n-- id 43:  +250   reversing entry (cancels 42)\n-- id 44:  -150   the correct posting\n-- SUM = 850\n```\n\nThe balance ends where an in-place `UPDATE` would have put it, but the book now shows *what happened*: a wrong posting, its reversal, and the repair — with a reason and a timestamp on each. That is a feature, not clutter: an audit trail with the embarrassing parts edited out is not an audit trail. An auditor can see that the account was wrong, for how long, and by whose action it was fixed.",
+            "ru": "В журнале только на добавление ошибку никогда не «затирают». Её отменяют **сторнирующей записью**: новой строкой с противоположной суммой, а следом — новой строкой с правильной суммой. Это приём бухгалтера, и он оставляет ошибку в книге.\n\n```sql\n-- id 41: +1000   исходная\n-- id 42:  -250   ошибочная проводка\n-- id 43:  +250   сторнирующая запись (отменяет 42)\n-- id 44:  -150   правильная проводка\n-- SUM = 850\n```\n\nБаланс приходит туда же, куда его привёл бы `UPDATE` на месте, но книга теперь показывает *что произошло*: ошибочную проводку, её сторно и исправление — с причиной и временем у каждой. Это преимущество, а не мусор: аудиторский след, из которого вырезали неудобные места, аудиторским следом не является. Аудитор видит, что счёт был неверным, как долго и чьим действием его починили."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two appends: cancel the wrong row, then post the right one.",
+              "ru": "Два добавления: отменить неверную строку, затем провести правильную."
+            },
+            "incorrect": {
+              "en": "You append a reversal and then the correct entry; the wrong row stays.",
+              "ru": "Добавляют сторно, затем правильную запись; неверная строка остаётся."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Append a +250 entry cancelling it, then append a -150 entry",
+                "ru": "Добавить запись +250, отменяющую её, затем добавить запись -150"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "UPDATE the entry's amount to -150",
+                "ru": "Изменить сумму записи на -150 через UPDATE"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Updating the row is exactly what append-only forbids, and it erases that the mistake happened.",
+                "ru": "Обновление строки — ровно то, что запрещает append-only, и оно стирает сам факт ошибки."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "DELETE the entry and INSERT the correct one",
+                "ru": "Удалить запись и вставить правильную"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Deleting rebuilds the book to a different number with no trace that anything changed.",
+                "ru": "Удаление пересчитывает книгу в другое число, не оставляя следа изменения."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "caa-p1-removes-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In an append-only ledger, correcting a wrong entry removes it from the history.",
+            "ru": "В журнале только на добавление исправление ошибочной записи убирает её из истории."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The wrong entry stays; a reversal and the right entry are appended after it.",
+              "ru": "Ошибочная запись остаётся; после неё добавляют сторно и правильную запись."
+            },
+            "incorrect": {
+              "en": "No — the mistake stays in the book; the correction is two additional rows.",
+              "ru": "Нет — ошибка остаётся в книге; исправление это две дополнительные строки."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "caa-p2-auditor-sees",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does an auditor see after a wrong posting has been corrected in an append-only ledger?",
+            "ru": "Что видит аудитор после того, как ошибочную проводку исправили в журнале только на добавление?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "All three rows survive, so the repair itself is auditable.",
+              "ru": "Все три строки сохраняются, поэтому само исправление проверяемо."
+            },
+            "incorrect": {
+              "en": "Three rows: the wrong entry, its reversal, and the correct entry.",
+              "ru": "Три строки: ошибочную запись, её сторно и правильную запись."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The wrong entry, its reversal, and the correct entry",
+                "ru": "Ошибочную запись, её сторно и правильную запись"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Only the correct entry",
+                "ru": "Только правильную запись"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the in-place result; appending keeps all three rows.",
+                "ru": "Это результат «на месте»; добавление сохраняет все три строки."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The wrong entry marked with an 'amended' flag",
+                "ru": "Ошибочную запись с флагом «исправлено»"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing is modified — setting a flag would be an UPDATE on an immutable row.",
+                "ru": "Ничего не меняется — выставить флаг значило бы сделать UPDATE неизменяемой строки."
+              }
+            }
+          ]
+        },
+        {
+          "id": "caa-p3-sort-correction",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the steps of correcting a wrong posting in an append-only ledger.",
+            "ru": "Расставь по порядку шаги исправления ошибочной проводки в журнале только на добавление."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Cancel, then re-post — and keep all three rows.",
+              "ru": "Отменить, затем провести заново — и сохранить все три строки."
+            },
+            "incorrect": {
+              "en": "Locate the row, append the opposite amount, append the correct amount; nothing is edited.",
+              "ru": "Найти строку, добавить противоположную сумму, добавить правильную; ничего не редактируется."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Locate the wrong entry in the history",
+                "ru": "Найти ошибочную запись в истории"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Append a reversing entry with the opposite amount",
+                "ru": "Добавить сторнирующую запись с противоположной суммой"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Append a new entry with the correct amount",
+                "ru": "Добавить новую запись с правильной суммой"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "The fold now gives the right balance, with all three rows kept",
+                "ru": "Свёртка теперь даёт верный баланс, и все три строки сохранены"
+              }
+            }
+          ]
+        },
+        {
+          "id": "caa-p4-fill-reversing",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the row that cancels a wrong posting.",
+            "ru": "Назови строку, которая отменяет ошибочную проводку."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A reversing entry cancels without erasing.",
+              "ru": "Сторнирующая запись отменяет, не стирая."
+            },
+            "incorrect": {
+              "en": "It is a reversing entry — a new row with the opposite amount.",
+              "ru": "Это сторнирующая запись — новая строка с противоположной суммой."
+            }
+          },
+          "text": {
+            "en": "An entry recorded with the wrong amount is cancelled by appending a ___ entry with the opposite amount.",
+            "ru": "Запись с неверной суммой отменяют, добавляя ___ запись с противоположной суммой."
+          },
+          "blanks": [
+            {
+              "en": [
+                "reversing",
+                "reversal"
+              ],
+              "ru": [
+                "сторнирующую",
+                "сторнирующая",
+                "сторно"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "double-entry",
+      "title": {
+        "en": "Double entry",
+        "ru": "Двойная запись"
+      },
+      "summary": {
+        "en": "Every movement writes two rows — a debit on one account and a credit on another — so the sum of the whole book is always zero.",
+        "ru": "Каждое движение пишет две строки — дебет по одному счёту и кредит по другому, — поэтому сумма всей книги всегда равна нулю."
+      },
+      "discovery": [
+        {
+          "id": "de-d1-whole-book-sum",
+          "type": "predict_output",
+          "prompt": {
+            "en": "One transfer of 250 was recorded with double entry, and the book contains only these two rows. Predict the result of the last query.",
+            "ru": "Один перевод на 250 записан двойной записью, и в книге только эти две строки. Предскажи результат последнего запроса."
+          },
+          "code": "INSERT INTO entries (account_id, amount, reason) VALUES (7, -250, 'transfer');\nINSERT INTO entries (account_id, amount, reason) VALUES (9,  250, 'transfer');\n\nSELECT SUM(amount) FROM entries;   -- over the WHOLE book, all accounts",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "Real accounting goes one step beyond \"append a row\": **double entry**. Every movement writes **two** rows — a **debit** (the negative side, money leaving one account) and a **credit** (the positive side, money arriving on another). Money is never created or destroyed, only moved.\n\n```mermaid\nflowchart LR\n  M[\"transfer 250\"] --> D[\"account 7: -250 debit\"]\n  M --> C[\"account 9: +250 credit\"]\n  D --> S[\"SUM over the whole book = 0\"]\n  C --> S\n```\n\nBecause the two sides always cancel, the sum of **every** entry in the whole book is always zero. That is an invariant you can check with one query: if it is not zero, money appeared from nowhere or vanished, and some code path is broken. It costs one extra row per movement and buys the detection of an entire class of bugs.",
+            "ru": "Настоящий бухучёт идёт на шаг дальше «добавь строку»: **двойная запись**. Каждое движение пишет **две** строки — **дебет** (отрицательная сторона, деньги уходят с одного счёта) и **кредит** (положительная сторона, деньги приходят на другой). Деньги не создаются и не исчезают, а только перемещаются.\n\n```mermaid\nflowchart LR\n  M[\"перевод 250\"] --> D[\"счёт 7: -250 дебет\"]\n  M --> C[\"счёт 9: +250 кредит\"]\n  D --> S[\"SUM по всей книге = 0\"]\n  C --> S\n```\n\nПоскольку две стороны всегда взаимно уничтожаются, сумма **всех** записей во всей книге всегда равна нулю. Это инвариант, который проверяется одним запросом: если он не ноль, значит деньги появились из ниоткуда или исчезли, и какой-то путь в коде сломан. Это стоит одной лишней строки на движение и даёт обнаружение целого класса багов."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The two sides cancel — the whole book sums to zero.",
+              "ru": "Две стороны взаимно уничтожаются — вся книга суммируется в ноль."
+            },
+            "incorrect": {
+              "en": "Both rows are summed and they have opposite signs, so the total is 0.",
+              "ru": "Суммируются обе строки, а знаки у них противоположны, поэтому итог 0."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "0",
+                "ru": "0"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "250",
+                "ru": "250"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The query sums both rows, and their signs are opposite.",
+                "ru": "Запрос суммирует обе строки, а знаки у них противоположны."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "-250",
+                "ru": "-250"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The credit row is included too; it is a whole-book sum, not one account's.",
+                "ru": "Кредитовая строка тоже входит; это сумма по всей книге, а не по одному счёту."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "de-p1-zero-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Under double entry, the sum of every entry in the whole book is always zero.",
+            "ru": "При двойной записи сумма всех записей во всей книге всегда равна нулю."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Each movement writes a debit and a credit that cancel.",
+              "ru": "Каждое движение пишет дебет и кредит, которые взаимно уничтожаются."
+            },
+            "incorrect": {
+              "en": "It is true — every movement writes two rows with opposite signs.",
+              "ru": "Это правда — каждое движение пишет две строки с противоположными знаками."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "de-p2-match-sides",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each part of double-entry bookkeeping to what it means.",
+            "ru": "Соотнеси части двойной записи с их значением."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two sides per movement, and a whole-book sum that must stay at zero.",
+              "ru": "Две стороны на движение и сумма по всей книге, которая обязана оставаться нулём."
+            },
+            "incorrect": {
+              "en": "A debit is the negative side, a credit the positive one; together they cancel to zero.",
+              "ru": "Дебет — отрицательная сторона, кредит — положительная; вместе они дают ноль."
+            }
+          },
+          "pairs": [
+            {
+              "id": "debit",
+              "left": {
+                "en": "Debit row",
+                "ru": "Дебетовая строка"
+              },
+              "right": {
+                "en": "The negative side of a movement, on one account",
+                "ru": "Отрицательная сторона движения, по одному счёту"
+              }
+            },
+            {
+              "id": "credit",
+              "left": {
+                "en": "Credit row",
+                "ru": "Кредитовая строка"
+              },
+              "right": {
+                "en": "The positive side of the same movement, on another account",
+                "ru": "Положительная сторона того же движения, по другому счёту"
+              }
+            },
+            {
+              "id": "invariant",
+              "left": {
+                "en": "SUM(amount) over the whole book",
+                "ru": "SUM(amount) по всей книге"
+              },
+              "right": {
+                "en": "Must always be zero; anything else means a bug",
+                "ru": "Всегда должна быть нулём; иное означает баг"
+              }
+            }
+          ]
+        },
+        {
+          "id": "de-p3-fill-zero",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "State the double-entry invariant.",
+            "ru": "Сформулируй инвариант двойной записи."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One query over the whole book detects money created or lost.",
+              "ru": "Один запрос по всей книге обнаруживает созданные или потерянные деньги."
+            },
+            "incorrect": {
+              "en": "It is zero: every movement writes a debit and a credit that cancel.",
+              "ru": "Это ноль: каждое движение пишет дебет и кредит, которые взаимно уничтожаются."
+            }
+          },
+          "text": {
+            "en": "Under double entry, SUM(amount) over every row in the whole book is always ___.",
+            "ru": "При двойной записи SUM(amount) по всем строкам всей книги всегда равна ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "0",
+                "zero"
+              ],
+              "ru": [
+                "0",
+                "нулю",
+                "ноль"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "lost-update-removed",
+      "title": {
+        "en": "The race appending removes",
+        "ru": "Гонка, которую убирает добавление"
+      },
+      "summary": {
+        "en": "Two appended operations are two different rows, so the lost update of a read-modify-write on one balance cell cannot happen.",
+        "ru": "Две добавленные операции — это две разные строки, поэтому потерянное обновление ячейки баланса невозможно."
+      },
+      "discovery": [
+        {
+          "id": "lu-d1-two-updates",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The balance was 1000. Two concurrent transactions each read it and computed their own new total. Predict the final balance.",
+            "ru": "Баланс был 1000. Две параллельные транзакции прочитали его и посчитали каждая свой новый итог. Предскажи итоговый баланс."
+          },
+          "code": "-- tx-A: refund +100        tx-B: purchase +200\n-- both did: SELECT balance -> 1000\nUPDATE accounts SET balance = 1100 WHERE id = 7;  -- tx-A\nUPDATE accounts SET balance = 1200 WHERE id = 7;  -- tx-B\n\nSELECT balance FROM accounts WHERE id = 7;",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "This is the **lost update**: two transactions read the same value, each computes an absolute new total from it, and whichever writes last silently erases the other's work.\n\n```mermaid\nsequenceDiagram\n  participant A as tx-A\n  participant R as accounts row\n  participant B as tx-B\n  A->>R: SELECT balance\n  R-->>A: 1000\n  B->>R: SELECT balance\n  R-->>B: 1000\n  A->>R: UPDATE balance = 1100\n  B->>R: UPDATE balance = 1200\n  Note over R: the +100 refund is gone\n```\n\nAppending has no such step. Two operations become two `INSERT`s into two different rows: there is no shared cell for them to overwrite, so nothing can be lost. Same database, same isolation level — 1200 in place, 1300 in the ledger. (In place, the fix is a single atomic statement such as `balance = balance + ?`, or optimistic/pessimistic locking on the row.)",
+            "ru": "Это **потерянное обновление**: две транзакции читают одно значение, каждая считает от него свой абсолютный новый итог, и та, что пишет последней, молча стирает работу другой.\n\n```mermaid\nsequenceDiagram\n  participant A as tx-A\n  participant R as строка accounts\n  participant B as tx-B\n  A->>R: SELECT balance\n  R-->>A: 1000\n  B->>R: SELECT balance\n  R-->>B: 1000\n  A->>R: UPDATE balance = 1100\n  B->>R: UPDATE balance = 1200\n  Note over R: возврат +100 исчез\n```\n\nУ добавления такого шага нет вовсе. Две операции превращаются в два `INSERT` в две разные строки: общей ячейки, которую можно перезаписать, просто нет, поэтому потерять ничего нельзя. Та же база, тот же уровень изоляции — 1200 «на месте» и 1300 в журнале. (При хранении на месте это лечится одним атомарным оператором вроде `balance = balance + ?` или оптимистичной/пессимистичной блокировкой строки.)"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The last absolute write wins; the refund disappeared.",
+              "ru": "Побеждает последняя абсолютная запись; возврат исчез."
+            },
+            "incorrect": {
+              "en": "Each transaction wrote a total computed from a stale read, so one of them was overwritten.",
+              "ru": "Каждая транзакция записала итог из устаревшего чтения, поэтому одну из них затёрли."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "1200 — the +100 refund is gone",
+                "ru": "1200 — возврат +100 исчез"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "1300 — both amounts were applied",
+                "ru": "1300 — применились обе суммы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Each transaction wrote an absolute total from a stale read; the second overwrote the first.",
+                "ru": "Каждая транзакция записала абсолютный итог из устаревшего чтения; вторая затёрла первую."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "1100 — the second write is rejected as conflicting",
+                "ru": "1100 — вторую запись отклонят как конфликтующую"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing rejects tx-B here; a later write to the same cell simply wins.",
+                "ru": "Здесь ничто не отклоняет tx-B; более поздняя запись в ту же ячейку просто побеждает."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "lu-p1-why-no-conflict",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why can the lost update not occur when two concurrent operations are appended as separate entries?",
+            "ru": "Почему потерянное обновление невозможно, когда две параллельные операции добавляются отдельными записями?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "No shared cell means nothing to overwrite.",
+              "ru": "Нет общей ячейки — значит, нечего перезаписывать."
+            },
+            "incorrect": {
+              "en": "Each operation is its own new row, so there is no shared cell for one write to erase.",
+              "ru": "Каждая операция — своя новая строка, поэтому нет общей ячейки, которую можно стереть."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Each operation becomes its own new row; there is no shared cell to overwrite",
+                "ru": "Каждая операция становится своей новой строкой; общей ячейки для перезаписи нет"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The database serializes all INSERTs into one table",
+                "ru": "База сериализует все INSERT в одну таблицу"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Inserts of different rows do not serialize; they simply have nothing to conflict over.",
+                "ru": "Вставки разных строк не сериализуются; им просто не из-за чего конфликтовать."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "An append-only table runs at a higher isolation level",
+                "ru": "Таблица только на добавление работает на более высоком уровне изоляции"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Same database, same isolation level — what changed is the shape of the write.",
+                "ru": "Та же база и тот же уровень изоляции — изменилась форма записи."
+              }
+            }
+          ]
+        },
+        {
+          "id": "lu-p2-overwrite-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Two concurrent INSERTs of entries for the same account can overwrite each other's amounts.",
+            "ru": "Две параллельные вставки записей по одному счёту могут затереть суммы друг друга."
+          },
+          "feedback": {
+            "correct": {
+              "en": "They are two separate rows; both survive the fold.",
+              "ru": "Это две отдельные строки; обе учитываются в свёртке."
+            },
+            "incorrect": {
+              "en": "No — they are separate rows, so neither can erase the other.",
+              "ru": "Нет — это отдельные строки, и ни одна не может стереть другую."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "lu-p3-sort-lost-update",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the events of a lost update on a balance column.",
+            "ru": "Расставь по порядку события потерянного обновления колонки баланса."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Both read the same old value, and the later write erases the earlier one.",
+              "ru": "Обе прочитали одно старое значение, и более поздняя запись стёрла раннюю."
+            },
+            "incorrect": {
+              "en": "Both reads happen before either write; that is what makes the second write erase the first.",
+              "ru": "Оба чтения происходят до любой записи; именно поэтому вторая запись стирает первую."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "tx-A reads balance = 1000",
+                "ru": "tx-A читает balance = 1000"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "tx-B reads balance = 1000 as well",
+                "ru": "tx-B тоже читает balance = 1000"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "tx-A writes its computed total of 1100",
+                "ru": "tx-A записывает свой посчитанный итог 1100"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "tx-B writes 1200, overwriting tx-A's result",
+                "ru": "tx-B записывает 1200, затирая результат tx-A"
+              }
+            }
+          ]
+        },
+        {
+          "id": "lu-p4-fill-lost-update",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the race where one transaction's write is silently erased by another that read the same old value.",
+            "ru": "Назови гонку, в которой запись одной транзакции молча стирается другой, прочитавшей то же старое значение."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The lost update is the race that append-only removes.",
+              "ru": "Потерянное обновление — та гонка, которую убирает append-only."
+            },
+            "incorrect": {
+              "en": "It is the lost update — the classic hazard of read-modify-write on one row.",
+              "ru": "Это потерянное обновление — классическая опасность read-modify-write по одной строке."
+            }
+          },
+          "text": {
+            "en": "Read-modify-write on a single balance row is exposed to the ___ ___ race.",
+            "ru": "Read-modify-write по одной строке баланса подвержен гонке «___ ___»."
+          },
+          "blanks": [
+            {
+              "en": [
+                "lost"
+              ],
+              "ru": [
+                "потерянное"
+              ]
+            },
+            {
+              "en": [
+                "update"
+              ],
+              "ru": [
+                "обновление"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "check-then-act-remains",
+      "title": {
+        "en": "The race appending does not remove",
+        "ru": "Гонка, которую добавление не убирает"
+      },
+      "summary": {
+        "en": "\"Never below zero\" is a rule about the fold, and an INSERT knows nothing about the fold, so two concurrent withdrawals can both pass the check.",
+        "ru": "«Никогда ниже нуля» — правило о свёртке, а INSERT о свёртке ничего не знает, поэтому два параллельных списания могут оба пройти проверку."
+      },
+      "discovery": [
+        {
+          "id": "cta-d1-two-withdrawals",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The account's entries fold to 200. Two withdrawals of 200 run this concurrently and both commit. Predict the account's balance afterwards.",
+            "ru": "Записи счёта сворачиваются в 200. Два списания по 200 выполняют это параллельно, и обе транзакции фиксируются. Предскажи баланс счёта после."
+          },
+          "code": "-- inside each transaction:\nSELECT COALESCE(SUM(amount), 0) FROM entries WHERE account_id = 7;  -- 200\n-- application checks: 200 - 200 >= 0  -> allowed\nINSERT INTO entries (account_id, amount) VALUES (7, -200);",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "This is **check-then-act**: read a value, decide from it, then write. Append-only does not fix it, because the rule (\"never below zero\") is a statement about the **fold**, and an `INSERT` knows nothing about the fold — there is no shared cell for the database to see a conflict on. Both checks pass, both rows are appended, and the account is at −200 with nothing having conflicted anywhere.\n\nA higher isolation level does not save you either: under **MVCC** each transaction reads its own snapshot of the data, taken before the other's insert. It only converts the problem into a serialization failure that you must catch and retry.\n\nTo enforce an invariant you have to reintroduce a **serialization point** on the account:\n\n- lock the account row (`SELECT ... FOR UPDATE`) for the duration of the write;\n- or keep a version/balance column and update it conditionally — the database version of compare-and-set;\n- or make one writer per account (a partitioned queue, one consumer per account key), which is how high-throughput ledgers usually do it.\n\nAppending removes conflicts **between writes**. It does not remove the need to serialize **decisions**.",
+            "ru": "Это **check-then-act**: прочитать значение, принять по нему решение, затем записать. Append-only это не чинит, потому что правило («никогда ниже нуля») — утверждение о **свёртке**, а `INSERT` о свёртке ничего не знает: общей ячейки, на которой база увидела бы конфликт, нет. Обе проверки проходят, обе строки добавляются, и счёт уходит в −200, причём ничто ни с чем не конфликтовало.\n\nБолее высокий уровень изоляции тоже не спасает: при **MVCC** каждая транзакция читает свой снимок данных, сделанный до вставки другой. Он лишь превращает проблему в ошибку сериализации, которую нужно ловить и повторять.\n\nЧтобы обеспечить инвариант, придётся вернуть **точку сериализации** по счёту:\n\n- заблокировать строку счёта (`SELECT ... FOR UPDATE`) на время записи;\n- либо держать колонку версии/баланса и обновлять её условно — это версия compare-and-set на уровне базы;\n- либо сделать одного писателя на счёт (секционированная очередь, по одному консьюмеру на ключ счёта) — так обычно и устроены высоконагруженные журналы.\n\nДобавление убирает конфликты **между записями**. Оно не убирает необходимость сериализовать **решения**."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Both checks passed on the same snapshot, and both rows were appended.",
+              "ru": "Обе проверки прошли по одному снимку, и обе строки добавились."
+            },
+            "incorrect": {
+              "en": "Nothing conflicts: two inserts of different rows both succeed, so the account goes to -200.",
+              "ru": "Ничто не конфликтует: две вставки разных строк проходят обе, и счёт уходит в -200."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "-200 — both checks passed and both rows were appended",
+                "ru": "-200 — обе проверки прошли и обе строки добавились"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "0 — the second INSERT conflicts with the first",
+                "ru": "0 — второй INSERT конфликтует с первым"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Two inserts of different rows do not conflict; the database has nothing to reject.",
+                "ru": "Две вставки разных строк не конфликтуют; базе нечего отклонять."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "0 — the second transaction's SUM already sees the first withdrawal",
+                "ru": "0 — SUM второй транзакции уже видит первое списание"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Each transaction reads its own snapshot, taken before the other's insert committed.",
+                "ru": "Каждая транзакция читает свой снимок, сделанный до фиксации вставки другой."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cta-p1-serialize-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Storing operations append-only removes the need to serialize a \"balance never below zero\" check.",
+            "ru": "Хранение операций только на добавление снимает необходимость сериализовать проверку «баланс никогда ниже нуля»."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It removes conflicts between writes, not the need to serialize decisions.",
+              "ru": "Оно убирает конфликты между записями, но не необходимость сериализовать решения."
+            },
+            "incorrect": {
+              "en": "No — the rule is about the fold, so two concurrent withdrawals can both pass the check.",
+              "ru": "Нет — правило о свёртке, поэтому два параллельных списания могут оба пройти проверку."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "cta-p2-enforce-rule",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which mechanism actually enforces \"the balance never goes below zero\" in an append-only design?",
+            "ru": "Какой механизм действительно обеспечивает «баланс никогда не уходит ниже нуля» в схеме только на добавление?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "You reintroduce a serialization point on the account.",
+              "ru": "Возвращают точку сериализации по счёту."
+            },
+            "incorrect": {
+              "en": "You need a serialization point: a row lock, a conditional update, or one writer per account.",
+              "ru": "Нужна точка сериализации: блокировка строки, условное обновление или один писатель на счёт."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Locking the account row with SELECT ... FOR UPDATE for the duration of the write",
+                "ru": "Блокировка строки счёта через SELECT ... FOR UPDATE на время записи"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Raising the isolation level and changing nothing else",
+                "ru": "Повышение уровня изоляции без каких-либо других изменений"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That converts the race into a serialization failure you still have to catch and retry.",
+                "ru": "Это превращает гонку в ошибку сериализации, которую всё равно надо ловить и повторять."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A CHECK constraint on the entries.amount column",
+                "ru": "CHECK-ограничение на колонку entries.amount"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A row constraint sees one row; the rule is about the sum of all of them.",
+                "ru": "Ограничение строки видит одну строку; правило же о сумме всех."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cta-p3-match-mechanisms",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each serialization point for an account to what it is.",
+            "ru": "Соотнеси каждую точку сериализации по счёту с тем, чем она является."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Three ways to make decisions on one account happen one at a time.",
+              "ru": "Три способа сделать так, чтобы решения по одному счёту принимались по очереди."
+            },
+            "incorrect": {
+              "en": "A row lock, a conditional update, or a single writer per account key.",
+              "ru": "Блокировка строки, условное обновление или единственный писатель на ключ счёта."
+            }
+          },
+          "pairs": [
+            {
+              "id": "for-update",
+              "left": {
+                "en": "SELECT ... FOR UPDATE on the account",
+                "ru": "SELECT ... FOR UPDATE по счёту"
+              },
+              "right": {
+                "en": "Locks the account row for the duration of the write",
+                "ru": "Блокирует строку счёта на время записи"
+              }
+            },
+            {
+              "id": "conditional",
+              "left": {
+                "en": "Conditional update of a version/balance column",
+                "ru": "Условное обновление колонки версии/баланса"
+              },
+              "right": {
+                "en": "The database version of compare-and-set",
+                "ru": "Версия compare-and-set на уровне базы"
+              }
+            },
+            {
+              "id": "single-writer",
+              "left": {
+                "en": "One consumer per account key",
+                "ru": "Один консьюмер на ключ счёта"
+              },
+              "right": {
+                "en": "A partitioned queue: how high-throughput ledgers usually do it",
+                "ru": "Секционированная очередь: так обычно делают высоконагруженные журналы"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cta-p4-fill-check-then-act",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the pattern that append-only storage does not fix.",
+            "ru": "Назови паттерн, который хранение только на добавление не чинит."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Check-then-act still needs a serialization point on the account.",
+              "ru": "Check-then-act по-прежнему требует точки сериализации по счёту."
+            },
+            "incorrect": {
+              "en": "It is check-then-act: read the fold, decide, append — with a gap in between.",
+              "ru": "Это check-then-act: прочитать свёртку, решить, добавить — с зазором посередине."
+            }
+          },
+          "text": {
+            "en": "Reading the balance, deciding, and then appending is the ___-then-___ pattern.",
+            "ru": "Прочитать баланс, принять решение и затем добавить запись — это паттерн ___-then-___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "check"
+              ],
+              "ru": [
+                "check"
+              ]
+            },
+            {
+              "en": [
+                "act"
+              ],
+              "ru": [
+                "act"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "read-cost-and-snapshots",
+      "title": {
+        "en": "The read cost and snapshots",
+        "ru": "Стоимость чтения и снимки"
+      },
+      "summary": {
+        "en": "The fold grows forever, so you index it, snapshot it, close the period or keep a running balance — and the entries always stay.",
+        "ru": "Свёртка растёт бесконечно, поэтому её индексируют, снимают снимок, закрывают период или хранят нарастающий итог — а записи всегда остаются."
+      },
+      "discovery": [
+        {
+          "id": "rcs-d1-five-million",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "An account has 5 million entries and every balance read folds all of them. Which fix keeps the ledger's guarantees intact?",
+            "ru": "У счёта 5 миллионов записей, и каждое чтение баланса сворачивает их все. Какое решение сохраняет гарантии журнала?"
+          },
+          "code": "SELECT COALESCE(SUM(amount), 0) FROM entries WHERE account_id = 7;  -- 5 000 000 rows",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "`SUM(amount)` over a whole history is fine at 50 entries and a problem at 5 million. The standard answers, in the order you should reach for them:\n\n1. **Index it.** A composite index on `(account_id, id)` turns the fold into a range scan of one account's rows instead of a scan of the table.\n2. **Snapshot.** Store the balance as of entry N and fold only what came after. A **snapshot is a cache of the fold**, never a replacement for the history — the entries stay. Nine entries, and a read drops from eight rows to one, with nothing deleted.\n3. **Close the period.** The accounting version of a snapshot: an opening balance per account per month, after which old entries can be archived or partitioned away without losing the ability to state the balance.\n4. **Keep a running balance on the entry itself.** Each row stores the balance after it, so the current balance is `ORDER BY id DESC LIMIT 1`. This only works if entries for one account are serialized — which you may need anyway for invariants.\n\nThe trap is deleting the entries behind a snapshot. Do that and you are back to an in-place balance with extra steps.",
+            "ru": "`SUM(amount)` по всей истории прекрасен на 50 записях и проблемен на 5 миллионах. Стандартные ответы, в том порядке, в каком за ними стоит тянуться:\n\n1. **Проиндексировать.** Составной индекс по `(account_id, id)` превращает свёртку в range scan по строкам одного счёта вместо сканирования таблицы.\n2. **Сделать снимок.** Сохранить баланс по состоянию на запись N и сворачивать только то, что было после. **Снимок — это кэш свёртки**, а не замена истории: записи остаются. Девять записей — и чтение падает с восьми строк до одной, ничего не удаляя.\n3. **Закрыть период.** Бухгалтерская версия снимка: входящий остаток по счёту на каждый месяц, после чего старые записи можно архивировать или выносить в отдельные секции, не теряя возможности назвать баланс.\n4. **Хранить нарастающий итог в самой записи.** Каждая строка хранит баланс после себя, и текущий баланс — это `ORDER BY id DESC LIMIT 1`. Работает, только если записи по одному счёту сериализованы, — а это может понадобиться и так, ради инвариантов.\n\nЛовушка — удалить записи, стоящие за снимком. Сделаешь так — и получишь баланс «на месте», только сложным путём."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A snapshot bounds the fold while the history stays intact.",
+              "ru": "Снимок ограничивает свёртку, а история остаётся нетронутой."
+            },
+            "incorrect": {
+              "en": "Snapshot the fold and keep the entries; the slow part is the read, not the history.",
+              "ru": "Сделай снимок свёртки и сохрани записи; медленно чтение, а не история."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Store the balance as of entry N and fold only what came after",
+                "ru": "Сохранить баланс на момент записи N и сворачивать только то, что после"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Delete entries older than a year once their total is known",
+                "ru": "Удалять записи старше года, когда их итог известен"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Delete the history and you are back to an in-place balance with extra steps.",
+                "ru": "Удали историю — и получишь баланс «на месте», только сложным путём."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Replace the entries table with a single balance column",
+                "ru": "Заменить таблицу записей одной колонкой баланса"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is exactly the in-place model the ledger was chosen over.",
+                "ru": "Это ровно та модель «на месте», вместо которой выбрали журнал."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "rcs-p1-delete-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Once a balance snapshot exists, the entries behind it can safely be deleted.",
+            "ru": "Как только есть снимок баланса, стоящие за ним записи можно спокойно удалить."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A snapshot caches the fold; the history is what the ledger was for.",
+              "ru": "Снимок кэширует свёртку; история — то, ради чего заводили журнал."
+            },
+            "incorrect": {
+              "en": "No — delete them and you have an in-place balance with extra steps.",
+              "ru": "Нет — удали их, и получишь баланс «на месте», только сложным путём."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "rcs-p2-which-index",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which index turns the fold over one account's entries into a range scan?",
+            "ru": "Какой индекс превращает свёртку по записям одного счёта в range scan?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Account first, then id: one account's rows sit together and in order.",
+              "ru": "Сначала счёт, потом id: строки одного счёта лежат вместе и по порядку."
+            },
+            "incorrect": {
+              "en": "A composite index on (account_id, id) groups one account's rows together in order.",
+              "ru": "Составной индекс по (account_id, id) собирает строки одного счёта вместе и по порядку."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A composite index on (account_id, id)",
+                "ru": "Составной индекс по (account_id, id)"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "An index on amount",
+                "ru": "Индекс по amount"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The fold selects by account and sums the amounts; indexing the summed column narrows nothing.",
+                "ru": "Свёртка выбирает по счёту и суммирует суммы; индекс по суммируемой колонке ничего не сужает."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "An index on created_at",
+                "ru": "Индекс по created_at"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Time does not group one account's rows together; the fold selects by account.",
+                "ru": "Время не собирает строки одного счёта вместе; свёртка выбирает по счёту."
+              }
+            }
+          ]
+        },
+        {
+          "id": "rcs-p3-sort-fixes",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the fixes for a slow balance fold, from the cheapest to reach for to the biggest change.",
+            "ru": "Расставь способы ускорить медленную свёртку баланса — от самого дешёвого до самого крупного изменения."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Index, snapshot, close the period, then a running balance per row.",
+              "ru": "Индекс, снимок, закрытие периода, затем нарастающий итог в строке."
+            },
+            "incorrect": {
+              "en": "Start with the index; the running balance per row is the biggest commitment because it needs serialized writes.",
+              "ru": "Начинают с индекса; нарастающий итог в строке — самое серьёзное, ведь он требует сериализованных записей."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Add a composite index on (account_id, id)",
+                "ru": "Добавить составной индекс по (account_id, id)"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Store a snapshot of the balance as of entry N",
+                "ru": "Сохранить снимок баланса на момент записи N"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Close the period: an opening balance per account per month",
+                "ru": "Закрыть период: входящий остаток по счёту на каждый месяц"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Store a running balance on every entry row",
+                "ru": "Хранить нарастающий итог в каждой строке записи"
+              }
+            }
+          ]
+        },
+        {
+          "id": "rcs-p4-fill-cache",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the rule about snapshots.",
+            "ru": "Дополни правило о снимках."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It caches the fold; the entries stay where they are.",
+              "ru": "Он кэширует свёртку; записи остаются на месте."
+            },
+            "incorrect": {
+              "en": "A snapshot is a cache of the fold — the history behind it must stay.",
+              "ru": "Снимок — это кэш свёртки; история за ним должна остаться."
+            }
+          },
+          "text": {
+            "en": "A balance snapshot is a ___ of the fold, never a replacement for the ___.",
+            "ru": "Снимок баланса — это ___ свёртки, а не замена ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "cache"
+              ],
+              "ru": [
+                "кэш"
+              ]
+            },
+            {
+              "en": [
+                "history",
+                "entries"
+              ],
+              "ru": [
+                "истории",
+                "записей"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hybrid-one-transaction",
+      "title": {
+        "en": "The hybrid: entries plus a balance column",
+        "ru": "Гибрид: записи плюс колонка баланса"
+      },
+      "summary": {
+        "en": "Production keeps entries as the source of truth and a denormalized balance column for reads, written in the same transaction — always.",
+        "ru": "В продакшене держат записи как источник истины и денормализованную колонку баланса для чтений, записывая их в одной транзакции — всегда."
+      },
+      "discovery": [
+        {
+          "id": "hot-d1-two-transactions",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "Entries are the source of truth and `accounts.balance` serves the reads. What is the defect here?",
+            "ru": "Записи — источник истины, а `accounts.balance` обслуживает чтения. В чём здесь дефект?"
+          },
+          "code": "BEGIN;\n  INSERT INTO entries (account_id, amount, reason) VALUES (7, -250, 'purchase');\nCOMMIT;\n\nBEGIN;\n  UPDATE accounts SET balance = balance - 250 WHERE id = 7;\nCOMMIT;",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "Nearly every real balance service ends up with **both**: entries as the source of truth and a **denormalized** balance column serving the reads (denormalized = the same fact stored twice, once derived, for speed). There is exactly one rule, and the whole design rests on it:\n\n> The entry and the balance update are **one transaction**. Always.\n\n```mermaid\nflowchart TD\n  A[\"POST /operations\"] --> B[\"BEGIN\"]\n  B --> C[\"INSERT INTO entries (immutable)\"]\n  C --> D[\"UPDATE accounts SET balance = balance + amount\"]\n  D --> E[\"COMMIT\"]\n  E --> F[\"reads: one row, O(1)\"]\n  E --> G[\"audit job: replay entries, compare, alert\"]\n```\n\nSplit them, as the code above does, and the cached number quietly stops being true: the entry commits, the second transaction never runs, and reads keep answering the stale value with total confidence. Within one database this costs nothing — it is the atomicity you already have from ACID, one transactional boundary.\n\nThe entries buy a second thing here: a **reconciliation** job comparing `accounts.balance` to `SUM(entries.amount)` can *detect* drift. An in-place-only design has no such job, because there is nothing to compare against. If the balance must be updated asynchronously (a separate read model, another service), you have chosen eventual consistency and must handle a stale read at a decision point.",
+            "ru": "Почти любой реальный сервис балансов приходит к **обоим** вариантам сразу: записи как источник истины и **денормализованная** колонка баланса, обслуживающая чтения (денормализация = один и тот же факт хранится дважды, второй раз выведенным, ради скорости). Правило здесь ровно одно, и на нём держится вся конструкция:\n\n> Запись и обновление баланса — это **одна транзакция**. Всегда.\n\n```mermaid\nflowchart TD\n  A[\"POST /operations\"] --> B[\"BEGIN\"]\n  B --> C[\"INSERT INTO entries (неизменяемая)\"]\n  C --> D[\"UPDATE accounts SET balance = balance + amount\"]\n  D --> E[\"COMMIT\"]\n  E --> F[\"чтения: одна строка, O(1)\"]\n  E --> G[\"сверка: прогнать записи, сравнить, поднять алерт\"]\n```\n\nРазнеси их, как в коде выше, — и кэшированное число тихо перестанет быть правдой: запись зафиксировалась, вторая транзакция так и не выполнилась, а чтения с полной уверенностью продолжают отдавать устаревшее значение. В пределах одной базы это ничего не стоит: это та самая атомарность, которая уже есть из ACID, одна транзакционная граница.\n\nЗаписи дают здесь и второе: задача **сверки**, сравнивающая `accounts.balance` с `SUM(entries.amount)`, способна *обнаружить* расхождение. У схемы «только на месте» такой задачи нет — сравнивать не с чем. Если баланс приходится обновлять асинхронно (отдельная модель чтения, другой сервис), значит выбрана согласованность в конечном счёте, и придётся отдельно обрабатывать устаревшее чтение в точке принятия решения."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two transactions mean two truths, and reads use the stale one.",
+              "ru": "Две транзакции означают две правды, и чтения используют устаревшую."
+            },
+            "incorrect": {
+              "en": "The entry and the balance update must commit together; split, the cached number can silently go stale.",
+              "ru": "Запись и обновление баланса должны фиксироваться вместе; порознь кэшированное число молча устаревает."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "They are two transactions, so a failure between them leaves the cached balance stale",
+                "ru": "Это две транзакции, и сбой между ними оставляет кэшированный баланс устаревшим"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The UPDATE should set an absolute value instead of a delta",
+                "ru": "UPDATE должен ставить абсолютное значение, а не дельту"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A relative update is fine and atomic; the defect is that it can fail to happen at all.",
+                "ru": "Относительное обновление корректно и атомарно; дефект в том, что оно может вообще не произойти."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — both statements commit successfully",
+                "ru": "Ничего — оба оператора успешно фиксируются"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Each commits on its own, which is the problem: the second may never run.",
+                "ru": "Каждый фиксируется сам по себе — в этом и проблема: второй может не выполниться."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "hot-p1-same-tx-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Keeping both an entries table and a cached balance column is safe only when the insert and the update commit in the same transaction.",
+            "ru": "Держать и таблицу записей, и кэшированную колонку баланса безопасно, только если вставка и обновление фиксируются в одной транзакции."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One transaction means one truth; two means the reads can use a stale number.",
+              "ru": "Одна транзакция — одна правда; две означают, что чтения могут использовать устаревшее число."
+            },
+            "incorrect": {
+              "en": "It is true — that single rule is what makes the cached balance trustworthy.",
+              "ru": "Это правда — именно это правило делает кэшированный баланс достоверным."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "hot-p2-detect-drift",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "How does a service detect that its cached balance column has drifted away from the entries?",
+            "ru": "Как сервис обнаруживает, что его кэшированная колонка баланса разошлась с записями?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Reconciliation is only possible because the entries exist to compare against.",
+              "ru": "Сверка возможна только потому, что есть записи, с которыми можно сравнить."
+            },
+            "incorrect": {
+              "en": "A reconciliation job compares accounts.balance with SUM(entries.amount) and alerts on a mismatch.",
+              "ru": "Задача сверки сравнивает accounts.balance с SUM(entries.amount) и поднимает алерт при расхождении."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A reconciliation job comparing accounts.balance with SUM(entries.amount)",
+                "ru": "Задача сверки, сравнивающая accounts.balance с SUM(entries.amount)"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A foreign key from accounts to entries",
+                "ru": "Внешний ключ из accounts в entries"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A foreign key checks that a row exists, not that a total still matches.",
+                "ru": "Внешний ключ проверяет наличие строки, а не совпадение итога."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A NOT NULL constraint on the balance column",
+                "ru": "Ограничение NOT NULL на колонке баланса"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A single-column constraint cannot compare a value to an aggregate over another table.",
+                "ru": "Ограничение по одной колонке не может сравнить значение с агрегатом по другой таблице."
+              }
+            }
+          ]
+        },
+        {
+          "id": "hot-p3-word-bank-rule",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the one rule the hybrid balance design rests on.",
+            "ru": "Собери единственное правило, на котором держится гибридная схема баланса."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Both writes commit together, or neither does.",
+              "ru": "Обе записи фиксируются вместе — или ни одна."
+            },
+            "incorrect": {
+              "en": "The entry and the balance update are one transaction, always.",
+              "ru": "Запись и обновление баланса — это одна транзакция, всегда."
+            }
+          },
+          "tokens": {
+            "en": [
+              "the",
+              "entry",
+              "and",
+              "the",
+              "balance",
+              "update",
+              "are",
+              "one",
+              "transaction"
+            ],
+            "ru": [
+              "запись",
+              "и",
+              "обновление",
+              "баланса",
+              "это",
+              "одна",
+              "транзакция"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "two",
+              "eventually"
+            ],
+            "ru": [
+              "две",
+              "потом"
+            ]
+          }
+        },
+        {
+          "id": "hot-p4-fill-truth-cache",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the roles of the two stores in the hybrid design.",
+            "ru": "Дополни роли двух хранилищ в гибридной схеме."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Entries prove the number; the column serves it fast.",
+              "ru": "Записи доказывают число; колонка быстро его отдаёт."
+            },
+            "incorrect": {
+              "en": "The entries are the source of truth; the balance column is a cache for reads.",
+              "ru": "Записи — источник истины; колонка баланса — кэш для чтений."
+            }
+          },
+          "text": {
+            "en": "In the hybrid design, entries are the source of ___ and the balance column is a ___ serving the reads.",
+            "ru": "В гибридной схеме записи — источник ___, а колонка баланса — ___, обслуживающий чтения."
+          },
+          "blanks": [
+            {
+              "en": [
+                "truth"
+              ],
+              "ru": [
+                "истины",
+                "правды"
+              ]
+            },
+            {
+              "en": [
+                "cache"
+              ],
+              "ru": [
+                "кэш"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "immutability-is-policy",
+      "title": {
+        "en": "Immutability is a policy",
+        "ru": "Неизменяемость — это политика"
+      },
+      "summary": {
+        "en": "Nothing in the database stops DELETE on entries; permissions, a hash chain and reconciliation are what actually make them immutable.",
+        "ru": "Ничто в базе не мешает выполнить DELETE по записям; неизменяемыми их делают права доступа, цепочка хэшей и сверка."
+      },
+      "discovery": [
+        {
+          "id": "iip-d1-delete-entry",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The entries table is described as immutable. What happens when the application role runs this?",
+            "ru": "Таблицу записей называют неизменяемой. Что произойдёт, если роль приложения выполнит это?"
+          },
+          "code": "DELETE FROM entries WHERE id = 42;",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "Nothing in PostgreSQL stops that statement. The row disappears, the book rebuilds to a different number, and it all looks perfectly consistent afterwards. \"Append-only\" is how you *use* a table, not a property the table has. Three things actually make entries immutable:\n\n- **Permissions.** The application role is granted `INSERT` and `SELECT` on `entries`, never `UPDATE` or `DELETE`. Revoking is the enforcement.\n- **A hash chain or signature.** Each row stores a hash of its own content plus the previous row's hash, so an edit or a deletion breaks the chain and a verification job finds it.\n\n```mermaid\nflowchart LR\n  E1[\"entry 41 hash h41\"] --> E2[\"entry 42 hash h42 = f(content, h41)\"]\n  E2 --> E3[\"entry 43 hash h43 = f(content, h42)\"]\n```\n\n- **Reconciliation.** Compare the fold against snapshots, against the balance column, and against external statements (the bank, the acquirer).\n\nTampering that survives all three is not a schema problem any more.",
+            "ru": "Ничто в PostgreSQL не мешает выполнить этот оператор. Строка исчезает, книга пересчитывается в другое число, и всё это выглядит идеально согласованным. «Только на добавление» — это то, как ты *используешь* таблицу, а не свойство самой таблицы. Неизменяемыми записи делают три вещи:\n\n- **Права доступа.** Роль приложения получает `INSERT` и `SELECT` на `entries` и никогда `UPDATE` или `DELETE`. Отзыв прав и есть механизм принуждения.\n- **Цепочка хэшей или подпись.** Каждая строка хранит хэш своего содержимого плюс хэш предыдущей строки, поэтому правка или удаление рвут цепочку, и задача проверки это находит.\n\n```mermaid\nflowchart LR\n  E1[\"запись 41 хэш h41\"] --> E2[\"запись 42 хэш h42 = f(содержимое, h41)\"]\n  E2 --> E3[\"запись 43 хэш h43 = f(содержимое, h42)\"]\n```\n\n- **Сверка.** Сравнивать свёртку со снимками, с колонкой баланса и с внешними выписками (банк, эквайер).\n\nПодделка, пережившая все три проверки, — это уже не проблема схемы."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It just runs, unless the role was denied DELETE.",
+              "ru": "Он просто выполнится, если только у роли не отобрали DELETE."
+            },
+            "incorrect": {
+              "en": "The database has no append-only table type; only permissions stop it.",
+              "ru": "В базе нет типа «таблица только на добавление»; останавливают только права."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It succeeds unless the role was denied DELETE, and the book folds to a different number",
+                "ru": "Он выполнится, если у роли не отобрали DELETE, и книга свернётся в другое число"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The database rejects it because the table is append-only",
+                "ru": "База отклонит его, потому что таблица только на добавление"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no such table property; append-only is how you use the table, not what it is.",
+                "ru": "Такого свойства у таблицы нет; append-only — способ использования, а не сущность таблицы."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It succeeds but the row is kept as a tombstone for auditing",
+                "ru": "Он выполнится, но строка сохранится как «надгробие» для аудита"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A plain DELETE removes the row; nothing preserves it for you.",
+                "ru": "Обычный DELETE убирает строку; никто её для тебя не сохраняет."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "iip-p1-append-only-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Declaring a table append-only in your design makes the database reject UPDATE and DELETE on it.",
+            "ru": "Если объявить таблицу «только на добавление» в дизайне, база начнёт отклонять UPDATE и DELETE по ней."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It is an ordinary table; permissions are what enforce the rule.",
+              "ru": "Это обычная таблица; правило обеспечивают права доступа."
+            },
+            "incorrect": {
+              "en": "No — the table is immutable exactly as far as permissions, hash chains and reconciliation make it.",
+              "ru": "Нет — таблица неизменяема ровно настолько, насколько её такой делают права, цепочка хэшей и сверка."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "iip-p2-hash-chain",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does a hash chain over a ledger's entries give you?",
+            "ru": "Что даёт цепочка хэшей по записям журнала?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Detection, not prevention: the broken chain is the evidence.",
+              "ru": "Обнаружение, а не предотвращение: разорванная цепочка и есть улика."
+            },
+            "incorrect": {
+              "en": "An edit or deletion breaks the chain, so a verification job can find it afterwards.",
+              "ru": "Правка или удаление рвут цепочку, и задача проверки находит это постфактум."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "An edit or deletion breaks the chain, so a verification job can find it",
+                "ru": "Правка или удаление рвут цепочку, и задача проверки это находит"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It prevents the DELETE statement from executing",
+                "ru": "Она не даёт оператору DELETE выполниться"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It detects tampering after the fact; blocking the statement is the job of permissions.",
+                "ru": "Она обнаруживает подделку постфактум; блокировать оператор — задача прав доступа."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It makes the fold over the history faster",
+                "ru": "Она ускоряет свёртку по истории"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Hashing is about integrity, not about the cost of summing the amounts.",
+                "ru": "Хэширование про целостность, а не про стоимость суммирования."
+              }
+            }
+          ]
+        },
+        {
+          "id": "iip-p3-match-mechanisms",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each mechanism that enforces immutability to what it actually does.",
+            "ru": "Соотнеси каждый механизм обеспечения неизменяемости с тем, что он делает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One blocks, one detects edits, one detects disagreement with reality.",
+              "ru": "Один блокирует, другой обнаруживает правки, третий — расхождение с реальностью."
+            },
+            "incorrect": {
+              "en": "Permissions block the write, the hash chain detects an edit, reconciliation compares against other sources.",
+              "ru": "Права блокируют запись, цепочка хэшей обнаруживает правку, сверка сравнивает с другими источниками."
+            }
+          },
+          "pairs": [
+            {
+              "id": "permissions",
+              "left": {
+                "en": "Permissions",
+                "ru": "Права доступа"
+              },
+              "right": {
+                "en": "The role gets INSERT and SELECT, never UPDATE or DELETE",
+                "ru": "Роль получает INSERT и SELECT, но не UPDATE и не DELETE"
+              }
+            },
+            {
+              "id": "hash-chain",
+              "left": {
+                "en": "Hash chain",
+                "ru": "Цепочка хэшей"
+              },
+              "right": {
+                "en": "Each row hashes its content plus the previous row's hash",
+                "ru": "Каждая строка хэширует своё содержимое плюс хэш предыдущей"
+              }
+            },
+            {
+              "id": "reconciliation",
+              "left": {
+                "en": "Reconciliation",
+                "ru": "Сверка"
+              },
+              "right": {
+                "en": "Compares the fold against snapshots, the balance column and external statements",
+                "ru": "Сравнивает свёртку со снимками, колонкой баланса и внешними выписками"
+              }
+            }
+          ]
+        },
+        {
+          "id": "iip-p4-fill-grants",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the grant that makes an entries table effectively append-only.",
+            "ru": "Дополни выдачу прав, которая делает таблицу записей фактически только на добавление."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Write and read only; revoking the rest is the enforcement.",
+              "ru": "Только запись и чтение; отзыв остального и есть принуждение."
+            },
+            "incorrect": {
+              "en": "The role gets INSERT and SELECT, and never DELETE (or UPDATE).",
+              "ru": "Роль получает INSERT и SELECT и никогда DELETE (или UPDATE)."
+            }
+          },
+          "text": {
+            "en": "The application role is granted ___ and SELECT on entries, never UPDATE or ___.",
+            "ru": "Роль приложения получает ___ и SELECT на entries, но никогда UPDATE или ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "INSERT",
+                "insert"
+              ],
+              "ru": [
+                "INSERT",
+                "insert"
+              ]
+            },
+            {
+              "en": [
+                "DELETE",
+                "delete"
+              ],
+              "ru": [
+                "DELETE",
+                "delete"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ledger-vs-event-sourcing",
+      "title": {
+        "en": "Ledger vs event sourcing",
+        "ru": "Журнал против event sourcing"
+      },
+      "summary": {
+        "en": "A ledger is one aggregate's financial history; event sourcing is an architecture for the whole system and pays a much larger schema-evolution tax.",
+        "ru": "Журнал — финансовая история одного агрегата; event sourcing — архитектура всей системы, платящая куда больший налог за эволюцию схемы."
+      },
+      "discovery": [
+        {
+          "id": "lve-d1-are-they-es",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A team stores money movements as immutable entries and derives balances from them. Are they doing event sourcing?",
+            "ru": "Команда хранит движения денег неизменяемыми записями и выводит из них балансы. Это event sourcing?"
+          },
+          "reveal": {
+            "en": "Related, not identical. **Event sourcing** is an architecture in which the *whole system's* state is rebuilt by replaying stored events; a **ledger** is one aggregate's financial history.\n\n| | Accounting ledger | Event sourcing |\n| --- | --- | --- |\n| Scope | one aggregate: money movements | the whole system's state |\n| Vocabulary | debit, credit, reversal, posting date | events, aggregates, projections, replay |\n| Read model | usually a balance column in the same DB | projections, often CQRS and a separate store |\n| Schema change | the entry shape is a domain fact and barely moves | every old event version must stay replayable forever |\n| Team cost | low — a table with a SUM | high — new failure modes, tooling, mental model |\n\nA ledger is the narrow, boring, well-understood version of the same idea, and it is what \"should I event-source my balance service?\" almost always wants. Event sourcing's biggest hidden cost is **schema evolution**: if you replay history to rebuild state, you can never delete an old event version, and a change in what an event *means* becomes a data migration over years of records. A ledger dodges most of this because \"money moved by X for reason Y\" does not change meaning.",
+            "ru": "Идеи родственные, но не одинаковые. **Event sourcing** — архитектура, в которой состояние *всей системы* восстанавливается прогоном сохранённых событий; **журнал** — финансовая история одного агрегата.\n\n| | Бухгалтерский журнал | Event sourcing |\n| --- | --- | --- |\n| Охват | один агрегат: движения денег | состояние всей системы |\n| Словарь | дебет, кредит, сторно, дата проводки | события, агрегаты, проекции, replay |\n| Модель чтения | обычно колонка баланса в той же БД | проекции, часто CQRS и отдельное хранилище |\n| Изменение схемы | форма записи — доменный факт, почти не меняется | любая старая версия события должна остаться воспроизводимой навсегда |\n| Цена для команды | низкая: таблица и SUM | высокая: новые режимы отказа, инструменты, образ мышления |\n\nЖурнал — узкая, скучная и хорошо изученная версия той же идеи, и именно её почти всегда имеют в виду, спрашивая «стоит ли делать event sourcing для сервиса балансов?». Главная скрытая цена event sourcing — **эволюция схемы**: если состояние восстанавливается прогоном истории, старую версию события уже никогда не удалить, а изменение *смысла* события становится миграцией данных за годы записей. Журнал обходит почти всё это, потому что «деньги подвинулись на X по причине Y» смысла не меняет."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Same idea, very different scope and cost.",
+              "ru": "Идея та же, но охват и цена совсем разные."
+            },
+            "incorrect": {
+              "en": "No — a ledger covers one aggregate; event sourcing rebuilds the whole system's state.",
+              "ru": "Нет — журнал охватывает один агрегат; event sourcing восстанавливает состояние всей системы."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "No — a ledger covers one aggregate, event sourcing the whole system's state",
+                "ru": "Нет — журнал охватывает один агрегат, event sourcing — состояние всей системы"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Yes — any append-only storage is event sourcing",
+                "ru": "Да — любое хранение только на добавление и есть event sourcing"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The ideas are related, but event sourcing rebuilds all state from events and brings projections and versioning with it.",
+                "ru": "Идеи родственны, но event sourcing восстанавливает всё состояние из событий и тянет за собой проекции и версионирование."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Yes, as soon as they add a balance column for reads",
+                "ru": "Да, как только они добавят колонку баланса для чтений"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A balance column in the same database is a denormalized read, not an event-sourcing projection store.",
+                "ru": "Колонка баланса в той же базе — денормализованное чтение, а не хранилище проекций event sourcing."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "lve-p1-same-thing-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "An accounting ledger and event sourcing are the same technique under two names.",
+            "ru": "Бухгалтерский журнал и event sourcing — одна и та же техника под двумя названиями."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One aggregate's history versus an architecture for all state.",
+              "ru": "История одного агрегата против архитектуры для всего состояния."
+            },
+            "incorrect": {
+              "en": "No — a ledger is one aggregate's financial history; event sourcing is a system-wide architecture.",
+              "ru": "Нет — журнал это финансовая история одного агрегата; event sourcing — архитектура всей системы."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "lve-p2-hidden-cost",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What is event sourcing's biggest hidden cost, which a money ledger largely avoids?",
+            "ru": "Какова главная скрытая цена event sourcing, которой денежный журнал по большей части избегает?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Replay forces you to keep every old version understandable forever.",
+              "ru": "Прогон истории заставляет вечно держать понятной каждую старую версию."
+            },
+            "incorrect": {
+              "en": "Schema evolution: old event versions must stay replayable, and a change of meaning is a years-wide migration.",
+              "ru": "Эволюция схемы: старые версии событий должны оставаться воспроизводимыми, а смена смысла — миграция за годы."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Schema evolution: every old event version must stay replayable forever",
+                "ru": "Эволюция схемы: любая старая версия события должна оставаться воспроизводимой навсегда"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Storage: events take far more disk space than ledger entries",
+                "ru": "Хранение: события занимают куда больше места, чем записи журнала"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Both store one row per fact; volume is not what separates them.",
+                "ru": "Оба хранят по строке на факт; объём — не то, что их различает."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It cannot derive current state without a separate database",
+                "ru": "Нельзя вывести текущее состояние без отдельной базы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A separate store is common, not required; the expensive part is keeping every old version replayable.",
+                "ru": "Отдельное хранилище распространено, но не обязательно; дорого именно поддерживать воспроизводимость всех старых версий."
+              }
+            }
+          ]
+        },
+        {
+          "id": "lve-p3-match-scope",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each property to the approach it describes.",
+            "ru": "Соотнеси каждое свойство с подходом, который оно описывает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Narrow and boring on one side; system-wide and expensive on the other.",
+              "ru": "С одной стороны узко и скучно, с другой — на всю систему и дорого."
+            },
+            "incorrect": {
+              "en": "A ledger is one aggregate with a balance column; event sourcing is all state with projections.",
+              "ru": "Журнал — один агрегат с колонкой баланса; event sourcing — всё состояние с проекциями."
+            }
+          },
+          "pairs": [
+            {
+              "id": "ledger-scope",
+              "left": {
+                "en": "Ledger: scope",
+                "ru": "Журнал: охват"
+              },
+              "right": {
+                "en": "One aggregate — money movements",
+                "ru": "Один агрегат — движения денег"
+              }
+            },
+            {
+              "id": "es-scope",
+              "left": {
+                "en": "Event sourcing: scope",
+                "ru": "Event sourcing: охват"
+              },
+              "right": {
+                "en": "The whole system's state",
+                "ru": "Состояние всей системы"
+              }
+            },
+            {
+              "id": "ledger-read",
+              "left": {
+                "en": "Ledger: read model",
+                "ru": "Журнал: модель чтения"
+              },
+              "right": {
+                "en": "Usually a balance column in the same database",
+                "ru": "Обычно колонка баланса в той же базе"
+              }
+            },
+            {
+              "id": "es-read",
+              "left": {
+                "en": "Event sourcing: read model",
+                "ru": "Event sourcing: модель чтения"
+              },
+              "right": {
+                "en": "Projections, often CQRS and a separate store",
+                "ru": "Проекции, часто CQRS и отдельное хранилище"
+              }
+            }
+          ]
+        },
+        {
+          "id": "lve-p4-fill-replayable",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the constraint that event sourcing imposes on old event versions.",
+            "ru": "Дополни ограничение, которое event sourcing накладывает на старые версии событий."
+          },
+          "feedback": {
+            "correct": {
+              "en": "State is rebuilt by replay, so no old version can ever be dropped.",
+              "ru": "Состояние восстанавливается прогоном, поэтому старую версию никогда не выбросить."
+            },
+            "incorrect": {
+              "en": "They must stay replayable forever, because state is rebuilt by replaying the history.",
+              "ru": "Они должны навсегда оставаться воспроизводимыми, ведь состояние восстанавливают прогоном истории."
+            }
+          },
+          "text": {
+            "en": "In event sourcing every old event version must stay ___ forever, because state is rebuilt by replaying history.",
+            "ru": "В event sourcing любая старая версия события должна навсегда оставаться ___, потому что состояние восстанавливается прогоном истории."
+          },
+          "blanks": [
+            {
+              "en": [
+                "replayable"
+              ],
+              "ru": [
+                "воспроизводимой",
+                "replayable"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "idempotent-entries",
+      "title": {
+        "en": "Idempotency of entries",
+        "ru": "Идемпотентность записей"
+      },
+      "summary": {
+        "en": "A retried request must not append a second entry; the guarantee is a unique key on the business operation id, enforced by the database.",
+        "ru": "Повторённый запрос не должен добавить вторую запись; гарантию даёт уникальный ключ по id бизнес-операции, обеспечиваемый базой."
+      },
+      "discovery": [
+        {
+          "id": "ie-d1-check-then-insert",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This is meant to make a retried request safe to process twice. What is the defect?",
+            "ru": "Это должно сделать повторённый запрос безопасным при двойной обработке. В чём дефект?"
+          },
+          "code": "SELECT count(*) FROM entries WHERE operation_id = '9f2c-...';\n-- returns 0, so the application proceeds:\nINSERT INTO entries (account_id, amount, reason, operation_id)\nVALUES (7, -250, 'purchase', '9f2c-...');",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "This is check-then-act again, with the same outcome: two concurrent retries both read `0` and both insert. The guarantee has to live **in the database**, as a unique constraint on the business operation's id — the **idempotency key**:\n\n```sql\nALTER TABLE entries ADD CONSTRAINT entries_operation_id_key UNIQUE (operation_id);\n-- the second INSERT now fails; the caller treats that as \"already applied\"\n```\n\nThe id must come from the business action, not from the database: a value the database generates is different on every retry, so it can never match.\n\nAppend-only makes this **more** important than usual, not less. In an in-place design a duplicated update can be corrected by writing the right number. Here a duplicate entry is silently permanent — the only repair is to append a reversing entry, and until someone notices, every fold includes the phantom amount.",
+            "ru": "Это снова check-then-act с тем же исходом: два параллельных повтора оба читают `0` и оба вставляют. Гарантия должна жить **в базе** — уникальным ограничением по идентификатору бизнес-операции, то есть по **ключу идемпотентности**:\n\n```sql\nALTER TABLE entries ADD CONSTRAINT entries_operation_id_key UNIQUE (operation_id);\n-- второй INSERT теперь падает; вызывающий трактует это как «уже применено»\n```\n\nИдентификатор должен приходить от бизнес-действия, а не от базы: значение, сгенерированное базой, при каждом повторе будет другим и никогда не совпадёт.\n\nAppend-only делает это **важнее** обычного, а не наоборот. При хранении на месте задвоенное обновление чинится записью правильного числа. Здесь дубль молча остаётся навсегда — починить его можно лишь сторнирующей записью, а пока никто не заметил, каждая свёртка включает фантомную сумму."
+          },
+          "feedback": {
+            "correct": {
+              "en": "An application-side check is a race; only a constraint can decide.",
+              "ru": "Проверка в приложении — это гонка; решить может только ограничение."
+            },
+            "incorrect": {
+              "en": "Two concurrent retries both see 0 and both insert; the guarantee must be a database constraint.",
+              "ru": "Два параллельных повтора оба видят 0 и оба вставляют; гарантией должно быть ограничение базы."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The check and the insert are separate, so two concurrent retries both see 0 and both insert",
+                "ru": "Проверка и вставка разделены, поэтому два параллельных повтора видят 0 и оба вставляют"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The operation id should be generated by the database instead",
+                "ru": "Идентификатор операции должна генерировать база"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It has to identify the business action — a database-generated value differs on every retry.",
+                "ru": "Он должен идентифицировать бизнес-действие: значение из базы при каждом повторе будет новым."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — the count check already prevents the duplicate",
+                "ru": "Ничего — проверка count уже предотвращает дубль"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It prevents it only when nothing runs concurrently, which is exactly when retries arrive.",
+                "ru": "Она предотвращает его лишь при отсутствии параллелизма — а повторы приходят именно параллельно."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "ie-p1-delete-duplicate-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In an append-only ledger, a duplicated entry can simply be deleted once someone notices it.",
+            "ru": "В журнале только на добавление задвоенную запись можно просто удалить, как только её заметят."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Deleting is what append-only forbids; you append a reversing entry instead.",
+              "ru": "Удаление — то, что запрещает append-only; вместо него добавляют сторнирующую запись."
+            },
+            "incorrect": {
+              "en": "No — the repair is a reversing entry, and until then every fold includes the duplicate.",
+              "ru": "Нет — чинят сторнирующей записью, а до этого дубль входит в каждую свёртку."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "ie-p2-where-guarantee",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Where does the guarantee live that a retried request appends only one entry?",
+            "ru": "Где живёт гарантия, что повторённый запрос добавит только одну запись?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Only the database can arbitrate between two concurrent retries.",
+              "ru": "Рассудить два параллельных повтора может только база."
+            },
+            "incorrect": {
+              "en": "In a unique constraint on the business operation id, enforced by the database.",
+              "ru": "В уникальном ограничении по id бизнес-операции, которое обеспечивает база."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "In a unique constraint on the business operation id, in the database",
+                "ru": "В уникальном ограничении по id бизнес-операции, в базе"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "In an application check that queries for the operation id first",
+                "ru": "В проверке приложения, которая сначала ищет id операции"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Two concurrent retries can both find nothing and both insert; only the database can decide.",
+                "ru": "Два параллельных повтора могут оба ничего не найти и оба вставить; решить может только база."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "In the client, which must be written never to retry",
+                "ru": "В клиенте, который надо написать так, чтобы он не повторял запросы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Retries are a fact of networks; the receiver has to be safe against them.",
+                "ru": "Повторы — свойство сетей; безопасным к ним должен быть получатель."
+              }
+            }
+          ]
+        },
+        {
+          "id": "ie-p3-match-idempotency",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each piece of a ledger's duplicate protection to its role.",
+            "ru": "Соотнеси каждую часть защиты журнала от дублей с её ролью."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One identifies the action, one blocks the duplicate, one repairs the one that got through.",
+              "ru": "Один идентифицирует действие, другой блокирует дубль, третий чинит проскочивший."
+            },
+            "incorrect": {
+              "en": "operation_id identifies the business action, the unique constraint blocks the second insert, a reversing entry repairs a duplicate that got in.",
+              "ru": "operation_id идентифицирует бизнес-действие, уникальное ограничение блокирует вторую вставку, сторнирующая запись чинит проскочивший дубль."
+            }
+          },
+          "pairs": [
+            {
+              "id": "operation-id",
+              "left": {
+                "en": "operation_id on the entry",
+                "ru": "operation_id в записи"
+              },
+              "right": {
+                "en": "The idempotency key of the business action",
+                "ru": "Ключ идемпотентности бизнес-действия"
+              }
+            },
+            {
+              "id": "unique",
+              "left": {
+                "en": "Unique constraint on operation_id",
+                "ru": "Уникальное ограничение по operation_id"
+              },
+              "right": {
+                "en": "Where the no-duplicates guarantee is actually enforced",
+                "ru": "Где на самом деле обеспечивается гарантия отсутствия дублей"
+              }
+            },
+            {
+              "id": "reversal",
+              "left": {
+                "en": "Reversing entry",
+                "ru": "Сторнирующая запись"
+              },
+              "right": {
+                "en": "How a duplicate that did get in is repaired",
+                "ru": "Как чинят дубль, который всё же попал внутрь"
+              }
+            }
+          ]
+        },
+        {
+          "id": "ie-p4-fill-unique",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the mechanism that keeps a retried request from appending twice.",
+            "ru": "Дополни механизм, который не даёт повторённому запросу добавить запись дважды."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The constraint decides, not the application.",
+              "ru": "Решает ограничение, а не приложение."
+            },
+            "incorrect": {
+              "en": "A unique constraint on the operation id — the database enforces it, not an application check.",
+              "ru": "Уникальное ограничение по id операции — его обеспечивает база, а не проверка в приложении."
+            }
+          },
+          "text": {
+            "en": "A retried request appends only one entry because a ___ constraint on the operation id is enforced by the ___.",
+            "ru": "Повторённый запрос добавляет только одну запись, потому что ограничение ___ по id операции обеспечивает ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "unique",
+                "UNIQUE"
+              ],
+              "ru": [
+                "уникальности",
+                "unique",
+                "UNIQUE"
+              ]
+            },
+            {
+              "en": [
+                "database",
+                "db"
+              ],
+              "ru": [
+                "база",
+                "база данных",
+                "БД"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "when-in-place-is-right",
+      "title": {
+        "en": "When updating in place is right",
+        "ru": "Когда обновление на месте верно"
+      },
+      "summary": {
+        "en": "In place is correct when the number is not a claim about the past: a recomputable cache, a gauge, a like count, a stock level whose authority is elsewhere.",
+        "ru": "«На месте» верно, когда число не является утверждением о прошлом: пересчитываемый кэш, датчик, счётчик лайков, остаток на складе с внешним авторитетом."
+      },
+      "discovery": [
+        {
+          "id": "wip-d1-which-number",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which of these numbers is correctly stored as a single column updated in place?",
+            "ru": "Какое из этих чисел правильно хранить одной колонкой, обновляемой на месте?"
+          },
+          "reveal": {
+            "en": "Not everything is money. Updating in place is the *right* model when the number is **not a claim about the past**: a cached counter you can recompute from somewhere else, a gauge (CPU, queue depth, last-seen timestamp), a like count, a stock level whose authority is a physical warehouse.\n\nThe test is a single question:\n\n> If this number is wrong tomorrow, will anyone need to know how it got that way?\n\nIf nobody will, storing the conclusion is not a shortcut — it is the correct model, and the ledger's read cost, snapshots and reconciliation jobs are all overhead you would be paying for nothing.\n\nOne caveat worth stating out loud: you can start recording history tomorrow, but you cannot recover what today's `UPDATE` overwrote. \"We can always add the history later\" is only half true — the history *from now on*, yes; the history you already destroyed, never.",
+            "ru": "Не всё является деньгами. Обновление на месте — *правильная* модель, когда число **не является утверждением о прошлом**: кэшированный счётчик, который можно пересчитать из другого места; датчик (CPU, длина очереди, время последнего визита); количество лайков; остаток на складе, авторитет по которому — физический склад.\n\nПроверка сводится к одному вопросу:\n\n> Если завтра это число окажется неверным, понадобится ли кому-нибудь узнать, как оно таким стало?\n\nЕсли никому — хранить вывод не срезание угла, а правильная модель, и стоимость чтения журнала, снимки и задачи сверки были бы накладными расходами ни за что.\n\nОдну оговорку стоит проговорить вслух: начать записывать историю можно с завтрашнего дня, но вернуть то, что затёр сегодняшний `UPDATE`, нельзя. «Историю всегда можно добавить потом» верно лишь наполовину: историю *с этого момента* — да; уже уничтоженную — никогда."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A gauge is not a claim about the past, and it is recomputable.",
+              "ru": "Датчик не является утверждением о прошлом и пересчитывается заново."
+            },
+            "incorrect": {
+              "en": "The right candidate is the number nobody will ever have to explain the history of.",
+              "ru": "Подходит то число, историю которого никому никогда не придётся объяснять."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A queue-depth gauge, recomputable from the queue itself",
+                "ru": "Датчик длины очереди, пересчитываемый из самой очереди"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A customer's wallet balance in a payments service",
+                "ru": "Баланс кошелька клиента в платёжном сервисе"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Money is a claim about the past: disputes and audits ask how the number was reached.",
+                "ru": "Деньги — утверждение о прошлом: споры и аудит спрашивают, как получилось число."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The history of card transactions on an account",
+                "ru": "История карточных операций по счёту"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the history itself; there is no conclusion to store in place of it.",
+                "ru": "Это сама история; вместо неё нечего хранить как вывод."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "wip-p1-nobody-asks-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A number is a good candidate for in-place storage when nobody will ever need to know how it reached its value.",
+            "ru": "Число хорошо подходит для хранения на месте, если никому никогда не понадобится знать, как оно получило своё значение."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That single question is the whole test.",
+              "ru": "Этот единственный вопрос и есть вся проверка."
+            },
+            "incorrect": {
+              "en": "It is true — if the \"why\" is never asked, storing the conclusion is the correct model.",
+              "ru": "Это правда — если «почему» никогда не спрашивают, хранить вывод — правильная модель."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "wip-p2-add-history-later",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A team stores balances in place today and plans to add an entries table next year. What is lost in the meantime?",
+            "ru": "Команда сегодня хранит балансы на месте и планирует добавить таблицу записей через год. Что теряется за это время?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Recording can start tomorrow; what today's UPDATE overwrote is gone.",
+              "ru": "Записывать можно начать с завтра; то, что затёр сегодняшний UPDATE, исчезло."
+            },
+            "incorrect": {
+              "en": "Everything today's UPDATEs overwrite — that history cannot be reconstructed later.",
+              "ru": "Всё, что затирают сегодняшние UPDATE — эту историю потом не восстановить."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Everything today's UPDATEs overwrite — that history is unrecoverable",
+                "ru": "Всё, что затирают сегодняшние UPDATE — эта история невосстановима"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing; the entries can be reconstructed from the balance column",
+                "ru": "Ничего; записи можно восстановить из колонки баланса"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The column holds one number; the operations behind it were never written down.",
+                "ru": "В колонке одно число; операции за ним никогда не записывались."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Only the ability to run a reconciliation job",
+                "ru": "Только возможность запускать задачу сверки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Reconciliation is one casualty; the deeper loss is the history itself.",
+                "ru": "Сверка — одна из потерь; глубже потеряна сама история."
+              }
+            }
+          ]
+        },
+        {
+          "id": "wip-p3-match-numbers",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each stored number to the storage model that fits it.",
+            "ru": "Соотнеси каждое хранимое число с подходящей ему моделью хранения."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Only the number whose past someone will ask about needs a history.",
+              "ru": "История нужна лишь числу, о прошлом которого кто-то спросит."
+            },
+            "incorrect": {
+              "en": "Money needs its operations kept; gauges, like counts and externally-owned levels do not.",
+              "ru": "Деньгам нужны сохранённые операции; датчикам, лайкам и внешне-авторитетным остаткам — нет."
+            }
+          },
+          "pairs": [
+            {
+              "id": "wallet",
+              "left": {
+                "en": "A wallet balance in a payments service",
+                "ru": "Баланс кошелька в платёжном сервисе"
+              },
+              "right": {
+                "en": "Append operations: the history is part of the product",
+                "ru": "Добавлять операции: история — часть продукта"
+              }
+            },
+            {
+              "id": "gauge",
+              "left": {
+                "en": "A queue-depth gauge",
+                "ru": "Датчик длины очереди"
+              },
+              "right": {
+                "en": "Update in place: nobody asks how it got there",
+                "ru": "Обновлять на месте: никто не спросит, как оно таким стало"
+              }
+            },
+            {
+              "id": "likes",
+              "left": {
+                "en": "A like count",
+                "ru": "Счётчик лайков"
+              },
+              "right": {
+                "en": "Update in place: recomputable, not a claim about the past",
+                "ru": "Обновлять на месте: пересчитывается, не утверждение о прошлом"
+              }
+            },
+            {
+              "id": "stock",
+              "left": {
+                "en": "A stock level backed by a physical warehouse",
+                "ru": "Складской остаток, за которым стоит физический склад"
+              },
+              "right": {
+                "en": "Update in place: the authority lives outside the database",
+                "ru": "Обновлять на месте: авторитет находится вне базы"
+              }
+            }
+          ]
+        },
+        {
+          "id": "wip-p4-word-bank-test",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the single question that decides between an in-place number and a recorded history.",
+            "ru": "Собери единственный вопрос, который решает между числом на месте и записанной историей."
+          },
+          "feedback": {
+            "correct": {
+              "en": "If the answer is no, storing the conclusion is the right model.",
+              "ru": "Если ответ «нет», хранить вывод — правильная модель."
+            },
+            "incorrect": {
+              "en": "The test is: if this number is wrong tomorrow, will anyone need to know how it got that way?",
+              "ru": "Проверка такая: если завтра это число окажется неверным, понадобится ли кому-то узнать, как оно таким стало?"
+            }
+          },
+          "tokens": {
+            "en": [
+              "will",
+              "anyone",
+              "need",
+              "to",
+              "know",
+              "how",
+              "this",
+              "number",
+              "got",
+              "that",
+              "way"
+            ],
+            "ru": [
+              "понадобится",
+              "ли",
+              "кому-нибудь",
+              "узнать",
+              "как",
+              "это",
+              "число",
+              "таким",
+              "стало"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "fast",
+              "indexed"
+            ],
+            "ru": [
+              "быстро",
+              "проиндексировано"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "designing-a-balance-service",
+      "title": {
+        "en": "Designing a balance service",
+        "ru": "Проектирование сервиса балансов"
+      },
+      "summary": {
+        "en": "Entries as the source of truth, the balance column in the same transaction, a serialization point for invariants, and immutability enforced by policy.",
+        "ru": "Записи как источник истины, колонка баланса в той же транзакции, точка сериализации для инвариантов и неизменяемость через политику."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "cap-d1-drifted-column",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The account starts empty. Predict the two printed numbers.",
+            "ru": "Счёт изначально пуст. Предскажи два напечатанных числа."
+          },
+          "code": "BEGIN;\n  INSERT INTO entries (account_id, amount, operation_id) VALUES (7, 1000, 'op-1');\n  UPDATE accounts SET balance = balance + 1000 WHERE id = 7;\nCOMMIT;\n\nBEGIN;\n  INSERT INTO entries (account_id, amount, operation_id) VALUES (7, -250, 'op-2');\n  UPDATE accounts SET balance = balance + 250 WHERE id = 7;   -- wrong sign\nCOMMIT;\n\nSELECT balance FROM accounts WHERE id = 7;\nSELECT COALESCE(SUM(amount), 0) FROM entries WHERE account_id = 7;",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "The whole design in one place. The column is whatever the `UPDATE` wrote — 1000 + 250 = **1250**. The fold reads the entries and never consults the column — 1000 − 250 = **750**. Being inside one transaction guarantees that both writes happen together; it does not guarantee that the second one is *correct*. That is what the reconciliation job is for.\n\n```mermaid\nflowchart TD\n  A[\"operation with an idempotency key\"] --> B[\"BEGIN\"]\n  B --> C[\"serialization point: lock the account\"]\n  C --> D[\"INSERT entry (immutable, unique operation_id)\"]\n  D --> E[\"UPDATE accounts SET balance = balance + amount\"]\n  E --> F[\"COMMIT: both rows or neither\"]\n  F --> G[\"reads: one row, O(1)\"]\n  F --> H[\"reconciliation: fold entries, compare, alert\"]\n  H --> I[\"snapshots or period closing bound the fold\"]\n```\n\nEvery guarantee in the design comes from a specific mechanism, and each covers a different failure: one transaction stops drift from a missing write; the unique `operation_id` stops duplicates from retries; a lock or conditional update stops two concurrent decisions; a reversing entry repairs a wrong posting without erasing it; revoked `UPDATE`/`DELETE` rights make the entries actually immutable; snapshots keep the fold from growing without bound. Remove any one and a different class of bug walks in.",
+            "ru": "Вся конструкция в одном месте. В колонке лежит то, что записал `UPDATE`: 1000 + 250 = **1250**. Свёртка читает записи и в колонку не заглядывает: 1000 − 250 = **750**. Нахождение в одной транзакции гарантирует, что обе записи произойдут вместе; оно не гарантирует, что вторая *верна*. Для этого и нужна задача сверки.\n\n```mermaid\nflowchart TD\n  A[\"операция с ключом идемпотентности\"] --> B[\"BEGIN\"]\n  B --> C[\"точка сериализации: заблокировать счёт\"]\n  C --> D[\"INSERT записи (неизменяемой, uniq operation_id)\"]\n  D --> E[\"UPDATE accounts SET balance = balance + amount\"]\n  E --> F[\"COMMIT: обе строки или ни одной\"]\n  F --> G[\"чтения: одна строка, O(1)\"]\n  F --> H[\"сверка: свернуть записи, сравнить, алерт\"]\n  H --> I[\"снимки или закрытие периода ограничивают свёртку\"]\n```\n\nКаждая гарантия здесь идёт от конкретного механизма, и каждый закрывает свой отказ: одна транзакция не даёт разойтись числам из-за пропущенной записи; уникальный `operation_id` не даёт повторам создать дубль; блокировка или условное обновление не дают принять два решения одновременно; сторнирующая запись чинит ошибочную проводку, не стирая её; отозванные права `UPDATE`/`DELETE` делают записи действительно неизменяемыми; снимки не дают свёртке расти бесконечно. Убери любой — и войдёт свой класс багов."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The column and the fold disagree, and only reconciliation would notice.",
+              "ru": "Колонка и свёртка расходятся, и заметит это только сверка."
+            },
+            "incorrect": {
+              "en": "The column holds what the UPDATE wrote (1250); the fold reads the entries (750).",
+              "ru": "В колонке то, что записал UPDATE (1250); свёртка читает записи (750)."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "1250 and 750 — a reconciliation job comparing them would raise the alert",
+                "ru": "1250 и 750 — сравнивающая их задача сверки подняла бы алерт"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "750 and 750 — the entries are the source of truth, so the column follows them",
+                "ru": "750 и 750 — записи источник истины, поэтому колонка следует за ними"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "\"Source of truth\" is a design decision, not a mechanism; nothing recomputes the column from the entries.",
+                "ru": "«Источник истины» — проектное решение, а не механизм; никто не пересчитывает колонку из записей."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "1250 and 1250 — the SUM reads the cached column",
+                "ru": "1250 и 1250 — SUM читает кэшированную колонку"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The fold sums the entries table; it never consults accounts.balance.",
+                "ru": "Свёртка суммирует таблицу записей; в accounts.balance она не заглядывает."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cap-p1-concurrent-withdrawals",
+          "type": "predict_output",
+          "prompt": {
+            "en": "An account's entries fold to 200 and its cached balance column reads 200. Two withdrawals of 200 run this concurrently and both commit. Predict the resulting state.",
+            "ru": "Записи счёта сворачиваются в 200, и кэшированная колонка баланса тоже 200. Два списания по 200 выполняют это параллельно, и обе транзакции фиксируются. Предскажи итоговое состояние."
+          },
+          "code": "BEGIN;\n  SELECT COALESCE(SUM(amount), 0) FROM entries WHERE account_id = 7;  -- 200\n  -- application checks 200 - 200 >= 0 -> allowed\n  INSERT INTO entries (account_id, amount) VALUES (7, -200);\n  UPDATE accounts SET balance = balance - 200 WHERE id = 7;\nCOMMIT;",
+          "codeLang": "sql",
+          "feedback": {
+            "correct": {
+              "en": "No lost update, but the check-then-act race overdrew the account anyway.",
+              "ru": "Потерянного обновления нет, но гонка check-then-act всё равно увела счёт в минус."
+            },
+            "incorrect": {
+              "en": "Both rows are appended and both relative updates apply, so entries and column agree at -200.",
+              "ru": "Обе строки добавляются и оба относительных обновления применяются, поэтому записи и колонка сходятся на -200."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Two entries, a folded balance of -200, and the column also at -200",
+                "ru": "Две записи, свёрнутый баланс -200 и колонка тоже -200"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "One entry, because the second INSERT conflicts with the first",
+                "ru": "Одна запись, потому что второй INSERT конфликтует с первым"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Inserts of different rows do not conflict; nothing rejects the second transaction.",
+                "ru": "Вставки разных строк не конфликтуют; вторую транзакцию ничто не отклоняет."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Two entries but the column at 0, because one UPDATE was lost",
+                "ru": "Две записи, но колонка 0, потому что одно обновление потерялось"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "`balance = balance - 200` is applied atomically by the database, so both updates land.",
+                "ru": "`balance = balance - 200` применяется базой атомарно, поэтому оба обновления учитываются."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p2-inplace-repair",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "An entry was recorded as -250 when it should have been -150, and an engineer repairs it like this. Both numbers end up correct. What is still wrong?",
+            "ru": "Запись внесли как -250 вместо -150, и инженер чинит это так. Оба числа в итоге верны. Что всё равно не так?"
+          },
+          "code": "UPDATE entries  SET amount  = -150 WHERE id = 42;      -- was -250\nUPDATE accounts SET balance = balance + 100 WHERE id = 7;",
+          "codeLang": "sql",
+          "feedback": {
+            "correct": {
+              "en": "Correct and unauditable: the repair rewrote history instead of appending to it.",
+              "ru": "Верно и непроверяемо: исправление переписало историю вместо добавления к ней."
+            },
+            "incorrect": {
+              "en": "The history was rewritten — the append-only repair is a reversing entry plus the correct one.",
+              "ru": "История переписана — в append-only чинят сторнирующей записью плюс правильной."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The history was rewritten: neither the wrong posting nor its correction leaves a trace",
+                "ru": "История переписана: ни ошибочная проводка, ни её исправление не оставляют следа"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The balance adjustment has the wrong sign",
+                "ru": "У корректировки баланса неверный знак"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "-250 becoming -150 does return 100 to the account; the arithmetic is not the problem.",
+                "ru": "Замена -250 на -150 действительно возвращает счёту 100; арифметика здесь ни при чём."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — both the entry and the column hold correct values now",
+                "ru": "Ничего — и запись, и колонка теперь содержат верные значения"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Both are correct and unauditable; an append-only repair is a reversing entry plus the right one.",
+                "ru": "Оба верны и непроверяемы; в append-only чинят сторнирующей записью плюс правильной."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p3-sort-operation",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the complete handling of one operation in a hybrid ledger service, including its safety mechanisms.",
+            "ru": "Расставь по порядку полную обработку одной операции в гибридном сервисе журнала, включая механизмы защиты."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Serialize the decision, write both rows atomically, and reconcile later.",
+              "ru": "Сериализовать решение, атомарно записать обе строки, позже сверить."
+            },
+            "incorrect": {
+              "en": "Lock first, then insert the entry and update the column inside one transaction; reconciliation runs afterwards.",
+              "ru": "Сначала блокировка, затем вставка записи и обновление колонки в одной транзакции; сверка идёт после."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "BEGIN the transaction",
+                "ru": "Открыть транзакцию (BEGIN)"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Take the serialization point on the account: lock the row or prepare a conditional update",
+                "ru": "Взять точку сериализации по счёту: заблокировать строку или подготовить условное обновление"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "INSERT the entry, its operation id protected by a unique constraint",
+                "ru": "Вставить запись, id операции которой защищён уникальным ограничением"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "UPDATE the cached balance column by the same amount",
+                "ru": "Обновить кэшированную колонку баланса на ту же сумму"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "COMMIT — both rows or neither",
+                "ru": "Зафиксировать — обе строки или ни одной"
+              }
+            },
+            {
+              "id": "s6",
+              "text": {
+                "en": "Later, a reconciliation job folds the entries and compares them with the column",
+                "ru": "Позже задача сверки сворачивает записи и сравнивает их с колонкой"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p4-match-mechanisms",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each mechanism of a ledger-backed balance service to the failure it prevents or repairs.",
+            "ru": "Соотнеси каждый механизм сервиса балансов на журнале с отказом, который он предотвращает или чинит."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Five different failures, five different mechanisms — none of them substitutes for another.",
+              "ru": "Пять разных отказов, пять разных механизмов — ни один не заменяет другой."
+            },
+            "incorrect": {
+              "en": "One transaction stops drift, a unique key stops duplicates, a lock stops concurrent decisions, a reversal repairs a posting, revoked rights protect the history.",
+              "ru": "Одна транзакция не даёт разойтись числам, уникальный ключ — задвоиться, блокировка — принять два решения, сторно чинит проводку, отозванные права защищают историю."
+            }
+          },
+          "pairs": [
+            {
+              "id": "one-tx",
+              "left": {
+                "en": "One transaction around the entry and the balance update",
+                "ru": "Одна транзакция вокруг записи и обновления баланса"
+              },
+              "right": {
+                "en": "Keeps the cached balance from silently going stale",
+                "ru": "Не даёт кэшированному балансу молча устареть"
+              }
+            },
+            {
+              "id": "unique-op",
+              "left": {
+                "en": "Unique constraint on the operation id",
+                "ru": "Уникальное ограничение по id операции"
+              },
+              "right": {
+                "en": "A retried request appends only one entry",
+                "ru": "Повторённый запрос добавляет только одну запись"
+              }
+            },
+            {
+              "id": "lock",
+              "left": {
+                "en": "SELECT ... FOR UPDATE on the account",
+                "ru": "SELECT ... FOR UPDATE по счёту"
+              },
+              "right": {
+                "en": "Two concurrent withdrawals cannot both pass a balance check",
+                "ru": "Два параллельных списания не могут оба пройти проверку баланса"
+              }
+            },
+            {
+              "id": "reversal",
+              "left": {
+                "en": "Reversing entry",
+                "ru": "Сторнирующая запись"
+              },
+              "right": {
+                "en": "Repairs a wrong posting without erasing that it happened",
+                "ru": "Чинит ошибочную проводку, не стирая факт её существования"
+              }
+            },
+            {
+              "id": "revoked",
+              "left": {
+                "en": "UPDATE and DELETE revoked from the application role",
+                "ru": "Отозванные у роли приложения UPDATE и DELETE"
+              },
+              "right": {
+                "en": "Makes the entries table actually immutable",
+                "ru": "Делает таблицу записей действительно неизменяемой"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p5-fill-summary",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the three load-bearing facts of a ledger-backed balance service.",
+            "ru": "Дополни три несущих факта сервиса балансов на журнале."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Derive it, write both rows together, and repair by appending.",
+              "ru": "Выводить его, писать обе строки вместе и чинить добавлением."
+            },
+            "incorrect": {
+              "en": "SUM over the entries, one transaction for both writes, and a reversing entry for repairs.",
+              "ru": "SUM по записям, одна транзакция для обеих записей и сторнирующая запись для исправлений."
+            }
+          },
+          "text": {
+            "en": "A balance is derived as ___(amount) over the entries; the entry and the balance column are written in one ___; and a wrong posting is repaired with a ___ entry.",
+            "ru": "Баланс выводится как ___(amount) по записям; запись и колонка баланса пишутся в одной ___; а ошибочная проводка чинится ___ записью."
+          },
+          "blanks": [
+            {
+              "en": [
+                "SUM",
+                "sum"
+              ],
+              "ru": [
+                "SUM",
+                "sum"
+              ]
+            },
+            {
+              "en": [
+                "transaction"
+              ],
+              "ru": [
+                "транзакции",
+                "транзакция"
+              ]
+            },
+            {
+              "en": [
+                "reversing",
+                "reversal"
+              ],
+              "ru": [
+                "сторнирующей",
+                "сторнирующая",
+                "сторно"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

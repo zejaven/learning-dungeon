@@ -1,0 +1,1388 @@
+{
+  "schemaVersion": 1,
+  "topicId": "scaling-an-overloaded-server",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "capacity-arithmetic",
+      "title": { "en": "One instance has a fixed capacity", "ru": "У одного экземпляра фиксированная мощность" },
+      "summary": {
+        "en": "An instance's ceiling is throughput = concurrency / service time; only shorter work or more slots raise it.",
+        "ru": "Потолок экземпляра — пропускная способность = одновременность / время обработки; поднять его можно только сократив работу или добавив слоты."
+      },
+      "discovery": [
+        {
+          "id": "capacity-d1-threads-rps",
+          "type": "predict_output",
+          "prompt": {
+            "en": "One instance has 200 worker threads, and each request occupies one of them for 50 ms. What is its maximum sustainable throughput?",
+            "ru": "У экземпляра 200 рабочих потоков, и каждый запрос занимает один из них на 50 мс. Какова его максимальная устойчивая пропускная способность?"
+          },
+          "code": "worker threads (concurrency): 200\nservice time per request:     50 ms\nmax throughput = ?",
+          "codeLang": "text",
+          "reveal": {
+            "en": "**Concurrency** is how many requests one instance can hold at once — worker threads, connections, event-loop slots. In a Spring Boot service those slots are literally the container's thread pool. **Service time** is how long one request holds a slot.\n\n```\nthroughput = concurrency / service time\n           = 200 slots / 0.050 s\n           = 4000 requests per second\n```\n\nThat is the ceiling, and no amount of clever code changes it: only shorter work (less service time) or more slots move the number. Note which resource is limiting: *slots*, not CPU. A service that blocks on I/O can have every slot occupied while CPU sits at 30%.",
+            "ru": "**Одновременность (concurrency)** — сколько запросов экземпляр может держать одновременно: рабочие потоки, соединения, слоты event loop. В сервисе на Spring Boot это буквально пул потоков контейнера. **Время обработки (service time)** — как долго один запрос держит слот.\n\n```\nпропускная способность = одновременность / время обработки\n                       = 200 слотов / 0.050 с\n                       = 4000 запросов в секунду\n```\n\nЭто и есть потолок, и никакой умный код его не меняет: сдвигают число только более короткая работа (меньше время обработки) или большее число слотов. Обратите внимание, какой ресурс ограничивает: *слоты*, а не CPU. Сервис, блокирующийся на I/O, может занять все слоты, когда CPU стоит на 30%."
+          },
+          "feedback": {
+            "correct": { "en": "4000 rps: 200 slots, each reused every 50 ms.", "ru": "4000 rps: 200 слотов, каждый переиспользуется каждые 50 мс." },
+            "incorrect": { "en": "throughput = concurrency / service time = 200 / 0.05 s = 4000 rps.", "ru": "пропускная способность = одновременность / время обработки = 200 / 0.05 с = 4000 rps." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "4000 requests per second", "ru": "4000 запросов в секунду" }, "correct": true },
+            { "id": "b", "text": { "en": "200 requests per second — one per thread", "ru": "200 запросов в секунду — по одному на поток" }, "correct": false,
+              "feedback": { "en": "Slots are reused: at 50 ms one thread serves 20 requests per second, so 200 x 20 = 4000.", "ru": "Слоты переиспользуются: при 50 мс один поток обслуживает 20 запросов в секунду, значит 200 x 20 = 4000." } },
+            { "id": "c", "text": { "en": "It depends on CPU speed, not on these numbers", "ru": "Это зависит от скорости CPU, а не от этих чисел" }, "correct": false,
+              "feedback": { "en": "Capacity here is slots divided by service time; a service that waits on I/O is not limited by CPU.", "ru": "Мощность здесь — слоты, делённые на время обработки; сервис, ждущий I/O, не ограничен CPU." } }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "capacity-p1-halve-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Halving a request's service time doubles the throughput ceiling of one service instance.",
+            "ru": "Сокращение времени обработки запроса вдвое удваивает потолок пропускной способности одного экземпляра сервиса."
+          },
+          "feedback": {
+            "correct": { "en": "throughput = concurrency / service time, so half the service time is twice the throughput.", "ru": "пропускная способность = одновременность / время обработки, поэтому вдвое меньшее время — вдвое большая пропускная способность." },
+            "incorrect": { "en": "It does — with concurrency fixed, halving the service time doubles concurrency / service time.", "ru": "Удваивает — при фиксированной одновременности половина времени обработки даёт вдвое больший результат деления." }
+          },
+          "answer": true
+        },
+        {
+          "id": "capacity-p2-predict-100-slots",
+          "type": "predict_output",
+          "prompt": {
+            "en": "An instance has 100 concurrent slots and a service time of 20 ms per request. What is its throughput ceiling?",
+            "ru": "У экземпляра 100 одновременных слотов и время обработки 20 мс на запрос. Каков его потолок пропускной способности?"
+          },
+          "code": "concurrency:  100 slots\nservice time: 20 ms per request\nthroughput = ?",
+          "codeLang": "text",
+          "feedback": {
+            "correct": { "en": "100 / 0.020 s = 5000 requests per second.", "ru": "100 / 0.020 с = 5000 запросов в секунду." },
+            "incorrect": { "en": "throughput = concurrency / service time = 100 / 0.020 s = 5000 rps.", "ru": "пропускная способность = одновременность / время обработки = 100 / 0.020 с = 5000 rps." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "5000 requests per second", "ru": "5000 запросов в секунду" }, "correct": true },
+            { "id": "b", "text": { "en": "2000 requests per second", "ru": "2000 запросов в секунду" }, "correct": false,
+              "feedback": { "en": "2000 would be 100 slots at 50 ms; here a slot frees up every 20 ms, so it serves 50 requests per second.", "ru": "2000 — это 100 слотов при 50 мс; здесь слот освобождается каждые 20 мс, то есть обслуживает 50 запросов в секунду." } },
+            { "id": "c", "text": { "en": "100 requests per second", "ru": "100 запросов в секунду" }, "correct": false,
+              "feedback": { "en": "That counts slots, not the rate — each slot serves 50 requests per second at 20 ms.", "ru": "Это подсчёт слотов, а не скорости — каждый слот при 20 мс обслуживает 50 запросов в секунду." } }
+          ]
+        },
+        {
+          "id": "capacity-p3-fill-formula",
+          "type": "fill_blank",
+          "prompt": { "en": "Complete the capacity formula of one instance.", "ru": "Дополни формулу мощности одного экземпляра." },
+          "text": {
+            "en": "One instance: throughput = ___ / ___ time.",
+            "ru": "Один экземпляр: пропускная способность = ___ / время ___."
+          },
+          "blanks": [
+            { "en": ["concurrency"], "ru": ["одновременность", "concurrency", "параллельность"] },
+            { "en": ["service"], "ru": ["обработки", "service"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Slots divided by how long each request holds one — that is the whole ceiling.", "ru": "Слоты, делённые на время удержания слота запросом, — это и есть весь потолок." },
+            "incorrect": { "en": "throughput = concurrency / service time: 200 slots at 50 ms give 4000 rps.", "ru": "пропускная способность = одновременность / время обработки: 200 слотов по 50 мс дают 4000 rps." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "overload-queueing",
+      "title": { "en": "Where the surplus goes", "ru": "Куда девается излишек" },
+      "summary": {
+        "en": "Below capacity the queue is empty and latency equals service time; above it the surplus queues and no method got slower.",
+        "ru": "Ниже мощности очередь пуста и задержка равна времени обработки; выше — излишек уходит в очередь, и ни один метод не стал медленнее."
+      },
+      "discovery": [
+        {
+          "id": "queue-d1-where-time-goes",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "An instance whose ceiling is 4000 requests per second is receiving 5000. Latency has tripled, but a profiler shows every method taking exactly as long as before. Where are the extra seconds spent?",
+            "ru": "Экземпляр с потолком 4000 запросов в секунду получает 5000. Задержка выросла втрое, но профайлер показывает, что каждый метод занимает ровно столько же, сколько раньше. Куда уходят лишние секунды?"
+          },
+          "reveal": {
+            "en": "Requests come in at an **arrival rate**; the instance serves them at its capacity. While arrivals stay under capacity, the **queue** in front of the workers is empty and latency is exactly the service time. Once arrivals exceed capacity, the surplus has to go somewhere, and there are only three somewheres:\n\n```mermaid\nflowchart LR\n  A[\"arrivals per second\"] --> B{\"above capacity?\"}\n  B -->|no| C[\"queue empty, latency = service time\"]\n  B -->|yes| D[\"queue\"]\n  D --> E[\"latency grows\"]\n  D --> F[\"queue full, 503\"]\n  D --> G[\"client timeout, retry\"]\n```\n\nNotice what is *not* in that picture: the code getting slower. Every method still takes the same time, which is why profiling an overloaded service finds nothing — the extra seconds are spent standing in line. So the first measurement is always arrival rate against measured capacity, not a profiler.",
+            "ru": "Запросы приходят со **скоростью прихода (arrival rate)**; экземпляр обслуживает их со своей мощностью. Пока приход держится ниже мощности, **очередь** перед обработчиками пуста, а задержка ровно равна времени обработки. Как только приход превышает мощность, излишку надо куда-то деться, а деться можно только в три места:\n\n```mermaid\nflowchart LR\n  A[\"запросов в секунду\"] --> B{\"выше мощности?\"}\n  B -->|нет| C[\"очередь пуста, задержка = время обработки\"]\n  B -->|да| D[\"очередь\"]\n  D --> E[\"задержка растёт\"]\n  D --> F[\"очередь заполнена, 503\"]\n  D --> G[\"таймаут клиента, повтор\"]\n```\n\nОбратите внимание, чего в этой картине *нет*: код не стал медленнее. Каждый метод занимает то же время, поэтому профилирование перегруженного сервиса ничего не находит — лишние секунды уходят на стояние в очереди. Значит, первое измерение — это всегда скорость прихода против измеренной мощности, а не профайлер."
+          },
+          "feedback": {
+            "correct": { "en": "Waiting, not working: the queue is where the extra time goes.", "ru": "Ожидание, а не работа: лишнее время уходит в очередь." },
+            "incorrect": { "en": "Nothing inside the request got slower — the surplus waits in the queue before being picked up.", "ru": "Внутри запроса ничего не замедлилось — излишек ждёт в очереди, пока его возьмут в работу." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Waiting in the queue before the request is picked up", "ru": "В ожидании в очереди, пока запрос не возьмут в работу" }, "correct": true },
+            { "id": "b", "text": { "en": "In garbage collection pauses", "ru": "В паузах сборки мусора" }, "correct": false,
+              "feedback": { "en": "GC would show up as methods taking longer; here nothing inside the request changed.", "ru": "GC проявился бы как удлинившиеся методы; здесь внутри запроса ничего не изменилось." } },
+            { "id": "c", "text": { "en": "In the code, which becomes slower under load", "ru": "В коде, который под нагрузкой становится медленнее" }, "correct": false,
+              "feedback": { "en": "The code is identical at any load; queueing adds waiting time, not execution time.", "ru": "Код одинаков при любой нагрузке; очередь добавляет время ожидания, а не выполнения." } }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "queue-p1-profile-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "When a service is slow purely because of queueing, profiling its code will show which method got slower.",
+            "ru": "Когда сервис медленный чисто из-за очереди, профилирование кода покажет, какой метод стал медленнее."
+          },
+          "feedback": {
+            "correct": { "en": "No method got slower; the time is spent waiting before execution starts.", "ru": "Ни один метод не стал медленнее; время уходит на ожидание до начала выполнения." },
+            "incorrect": { "en": "It will not — under queueing every method takes the same time as before; compare arrival rate to capacity instead.", "ru": "Не покажет — при очереди каждый метод занимает столько же, сколько раньше; сравнивайте скорость прихода с мощностью." }
+          },
+          "answer": false
+        },
+        {
+          "id": "queue-p2-match-states",
+          "type": "match_pairs",
+          "prompt": { "en": "Match each situation to what happens to the requests.", "ru": "Соотнеси каждую ситуацию с тем, что происходит с запросами." },
+          "feedback": {
+            "correct": { "en": "Below capacity nothing waits; above it the surplus queues, is refused, or is abandoned.", "ru": "Ниже мощности ничего не ждёт; выше — излишек стоит в очереди, отвергается или бросается клиентом." },
+            "incorrect": { "en": "Under capacity: empty queue. Over it: a growing queue, then 503s, and clients that time out.", "ru": "Ниже мощности: пустая очередь. Выше: растущая очередь, затем 503 и клиенты, упирающиеся в таймаут." }
+          },
+          "pairs": [
+            { "id": "under", "left": { "en": "Arrivals below capacity", "ru": "Приход ниже мощности" }, "right": { "en": "Empty queue, latency equals the service time", "ru": "Пустая очередь, задержка равна времени обработки" } },
+            { "id": "over", "left": { "en": "Arrivals above capacity", "ru": "Приход выше мощности" }, "right": { "en": "A queue that grows for as long as the overload lasts", "ru": "Очередь, растущая всё время перегрузки" } },
+            { "id": "full", "left": { "en": "Queue full", "ru": "Очередь заполнена" }, "right": { "en": "The surplus is refused with 503", "ru": "Излишек отвергается с 503" } },
+            { "id": "gaveup", "left": { "en": "Client gives up first", "ru": "Клиент сдаётся первым" }, "right": { "en": "A timeout, usually followed by a retry", "ru": "Таймаут, обычно с последующим повтором" } }
+          ]
+        },
+        {
+          "id": "queue-p3-fill-latency",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the missing word.", "ru": "Впиши пропущенное слово." },
+          "text": {
+            "en": "While arrivals stay below capacity, the queue is empty and latency equals the ___ time.",
+            "ru": "Пока приход держится ниже мощности, очередь пуста, а задержка равна времени ___."
+          },
+          "blanks": [
+            { "en": ["service"], "ru": ["обработки", "service"] }
+          ],
+          "feedback": {
+            "correct": { "en": "With no queue there is nothing to add to the work itself.", "ru": "Когда очереди нет, к самой работе нечего добавить." },
+            "incorrect": { "en": "It is the service time: below capacity nothing waits, so latency is just the work.", "ru": "Это время обработки: ниже мощности ничего не ждёт, поэтому задержка — это только работа." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "latency-nonlinear",
+      "title": { "en": "Latency rises non-linearly", "ru": "Задержка растёт нелинейно" },
+      "summary": {
+        "en": "Queue wait scales roughly with 1 / (1 - utilisation), so the last few percent of utilisation cost far more than the first.",
+        "ru": "Ожидание в очереди растёт примерно как 1 / (1 - загрузка), поэтому последние проценты загрузки стоят гораздо дороже первых."
+      },
+      "discovery": [
+        {
+          "id": "nonlinear-d1-which-hurts",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which change adds more latency: moving a server from 50% to 60% utilisation, or from 90% to 95%?",
+            "ru": "Какое изменение добавляет больше задержки: переход сервера с 50% на 60% загрузки или с 90% на 95%?"
+          },
+          "reveal": {
+            "en": "**Utilisation** (written ρ) is the arrival rate divided by capacity: 3600 rps arriving at a 4000 rps instance is ρ = 0.9. Queueing theory says the waiting time scales roughly with `1 / (1 - ρ)`:\n\n```\nρ = 0.50  ->  1 / (1 - 0.50) = 2\nρ = 0.60  ->  1 / (1 - 0.60) = 2.5    (+0.5)\nρ = 0.90  ->  1 / (1 - 0.90) = 10\nρ = 0.95  ->  1 / (1 - 0.95) = 20     (+10)\n```\n\nThe same handful of utilisation points costs twenty times more latency at the top of the range than in the middle. That is why a system looks completely fine right up to the moment it very suddenly does not: the curve is flat and then vertical, and nothing in the code changed at either end. It also means \"we are only at 90%\" is not the comfortable statement it sounds like.",
+            "ru": "**Загрузка (utilisation, ρ)** — это скорость прихода, делённая на мощность: 3600 rps на экземпляре с потолком 4000 rps дают ρ = 0.9. Теория массового обслуживания говорит, что время ожидания растёт примерно как `1 / (1 - ρ)`:\n\n```\nρ = 0.50  ->  1 / (1 - 0.50) = 2\nρ = 0.60  ->  1 / (1 - 0.60) = 2.5    (+0.5)\nρ = 0.90  ->  1 / (1 - 0.90) = 10\nρ = 0.95  ->  1 / (1 - 0.95) = 20     (+10)\n```\n\nОдни и те же несколько процентов загрузки в верхней части диапазона стоят в двадцать раз дороже по задержке, чем в середине. Именно поэтому система выглядит совершенно нормально ровно до момента, когда очень внезапно перестаёт: кривая плоская, а затем вертикальная, и код на обоих концах одинаковый. И это же значит, что «мы всего лишь на 90%» — вовсе не такое спокойное утверждение, каким кажется."
+          },
+          "feedback": {
+            "correct": { "en": "The wait factor goes 10 -> 20 at the top, but only 2 -> 2.5 in the middle.", "ru": "Коэффициент ожидания вверху идёт 10 -> 20, а в середине лишь 2 -> 2.5." },
+            "incorrect": { "en": "90% -> 95%: the wait factor 1/(1-ρ) doubles there, while 50% -> 60% adds almost nothing.", "ru": "90% -> 95%: коэффициент 1/(1-ρ) там удваивается, а 50% -> 60% почти ничего не добавляет." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "90% to 95%, by a wide margin", "ru": "С 90% на 95%, с большим отрывом" }, "correct": true },
+            { "id": "b", "text": { "en": "Both add about the same — each is a few points of utilisation", "ru": "Оба добавляют примерно одинаково — это несколько процентов загрузки" }, "correct": false,
+              "feedback": { "en": "Latency is not linear in utilisation: the wait factor 1/(1-ρ) explodes as ρ approaches 1.", "ru": "Задержка не линейна по загрузке: коэффициент 1/(1-ρ) взлетает, когда ρ приближается к 1." } },
+            { "id": "c", "text": { "en": "50% to 60%, because that is where the queue starts forming", "ru": "С 50% на 60%, потому что там начинает формироваться очередь" }, "correct": false,
+              "feedback": { "en": "A queue forms at every utilisation; the wait it causes stays tiny until ρ nears 1.", "ru": "Очередь формируется при любой загрузке; вызванное ею ожидание мало, пока ρ не приблизится к 1." } }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "nonlinear-p1-why",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why does a server's latency rise non-linearly as it approaches full utilisation, instead of degrading smoothly?",
+            "ru": "Почему задержка сервера растёт нелинейно по мере приближения к полной загрузке, а не деградирует плавно?"
+          },
+          "feedback": {
+            "correct": { "en": "Queue wait scales with 1 / (1 - utilisation), which explodes as utilisation approaches 1.", "ru": "Ожидание в очереди растёт как 1 / (1 - загрузка), и это взлетает при приближении загрузки к 1." },
+            "incorrect": { "en": "The non-linearity is queueing: waiting time scales roughly with 1 / (1 - utilisation).", "ru": "Нелинейность даёт очередь: время ожидания растёт примерно как 1 / (1 - загрузка)." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Queue wait scales roughly with 1 / (1 - utilisation)", "ru": "Ожидание в очереди растёт примерно как 1 / (1 - загрузка)" }, "correct": true },
+            { "id": "b", "text": { "en": "The CPU throttles itself as it gets hot", "ru": "CPU начинает троттлить, когда нагревается" }, "correct": false,
+              "feedback": { "en": "Thermal effects are not what makes latency explode; the queue in front of the workers is.", "ru": "Задержку взрывает не нагрев, а очередь перед обработчиками." } },
+            { "id": "c", "text": { "en": "The application code takes longer paths under load", "ru": "Код приложения под нагрузкой идёт более длинными путями" }, "correct": false,
+              "feedback": { "en": "The code path is identical; the added time is waiting, not executing.", "ru": "Путь по коду тот же; добавленное время — это ожидание, а не выполнение." } }
+          ]
+        },
+        {
+          "id": "nonlinear-p2-predict-098",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Compute the queueing wait factor at 98% utilisation.",
+            "ru": "Вычисли коэффициент ожидания в очереди при загрузке 98%."
+          },
+          "code": "utilisation = 0.98\nwait factor = 1 / (1 - utilisation)",
+          "codeLang": "text",
+          "feedback": {
+            "correct": { "en": "1 / 0.02 = 50 — fifty times the wait of an idle system.", "ru": "1 / 0.02 = 50 — в пятьдесят раз больше ожидания, чем у незагруженной системы." },
+            "incorrect": { "en": "1 / (1 - 0.98) = 1 / 0.02 = 50.", "ru": "1 / (1 - 0.98) = 1 / 0.02 = 50." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "50", "ru": "50" }, "correct": true },
+            { "id": "b", "text": { "en": "2", "ru": "2" }, "correct": false,
+              "feedback": { "en": "2 is the factor at 50% utilisation; at 98% the denominator is 0.02.", "ru": "2 — это коэффициент при загрузке 50%; при 98% знаменатель равен 0.02." } },
+            { "id": "c", "text": { "en": "1.02", "ru": "1.02" }, "correct": false,
+              "feedback": { "en": "The formula divides by (1 - utilisation), it does not add to it.", "ru": "Формула делит на (1 - загрузка), а не прибавляет к ней." } }
+          ]
+        },
+        {
+          "id": "nonlinear-p3-fill-rho",
+          "type": "fill_blank",
+          "prompt": { "en": "Complete the queueing rule of thumb.", "ru": "Дополни практическое правило теории очередей." },
+          "text": {
+            "en": "Queue wait grows roughly as 1 / (1 - ___), where that symbol is the server's utilisation.",
+            "ru": "Ожидание в очереди растёт примерно как 1 / (1 - ___), где этот символ — загрузка сервера."
+          },
+          "blanks": [
+            { "en": ["ρ", "rho", "utilisation", "utilization"], "ru": ["ρ", "rho", "загрузка", "утилизация"] }
+          ],
+          "feedback": {
+            "correct": { "en": "As ρ approaches 1 the denominator approaches zero and the wait explodes.", "ru": "Когда ρ приближается к 1, знаменатель стремится к нулю и ожидание взрывается." },
+            "incorrect": { "en": "It is ρ, the utilisation: wait ~ 1 / (1 - ρ).", "ru": "Это ρ, загрузка: ожидание ~ 1 / (1 - ρ)." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "wasted-work",
+      "title": { "en": "Busy but useless", "ru": "Занят, но бесполезен" },
+      "summary": {
+        "en": "A client that has timed out is gone, but the server still finishes its request, so capacity is spent on nothing.",
+        "ru": "Клиент, упёршийся в таймаут, уже ушёл, но сервер всё равно доделывает его запрос — мощность тратится впустую."
+      },
+      "discovery": [
+        {
+          "id": "wasted-d1-timeout",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A client gives up after its 2-second timeout and closes the connection. Its request is still sitting in the server's queue. What does the server do with it?",
+            "ru": "Клиент сдаётся после своего таймаута в 2 секунды и закрывает соединение. Его запрос всё ещё лежит в очереди сервера. Что сервер с ним сделает?"
+          },
+          "reveal": {
+            "en": "The queue does not know that a client has left, so queued work outlives the client that asked for it. The server picks the request up in turn, does the full amount of work, and writes the response into a socket nobody is reading. **A server can be 100% busy and 0% useful.**\n\nThat gives the single most useful design rule here: **never let the queue be deeper than the client's timeout.**\n\n```\ncapacity        4000 requests per second\nqueue holds     40 000 requests  ->  10 s of work\nclient timeout  2 s\n```\n\nEverything past the 2-second mark — 80% of that queue — is guaranteed to be finished for clients who already gave up. Past that depth the server is not slow, it is useless: it burns its whole capacity on answers nobody will read. Bound the queue to what the timeout allows, and refuse the rest instead of storing it.",
+            "ru": "Очередь не знает, что клиент ушёл, поэтому работа в очереди переживает того, кто её заказал. Сервер берёт запрос в свою очередь, делает всю работу целиком и пишет ответ в сокет, который никто не читает. **Сервер может быть на 100% занят и на 0% полезен.**\n\nОтсюда самое полезное проектное правило: **очередь никогда не должна быть глубже клиентского таймаута.**\n\n```\nмощность            4000 запросов в секунду\nв очереди           40 000 запросов  ->  10 с работы\nтаймаут клиента     2 с\n```\n\nВсё, что дальше отметки в 2 секунды, — 80% этой очереди — гарантированно доделывается для клиентов, которые уже ушли. За этой глубиной сервер не медленный, а бесполезный: он тратит всю мощность на ответы, которые никто не прочтёт. Ограничьте очередь тем, что допускает таймаут, и отвергайте остальное вместо того, чтобы копить."
+          },
+          "feedback": {
+            "correct": { "en": "The server has no idea the client left — it pays full price for an answer nobody reads.", "ru": "Сервер не знает, что клиент ушёл, — он платит полную цену за ответ, который никто не прочтёт." },
+            "incorrect": { "en": "It finishes the work anyway: nothing tells the queue that the client disconnected.", "ru": "Он всё равно доделывает работу: очереди никто не сообщает, что клиент отключился." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Picks it up in turn, does the full work, and writes the response into a closed socket", "ru": "Берёт его в свою очередь, делает всю работу и пишет ответ в закрытый сокет" }, "correct": true },
+            { "id": "b", "text": { "en": "Detects the disconnect and drops the queued request", "ru": "Замечает отключение и выбрасывает запрос из очереди" }, "correct": false,
+              "feedback": { "en": "In general the server does not learn that the client left while the request is queued.", "ru": "Как правило, сервер не узнаёт об уходе клиента, пока запрос стоит в очереди." } },
+            { "id": "c", "text": { "en": "Returns 503 for it immediately", "ru": "Немедленно возвращает по нему 503" }, "correct": false,
+              "feedback": { "en": "A 503 comes from a full bounded queue at admission time, not from a client that disappeared.", "ru": "503 приходит от заполненной ограниченной очереди на входе, а не от исчезнувшего клиента." } }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "wasted-p1-busy-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A server that is 100% busy is, by definition, doing useful work.",
+            "ru": "Сервер, занятый на 100%, по определению делает полезную работу."
+          },
+          "feedback": {
+            "correct": { "en": "Under overload much of that work is finished for clients that already timed out.", "ru": "При перегрузке значительная часть этой работы доделывается для клиентов, которые уже упёрлись в таймаут." },
+            "incorrect": { "en": "No — a server can be 100% busy and 0% useful when it answers clients who have gone.", "ru": "Нет — сервер может быть на 100% занят и на 0% полезен, когда отвечает ушедшим клиентам." }
+          },
+          "answer": false
+        },
+        {
+          "id": "wasted-p2-word-bank",
+          "type": "word_bank",
+          "prompt": { "en": "Assemble the queue-depth rule.", "ru": "Собери правило глубины очереди." },
+          "feedback": {
+            "correct": { "en": "Past that depth every request is worked on for a client who has already left.", "ru": "За этой глубиной каждый запрос обрабатывается для клиента, который уже ушёл." },
+            "incorrect": { "en": "Never let the queue be deeper than the client timeout — beyond it, all work is waste.", "ru": "Очередь никогда не должна быть глубже клиентского таймаута — дальше вся работа впустую." }
+          },
+          "tokens": {
+            "en": ["never", "let", "the", "queue", "be", "deeper", "than", "the", "client", "timeout"],
+            "ru": ["очередь", "никогда", "не", "должна", "быть", "глубже", "клиентского", "таймаута"]
+          },
+          "distractors": {
+            "en": ["memory", "faster"],
+            "ru": ["памяти", "быстрее"]
+          }
+        },
+        {
+          "id": "wasted-p3-fill-busy-useless",
+          "type": "fill_blank",
+          "prompt": { "en": "Complete the sentence about an overloaded server.", "ru": "Дополни фразу о перегруженном сервере." },
+          "text": {
+            "en": "Under overload a server can be 100% ___ and 0% ___.",
+            "ru": "При перегрузке сервер может быть на 100% ___ и на 0% ___."
+          },
+          "blanks": [
+            { "en": ["busy"], "ru": ["занят", "занятым"] },
+            { "en": ["useful"], "ru": ["полезен", "полезным"] }
+          ],
+          "feedback": {
+            "correct": { "en": "That is why utilisation alone never proves a server is healthy.", "ru": "Поэтому одна лишь загрузка никогда не доказывает, что сервер здоров." },
+            "incorrect": { "en": "100% busy and 0% useful: every finished request goes to a client that already timed out.", "ru": "На 100% занят и на 0% полезен: каждый доделанный запрос уходит клиенту, который уже отвалился по таймауту." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "retry-storms",
+      "title": { "en": "Retry storms", "ru": "Шторм повторов (retry storm)" },
+      "summary": {
+        "en": "Clients that time out retry, so the offered load rises exactly when the server can least absorb it.",
+        "ru": "Клиенты, упёршиеся в таймаут, повторяют запрос, поэтому предлагаемая нагрузка растёт ровно тогда, когда сервер меньше всего способен её принять."
+      },
+      "discovery": [
+        {
+          "id": "retry-d1-offered-load",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "An overloaded server is already above capacity. Its clients hit their timeouts and each one retries. What happens to the load offered to the server?",
+            "ru": "Перегруженный сервер уже выше своей мощности. Его клиенты упираются в таймауты, и каждый повторяет запрос. Что происходит с нагрузкой, предлагаемой серверу?"
+          },
+          "reveal": {
+            "en": "It rises — at exactly the worst moment. This feedback loop is a **retry storm**:\n\n```mermaid\nflowchart LR\n  O[\"overload\"] --> T[\"client timeouts\"]\n  T --> R[\"retries\"]\n  R --> L[\"higher offered load\"]\n  L --> O\n```\n\nThe original request is usually still inside the server being worked on, so the retry is *additional* load, not a replacement. The server is least able to take extra work at precisely the moment its clients generate it, so retries need to be budgeted rather than automatic:\n\n- **jitter** — randomise the delay so retries do not arrive as one synchronised wave;\n- **retry budgets** — cap retries as a fraction of traffic instead of per-request;\n- a **circuit breaker** — stop calling a failing dependency at all for a while, so it gets room to recover.\n\nAnd if the retried operation is not idempotent, the retry can also duplicate its effect — a second charge, a second order — which is a correctness problem stacked on top of the load problem.",
+            "ru": "Она растёт — ровно в худший момент. Эта петля обратной связи и есть **retry storm** (шторм повторов):\n\n```mermaid\nflowchart LR\n  O[\"перегрузка\"] --> T[\"таймауты клиентов\"]\n  T --> R[\"повторы\"]\n  R --> L[\"выше предлагаемая нагрузка\"]\n  L --> O\n```\n\nИсходный запрос обычно всё ещё внутри сервера и обрабатывается, поэтому повтор — это *дополнительная* нагрузка, а не замена. Сервер меньше всего способен принять лишнюю работу именно тогда, когда его клиенты её порождают, поэтому повторы нужно ограничивать, а не выполнять автоматически:\n\n- **джиттер (jitter)** — рандомизировать задержку, чтобы повторы не приходили одной синхронной волной;\n- **бюджеты повторов** — ограничивать повторы как долю трафика, а не поштучно;\n- **circuit breaker** — на время вообще прекратить вызовы падающей зависимости, чтобы дать ей восстановиться.\n\nА если повторяемая операция не идемпотентна, повтор может ещё и продублировать эффект — второе списание, второй заказ, — и это уже проблема корректности поверх проблемы нагрузки."
+          },
+          "feedback": {
+            "correct": { "en": "Retries add load on top of work already in progress.", "ru": "Повторы добавляют нагрузку поверх уже выполняемой работы." },
+            "incorrect": { "en": "It rises: the original request is still being worked on, so each retry is extra load.", "ru": "Она растёт: исходный запрос всё ещё обрабатывается, поэтому каждый повтор — это лишняя нагрузка." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "It rises, roughly doubling for every request that timed out", "ru": "Она растёт, примерно удваиваясь для каждого запроса, упавшего по таймауту" }, "correct": true },
+            { "id": "b", "text": { "en": "It falls, because timed-out clients have given up", "ru": "Она падает, потому что клиенты с таймаутом сдались" }, "correct": false,
+              "feedback": { "en": "A timeout usually means \"retry\", not \"surrender\".", "ru": "Таймаут обычно означает «повторить», а не «сдаться»." } },
+            { "id": "c", "text": { "en": "It stays the same, since the retry replaces the original request", "ru": "Она остаётся прежней, ведь повтор заменяет исходный запрос" }, "correct": false,
+              "feedback": { "en": "The original is still queued or being processed; the server has no idea it was abandoned.", "ru": "Исходный запрос всё ещё в очереди или в обработке; сервер не знает, что от него отказались." } }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "retry-p1-controls",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which set of controls keeps client retries from amplifying an overload into a retry storm?",
+            "ru": "Какой набор средств не даёт повторам клиентов раздуть перегрузку в retry storm?"
+          },
+          "feedback": {
+            "correct": { "en": "Jitter spreads them out, budgets cap them, and a circuit breaker stops them entirely for a while.", "ru": "Джиттер разносит их во времени, бюджеты ограничивают, а circuit breaker на время прекращает вовсе." },
+            "incorrect": { "en": "Jitter, retry budgets and a circuit breaker — they spread, cap and stop the retries.", "ru": "Джиттер, бюджеты повторов и circuit breaker — они разносят, ограничивают и останавливают повторы." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Jitter, retry budgets and a circuit breaker", "ru": "Джиттер, бюджеты повторов и circuit breaker" }, "correct": true },
+            { "id": "b", "text": { "en": "A longer client timeout and more retry attempts", "ru": "Более длинный таймаут клиента и больше попыток повтора" }, "correct": false,
+              "feedback": { "en": "That waits longer for work that is already wasted and then adds even more load.", "ru": "Это дольше ждёт работу, которая и так впустую, а затем добавляет ещё больше нагрузки." } },
+            { "id": "c", "text": { "en": "A deeper request queue on the server", "ru": "Более глубокая очередь запросов на сервере" }, "correct": false,
+              "feedback": { "en": "A deeper queue stores the retries instead of preventing them, and makes the wasted work worse.", "ru": "Более глубокая очередь копит повторы вместо того, чтобы их предотвращать, и лишь увеличивает работу впустую." } }
+          ]
+        },
+        {
+          "id": "retry-p2-nonidempotent",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A non-idempotent operation times out and the client retries it. What problem appears in addition to the extra load?",
+            "ru": "Неидемпотентная операция упала по таймауту, и клиент её повторил. Какая проблема добавляется к лишней нагрузке?"
+          },
+          "feedback": {
+            "correct": { "en": "The first attempt may well have succeeded, so the effect happens twice.", "ru": "Первая попытка вполне могла пройти успешно, поэтому эффект случается дважды." },
+            "incorrect": { "en": "Duplicates: the timed-out attempt may have completed, so the retry repeats its effect.", "ru": "Дубликаты: упавшая по таймауту попытка могла завершиться, и повтор повторяет её эффект." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "The effect can happen twice — a duplicate charge or order", "ru": "Эффект может случиться дважды — двойное списание или заказ" }, "correct": true },
+            { "id": "b", "text": { "en": "The responses come back in the wrong order", "ru": "Ответы возвращаются в неправильном порядке" }, "correct": false,
+              "feedback": { "en": "Ordering is not the issue; the issue is that the operation is applied twice.", "ru": "Дело не в порядке; дело в том, что операция применяется дважды." } },
+            { "id": "c", "text": { "en": "The retry bypasses the server's queue", "ru": "Повтор обходит очередь сервера" }, "correct": false,
+              "feedback": { "en": "A retry is an ordinary request and queues like any other.", "ru": "Повтор — обычный запрос и встаёт в очередь, как любой другой." } }
+          ]
+        },
+        {
+          "id": "retry-p3-sort-loop",
+          "type": "sort_steps",
+          "prompt": { "en": "Order the steps of a retry storm.", "ru": "Расставь по порядку шаги retry storm." },
+          "feedback": {
+            "correct": { "en": "The loop closes: overload causes retries, and retries deepen the overload.", "ru": "Петля замыкается: перегрузка порождает повторы, а повторы усиливают перегрузку." },
+            "incorrect": { "en": "Overload, then latency past the timeout, then retries, then even more load than before.", "ru": "Перегрузка, затем задержка выше таймаута, затем повторы, затем нагрузка ещё выше исходной." }
+          },
+          "steps": [
+            { "id": "s1", "text": { "en": "Arrivals pass the instance's capacity and the queue grows", "ru": "Приход превышает мощность экземпляра, и очередь растёт" } },
+            { "id": "s2", "text": { "en": "Latency grows past the client's timeout", "ru": "Задержка вырастает выше клиентского таймаута" } },
+            { "id": "s3", "text": { "en": "Clients time out and send their requests again", "ru": "Клиенты упираются в таймаут и отправляют запросы снова" } },
+            { "id": "s4", "text": { "en": "Offered load rises above the original traffic", "ru": "Предлагаемая нагрузка становится выше исходного трафика" } },
+            { "id": "s5", "text": { "en": "The server falls further behind, and more clients time out", "ru": "Сервер отстаёт ещё сильнее, и по таймауту отваливается ещё больше клиентов" } }
+          ]
+        },
+        {
+          "id": "retry-p4-fill-controls",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the two missing names.", "ru": "Впиши два пропущенных названия." },
+          "text": {
+            "en": "Retries need ___, budgets, and a circuit ___.",
+            "ru": "Повторам нужны ___, бюджеты и circuit ___."
+          },
+          "blanks": [
+            { "en": ["jitter"], "ru": ["джиттер", "jitter"] },
+            { "en": ["breaker"], "ru": ["breaker", "брейкер"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Randomised delays, a cap on the retry rate, and a way to stop calling a failing dependency.", "ru": "Рандомизированные задержки, ограничение доли повторов и способ прекратить вызовы падающей зависимости." },
+            "incorrect": { "en": "Jitter and a circuit breaker — plus retry budgets, so retries stay a fraction of traffic.", "ru": "Джиттер и circuit breaker — плюс бюджеты повторов, чтобы повторы оставались долей трафика." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "shed-dont-store",
+      "title": { "en": "Shed load, do not store it", "ru": "Сбрасывать нагрузку, а не копить" },
+      "summary": {
+        "en": "A bounded queue turns overload into a fast, honest 503 for the surplus while admitted requests still get a normal answer.",
+        "ru": "Ограниченная очередь превращает перегрузку в быстрый честный 503 для излишка, а принятые запросы получают нормальный ответ."
+      },
+      "discovery": [
+        {
+          "id": "shed-d1-reject-or-queue",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The server is overloaded and one more request arrives. Which is better for the client: an immediate 503, or storing the request and answering it in 30 seconds?",
+            "ru": "Сервер перегружен, и приходит ещё один запрос. Что лучше для клиента: немедленный 503 или сохранить запрос и ответить через 30 секунд?"
+          },
+          "reveal": {
+            "en": "**Load shedding** is refusing the surplus deliberately so that everything inside the limit still works. It *looks* like the failure, but it is the healthy behaviour: a **bounded queue** converts overload into a fast, honest 503 for the requests that do not fit, while requests inside the bound keep their normal latency.\n\nThe alternative — an unbounded queue — spends capacity answering clients that have already gone, and then exhausts connections, file descriptors and the heap held by queued request objects. That is where an overloaded service stops being slow and starts crashing.\n\n**Backpressure** is the same idea pointed upstream: instead of silently absorbing more than it can handle, a component signals its limit — a rejection, a blocked write, a paused consumer — so the caller slows down rather than piling on. A client that gets a 503 in 5 ms can fail over, degrade or retry later; a client waiting 30 seconds has already timed out and got nothing. Rejecting fast is kinder than answering late.",
+            "ru": "**Сброс нагрузки (load shedding)** — это осознанный отказ излишку, чтобы всё, что помещается в границу, продолжало работать. Это *выглядит* как сбой, но на самом деле это здоровое поведение: **ограниченная очередь** превращает перегрузку в быстрый честный 503 для тех запросов, что не помещаются, а запросы внутри границы сохраняют обычную задержку.\n\nАльтернатива — неограниченная очередь — тратит мощность на ответы ушедшим клиентам, а затем исчерпывает соединения, файловые дескрипторы и кучу, занятую объектами запросов в очереди. Здесь перегруженный сервис перестаёт быть медленным и начинает падать.\n\n**Backpressure (обратное давление)** — та же идея, направленная вверх по потоку: вместо того чтобы молча принимать больше, чем может, компонент сигнализирует о своём пределе — отказом, заблокированной записью, приостановленным консьюмером, — и вызывающая сторона притормаживает. Клиент, получивший 503 за 5 мс, может уйти на резерв, деградировать или повторить позже; клиент, ждущий 30 секунд, уже отвалился по таймауту и не получил ничего. Быстро отказать милосерднее, чем ответить поздно."
+          },
+          "feedback": {
+            "correct": { "en": "A fast, honest refusal leaves the client able to act; a late answer arrives after it left.", "ru": "Быстрый честный отказ оставляет клиенту возможность действовать; поздний ответ приходит, когда он уже ушёл." },
+            "incorrect": { "en": "The 503: the client's timeout fires long before 30 s, so the stored request became wasted work.", "ru": "503: таймаут клиента сработает задолго до 30 с, поэтому сохранённый запрос превратился в работу впустую." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "The immediate 503 — the client learns now and can fail over, degrade or retry later", "ru": "Немедленный 503 — клиент узнаёт сразу и может уйти на резерв, деградировать или повторить позже" }, "correct": true },
+            { "id": "b", "text": { "en": "The 30-second answer — an answer is always better than an error", "ru": "Ответ через 30 секунд — ответ всегда лучше ошибки" }, "correct": false,
+              "feedback": { "en": "The client times out long before then, so nobody ever reads that answer.", "ru": "Клиент отвалится по таймауту задолго до этого, поэтому ответ никто не прочтёт." } },
+            { "id": "c", "text": { "en": "Neither — the server should just make the queue bigger", "ru": "Ни то ни другое — сервер должен просто увеличить очередь" }, "correct": false,
+              "feedback": { "en": "A queue deeper than the client timeout only converts fast errors into wasted work.", "ru": "Очередь глубже клиентского таймаута лишь превращает быстрые ошибки в работу впустую." } }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "shed-p1-bigger-queue-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Making the request queue bigger reduces errors during a sustained overload.",
+            "ru": "Увеличение очереди запросов уменьшает количество ошибок при длительной перегрузке."
+          },
+          "feedback": {
+            "correct": { "en": "It converts fast errors into slow wasted work, and eventually into resource exhaustion.", "ru": "Оно превращает быстрые ошибки в медленную работу впустую, а затем в исчерпание ресурсов." },
+            "incorrect": { "en": "No — a sustained overload just fills any queue; a deeper one only delays and wastes more.", "ru": "Нет — длительная перегрузка заполнит любую очередь; более глубокая лишь дольше тянет и больше тратит впустую." }
+          },
+          "answer": false
+        },
+        {
+          "id": "shed-p2-match-mechanisms",
+          "type": "match_pairs",
+          "prompt": { "en": "Match each mechanism to what it does under overload.", "ru": "Соотнеси каждый механизм с тем, что он делает при перегрузке." },
+          "feedback": {
+            "correct": { "en": "Bound the queue, refuse the surplus on purpose, and tell the caller to slow down.", "ru": "Ограничить очередь, осознанно отказать излишку и сказать вызывающей стороне притормозить." },
+            "incorrect": { "en": "A bound turns overload into 503s; unbounded queues waste capacity and exhaust resources.", "ru": "Граница превращает перегрузку в 503; неограниченные очереди тратят мощность впустую и исчерпывают ресурсы." }
+          },
+          "pairs": [
+            { "id": "bounded", "left": { "en": "Bounded queue", "ru": "Ограниченная очередь" }, "right": { "en": "The surplus gets a fast 503, admitted requests keep normal latency", "ru": "Излишек получает быстрый 503, принятые запросы сохраняют обычную задержку" } },
+            { "id": "unbounded", "left": { "en": "Unbounded queue", "ru": "Неограниченная очередь" }, "right": { "en": "Capacity spent on clients that already left, then resource exhaustion", "ru": "Мощность уходит на ушедших клиентов, затем исчерпание ресурсов" } },
+            { "id": "shedding", "left": { "en": "Load shedding", "ru": "Load shedding (сброс нагрузки)" }, "right": { "en": "Refusing the surplus on purpose to protect the rest", "ru": "Осознанный отказ излишку ради защиты остальных" } },
+            { "id": "backpressure", "left": { "en": "Backpressure", "ru": "Backpressure (обратное давление)" }, "right": { "en": "Signalling the limit upstream so the caller slows down", "ru": "Сигнал о пределе вверх по потоку, чтобы вызывающая сторона притормозила" } }
+          ]
+        },
+        {
+          "id": "shed-p3-fill-503",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the HTTP status code.", "ru": "Впиши HTTP-код состояния." },
+          "text": {
+            "en": "A full bounded queue answers the surplus with HTTP status ___.",
+            "ru": "Заполненная ограниченная очередь отвечает излишку HTTP-кодом ___."
+          },
+          "blanks": [
+            { "en": ["503"], "ru": ["503"] }
+          ],
+          "feedback": {
+            "correct": { "en": "A fast 503 is the healthy shape of overload, not the failure itself.", "ru": "Быстрый 503 — здоровая форма перегрузки, а не сам сбой." },
+            "incorrect": { "en": "It is 503: the server refuses the surplus instead of storing it.", "ru": "Это 503: сервер отвергает излишек вместо того, чтобы его копить." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "vertical-scaling",
+      "title": { "en": "Vertical scaling", "ru": "Вертикальное масштабирование" },
+      "summary": {
+        "en": "A bigger machine raises the capacity number with no new failure modes, but the ceiling only moves and the failure domain is still one machine.",
+        "ru": "Более мощная машина поднимает число мощности без новых режимов отказа, но потолок лишь сдвигается, а домен отказа остаётся одной машиной."
+      },
+      "discovery": [
+        {
+          "id": "vertical-d1-what-unchanged",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "You move the service to a machine with twice the CPU and memory and double the pool sizes. Which problem have you NOT solved?",
+            "ru": "Вы переносите сервис на машину с вдвое большими CPU и памятью и удваиваете размеры пулов. Какую проблему вы НЕ решили?"
+          },
+          "reveal": {
+            "en": "**Vertical scaling** means giving the same machine more CPU and memory and raising the pool sizes, so the single capacity number goes up. It deserves more respect than it usually gets in interviews:\n\n- no new code and no distributed failure modes — there is nothing new to reason about;\n- one process, so debugging and profiling stay simple;\n- often the right first move, because modern machines are enormous.\n\nWhat it does not buy:\n\n- **a ceiling that goes away** — it moves, and hardware runs out;\n- **elasticity** — resizing usually means restarting the process that is serving traffic;\n- **availability** — the failure domain is still exactly one machine. When it dies the service is not slow, it is *absent*.\n\nThat last point is usually the argument that actually decides the question. On pure throughput a bigger box often wins; the honest reason to go horizontal is availability and elasticity, not speed.",
+            "ru": "**Вертикальное масштабирование** — дать той же машине больше CPU и памяти и поднять размеры пулов, чтобы выросло единственное число мощности. Оно заслуживает большего уважения, чем ему обычно оказывают на собеседованиях:\n\n- ни строчки нового кода и никаких распределённых режимов отказа — думать не о чем новом;\n- один процесс, поэтому отладка и профилирование остаются простыми;\n- часто это правильный первый шаг, потому что современные машины огромны.\n\nЧего оно не даёт:\n\n- **исчезновения потолка** — потолок сдвигается, а железо заканчивается;\n- **эластичности** — смена размера обычно означает рестарт процесса, обслуживающего трафик;\n- **доступности** — домен отказа по-прежнему ровно одна машина. Когда она умирает, сервис не медленный, его *нет*.\n\nИменно последний пункт обычно и решает вопрос. По чистой пропускной способности большая коробка часто выигрывает; честная причина идти вширь — доступность и эластичность, а не скорость."
+          },
+          "feedback": {
+            "correct": { "en": "The failure domain is unchanged: one machine still takes the whole service down.", "ru": "Домен отказа не изменился: одна машина по-прежнему уносит весь сервис." },
+            "incorrect": { "en": "Availability: a bigger box is still one box, and when it dies the service is absent.", "ru": "Доступность: большая коробка — всё ещё одна коробка, и когда она умирает, сервиса нет." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "The service disappearing entirely when that machine dies", "ru": "Полное исчезновение сервиса, когда эта машина умирает" }, "correct": true },
+            { "id": "b", "text": { "en": "Running out of worker threads at peak traffic", "ru": "Нехватку рабочих потоков на пике трафика" }, "correct": false,
+              "feedback": { "en": "More CPU and memory let you raise the pool sizes, so that ceiling does move.", "ru": "Больше CPU и памяти позволяют поднять размеры пулов, так что этот потолок сдвигается." } },
+            { "id": "c", "text": { "en": "Being unable to serve more requests per second than today", "ru": "Невозможность обслуживать больше запросов в секунду, чем сегодня" }, "correct": false,
+              "feedback": { "en": "That is exactly what vertical scaling buys: the single capacity number goes up.", "ru": "Это как раз то, что даёт вертикальное масштабирование: единственное число мощности растёт." } }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "vertical-p1-advantage",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which is a genuine advantage of vertical scaling over horizontal scaling?",
+            "ru": "Что является настоящим преимуществом вертикального масштабирования над горизонтальным?"
+          },
+          "feedback": {
+            "correct": { "en": "No new code, no distributed failure modes, one process to debug and profile.", "ru": "Ни нового кода, ни распределённых режимов отказа, один процесс для отладки и профилирования." },
+            "incorrect": { "en": "Simplicity: a bigger box adds no new failure modes and keeps debugging to one process.", "ru": "Простота: большая коробка не добавляет режимов отказа и оставляет отладку в одном процессе." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "No new failure modes: one process to reason about, debug and profile", "ru": "Никаких новых режимов отказа: один процесс, который надо понимать, отлаживать и профилировать" }, "correct": true },
+            { "id": "b", "text": { "en": "It removes the capacity ceiling for good", "ru": "Оно навсегда убирает потолок мощности" }, "correct": false,
+              "feedback": { "en": "The ceiling moves; it does not disappear, and hardware eventually runs out.", "ru": "Потолок сдвигается, а не исчезает, и железо в итоге заканчивается." } },
+            { "id": "c", "text": { "en": "Capacity can be changed while the service keeps serving traffic", "ru": "Мощность можно менять, пока сервис продолжает обслуживать трафик" }, "correct": false,
+              "feedback": { "en": "Resizing a box usually needs a restart — elasticity is what horizontal scaling buys.", "ru": "Смена размера коробки обычно требует рестарта — эластичность даёт горизонтальное масштабирование." } }
+          ]
+        },
+        {
+          "id": "vertical-p2-match-tradeoffs",
+          "type": "match_pairs",
+          "prompt": { "en": "Match each aspect of vertical scaling to its consequence.", "ru": "Соотнеси каждый аспект вертикального масштабирования с его следствием." },
+          "feedback": {
+            "correct": { "en": "More capacity, cheaply — but bought on one machine that can still die.", "ru": "Больше мощности и дёшево — но всё на одной машине, которая по-прежнему может умереть." },
+            "incorrect": { "en": "The number goes up, resizing needs a restart, the failure domain and the hardware limit stay.", "ru": "Число растёт, смена размера требует рестарта, домен отказа и предел железа остаются." }
+          },
+          "pairs": [
+            { "id": "bigger", "left": { "en": "More CPU and memory, bigger pools", "ru": "Больше CPU и памяти, бо́льшие пулы" }, "right": { "en": "The single capacity number goes up, with no code changes", "ru": "Единственное число мощности растёт, без изменений в коде" } },
+            { "id": "resize", "left": { "en": "Resizing the machine", "ru": "Смена размера машины" }, "right": { "en": "Usually a restart of the process serving traffic", "ru": "Обычно рестарт процесса, обслуживающего трафик" } },
+            { "id": "domain", "left": { "en": "Still one machine", "ru": "По-прежнему одна машина" }, "right": { "en": "The failure domain is unchanged: it dies, the service is absent", "ru": "Домен отказа не изменился: она умирает — сервиса нет" } },
+            { "id": "hardware", "left": { "en": "Hardware limits", "ru": "Пределы железа" }, "right": { "en": "The ceiling moves but eventually runs out", "ru": "Потолок сдвигается, но в итоге заканчивается" } }
+          ]
+        },
+        {
+          "id": "vertical-p3-fill-ceiling",
+          "type": "fill_blank",
+          "prompt": { "en": "Complete the summary of vertical scaling.", "ru": "Дополни вывод о вертикальном масштабировании." },
+          "text": {
+            "en": "Vertical scaling moves the ___, but the failure ___ is still one machine.",
+            "ru": "Вертикальное масштабирование сдвигает ___, но ___ отказа по-прежнему одна машина."
+          },
+          "blanks": [
+            { "en": ["ceiling"], "ru": ["потолок", "ceiling"] },
+            { "en": ["domain"], "ru": ["домен", "domain"] }
+          ],
+          "feedback": {
+            "correct": { "en": "More throughput, same availability — that is the whole trade.", "ru": "Больше пропускной способности, та же доступность — вот и весь размен." },
+            "incorrect": { "en": "It moves the ceiling; the failure domain stays one machine, which is why availability needs replicas.", "ru": "Оно сдвигает потолок; домен отказа остаётся одной машиной — поэтому доступности нужны реплики." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "horizontal-scaling",
+      "title": { "en": "Horizontal scaling and the load balancer", "ru": "Горизонтальное масштабирование и балансировщик" },
+      "summary": {
+        "en": "N identical replicas behind a load balancer make capacity a deployment decision and cut the cost of losing a machine to 1/N.",
+        "ru": "N одинаковых реплик за балансировщиком делают мощность решением о деплое и снижают цену потери машины до 1/N."
+      },
+      "discovery": [
+        {
+          "id": "horizontal-d1-lose-one",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Four identical replicas share the traffic evenly behind a load balancer. One of them dies. How much of the fleet's capacity is gone?",
+            "ru": "Четыре одинаковые реплики за балансировщиком поровну делят трафик. Одна из них умирает. Какая часть мощности флота потеряна?"
+          },
+          "code": "fleet:    4 identical replicas behind a load balancer\ntraffic:  distributed evenly\nevent:    one replica dies\ncapacity lost = ?",
+          "codeLang": "text",
+          "reveal": {
+            "en": "**Horizontal scaling** runs N identical replicas and puts a **load balancer** in front. Clients resolve the balancer's address, and it picks a replica for each request.\n\n```mermaid\nflowchart TD\n  C[\"clients\"] --> LB[\"load balancer (health checks)\"]\n  LB --> A1[\"app-1\"]\n  LB --> A2[\"app-2\"]\n  LB --> A3[\"app-3\"]\n  A1 --> DB[(\"shared database\")]\n  A2 --> DB\n  A3 --> DB\n```\n\nCapacity becomes a deployment decision instead of a hardware one, it can change while the service is running (**elasticity**), and losing one machine costs `1/N` of capacity instead of all of it. The balancer is also the natural place to terminate TLS, and in a microservice system it often sits next to an API gateway that adds routing, auth and rate limiting.\n\nIn return you take on four obligations, each of which is a following step: the balancer must know who is alive, the choice of replica starts to matter, the fleet must be sized to survive losing one, and the replicas must be interchangeable. One more consequence: the balancer itself is now a single point of failure — answered with a pair of balancers and a floating IP, DNS or anycast in front, or in practice by using a managed one.",
+            "ru": "**Горизонтальное масштабирование** запускает N одинаковых реплик и ставит перед ними **балансировщик**. Клиенты резолвят адрес балансировщика, а он выбирает реплику на каждый запрос.\n\n```mermaid\nflowchart TD\n  C[\"клиенты\"] --> LB[\"балансировщик (health-check)\"]\n  LB --> A1[\"app-1\"]\n  LB --> A2[\"app-2\"]\n  LB --> A3[\"app-3\"]\n  A1 --> DB[(\"общая база данных\")]\n  A2 --> DB\n  A3 --> DB\n```\n\nМощность становится решением о деплое, а не о железе, её можно менять на ходу (**эластичность**), и потеря одной машины стоит `1/N` мощности, а не всей. Балансировщик — ещё и естественное место терминации TLS, а в микросервисной системе он часто стоит рядом с API Gateway, который добавляет маршрутизацию, аутентификацию и рейт-лимиты.\n\nВзамен вы берёте четыре обязательства, каждому из которых посвящён следующий шаг: балансировщик обязан знать, кто жив; выбор реплики начинает иметь значение; флот нужно считать так, чтобы пережить потерю одной; реплики должны быть взаимозаменяемыми. И ещё одно следствие: сам балансировщик теперь единая точка отказа — лечится парой балансировщиков с плавающим IP, DNS/anycast перед ними или, на практике, использованием управляемого."
+          },
+          "feedback": {
+            "correct": { "en": "1/N: with four replicas, one machine is a quarter of the capacity.", "ru": "1/N: при четырёх репликах одна машина — это четверть мощности." },
+            "incorrect": { "en": "Losing one of N identical replicas costs 1/N of capacity — here 25%.", "ru": "Потеря одной из N одинаковых реплик стоит 1/N мощности — здесь 25%." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "25% — one quarter, that is 1/N", "ru": "25% — четверть, то есть 1/N" }, "correct": true },
+            { "id": "b", "text": { "en": "All of it — the service is down", "ru": "Вся — сервис лежит" }, "correct": false,
+              "feedback": { "en": "That is the single-machine case; with N replicas the balancer keeps using the survivors.", "ru": "Это случай одной машины; при N репликах балансировщик продолжает использовать выживших." } },
+            { "id": "c", "text": { "en": "None — the load balancer makes up the missing capacity", "ru": "Никакая — балансировщик восполняет недостающую мощность" }, "correct": false,
+              "feedback": { "en": "A balancer only distributes requests; it does not create capacity.", "ru": "Балансировщик только распределяет запросы; мощность он не создаёт." } }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "horizontal-p1-clients",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What changes for clients once a load balancer is put in front of a service's replicas?",
+            "ru": "Что меняется для клиентов, когда перед репликами сервиса ставят балансировщик?"
+          },
+          "feedback": {
+            "correct": { "en": "Clients see one address; which replica serves them stops being their concern.", "ru": "Клиенты видят один адрес; какая реплика их обслужит — уже не их забота." },
+            "incorrect": { "en": "They address the balancer, and it chooses a replica per request; fleet membership becomes invisible.", "ru": "Они обращаются к балансировщику, а он выбирает реплику на каждый запрос; состав флота становится невидимым." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "They resolve one address — the balancer — which picks a replica for each request", "ru": "Они резолвят один адрес — балансировщика, — а он выбирает реплику на каждый запрос" }, "correct": true },
+            { "id": "b", "text": { "en": "They must know the address of every replica and pick one", "ru": "Они должны знать адрес каждой реплики и выбирать сами" }, "correct": false,
+              "feedback": { "en": "The opposite: the fleet's membership becomes invisible to clients.", "ru": "Наоборот: состав флота становится для клиентов невидимым." } },
+            { "id": "c", "text": { "en": "They must retry until they happen to reach a healthy replica", "ru": "Они должны повторять запросы, пока случайно не попадут на живую реплику" }, "correct": false,
+              "feedback": { "en": "Avoiding dead replicas is the balancer's job, via health checks — not the client's.", "ru": "Обходить мёртвые реплики — задача балансировщика через health-check'и, а не клиента." } }
+          ]
+        },
+        {
+          "id": "horizontal-p2-match-effects",
+          "type": "match_pairs",
+          "prompt": { "en": "Match each part of a horizontally scaled setup to what it means.", "ru": "Соотнеси каждую часть горизонтально масштабированной схемы с её смыслом." },
+          "feedback": {
+            "correct": { "en": "One address in front, N replicas behind, and a new single point of failure to handle.", "ru": "Один адрес спереди, N реплик сзади и новая единая точка отказа, с которой надо что-то делать." },
+            "incorrect": { "en": "The balancer picks a replica; N replicas make a loss cost 1/N; the balancer itself needs redundancy.", "ru": "Балансировщик выбирает реплику; N реплик делают потерю ценой 1/N; самому балансировщику нужна избыточность." }
+          },
+          "pairs": [
+            { "id": "lb", "left": { "en": "Load balancer", "ru": "Балансировщик" }, "right": { "en": "The address clients resolve; picks a replica per request", "ru": "Адрес, который резолвят клиенты; выбирает реплику на каждый запрос" } },
+            { "id": "replicas", "left": { "en": "N identical replicas", "ru": "N одинаковых реплик" }, "right": { "en": "Losing one costs 1/N of capacity, not all of it", "ru": "Потеря одной стоит 1/N мощности, а не всей" } },
+            { "id": "elasticity", "left": { "en": "Elasticity", "ru": "Эластичность" }, "right": { "en": "Capacity changes while the service keeps serving traffic", "ru": "Мощность меняется, пока сервис продолжает обслуживать трафик" } },
+            { "id": "spof", "left": { "en": "The balancer as a single point of failure", "ru": "Балансировщик как единая точка отказа" }, "right": { "en": "A pair with a floating IP, DNS/anycast in front, or a managed one", "ru": "Пара с плавающим IP, DNS/anycast перед ними или управляемый сервис" } }
+          ]
+        },
+        {
+          "id": "horizontal-p3-fill-share",
+          "type": "fill_blank",
+          "prompt": { "en": "Compute the capacity lost.", "ru": "Посчитай потерянную мощность." },
+          "text": {
+            "en": "With 5 identical replicas behind a load balancer, losing one costs ___% of the fleet's capacity.",
+            "ru": "При 5 одинаковых репликах за балансировщиком потеря одной стоит ___% мощности флота."
+          },
+          "blanks": [
+            { "en": ["20"], "ru": ["20"] }
+          ],
+          "feedback": {
+            "correct": { "en": "1/N of capacity — the whole availability argument for going horizontal.", "ru": "1/N мощности — весь аргумент доступности в пользу горизонтального масштабирования." },
+            "incorrect": { "en": "1/5 = 20%: with N replicas, one machine is 1/N of the capacity.", "ru": "1/5 = 20%: при N репликах одна машина — это 1/N мощности." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "health-checks",
+      "title": { "en": "Health checks", "ru": "Health-check'и" },
+      "summary": {
+        "en": "Without health checks the balancer keeps giving a dead replica its full share; with them, failures stop only after the detection window.",
+        "ru": "Без health-check'ов балансировщик продолжает отдавать мёртвой реплике полную долю; с ними отказы прекращаются только после окна обнаружения."
+      },
+      "discovery": [
+        {
+          "id": "health-d1-no-checks",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Three replicas sit behind a balancer that has no health checks configured. One replica crashes. What does the failure pattern look like?",
+            "ru": "Три реплики стоят за балансировщиком без настроенных health-check'ов. Одна реплика падает. Как выглядит картина отказов?"
+          },
+          "reveal": {
+            "en": "Without health checks the balancer's list of backends is a configuration file, not a fact about the world, so it keeps handing the dead replica its full share: a clean fraction of requests failing, while latency and CPU on the machines that are alive look perfectly normal.\n\nA **health check** is a request the balancer makes on a schedule to decide whether a replica stays in rotation. With one configured, the corpse leaves the rotation — but only after the **detection window** (check interval x the number of failures required):\n\n```mermaid\nflowchart LR\n  X[\"replica dies\"] --> W[\"detection window: traffic still routed to it, and failing\"]\n  W --> R[\"check fails N times, replica leaves rotation\"]\n  R --> S[\"survivors take the traffic\"]\n```\n\nEvery request inside that window still failed for a real user. **Health checks bound the damage of a crash; they do not prevent it.** And a check that only asks \"is the port open?\" misses the more common failure: a replica that answers, slowly. A useful check exercises the path that actually serves requests.",
+            "ru": "Без health-check'ов список бэкендов балансировщика — это конфиг, а не факт о мире, поэтому он продолжает отдавать мёртвой реплике полную долю: ровная доля запросов падает, а задержка и CPU на живых машинах выглядят совершенно нормально.\n\n**Health-check** — это запрос, который балансировщик делает по расписанию, чтобы решить, остаётся ли реплика в ротации. С ним труп покидает ротацию — но только после **окна обнаружения** (интервал проверки x число требуемых неудач):\n\n```mermaid\nflowchart LR\n  X[\"реплика умирает\"] --> W[\"окно обнаружения: трафик всё ещё идёт к ней и падает\"]\n  W --> R[\"проверка падает N раз, реплика выходит из ротации\"]\n  R --> S[\"трафик забирают выжившие\"]\n```\n\nКаждый запрос внутри этого окна всё равно провалился у настоящего пользователя. **Health-check'и ограничивают ущерб от падения, но не предотвращают его.** А проверка в стиле «порт открыт?» пропускает более частый случай: реплику, которая отвечает, но медленно. Полезная проверка задействует тот путь, который реально обслуживает запросы."
+          },
+          "feedback": {
+            "correct": { "en": "A clean fraction fails while every live-machine metric looks fine.", "ru": "Падает ровная доля запросов, а все метрики живых машин выглядят нормально." },
+            "incorrect": { "en": "The balancer keeps sending a third of the traffic to the dead replica; latency and CPU look normal.", "ru": "Балансировщик продолжает отправлять треть трафика мёртвой реплике; задержка и CPU выглядят нормально." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "About one request in three fails, while latency and CPU look perfectly normal", "ru": "Примерно каждый третий запрос падает, а задержка и CPU выглядят совершенно нормально" }, "correct": true },
+            { "id": "b", "text": { "en": "Everything slows down as the other two absorb the extra load", "ru": "Всё замедляется, пока две остальные принимают дополнительную нагрузку" }, "correct": false,
+              "feedback": { "en": "The balancer does not move that share anywhere — it keeps sending it to the dead replica.", "ru": "Балансировщик никуда эту долю не переносит — он продолжает слать её мёртвой реплике." } },
+            { "id": "c", "text": { "en": "Nothing — a balancer routes around a dead backend automatically", "ru": "Ничего — балансировщик автоматически обходит мёртвый бэкенд" }, "correct": false,
+              "feedback": { "en": "Only if a health check tells it the backend is dead; otherwise the list is just config.", "ru": "Только если health-check сообщит ему, что бэкенд мёртв; иначе список — просто конфиг." } }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "health-p1-no-failures-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "With health checks configured on the load balancer, a crashing replica causes no failed requests.",
+            "ru": "Если на балансировщике настроены health-check'и, падение реплики не приводит к упавшим запросам."
+          },
+          "feedback": {
+            "correct": { "en": "Everything inside the detection window still failed for real users.", "ru": "Всё, что попало в окно обнаружения, всё равно провалилось у настоящих пользователей." },
+            "incorrect": { "en": "No — checks bound the damage: requests inside the detection window still fail.", "ru": "Нет — проверки ограничивают ущерб: запросы внутри окна обнаружения всё равно падают." }
+          },
+          "answer": false
+        },
+        {
+          "id": "health-p2-match-checks",
+          "type": "match_pairs",
+          "prompt": { "en": "Match each health-check situation to its consequence.", "ru": "Соотнеси каждую ситуацию с health-check'ами с её следствием." },
+          "feedback": {
+            "correct": { "en": "Checks decide who stays in rotation — and how deep they look decides what they catch.", "ru": "Проверки решают, кто остаётся в ротации, — а их глубина решает, что они вообще замечают." },
+            "incorrect": { "en": "No checks: the dead replica keeps its share. Checks: it leaves after the detection window.", "ru": "Без проверок мёртвая реплика сохраняет свою долю. С проверками она выходит после окна обнаружения." }
+          },
+          "pairs": [
+            { "id": "none", "left": { "en": "No health checks", "ru": "Health-check'ов нет" }, "right": { "en": "The dead replica keeps receiving its full share of requests", "ru": "Мёртвая реплика продолжает получать полную долю запросов" } },
+            { "id": "configured", "left": { "en": "Health checks configured", "ru": "Health-check'и настроены" }, "right": { "en": "The dead replica leaves rotation after the detection window", "ru": "Мёртвая реплика выходит из ротации после окна обнаружения" } },
+            { "id": "window", "left": { "en": "Detection window", "ru": "Окно обнаружения" }, "right": { "en": "The requests that still failed before the removal took effect", "ru": "Запросы, которые всё же упали до того, как удаление подействовало" } },
+            { "id": "shallow", "left": { "en": "Port-only check", "ru": "Проверка «открыт ли порт»" }, "right": { "en": "A replica that answers slowly stays in rotation", "ru": "Реплика, которая отвечает медленно, остаётся в ротации" } }
+          ]
+        },
+        {
+          "id": "health-p3-fill-bound",
+          "type": "fill_blank",
+          "prompt": { "en": "Complete the rule about health checks.", "ru": "Дополни правило про health-check'и." },
+          "text": {
+            "en": "Health checks ___ the damage of a crash; they do not ___ it.",
+            "ru": "Health-check'и ___ ущерб от падения; они его не ___."
+          },
+          "blanks": [
+            { "en": ["bound", "limit"], "ru": ["ограничивают", "ограничивает"] },
+            { "en": ["prevent"], "ru": ["предотвращают", "предотвращает"] }
+          ],
+          "feedback": {
+            "correct": { "en": "The detection window is exactly the damage they cannot remove.", "ru": "Окно обнаружения — это ровно тот ущерб, который они убрать не могут." },
+            "incorrect": { "en": "They bound the damage but do not prevent it: the detection window still fails for users.", "ru": "Они ограничивают ущерб, но не предотвращают его: окно обнаружения всё равно падает у пользователей." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "balancing-algorithms",
+      "title": { "en": "Choosing the replica", "ru": "Выбор реплики" },
+      "summary": {
+        "en": "With identical nodes every algorithm looks the same; once a replica struggles, routing by observed load self-corrects and round robin does not.",
+        "ru": "При одинаковых узлах все алгоритмы выглядят одинаково; когда реплика начинает отставать, маршрутизация по наблюдаемой загрузке самокорректируется, а round robin — нет."
+      },
+      "discovery": [
+        {
+          "id": "algo-d1-gc-pause",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "One replica hits a long GC pause. The load balancer is using round robin. What happens to that node?",
+            "ru": "Одна реплика попадает в длинную паузу GC. Балансировщик работает по round robin. Что происходит с этим узлом?"
+          },
+          "reveal": {
+            "en": "The common algorithms:\n\n- **round robin** — each replica in turn, regardless of what it is doing;\n- **least connections** (or least outstanding requests) — the replica currently doing the least work;\n- **weighted** — fixed, unequal shares for nodes you already know differ;\n- **hash-based** — the same client or key always to the same replica.\n\nWith identical nodes serving identical requests they all behave the same, which is why the choice is usually made carelessly. Then one node hits a long GC pause or restarts with a cold cache, and round robin keeps handing it a full share it cannot finish: it queues and starts refusing while its neighbours idle. Routing by *observed* load self-corrects, because a node that is not finishing work stops looking cheap to send to.\n\nThe trap underneath: a load balancer distributes **requests** evenly, not **load**. Equal shares to unequal nodes is not balance.",
+            "ru": "Основные алгоритмы:\n\n- **round robin** — каждой реплике по очереди, независимо от того, чем она занята;\n- **least connections** (или least outstanding requests) — реплике, которая сейчас делает меньше всего работы;\n- **взвешенный (weighted)** — фиксированные неравные доли для узлов, о различии которых вы знаете заранее;\n- **по хэшу (hash-based)** — один и тот же клиент или ключ всегда на одну и ту же реплику.\n\nПри одинаковых узлах и одинаковых запросах все они ведут себя одинаково, поэтому выбор обычно и делают небрежно. А потом один узел попадает в длинную паузу GC или перезапускается с холодным кэшем, и round robin продолжает отдавать ему полную долю, которую тот не успевает доделать: он копит очередь и начинает отказывать, пока соседи простаивают. Маршрутизация по *наблюдаемой* загрузке самокорректируется, потому что узел, который не доделывает работу, перестаёт выглядеть дешёвым для отправки.\n\nЛовушка на дне: балансировщик равномерно распределяет **запросы**, а не **нагрузку**. Равные доли неравным узлам — это не баланс."
+          },
+          "feedback": {
+            "correct": { "en": "Round robin does not observe anything, so the struggling node keeps its full share.", "ru": "Round robin ничего не наблюдает, поэтому отстающий узел сохраняет полную долю." },
+            "incorrect": { "en": "It keeps getting a full share it cannot finish, so it queues and refuses while its neighbours idle.", "ru": "Он продолжает получать полную долю, которую не может доделать, копит очередь и отказывает, пока соседи простаивают." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "It keeps its full share, queues work it cannot finish and starts refusing, while its neighbours idle", "ru": "Он сохраняет полную долю, копит работу, которую не успевает, и начинает отказывать, пока соседи простаивают" }, "correct": true },
+            { "id": "b", "text": { "en": "Round robin skips it because it is slow", "ru": "Round robin пропускает его, потому что он медленный" }, "correct": false,
+              "feedback": { "en": "Round robin hands out turns and observes nothing about a node's state.", "ru": "Round robin раздаёт очередь по кругу и ничего не наблюдает о состоянии узла." } },
+            { "id": "c", "text": { "en": "The other nodes automatically absorb its share", "ru": "Остальные узлы автоматически забирают его долю" }, "correct": false,
+              "feedback": { "en": "Only an algorithm that reacts to observed load does that; round robin does not.", "ru": "Так делает лишь алгоритм, реагирующий на наблюдаемую загрузку; round robin — нет." } }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "algo-p1-even-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A load balancer distributes load evenly across the replicas.",
+            "ru": "Балансировщик равномерно распределяет нагрузку между репликами."
+          },
+          "feedback": {
+            "correct": { "en": "It distributes requests evenly; equal shares to unequal nodes is not balance.", "ru": "Он равномерно распределяет запросы; равные доли неравным узлам — это не баланс." },
+            "incorrect": { "en": "No — it distributes requests evenly. A slow node gets the same share it cannot handle.", "ru": "Нет — он равномерно распределяет запросы. Медленный узел получает ту же долю, с которой не справляется." }
+          },
+          "answer": false
+        },
+        {
+          "id": "algo-p2-match-algorithms",
+          "type": "match_pairs",
+          "prompt": { "en": "Match each load-balancing algorithm to how it picks a replica.", "ru": "Соотнеси каждый алгоритм балансировки с тем, как он выбирает реплику." },
+          "feedback": {
+            "correct": { "en": "Only observed-load routing reacts to a node that is falling behind.", "ru": "Только маршрутизация по наблюдаемой загрузке реагирует на отстающий узел." },
+            "incorrect": { "en": "Round robin ignores state; least connections follows observed work; hashing pins clients.", "ru": "Round robin игнорирует состояние; least connections следует за наблюдаемой работой; хэш закрепляет клиентов." }
+          },
+          "pairs": [
+            { "id": "rr", "left": { "en": "Round robin", "ru": "Round robin" }, "right": { "en": "Each replica in turn, regardless of its current state", "ru": "Каждой реплике по очереди, независимо от её состояния" } },
+            { "id": "lc", "left": { "en": "Least connections", "ru": "Least connections" }, "right": { "en": "The replica doing the least work right now, so it self-corrects", "ru": "Реплике, которая сейчас делает меньше всего работы, — поэтому самокорректируется" } },
+            { "id": "weighted", "left": { "en": "Weighted", "ru": "Взвешенный (weighted)" }, "right": { "en": "Fixed unequal shares for nodes known to differ", "ru": "Фиксированные неравные доли для узлов, о различии которых известно" } },
+            { "id": "hash", "left": { "en": "Hash-based", "ru": "По хэшу (hash-based)" }, "right": { "en": "The same client or key always to the same replica", "ru": "Один и тот же клиент или ключ всегда на одну реплику" } }
+          ]
+        },
+        {
+          "id": "algo-p3-fill-requests-load",
+          "type": "fill_blank",
+          "prompt": { "en": "Complete the sentence about what a balancer really distributes.", "ru": "Дополни фразу о том, что на самом деле распределяет балансировщик." },
+          "text": {
+            "en": "A load balancer distributes ___ evenly, not ___.",
+            "ru": "Балансировщик равномерно распределяет ___, а не ___."
+          },
+          "blanks": [
+            { "en": ["requests"], "ru": ["запросы", "запросов"] },
+            { "en": ["load"], "ru": ["нагрузку", "нагрузки"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Which is why algorithms matter as soon as the nodes stop being identical.", "ru": "Поэтому алгоритмы начинают иметь значение, как только узлы перестают быть одинаковыми." },
+            "incorrect": { "en": "Requests, not load: equal shares to unequal nodes is not balance.", "ru": "Запросы, а не нагрузку: равные доли неравным узлам — это не баланс." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "size-for-n-minus-one",
+      "title": { "en": "Size for N-1, not N", "ru": "Считайте по N-1, а не по N" },
+      "summary": {
+        "en": "Losing a replica redistributes the traffic instead of reducing it, so the fleet must still fit on N-1 replicas.",
+        "ru": "Потеря реплики перераспределяет трафик, а не уменьшает его, поэтому флот должен помещаться и на N-1 репликах."
+      },
+      "discovery": [
+        {
+          "id": "n1-d1-three-at-70",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Three replicas each run at 70% utilisation. One dies and the balancer spreads its share over the survivors. What is each survivor's utilisation now?",
+            "ru": "Три реплики работают под загрузкой 70% каждая. Одна умирает, и балансировщик распределяет её долю по выжившим. Какая теперь загрузка у каждой выжившей?"
+          },
+          "code": "replicas:    3\nutilisation: 70% each\nevent:       one replica dies\nutilisation per survivor = ?",
+          "codeLang": "text",
+          "reveal": {
+            "en": "Losing a replica does not reduce the traffic; it **redistributes** it.\n\n```\ntotal load    = 3 x 70% = 210% of one replica\nsurvivors     = 2\nper survivor  = 210 / 2 = 105%\n```\n\nAt over 100% each survivor is now the overloaded server from the earlier steps: a growing queue, non-linear latency, timeouts, retries. And when the first survivor falls over, its share moves to the last one, which is now at 210%. That is the classic **cascade**, where the survivors fail one at a time and the whole fleet disappears within minutes of losing a single machine.\n\nSo size for **N-1**, not N: each replica may run at most `(N-1)/N` of its capacity in steady state. For 3 replicas that is about 66%, for 4 it is 75%, for 10 it is 90% — bigger fleets need proportionally less headroom. Headroom is not waste; it is the thing that makes the redundancy real.",
+            "ru": "Потеря реплики не уменьшает трафик, а **перераспределяет** его.\n\n```\nсуммарная нагрузка = 3 x 70% = 210% одной реплики\nвыживших           = 2\nна выжившую        = 210 / 2 = 105%\n```\n\nПри загрузке выше 100% каждая выжившая — это тот самый перегруженный сервер из предыдущих шагов: растущая очередь, нелинейная задержка, таймауты, повторы. А когда первая выжившая падает, её доля переходит к последней, и та оказывается на 210%. Это классический **каскад**, где выжившие падают по очереди и весь флот исчезает через считанные минуты после потери одной машины.\n\nПоэтому считайте по **N-1**, а не по N: в устойчивом режиме каждая реплика может работать максимум на `(N-1)/N` своей мощности. Для 3 реплик это около 66%, для 4 — 75%, для 10 — 90%: большим флотам нужен пропорционально меньший запас. Запас — это не расточительство, а то, что делает избыточность настоящей."
+          },
+          "feedback": {
+            "correct": { "en": "210% of load on two replicas is 105% each — past the ceiling.", "ru": "210% нагрузки на две реплики — это по 105% на каждую, за потолком." },
+            "incorrect": { "en": "3 x 70% = 210%, spread over 2 survivors = 105% each: both are now overloaded.", "ru": "3 x 70% = 210%, на 2 выживших = по 105%: обе теперь перегружены." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "About 105% — more than a replica can serve", "ru": "Около 105% — больше, чем реплика может обслужить" }, "correct": true },
+            { "id": "b", "text": { "en": "Still 70% — the traffic goes away with the replica", "ru": "По-прежнему 70% — трафик уходит вместе с репликой" }, "correct": false,
+              "feedback": { "en": "Losing a replica does not reduce the traffic; the same requests keep arriving.", "ru": "Потеря реплики не уменьшает трафик; те же запросы продолжают приходить." } },
+            { "id": "c", "text": { "en": "About 35% — the load halves", "ru": "Около 35% — нагрузка уменьшается вдвое" }, "correct": false,
+              "feedback": { "en": "Utilisation goes up, not down: the same load now runs on fewer machines.", "ru": "Загрузка растёт, а не падает: та же нагрузка теперь идёт на меньшее число машин." } }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "n1-p1-three-replicas-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Running three replicas means the service can always survive losing one of them.",
+            "ru": "Три работающие реплики означают, что сервис всегда переживёт потерю одной из них."
+          },
+          "feedback": {
+            "correct": { "en": "Only if the traffic still fits on two at their current utilisation.", "ru": "Только если трафик при текущей загрузке всё ещё помещается на двух." },
+            "incorrect": { "en": "No — three at 70% become two at 105%; redundancy needs headroom to be real.", "ru": "Нет — три по 70% превращаются в две по 105%; избыточность становится настоящей только с запасом." }
+          },
+          "answer": false
+        },
+        {
+          "id": "n1-p2-predict-four",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Four replicas each run at 60% utilisation and one dies. What is each survivor's utilisation?",
+            "ru": "Четыре реплики работают под загрузкой 60% каждая, и одна умирает. Какая загрузка у каждой выжившей?"
+          },
+          "code": "replicas:    4\nutilisation: 60% each\nevent:       one replica dies\nutilisation per survivor = ?",
+          "codeLang": "text",
+          "feedback": {
+            "correct": { "en": "4 x 60% = 240%, over 3 survivors = 80% each — tight but still serving.", "ru": "4 x 60% = 240%, на 3 выживших = по 80% — впритык, но всё ещё обслуживают." },
+            "incorrect": { "en": "4 x 60% = 240% of one replica; divided over 3 survivors that is 80% each.", "ru": "4 x 60% = 240% одной реплики; на 3 выживших это по 80%." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "80%", "ru": "80%" }, "correct": true },
+            { "id": "b", "text": { "en": "60% — unchanged", "ru": "60% — без изменений" }, "correct": false,
+              "feedback": { "en": "The traffic does not disappear with the machine: 4 x 60% must now fit on three.", "ru": "Трафик не исчезает вместе с машиной: 4 x 60% теперь должны поместиться на трёх." } },
+            { "id": "c", "text": { "en": "45%", "ru": "45%" }, "correct": false,
+              "feedback": { "en": "Utilisation rises when the fleet shrinks; it does not fall.", "ru": "При уменьшении флота загрузка растёт, а не падает." } }
+          ]
+        },
+        {
+          "id": "n1-p3-max-utilisation",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A fleet of 4 replicas must keep serving after losing one. What is the highest steady-state utilisation you can run each replica at?",
+            "ru": "Флот из 4 реплик должен продолжать обслуживать трафик после потери одной. Какая максимальная устойчивая загрузка допустима на каждой реплике?"
+          },
+          "feedback": {
+            "correct": { "en": "(N-1)/N = 3/4 = 75%: at that level the three survivors land exactly at 100%.", "ru": "(N-1)/N = 3/4 = 75%: при такой загрузке три выживших окажутся ровно на 100%." },
+            "incorrect": { "en": "75% — the (N-1)/N rule, so the survivors reach 100% rather than exceeding it.", "ru": "75% — правило (N-1)/N, чтобы выжившие вышли на 100%, а не выше." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "75% — the (N-1)/N rule", "ru": "75% — правило (N-1)/N" }, "correct": true },
+            { "id": "b", "text": { "en": "100% — headroom is wasted money", "ru": "100% — запас это выброшенные деньги" }, "correct": false,
+              "feedback": { "en": "Then the survivors sit at 133% the moment one replica dies, and cascade.", "ru": "Тогда в момент смерти одной реплики выжившие окажутся на 133% и посыплются каскадом." } },
+            { "id": "c", "text": { "en": "50% — always keep half the fleet spare", "ru": "50% — всегда держать половину флота в запасе" }, "correct": false,
+              "feedback": { "en": "That sizes for losing half the fleet; surviving one loss needs only (N-1)/N.", "ru": "Это расчёт на потерю половины флота; чтобы пережить одну потерю, достаточно (N-1)/N." } }
+          ]
+        },
+        {
+          "id": "n1-p4-fill-arithmetic",
+          "type": "fill_blank",
+          "prompt": { "en": "Do the N-1 arithmetic.", "ru": "Посчитай по правилу N-1." },
+          "text": {
+            "en": "Three replicas at 70% lose one: 3 x 70 = ___%, spread over ___ survivors = ___% each.",
+            "ru": "Три реплики по 70% теряют одну: 3 x 70 = ___%, на ___ выживших = по ___%."
+          },
+          "blanks": [
+            { "en": ["210"], "ru": ["210"] },
+            { "en": ["2", "two"], "ru": ["2", "две", "двух"] },
+            { "en": ["105"], "ru": ["105"] }
+          ],
+          "feedback": {
+            "correct": { "en": "105% each is an overloaded server, so the fleet was never really redundant.", "ru": "По 105% — это перегруженный сервер, значит флот на деле не был избыточным." },
+            "incorrect": { "en": "210% of load over 2 survivors is 105% each — the classic cascade setup.", "ru": "210% нагрузки на 2 выживших — по 105%, классическая заготовка для каскада." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "interchangeable-replicas",
+      "title": { "en": "Replicas must be interchangeable", "ru": "Реплики должны быть взаимозаменяемыми" },
+      "summary": {
+        "en": "State kept in one replica's heap makes the second replica wrong rather than helpful; sticky sessions only make that state reachable.",
+        "ru": "Состояние в куче одной реплики делает вторую реплику не полезной, а неправильной; sticky-сессии лишь делают это состояние достижимым."
+      },
+      "discovery": [
+        {
+          "id": "state-d1-split-cart",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A shopping cart is kept in the application's heap. A client's POST /cart lands on app-1; the following GET /cart is routed to app-2. What does the client get?",
+            "ru": "Корзина хранится в куче приложения. POST /cart клиента попадает на app-1, а следующий GET /cart маршрутизируется на app-2. Что получит клиент?"
+          },
+          "reveal": {
+            "en": "```mermaid\nsequenceDiagram\n  participant C as client\n  participant LB as balancer\n  participant A1 as app-1\n  participant A2 as app-2\n  C->>LB: POST /cart (add item)\n  LB->>A1: routed to app-1\n  A1-->>C: 200, cart stored in app-1 heap\n  C->>LB: GET /cart\n  LB->>A2: routed to app-2\n  A2-->>C: 200, empty cart\n```\n\nReplicas must be **interchangeable**: any replica must be able to serve any request. Anything a replica keeps in its own heap between requests breaks that — an `HttpSession`, a cart, a half-finished upload, a local cache treated as authoritative, a scheduled job, an in-memory rate-limit counter. The second replica then makes the service *wrong* rather than faster, and the failure is silent: no exception, no error log, just an unauthenticated user with an empty cart.\n\nThe fix is to move the state out: sessions into Redis or the database, files into object storage, caches made per-node and disposable, schedulers made leader-elected.",
+            "ru": "```mermaid\nsequenceDiagram\n  participant C as клиент\n  participant LB as балансировщик\n  participant A1 as app-1\n  participant A2 as app-2\n  C->>LB: POST /cart (добавить товар)\n  LB->>A1: направлено на app-1\n  A1-->>C: 200, корзина в куче app-1\n  C->>LB: GET /cart\n  LB->>A2: направлено на app-2\n  A2-->>C: 200, пустая корзина\n```\n\nРеплики должны быть **взаимозаменяемыми**: любая реплика должна уметь обслужить любой запрос. Всё, что реплика хранит в собственной куче между запросами, это ломает — `HttpSession`, корзина, недозагруженный файл, локальный кэш, который считают источником истины, планировщик задач, счётчик рейт-лимита в памяти. Тогда вторая реплика делает сервис не быстрее, а *неправильным*, и сбой этот молчаливый: ни исключения, ни записи в журнале ошибок — просто неаутентифицированный пользователь с пустой корзиной.\n\nЛечится это выносом состояния наружу: сессии — в Redis или базу, файлы — в объектное хранилище, кэши — пер-нодовые и одноразовые, планировщики — с выбором лидера."
+          },
+          "feedback": {
+            "correct": { "en": "app-2 answers correctly for what it knows — and it knows nothing about that cart.", "ru": "app-2 отвечает корректно для того, что знает, — а про эту корзину он не знает ничего." },
+            "incorrect": { "en": "A successful 200 with an empty cart: the state is in another replica's heap, and nothing logs an error.", "ru": "Успешный 200 с пустой корзиной: состояние лежит в куче другой реплики, и никакой ошибки не логируется." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "200 with an empty cart, and nothing in any error log", "ru": "200 с пустой корзиной, и ни строчки в журналах ошибок" }, "correct": true },
+            { "id": "b", "text": { "en": "500, because app-2 has no such cart", "ru": "500, потому что у app-2 нет такой корзины" }, "correct": false,
+              "feedback": { "en": "Nothing fails: app-2 answers correctly for its own state — an empty cart.", "ru": "Ничего не падает: app-2 корректно отвечает по своему состоянию — корзина пуста." } },
+            { "id": "c", "text": { "en": "The balancer routes it back to app-1 automatically", "ru": "Балансировщик автоматически вернёт запрос на app-1" }, "correct": false,
+              "feedback": { "en": "Only if stickiness is configured; by default the balancer picks a replica per request.", "ru": "Только если настроена привязка; по умолчанию балансировщик выбирает реплику на каждый запрос." } }
+          ]
+        },
+        {
+          "id": "state-d2-sticky-cost",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "You turn on sticky sessions, pinning each client to one replica, and the empty-cart problem stops. What have you given up?",
+            "ru": "Вы включаете sticky-сессии, прикрепляя каждого клиента к одной реплике, и проблема с пустой корзиной исчезает. Чем вы за это заплатили?"
+          },
+          "reveal": {
+            "en": "**Sticky sessions** pin a client to one replica — with a cookie or a hash of the source IP. They stop the misses and are a legitimate stopgap, but read what you agreed to:\n\n- load is balanced **by client**, not by request, so one heavy client can saturate one node;\n- a replica cannot be drained for deployment without dropping its clients' state;\n- when that replica dies, everything pinned to it dies with it.\n\nSticky sessions make state **reachable**, not **safe**. They are a bridge to externalised state, not a destination. The same shape appears with long-lived connections — WebSockets, SSE, long polling — which pin a client to one replica for the connection's lifetime, so they need connection-count-aware balancing and a shared bus to fan messages out across replicas.",
+            "ru": "**Sticky-сессии** прикрепляют клиента к одной реплике — кукой или хэшем IP-адреса источника. Они прекращают промахи и как временная мера законны, но прочтите, на что вы согласились:\n\n- нагрузка балансируется **по клиентам**, а не по запросам, поэтому один тяжёлый клиент может насытить один узел;\n- реплику нельзя вывести из-под трафика для деплоя, не потеряв состояние её клиентов;\n- когда эта реплика умирает, вместе с ней умирает всё, что к ней прикреплено.\n\nSticky-сессии делают состояние **достижимым**, а не **надёжным**. Это мост к вынесенному состоянию, а не конечная точка. Та же картина возникает с долгоживущими соединениями — WebSocket, SSE, длинный опрос: они прикрепляют клиента к одной реплике на время жизни соединения, поэтому им нужна балансировка с учётом числа соединений и общая шина для рассылки сообщений между репликами."
+          },
+          "feedback": {
+            "correct": { "en": "Balance per request and the freedom to lose or drain that replica.", "ru": "Баланс по запросам и свободу потерять или вывести эту реплику из ротации." },
+            "incorrect": { "en": "Per-request balance and disposability: pinned clients cannot be moved, and pinned state dies with the node.", "ru": "Баланс по запросам и одноразовость: прикреплённых клиентов не перенести, а прикреплённое состояние умирает вместе с узлом." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Balance per request, and the ability to lose or drain that replica without losing its clients' state", "ru": "Баланс по запросам и возможность потерять или вывести реплику, не теряя состояние её клиентов" }, "correct": true },
+            { "id": "b", "text": { "en": "Nothing — pinning is how load balancers are meant to work", "ru": "Ничем — привязка и есть то, как балансировщики должны работать" }, "correct": false,
+              "feedback": { "en": "Pinning trades away both even balancing and the replica's disposability.", "ru": "Привязка разменивает и ровный баланс, и одноразовость реплики." } },
+            { "id": "c", "text": { "en": "TLS termination at the balancer", "ru": "Терминацию TLS на балансировщике" }, "correct": false,
+              "feedback": { "en": "Stickiness has nothing to do with TLS; it changes how clients map to replicas.", "ru": "Привязка не связана с TLS; она меняет то, как клиенты отображаются на реплики." } }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "state-p1-logged-out",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "You add a second instance of a web application and users start getting logged out at random. What kind of state causes this?",
+            "ru": "Вы добавляете второй экземпляр веб-приложения, и пользователей начинает случайно разлогинивать. Какое состояние это вызывает?"
+          },
+          "feedback": {
+            "correct": { "en": "Session state in one replica's heap is invisible to the other one.", "ru": "Состояние сессии в куче одной реплики невидимо для другой." },
+            "incorrect": { "en": "Session state held in a replica's own heap: a request routed elsewhere sees an unauthenticated user.", "ru": "Состояние сессии в собственной куче реплики: запрос, попавший в другое место, видит неаутентифицированного пользователя." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Session state held in one replica's heap", "ru": "Состояние сессии, лежащее в куче одной реплики" }, "correct": true },
+            { "id": "b", "text": { "en": "A separate database connection pool per replica", "ru": "Отдельный пул подключений к базе на каждой реплике" }, "correct": false,
+              "feedback": { "en": "A pool per replica is normal and shared through the database, so it loses no sessions.", "ru": "Отдельный пул на реплику — это норма, состояние идёт через базу, и сессии не теряются." } },
+            { "id": "c", "text": { "en": "TLS certificates installed on the load balancer", "ru": "TLS-сертификаты, установленные на балансировщике" }, "correct": false,
+              "feedback": { "en": "Certificates do not vary per request between replicas; session storage does.", "ru": "Сертификаты не меняются от запроса к запросу между репликами; хранение сессии — меняется." } }
+          ]
+        },
+        {
+          "id": "state-p2-sticky-safe-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Sticky sessions make in-heap session state safe against the loss of a replica.",
+            "ru": "Sticky-сессии делают состояние сессии в куче надёжным на случай потери реплики."
+          },
+          "feedback": {
+            "correct": { "en": "Pinned state dies with the replica it is pinned to.", "ru": "Прикреплённое состояние умирает вместе с репликой, к которой прикреплено." },
+            "incorrect": { "en": "No — stickiness makes state reachable, not safe; the pinned replica can still die.", "ru": "Нет — привязка делает состояние достижимым, а не надёжным; прикреплённая реплика всё ещё может умереть." }
+          },
+          "answer": false
+        },
+        {
+          "id": "state-p3-match-externalise",
+          "type": "match_pairs",
+          "prompt": { "en": "Match each piece of per-replica state to where it should live instead.", "ru": "Соотнеси каждый вид состояния реплики с тем, где оно должно жить вместо этого." },
+          "feedback": {
+            "correct": { "en": "Once none of it lives in a replica's heap, any replica can serve any request.", "ru": "Когда ничего из этого не лежит в куче реплики, любая реплика может обслужить любой запрос." },
+            "incorrect": { "en": "Sessions to Redis or the DB, files to object storage, caches per-node, schedulers leader-elected.", "ru": "Сессии — в Redis или базу, файлы — в объектное хранилище, кэши — пер-нодовые, планировщики — с выбором лидера." }
+          },
+          "pairs": [
+            { "id": "session", "left": { "en": "HttpSession", "ru": "HttpSession" }, "right": { "en": "Redis or the database", "ru": "Redis или база данных" } },
+            { "id": "files", "left": { "en": "Uploaded files", "ru": "Загруженные файлы" }, "right": { "en": "Object storage", "ru": "Объектное хранилище" } },
+            { "id": "cache", "left": { "en": "Local cache", "ru": "Локальный кэш" }, "right": { "en": "Kept per-node and disposable", "ru": "Пер-нодовый и одноразовый" } },
+            { "id": "scheduler", "left": { "en": "Scheduled job", "ru": "Планировщик задач" }, "right": { "en": "Run under leader election", "ru": "Запуск с выбором лидера" } }
+          ]
+        },
+        {
+          "id": "state-p4-fill-externalise",
+          "type": "fill_blank",
+          "prompt": { "en": "Type where the state should go.", "ru": "Впиши, куда должно переехать состояние." },
+          "text": {
+            "en": "To make replicas interchangeable, move sessions into ___ or the database, and uploaded files into ___ storage.",
+            "ru": "Чтобы реплики стали взаимозаменяемыми, вынесите сессии в ___ или базу, а загруженные файлы — в ___ хранилище."
+          },
+          "blanks": [
+            { "en": ["Redis", "redis"], "ru": ["Redis", "redis"] },
+            { "en": ["object"], "ru": ["объектное", "object"] }
+          ],
+          "feedback": {
+            "correct": { "en": "With the state outside, a replica becomes disposable — which is what makes scaling out work.", "ru": "Когда состояние снаружи, реплика становится одноразовой — именно это и делает горизонтальное масштабирование рабочим." },
+            "incorrect": { "en": "Sessions into Redis or the database, files into object storage — then any replica can serve any request.", "ru": "Сессии — в Redis или базу, файлы — в объектное хранилище; тогда любая реплика обслужит любой запрос." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "find-the-constraint",
+      "title": { "en": "Find the constraint before multiplying", "ru": "Найдите ограничение, прежде чем умножать" },
+      "summary": {
+        "en": "The bottleneck moves rather than disappearing: measure first, expect the database next, and consider removing load instead of adding capacity.",
+        "ru": "Узкое место переезжает, а не исчезает: сначала измерьте, ждите базу следующей и подумайте, нельзя ли убрать нагрузку вместо добавления мощности."
+      },
+      "discovery": [
+        {
+          "id": "constraint-d1-three-to-ten",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "You scale the application tier from three instances to ten and throughput barely improves. What is the most likely explanation?",
+            "ru": "Вы увеличиваете слой приложения с трёх экземпляров до десяти, а пропускная способность почти не растёт. Каково самое вероятное объяснение?"
+          },
+          "reveal": {
+            "en": "The bottleneck **moves**; it does not disappear. Ten replicas all queue on the same primary database, the same payment gateway, the same lock — and multiplying the part that was never the limit changes nothing.\n\nSo find the constraint before multiplying anything. The usual order of investigation:\n\n1. arrival rate against **measured** per-instance capacity;\n2. where the time inside a single request goes;\n3. what the replicas share.\n\nWhen the answer is the database, the fixes are their own ladder, cheapest first: better queries and indexes, then query optimisation, then caching, then read replicas, then partitioning or sharding. \"Add app servers\" does nothing for any of them.",
+            "ru": "Узкое место **переезжает**, а не исчезает. Десять реплик стоят в очереди к той же основной базе, тому же платёжному шлюзу, той же блокировке — и умножение того, что никогда не было пределом, ничего не меняет.\n\nПоэтому найдите ограничение, прежде чем что-либо умножать. Обычный порядок разбирательства:\n\n1. скорость прихода против **измеренной** мощности одного экземпляра;\n2. куда уходит время внутри одного запроса;\n3. что у реплик общее.\n\nКогда ответ — база данных, лечение выстраивается в собственную лестницу, от дешёвого к дорогому: лучшие запросы и индексы, затем оптимизация запросов, затем кэширование, затем реплики для чтения, затем секционирование или шардирование. «Добавить серверов приложения» не помогает ни на одной из этих ступеней."
+          },
+          "feedback": {
+            "correct": { "en": "The app tier was never the limit — the replicas queue on something shared.", "ru": "Слой приложения никогда не был пределом — реплики стоят в очереди к чему-то общему." },
+            "incorrect": { "en": "The constraint is elsewhere: a shared database, gateway or lock that ten replicas now queue on together.", "ru": "Ограничение в другом месте: общая база, шлюз или блокировка, к которым десять реплик теперь стоят вместе." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "The application tier was never the constraint — the replicas queue on something shared", "ru": "Слой приложения никогда не был ограничением — реплики стоят в очереди к чему-то общему" }, "correct": true },
+            { "id": "b", "text": { "en": "Ten replicas are too many for one load balancer to distribute", "ru": "Десять реплик — слишком много, чтобы один балансировщик их обслужил" }, "correct": false,
+              "feedback": { "en": "Distributing requests is cheap; the balancer is not what capped throughput here.", "ru": "Распределение запросов дёшево; не балансировщик ограничил здесь пропускную способность." } },
+            { "id": "c", "text": { "en": "The new instances simply need time to warm up", "ru": "Новым экземплярам просто нужно время на прогрев" }, "correct": false,
+              "feedback": { "en": "Warm-up costs minutes, not a permanently flat throughput curve.", "ru": "Прогрев стоит минут, а не постоянно плоской кривой пропускной способности." } }
+          ]
+        },
+        {
+          "id": "constraint-d2-cpu-autoscale",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A service that spends most of each request waiting on the database has a fully saturated thread pool, and CPU sits at 30%. The autoscaler is configured to add instances above 70% CPU. What does it do?",
+            "ru": "Сервис, который большую часть каждого запроса ждёт базу, имеет полностью насыщенный пул потоков, а CPU стоит на 30%. Автомасштабирование настроено добавлять экземпляры выше 70% CPU. Что оно сделает?"
+          },
+          "reveal": {
+            "en": "Nothing — and that is the trap. CPU is a poor proxy for a service that blocks on I/O: a saturated thread pool can sit at 30% CPU while every request queues, because waiting on a socket burns no CPU. The autoscaler sees only the metric it was given.\n\nScale on a signal that actually reflects saturation:\n\n- **queue depth** — how many requests are waiting for a slot;\n- **latency** — especially a high percentile, which moves first;\n- **in-flight requests** — how many slots are occupied right now.\n\nAnd before adding any instance at all, measure: arrival rate versus measured capacity, and where the time inside a request goes. Capacity may not be the problem.",
+            "ru": "Ничего — и в этом ловушка. CPU — плохой заменитель для сервиса, блокирующегося на I/O: насыщенный пул потоков может стоять на 30% CPU, пока каждый запрос ждёт в очереди, потому что ожидание на сокете процессор не жжёт. Автомасштабирование видит только ту метрику, которую ему дали.\n\nМасштабируйтесь по сигналу, который реально отражает насыщение:\n\n- **глубина очереди** — сколько запросов ждёт слот;\n- **задержка** — особенно высокий перцентиль, он сдвигается первым;\n- **число запросов в работе (in-flight)** — сколько слотов занято прямо сейчас.\n\nА прежде чем вообще добавлять экземпляр, измерьте: скорость прихода против измеренной мощности и куда уходит время внутри запроса. Может быть, дело вовсе не в мощности."
+          },
+          "feedback": {
+            "correct": { "en": "The rule never fires, because waiting on I/O does not raise CPU.", "ru": "Правило не срабатывает, потому что ожидание I/O не поднимает CPU." },
+            "incorrect": { "en": "Nothing: the pool is saturated but CPU stays at 30%, so a CPU rule never triggers.", "ru": "Ничего: пул насыщен, но CPU стоит на 30%, поэтому правило по CPU не срабатывает никогда." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Nothing — it never triggers, while the service is already queueing and refusing requests", "ru": "Ничего — оно не срабатывает, пока сервис уже копит очередь и отказывает" }, "correct": true },
+            { "id": "b", "text": { "en": "Scales out, because the thread pool is saturated", "ru": "Расширяется, потому что пул потоков насыщен" }, "correct": false,
+              "feedback": { "en": "Pool saturation is invisible to a CPU rule; the autoscaler only sees the metric it was given.", "ru": "Насыщение пула невидимо для правила по CPU; автомасштабирование видит только заданную метрику." } },
+            { "id": "c", "text": { "en": "Scales out once the queueing pushes CPU above 70%", "ru": "Расширяется, как только очередь поднимет CPU выше 70%" }, "correct": false,
+              "feedback": { "en": "Queued requests wait on I/O and consume no CPU, so queueing does not raise it.", "ru": "Запросы в очереди ждут I/O и не потребляют CPU, поэтому очередь его не поднимает." } }
+          ]
+        },
+        {
+          "id": "constraint-d3-remove-load",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Traffic has doubled and the service is at its ceiling. Which of these raises effective capacity without adding a single machine?",
+            "ru": "Трафик удвоился, и сервис упёрся в потолок. Что из этого повышает эффективную мощность, не добавляя ни одной машины?"
+          },
+          "reveal": {
+            "en": "Before adding an instance, check whether you can remove load instead: caching, fixing an N+1 query, batching, moving slow work out of the request path into a queue, or rate-limiting an abusive client.\n\nSince capacity is `concurrency / service time`, a request that becomes 10x cheaper is a 10x bigger server — for free. Unlike a bigger fleet it costs nothing to run, adds no failure modes and needs no coordination. Sometimes the correct answer to \"how do we scale this?\" is \"we don't — we make the work smaller.\"",
+            "ru": "Прежде чем добавлять экземпляр, проверьте, нельзя ли вместо этого убрать нагрузку: кэширование, починка N+1 запроса, батчинг, вынос медленной работы из пути запроса в очередь или рейт-лимит для злоупотребляющего клиента.\n\nПоскольку мощность — это `одновременность / время обработки`, запрос, ставший в 10 раз дешевле, — это в 10 раз больший сервер, причём бесплатно. В отличие от большего флота, он ничего не стоит в эксплуатации, не добавляет режимов отказа и не требует координации. Иногда правильный ответ на «как это масштабировать?» — «никак: мы уменьшим саму работу»."
+          },
+          "feedback": {
+            "correct": { "en": "Cheaper requests raise the ceiling directly: capacity is concurrency / service time.", "ru": "Более дешёвые запросы прямо поднимают потолок: мощность — это одновременность / время обработки." },
+            "incorrect": { "en": "Making requests cheaper — caching and fixing an N+1 query — raises capacity without new machines.", "ru": "Удешевление запросов — кэш и починка N+1 — поднимает мощность без новых машин." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Caching a hot read and fixing an N+1 query", "ru": "Кэширование горячего чтения и починка N+1 запроса" }, "correct": true },
+            { "id": "b", "text": { "en": "Increasing the client's timeout", "ru": "Увеличение таймаута клиента" }, "correct": false,
+              "feedback": { "en": "That only makes clients wait longer for the same overloaded service.", "ru": "Это лишь заставляет клиентов дольше ждать тот же перегруженный сервис." } },
+            { "id": "c", "text": { "en": "Adding a second load balancer", "ru": "Добавление второго балансировщика" }, "correct": false,
+              "feedback": { "en": "A second balancer removes a single point of failure; it does not make requests cheaper.", "ru": "Второй балансировщик убирает единую точку отказа, но не делает запросы дешевле." } }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "constraint-p1-tripling-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "If tripling the number of application instances did not improve throughput, then the application tier was the bottleneck.",
+            "ru": "Если утроение числа экземпляров приложения не улучшило пропускную способность, значит узким местом был слой приложения."
+          },
+          "feedback": {
+            "correct": { "en": "It shows the opposite: the constraint is something the replicas share.", "ru": "Это показывает обратное: ограничение — что-то общее для реплик." },
+            "incorrect": { "en": "No — the flat result is evidence the app tier was NOT the constraint.", "ru": "Нет — плоский результат как раз доказывает, что слой приложения ограничением НЕ был." }
+          },
+          "answer": false
+        },
+        {
+          "id": "constraint-p2-cpu-signal",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why is CPU usually a poor autoscaling signal on its own for a request-serving service?",
+            "ru": "Почему CPU сам по себе обычно плохой сигнал для автомасштабирования сервиса, обслуживающего запросы?"
+          },
+          "feedback": {
+            "correct": { "en": "Waiting on I/O consumes no CPU, so a fully saturated pool can look idle.", "ru": "Ожидание I/O не потребляет CPU, поэтому полностью насыщенный пул может выглядеть простаивающим." },
+            "incorrect": { "en": "A service blocked on I/O can saturate its thread pool while CPU stays around 30%.", "ru": "Сервис, блокирующийся на I/O, может насытить пул потоков, пока CPU держится около 30%." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "A service blocked on I/O can saturate its thread pool while CPU stays low", "ru": "Сервис, блокирующийся на I/O, может насытить пул потоков при низком CPU" }, "correct": true },
+            { "id": "b", "text": { "en": "CPU metrics are collected too rarely to be useful", "ru": "Метрики CPU собираются слишком редко, чтобы быть полезными" }, "correct": false,
+              "feedback": { "en": "The collection interval is not the issue; the metric simply does not track saturation here.", "ru": "Дело не в интервале сбора; метрика просто не отслеживает здесь насыщение." } },
+            { "id": "c", "text": { "en": "CPU is identical on every replica, so it cannot be compared", "ru": "CPU одинаков на всех репликах, поэтому его нельзя сравнивать" }, "correct": false,
+              "feedback": { "en": "CPU does vary per replica; the problem is that it does not reflect queueing.", "ru": "CPU как раз различается по репликам; проблема в том, что он не отражает очередь." } }
+          ]
+        },
+        {
+          "id": "constraint-p3-sort-investigation",
+          "type": "sort_steps",
+          "prompt": { "en": "Order the investigation to run before adding any instance.", "ru": "Расставь по порядку разбирательство, которое надо провести до добавления экземпляров." },
+          "feedback": {
+            "correct": { "en": "Capacity first, then the request's own time, then whatever the replicas share.", "ru": "Сначала мощность, затем время внутри запроса, затем всё общее для реплик." },
+            "incorrect": { "en": "Arrival rate vs measured capacity, then where time inside a request goes, then what is shared.", "ru": "Скорость прихода против измеренной мощности, затем куда уходит время внутри запроса, затем что общее." }
+          },
+          "steps": [
+            { "id": "s1", "text": { "en": "Compare the arrival rate with the measured per-instance capacity", "ru": "Сравнить скорость прихода с измеренной мощностью одного экземпляра" } },
+            { "id": "s2", "text": { "en": "Find where the time inside one request actually goes", "ru": "Выяснить, куда на самом деле уходит время внутри одного запроса" } },
+            { "id": "s3", "text": { "en": "Identify what the replicas share — database, gateway, lock", "ru": "Определить, что у реплик общее — база, шлюз, блокировка" } }
+          ]
+        },
+        {
+          "id": "constraint-p4-sort-db-ladder",
+          "type": "sort_steps",
+          "prompt": { "en": "Order the fixes for a database bottleneck, cheapest and least invasive first.", "ru": "Расставь лечение узкого места в базе от самого дешёвого и наименее инвазивного." },
+          "feedback": {
+            "correct": { "en": "Every rung is cheaper than the next; adding app servers is on none of them.", "ru": "Каждая ступень дешевле следующей; «добавить серверов приложения» нет ни на одной." },
+            "incorrect": { "en": "Queries and indexes, then query optimisation, then caching, then read replicas, then sharding.", "ru": "Запросы и индексы, затем оптимизация запросов, затем кэш, затем реплики для чтения, затем шардирование." }
+          },
+          "steps": [
+            { "id": "s1", "text": { "en": "Fix the queries and add the missing indexes", "ru": "Починить запросы и добавить недостающие индексы" } },
+            { "id": "s2", "text": { "en": "Optimise the remaining expensive queries", "ru": "Оптимизировать оставшиеся дорогие запросы" } },
+            { "id": "s3", "text": { "en": "Cache the hot reads", "ru": "Закэшировать горячие чтения" } },
+            { "id": "s4", "text": { "en": "Add read replicas", "ru": "Добавить реплики для чтения" } },
+            { "id": "s5", "text": { "en": "Partition or shard the data", "ru": "Секционировать или шардировать данные" } }
+          ]
+        },
+        {
+          "id": "constraint-p5-fill-signals",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the missing autoscaling signal and the metric to avoid using alone.", "ru": "Впиши пропущенный сигнал автомасштабирования и метрику, которую нельзя использовать в одиночку." },
+          "text": {
+            "en": "Autoscale on queue ___, on latency or on in-flight requests — not on ___ alone.",
+            "ru": "Масштабируйтесь по глубине ___, по задержке или по числу запросов в работе, а не по одному лишь ___."
+          },
+          "blanks": [
+            { "en": ["depth"], "ru": ["очереди"] },
+            { "en": ["CPU", "cpu"], "ru": ["CPU", "cpu", "процессору"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Those signals track the actual saturation; CPU can stay flat while requests queue.", "ru": "Эти сигналы отслеживают реальное насыщение; CPU может стоять на месте, пока запросы ждут в очереди." },
+            "incorrect": { "en": "Queue depth (or latency, or in-flight requests) rather than CPU, which misses I/O-bound saturation.", "ru": "Глубина очереди (или задержка, или запросы в работе), а не CPU, который не видит насыщения на I/O." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "overload-end-to-end",
+      "title": { "en": "The whole picture", "ru": "Вся картина целиком" },
+      "summary": {
+        "en": "From one instance's capacity to a healthy fleet: measure, bound the queue, and scale the tier that is actually the constraint.",
+        "ru": "От мощности одного экземпляра до здорового флота: измерить, ограничить очередь и масштабировать тот слой, который действительно является ограничением."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "cap-d1-replica-dies",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Predict what the next few seconds look like for users.",
+            "ru": "Предскажи, как будут выглядеть следующие несколько секунд для пользователей."
+          },
+          "code": "one instance: 200 worker threads, 50 ms per request\nfleet:        3 identical replicas behind a load balancer\nutilisation:  70% of capacity on each\nbalancer:     no health checks configured\nevent:        one replica dies",
+          "codeLang": "text",
+          "reveal": {
+            "en": "Two independent failures stack here: the traffic that still goes to the corpse, and the traffic that now overloads the survivors.\n\n```mermaid\nflowchart TD\n  CAP[\"capacity = concurrency / service time\"] --> U{\"arrivals above capacity?\"}\n  U -->|no| OK[\"latency = service time\"]\n  U -->|yes| Q[\"queue grows\"]\n  Q --> L[\"latency ~ 1 / (1 - utilisation)\"]\n  L --> T[\"client timeouts: work becomes waste\"]\n  T --> RT[\"retries raise offered load\"]\n  RT --> Q\n  Q --> SH[\"bounded queue: fast 503\"]\n```\n\nWithout health checks the balancer's backend list is still a config file, so a third of requests keep being sent to a replica that cannot answer. Meanwhile the share that does land on the survivors pushes them from 70% to 105%, where the loop above starts: queue, non-linear latency, client timeouts, retries, and eventually 503s.\n\nThe answers all come from the same arithmetic. Vertical scaling raises `concurrency / service time` cheaply but leaves one failure domain; horizontal scaling buys elasticity and survives a lost machine, but only if the replicas are interchangeable, the checks are configured, and the fleet was sized for N-1. And none of it helps if the real constraint is a shared database.",
+            "ru": "Здесь складываются два независимых отказа: трафик, который всё ещё идёт к трупу, и трафик, который теперь перегружает выживших.\n\n```mermaid\nflowchart TD\n  CAP[\"мощность = одновременность / время обработки\"] --> U{\"приход выше мощности?\"}\n  U -->|нет| OK[\"задержка = время обработки\"]\n  U -->|да| Q[\"очередь растёт\"]\n  Q --> L[\"задержка ~ 1 / (1 - загрузка)\"]\n  L --> T[\"таймауты клиентов: работа впустую\"]\n  T --> RT[\"повторы повышают нагрузку\"]\n  RT --> Q\n  Q --> SH[\"ограниченная очередь: быстрый 503\"]\n```\n\nБез health-check'ов список бэкендов балансировщика — по-прежнему конфиг, поэтому треть запросов продолжает уходить к реплике, которая не может ответить. Тем временем та доля, что попадает на выживших, поднимает их с 70% до 105%, где и запускается петля выше: очередь, нелинейная задержка, таймауты клиентов, повторы и в итоге 503.\n\nВсе ответы выводятся из одной и той же арифметики. Вертикальное масштабирование дёшево поднимает `одновременность / время обработки`, но оставляет один домен отказа; горизонтальное даёт эластичность и переживает потерю машины — но только если реплики взаимозаменяемы, проверки настроены, а флот посчитан по N-1. И ничто из этого не поможет, если настоящее ограничение — общая база данных."
+          },
+          "feedback": {
+            "correct": { "en": "Both effects at once: a third of requests fail outright, and the survivors go over 100%.", "ru": "Оба эффекта сразу: треть запросов падает сразу, а выжившие уходят выше 100%." },
+            "incorrect": { "en": "Without health checks the dead replica keeps its share, and the rest pushes the survivors to ~105%.", "ru": "Без health-check'ов мёртвая реплика сохраняет свою долю, а остальное поднимает выживших до ~105%." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "About a third of requests fail at the dead replica, and the survivors are pushed to ~105% and start queueing", "ru": "Примерно треть запросов падает на мёртвой реплике, а выжившие уходят на ~105% и копят очередь" }, "correct": true },
+            { "id": "b", "text": { "en": "The two survivors take all the traffic at ~105% and nothing is lost outright", "ru": "Две выжившие берут весь трафик на ~105%, и напрямую ничего не теряется" }, "correct": false,
+              "feedback": { "en": "Only with health checks configured; here the balancer keeps sending a full share to the corpse.", "ru": "Так было бы только с настроенными health-check'ами; здесь балансировщик продолжает слать полную долю трупу." } },
+            { "id": "c", "text": { "en": "The survivors stay at 70% — only the dead replica's own clients are affected", "ru": "Выжившие остаются на 70% — пострадают только клиенты мёртвой реплики" }, "correct": false,
+              "feedback": { "en": "Losing a replica redistributes traffic rather than removing it, so the survivors rise to 105%.", "ru": "Потеря реплики перераспределяет трафик, а не убирает его, поэтому выжившие поднимаются до 105%." } }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cap-p1-wasted-capacity",
+          "type": "predict_output",
+          "prompt": {
+            "en": "After a few minutes of this, what is the server mostly spending its capacity on?",
+            "ru": "Спустя несколько минут в таком режиме — на что сервер в основном тратит свою мощность?"
+          },
+          "code": "capacity:        4000 requests per second\narrivals:        5000 requests per second\nqueue:           unbounded\nclient timeout:  2 s",
+          "codeLang": "text",
+          "feedback": {
+            "correct": { "en": "The queue grew far past 2 s of work, so almost everything it finishes is already abandoned.", "ru": "Очередь выросла далеко за 2 с работы, поэтому почти всё, что доделывается, уже брошено." },
+            "incorrect": { "en": "An unbounded queue outgrows the timeout: the server finishes requests whose clients are gone.", "ru": "Неограниченная очередь перерастает таймаут: сервер доделывает запросы, чьи клиенты уже ушли." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Finishing requests whose clients have already timed out and gone", "ru": "На доделывание запросов, чьи клиенты уже отвалились по таймауту и ушли" }, "correct": true },
+            { "id": "b", "text": { "en": "Rejecting the surplus with 503", "ru": "На отказы излишку с кодом 503" }, "correct": false,
+              "feedback": { "en": "An unbounded queue never rejects — it stores, which is exactly the problem.", "ru": "Неограниченная очередь никогда не отказывает — она копит, в чём и состоит проблема." } },
+            { "id": "c", "text": { "en": "Nothing unusual: the 5000 arriving requests are just served 25% slower", "ru": "Ни на что необычное: 5000 приходящих запросов просто обслуживаются на 25% медленнее" }, "correct": false,
+              "feedback": { "en": "The surplus accumulates, so the delay grows without bound rather than settling 25% higher.", "ru": "Излишек накапливается, поэтому задержка растёт неограниченно, а не устанавливается на 25% выше." } }
+          ]
+        },
+        {
+          "id": "cap-p2-spot-config",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "Several lines here are questionable, but one guarantees the server will spend its capacity on requests whose clients are already gone. Which one?",
+            "ru": "Здесь сомнительны несколько строк, но одна гарантирует, что сервер потратит мощность на запросы, чьи клиенты уже ушли. Какая?"
+          },
+          "code": "threads.max      = 200      # ~50 ms per request -> ~4000 rps\nqueue.capacity   = 100000   # accepted before refusing\nclient.timeout   = 2s\nretry.attempts   = 3        # fixed 100 ms delay, no jitter\nautoscale.metric = cpu",
+          "codeLang": "text",
+          "feedback": {
+            "correct": { "en": "100000 queued at 4000 rps is 25 s of work, and the client leaves after 2.", "ru": "100000 в очереди при 4000 rps — это 25 с работы, а клиент уходит через 2." },
+            "incorrect": { "en": "queue.capacity: 100000 / 4000 rps = 25 s of queued work against a 2 s timeout.", "ru": "queue.capacity: 100000 / 4000 rps = 25 с работы в очереди против таймаута в 2 с." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "queue.capacity = 100000", "ru": "queue.capacity = 100000" }, "correct": true },
+            { "id": "b", "text": { "en": "retry.attempts = 3 with a fixed delay", "ru": "retry.attempts = 3 с фиксированной задержкой" }, "correct": false,
+              "feedback": { "en": "Retries without jitter amplify and synchronise load — bad, but they do not by themselves make the server work for absent clients.", "ru": "Повторы без джиттера усиливают и синхронизируют нагрузку — плохо, но сами по себе не заставляют сервер работать на отсутствующих клиентов." } },
+            { "id": "c", "text": { "en": "autoscale.metric = cpu", "ru": "autoscale.metric = cpu" }, "correct": false,
+              "feedback": { "en": "A poor scaling signal for an I/O-bound service, but it does not create wasted work on its own.", "ru": "Плохой сигнал масштабирования для сервиса на I/O, но сам по себе он не создаёт работы впустую." } }
+          ]
+        },
+        {
+          "id": "cap-p3-sort-symptoms",
+          "type": "sort_steps",
+          "prompt": { "en": "Order the symptoms of an overloaded server as they appear.", "ru": "Расставь симптомы перегруженного сервера в порядке появления." },
+          "feedback": {
+            "correct": { "en": "Slow, then wasteful, then self-amplifying, then refusing, then crashing.", "ru": "Сначала медленно, затем впустую, затем самоусиление, затем отказы, затем падение." },
+            "incorrect": { "en": "Queue, non-linear latency, timeouts, retries, 503s, then resource exhaustion.", "ru": "Очередь, нелинейная задержка, таймауты, повторы, 503, затем исчерпание ресурсов." }
+          },
+          "steps": [
+            { "id": "s1", "text": { "en": "The queue grows as utilisation approaches 100%", "ru": "Очередь растёт по мере приближения загрузки к 100%" } },
+            { "id": "s2", "text": { "en": "Latency climbs non-linearly", "ru": "Задержка растёт нелинейно" } },
+            { "id": "s3", "text": { "en": "Client timeouts fire, and finished work goes to nobody", "ru": "Срабатывают таймауты клиентов, и доделанная работа уходит в никуда" } },
+            { "id": "s4", "text": { "en": "Retries push the offered load even higher", "ru": "Повторы поднимают предлагаемую нагрузку ещё выше" } },
+            { "id": "s5", "text": { "en": "The queue fills and the server starts returning 503", "ru": "Очередь заполняется, и сервер начинает отдавать 503" } },
+            { "id": "s6", "text": { "en": "Connections, file descriptors and heap run out", "ru": "Заканчиваются соединения, файловые дескрипторы и куча" } }
+          ]
+        },
+        {
+          "id": "cap-p4-match-mechanisms",
+          "type": "match_pairs",
+          "prompt": { "en": "Match each mechanism to the job it does in a scaled-out service.", "ru": "Соотнеси каждый механизм с его ролью в масштабированном сервисе." },
+          "feedback": {
+            "correct": { "en": "Each one covers a different failure: waste, a dead node, a slow node, lost state, a cascade.", "ru": "Каждый закрывает свой отказ: работу впустую, мёртвый узел, медленный узел, потерянное состояние, каскад." },
+            "incorrect": { "en": "Bounded queue for waste, health checks for dead nodes, least connections for slow ones, external state for interchangeability, N-1 against cascades.", "ru": "Ограниченная очередь — против работы впустую, health-check'и — против мёртвых узлов, least connections — против медленных, вынесенное состояние — ради взаимозаменяемости, N-1 — против каскада." }
+          },
+          "pairs": [
+            { "id": "queue", "left": { "en": "Bounded queue", "ru": "Ограниченная очередь" }, "right": { "en": "Turns overload into a fast 503 instead of wasted work", "ru": "Превращает перегрузку в быстрый 503 вместо работы впустую" } },
+            { "id": "health", "left": { "en": "Health check", "ru": "Health-check" }, "right": { "en": "Removes a dead replica from rotation after the detection window", "ru": "Убирает мёртвую реплику из ротации после окна обнаружения" } },
+            { "id": "lc", "left": { "en": "Least connections", "ru": "Least connections" }, "right": { "en": "Stops sending a full share to a node that is not finishing work", "ru": "Перестаёт слать полную долю узлу, который не доделывает работу" } },
+            { "id": "session", "left": { "en": "Externalised session store", "ru": "Вынесенное хранилище сессий" }, "right": { "en": "Lets any replica serve any request", "ru": "Позволяет любой реплике обслужить любой запрос" } },
+            { "id": "n1", "left": { "en": "N-1 sizing", "ru": "Расчёт по N-1" }, "right": { "en": "Keeps the loss of one replica from cascading", "ru": "Не даёт потере одной реплики превратиться в каскад" } }
+          ]
+        },
+        {
+          "id": "cap-p5-fill-summary",
+          "type": "fill_blank",
+          "prompt": { "en": "Fill the key numbers of the interview answer.", "ru": "Впиши ключевые части ответа для собеседования." },
+          "text": {
+            "en": "One instance: throughput = ___ / service time. Keep the queue no deeper than the client's ___. And three replicas at 70% become two at ___%.",
+            "ru": "Один экземпляр: пропускная способность = ___ / время обработки. Очередь не глубже клиентского ___. А три реплики по 70% превращаются в две по ___%."
+          },
+          "blanks": [
+            { "en": ["concurrency"], "ru": ["одновременность", "concurrency", "параллельность"] },
+            { "en": ["timeout"], "ru": ["таймаута", "таймаут"] },
+            { "en": ["105"], "ru": ["105"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Capacity, wasted work and N-1 sizing — the three numbers the whole answer rests on.", "ru": "Мощность, работа впустую и расчёт по N-1 — три числа, на которых держится весь ответ." },
+            "incorrect": { "en": "concurrency / service time; a queue no deeper than the client timeout; and 3 x 70% over 2 replicas = 105%.", "ru": "одновременность / время обработки; очередь не глубже клиентского таймаута; и 3 x 70% на 2 реплики = 105%." }
+          }
+        }
+      ]
+    }
+  ]
+}

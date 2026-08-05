@@ -1,0 +1,1386 @@
+{
+  "schemaVersion": 1,
+  "topicId": "transaction-read-anomalies",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "overlapping-transactions",
+      "title": { "en": "Where anomalies come from", "ru": "Откуда берутся аномалии" },
+      "summary": {
+        "en": "Anomalies appear when two transactions overlap in time: one can observe or overwrite work the other has not finished.",
+        "ru": "Аномалии появляются, когда две транзакции пересекаются во времени: одна может увидеть или перезаписать незаконченную работу другой."
+      },
+      "discovery": [
+        {
+          "id": "overlap-d1-why-wrong",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Transaction A and transaction B work with the same row at the same time. Every SQL statement in each of them is written correctly. Why can the final result still be wrong?",
+            "ru": "Транзакция A и транзакция B работают с одной строкой одновременно. Каждый SQL-запрос в обеих написан правильно. Почему итоговый результат все равно может быть неверным?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Because A can observe or overwrite work that B has not finished", "ru": "Потому что A может увидеть или перезаписать работу, которую B еще не закончила" }, "correct": true },
+            { "id": "b", "text": { "en": "Because a database cannot run two transactions at the same time", "ru": "Потому что база данных не может выполнять две транзакции одновременно" }, "correct": false,
+              "feedback": { "en": "Databases do run transactions concurrently; the risk is what they see of each other.", "ru": "Базы данных выполняют транзакции параллельно; риск — в том, что они видят друг у друга." } },
+            { "id": "c", "text": { "en": "Because each transaction always works on a frozen copy of the database", "ru": "Потому что каждая транзакция всегда работает с замороженной копией базы" }, "correct": false,
+              "feedback": { "en": "A frozen copy is something stronger isolation adds; it is not automatic.", "ru": "Замороженная копия — это то, что добавляет более строгий isolation; она не появляется сама." } }
+          ],
+          "reveal": {
+            "en": "A **transaction** is a unit of work that ends in one of two ways: **COMMIT** makes its changes part of the database's official history, or **ROLLBACK** discards them as if they never happened.\n\nWhile a transaction is open, its changes exist but are **uncommitted**. Two transactions **overlap** when both are open at the same time — and that overlap is the only place these anomalies can live. There are two ways it hurts:\n\n```mermaid\nflowchart TD\n  A[\"two overlapping transactions\"] --> B{\"has the other one committed?\"}\n  B -->|no| C[\"dirty read\"]\n  B -->|yes| D[\"non-repeatable read or phantom read\"]\n  A --> E[\"read-modify-write overlap\"]\n  E --> F[\"lost update\"]\n```\n\nThe first branch is about what a transaction **sees** of another's changes; the second is about two transactions **writing** over each other. The next atoms define each of the four named cases.",
+            "ru": "**Транзакция** — это единица работы, которая заканчивается одним из двух способов: **COMMIT** делает ее изменения частью официальной истории базы, а **ROLLBACK** отменяет их, как будто их не было.\n\nПока транзакция открыта, ее изменения существуют, но они **uncommitted**. Две транзакции **пересекаются**, когда обе открыты одновременно, — и только в этом пересечении и живут аномалии. Вредит это двумя способами:\n\n```mermaid\nflowchart TD\n  A[\"две пересекающиеся транзакции\"] --> B{\"другая сделала commit?\"}\n  B -->|нет| C[\"dirty read\"]\n  B -->|да| D[\"non-repeatable read или phantom read\"]\n  A --> E[\"пересечение read-modify-write\"]\n  E --> F[\"lost update\"]\n```\n\nПервая ветка — про то, что транзакция **видит** из чужих изменений; вторая — про то, как две транзакции **записывают** поверх друг друга. Следующие атомы разберут каждый из четырех случаев."
+          },
+          "feedback": {
+            "correct": { "en": "Right — the danger lives in the overlap, not in a single statement.", "ru": "Верно — опасность живет в пересечении, а не в отдельном запросе." },
+            "incorrect": { "en": "The risk is the overlap: one transaction can see or overwrite another's unfinished work.", "ru": "Риск — в пересечении: одна транзакция может увидеть или перезаписать незаконченную работу другой." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "overlap-p1-correct-statements-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Transaction anomalies can appear even when every single SQL statement in each transaction is correct.",
+            "ru": "Аномалии транзакций могут появиться, даже если каждый отдельный SQL-запрос в каждой транзакции корректен."
+          },
+          "answer": true,
+          "feedback": {
+            "correct": { "en": "The bug lives in the interleaving of two transactions, not in one statement.", "ru": "Ошибка живет в чередовании двух транзакций, а не в одном запросе." },
+            "incorrect": { "en": "They can — the defect is in how two correct transactions interleave.", "ru": "Могут — дефект в том, как чередуются две корректные транзакции." }
+          }
+        },
+        {
+          "id": "overlap-p2-needs-write",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which of these four anomalies requires the affected transaction to WRITE, not just to read?",
+            "ru": "Какая из четырех аномалий требует, чтобы пострадавшая транзакция ЗАПИСЫВАЛА, а не только читала?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "lost update", "ru": "lost update" }, "correct": true },
+            { "id": "b", "text": { "en": "dirty read", "ru": "dirty read" }, "correct": false,
+              "feedback": { "en": "A read-only transaction can read another's uncommitted value.", "ru": "Транзакция только для чтения может прочитать чужое uncommitted значение." } },
+            { "id": "c", "text": { "en": "phantom read", "ru": "phantom read" }, "correct": false,
+              "feedback": { "en": "A read-only transaction can run the same query twice and see a new row.", "ru": "Транзакция только для чтения может выполнить один запрос дважды и увидеть новую строку." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Lost update is a write-write problem; the other three are read anomalies.", "ru": "Lost update — проблема write-write; остальные три — аномалии чтения." },
+            "incorrect": { "en": "Only lost update needs a write: it is one write overwriting another.", "ru": "Только lost update требует записи: это одна запись поверх другой." }
+          }
+        },
+        {
+          "id": "overlap-p3-fill-commit-rollback",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the two SQL keywords that end a transaction.", "ru": "Впиши два SQL-ключевых слова, которыми заканчивается транзакция." },
+          "text": {
+            "en": "A transaction ends either with a ___ that keeps its changes, or with a ___ that discards them.",
+            "ru": "Транзакция заканчивается либо ___, который сохраняет ее изменения, либо ___, который их отменяет."
+          },
+          "blanks": [
+            { "en": ["COMMIT", "commit"], "ru": ["COMMIT", "commit"] },
+            { "en": ["ROLLBACK", "rollback"], "ru": ["ROLLBACK", "rollback"] }
+          ],
+          "feedback": {
+            "correct": { "en": "COMMIT publishes the changes; ROLLBACK erases them.", "ru": "COMMIT публикует изменения; ROLLBACK их стирает." },
+            "incorrect": { "en": "COMMIT keeps the changes, ROLLBACK discards them.", "ru": "COMMIT сохраняет изменения, ROLLBACK их отменяет." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "dirty-read",
+      "title": { "en": "Dirty read", "ru": "Dirty read" },
+      "summary": {
+        "en": "A dirty read is reading a value another transaction has written but has not committed yet.",
+        "ru": "Dirty read — это чтение значения, которое другая транзакция записала, но еще не зафиксировала."
+      },
+      "discovery": [
+        {
+          "id": "dirty-d1-uncommitted-select",
+          "type": "predict_output",
+          "prompt": {
+            "en": "T1 has changed the row but has not committed. On a level that allows dirty reads, what does T2's SELECT return?",
+            "ru": "T1 изменила строку, но не сделала commit. На уровне, который допускает dirty reads, что вернет SELECT в T2?"
+          },
+          "code": "-- committed balance is 100\n\n-- T1\nBEGIN;\nUPDATE accounts SET balance = 50 WHERE id = 1;   -- no COMMIT yet\n\n-- T2, on a level that allows dirty reads\nBEGIN;\nSELECT balance FROM accounts WHERE id = 1;",
+          "codeLang": "sql",
+          "options": [
+            { "id": "a", "text": { "en": "50", "ru": "50" }, "correct": true },
+            { "id": "b", "text": { "en": "100", "ru": "100" }, "correct": false,
+              "feedback": { "en": "100 is what a database that hides uncommitted data returns; here they are visible.", "ru": "100 вернет база, которая скрывает uncommitted данные; здесь они видны." } },
+            { "id": "c", "text": { "en": "An error, because the row is being modified", "ru": "Ошибку, потому что строка изменяется" }, "correct": false,
+              "feedback": { "en": "A dirty read is an ordinary read of an in-progress value, not an error.", "ru": "Dirty read — обычное чтение незавершенного значения, а не ошибка." } }
+          ],
+          "reveal": {
+            "en": "A **dirty read** happens when one transaction reads a value that another transaction has written but **not committed**. \"Dirty\" means exactly one thing: *not committed yet* — nothing else.\n\n```mermaid\nsequenceDiagram\n  participant A as Transaction A\n  participant DB as Database\n  participant B as Transaction B\n  B->>DB: UPDATE balance from 100 to 50, no COMMIT\n  A->>DB: SELECT balance\n  DB-->>A: 50, uncommitted\n```\n\nThe timeline is: B updates `balance` from `100` to `50` and stays open; A reads `50`; A now continues its own work using a number that is still only a draft inside B. Why would a database ever allow this? Because hiding in-progress values costs bookkeeping — the weakest isolation setting skips that work, and the reader pays for it.",
+            "ru": "**Dirty read** происходит, когда одна транзакция читает значение, которое другая транзакция записала, но **не зафиксировала**. Слово \"dirty\" означает ровно одно: *еще не committed* — и ничего больше.\n\n```mermaid\nsequenceDiagram\n  participant A as Транзакция A\n  participant DB as База данных\n  participant B as Транзакция B\n  B->>DB: UPDATE balance со 100 на 50, без COMMIT\n  A->>DB: SELECT balance\n  DB-->>A: 50, uncommitted\n```\n\nПорядок такой: B меняет `balance` со `100` на `50` и остается открытой; A читает `50`; A продолжает свою работу с числом, которое пока лишь черновик внутри B. Зачем базе это разрешать? Потому что скрывать незавершенные значения — это дополнительная работа; самый слабый уровень isolation ее не делает, а расплачивается читатель."
+          },
+          "feedback": {
+            "correct": { "en": "Right — an uncommitted 50 became visible, and that is a dirty read.", "ru": "Верно — uncommitted 50 стало видно, и это dirty read." },
+            "incorrect": { "en": "With dirty reads allowed, T2 sees T1's uncommitted 50.", "ru": "Когда dirty reads разрешены, T2 видит uncommitted 50 из T1." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "dirty-p1-definition-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A dirty read means reading a value that another transaction has written but not committed.",
+            "ru": "Dirty read означает чтение значения, которое другая транзакция записала, но не зафиксировала."
+          },
+          "answer": true,
+          "feedback": {
+            "correct": { "en": "That is the definition: the value is not part of committed data.", "ru": "Это и есть определение: значение не входит в committed data." },
+            "incorrect": { "en": "It is true — \"dirty\" means the writer has not committed yet.", "ru": "Это правда — \"dirty\" означает, что записавший еще не сделал commit." }
+          }
+        },
+        {
+          "id": "dirty-p2-condition",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which condition must hold for a read to count as a dirty read?",
+            "ru": "Какое условие должно выполняться, чтобы чтение считалось dirty read?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "The value was written by a transaction that has not committed yet", "ru": "Значение записано транзакцией, которая еще не сделала commit" }, "correct": true },
+            { "id": "b", "text": { "en": "The value is older than the reader expected", "ru": "Значение старее, чем ожидал читатель" }, "correct": false,
+              "feedback": { "en": "Reading an old but committed value is stale, not dirty.", "ru": "Чтение старого, но committed значения — stale, а не dirty." } },
+            { "id": "c", "text": { "en": "The reader and the writer touch different rows", "ru": "Читатель и писатель работают с разными строками" }, "correct": false,
+              "feedback": { "en": "A dirty read is about the same data an uncommitted transaction wrote.", "ru": "Dirty read — про те же данные, которые записала незафиксированная транзакция." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Commit status is the whole test for \"dirty\".", "ru": "Статус commit — единственный критерий для \"dirty\"." },
+            "incorrect": { "en": "The single test is commit status: the writer has not committed yet.", "ru": "Единственный критерий — статус commit: записавший еще не сделал commit." }
+          }
+        },
+        {
+          "id": "dirty-p3-sort-timeline",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Put the steps of a dirty read in the order they happen.",
+            "ru": "Расставь шаги dirty read в порядке их выполнения."
+          },
+          "steps": [
+            { "id": "s1", "text": { "en": "Transaction B begins and updates a row", "ru": "Транзакция B начинается и обновляет строку" } },
+            { "id": "s2", "text": { "en": "B stays open without committing", "ru": "B остается открытой и не делает commit" } },
+            { "id": "s3", "text": { "en": "Transaction A reads that row and sees B's new value", "ru": "Транзакция A читает эту строку и видит новое значение из B" } },
+            { "id": "s4", "text": { "en": "A continues its work using data that is not committed", "ru": "A продолжает работу с данными, которые не зафиксированы" } }
+          ],
+          "feedback": {
+            "correct": { "en": "The read has to land inside B's open window — that is the whole trick.", "ru": "Чтение должно попасть в открытое окно B — в этом весь смысл." },
+            "incorrect": { "en": "B writes without committing, then A reads that uncommitted value and acts on it.", "ru": "B записывает без commit, затем A читает это uncommitted значение и действует по нему." }
+          }
+        },
+        {
+          "id": "dirty-p4-fill-commit",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the missing SQL keyword.", "ru": "Впиши пропущенное SQL-ключевое слово." },
+          "text": {
+            "en": "A dirty read means reading data written by a transaction that has not done a ___ yet.",
+            "ru": "Dirty read означает чтение данных, записанных транзакцией, которая еще не сделала ___."
+          },
+          "blanks": [
+            { "en": ["COMMIT", "commit"], "ru": ["COMMIT", "commit"] }
+          ],
+          "feedback": {
+            "correct": { "en": "No COMMIT yet means the value is not part of committed history.", "ru": "Нет COMMIT — значит, значение не входит в committed history." },
+            "incorrect": { "en": "It is COMMIT: without it the written value stays uncommitted.", "ru": "Это COMMIT: без него записанное значение остается uncommitted." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "dirty-read-rollback",
+      "title": { "en": "Why dirty reads are dangerous", "ru": "Почему dirty read опасен" },
+      "summary": {
+        "en": "If the writer rolls back, the dirty value never became committed history, yet the reader has already acted on it.",
+        "ru": "Если записавший делает rollback, dirty-значение никогда не попало в committed history, а читатель уже принял по нему решение."
+      },
+      "discovery": [
+        {
+          "id": "rollback-d1-after-rollback",
+          "type": "predict_output",
+          "prompt": {
+            "en": "After T1's ROLLBACK, what is the committed balance, and what did T2 base its payout on?",
+            "ru": "После ROLLBACK в T1 каков зафиксированный баланс и на чем T2 основала выплату?"
+          },
+          "code": "-- committed balance is 100\n\n-- T1\nBEGIN;\nUPDATE accounts SET balance = 50 WHERE id = 1;\n\n-- T2, dirty reads allowed\nBEGIN;\nSELECT balance FROM accounts WHERE id = 1;   -- reads 50 and approves a payout\nCOMMIT;\n\n-- T1\nROLLBACK;",
+          "codeLang": "sql",
+          "options": [
+            { "id": "a", "text": { "en": "Balance is 100, and T2 decided on a value that never existed in committed history", "ru": "Баланс равен 100, а T2 приняла решение по значению, которого никогда не было в committed history" }, "correct": true },
+            { "id": "b", "text": { "en": "Balance is 50, because T2 already read it and committed", "ru": "Баланс равен 50, потому что T2 уже прочитала его и сделала commit" }, "correct": false,
+              "feedback": { "en": "A reader cannot make someone else's write durable; ROLLBACK discards it.", "ru": "Читатель не может сделать чужую запись постоянной; ROLLBACK ее отменяет." } },
+            { "id": "c", "text": { "en": "Balance is 100, and T2's payout is undone automatically", "ru": "Баланс равен 100, а выплата T2 отменяется автоматически" }, "correct": false,
+              "feedback": { "en": "T2 already committed; the database will not undo its work.", "ru": "T2 уже сделала commit; база не отменит ее работу." } }
+          ],
+          "reveal": {
+            "en": "**Committed history** is the sequence of states the database officially admits to. A rolled-back change never joins it — after `ROLLBACK` the balance is `100`, and `50` is a number that officially never existed.\n\nThat is what makes a dirty read worse than merely reading old data:\n\n- `ROLLBACK` only undoes the **writer's** changes. T2 already committed, so its payout stands.\n- The reader's real-world action (money paid, item shipped, email sent) cannot be rolled back at all.\n\nNote the contrast with a **stale read**: a value that was committed five minutes ago and has since changed is *old*, but it did exist. A dirty value may never have existed. That is why almost every isolation level worth using refuses to show uncommitted data.",
+            "ru": "**Committed history** — это последовательность состояний, которые база официально признает. Отмененное изменение в нее не попадает: после `ROLLBACK` баланс равен `100`, а `50` — число, которого официально никогда не было.\n\nИменно поэтому dirty read хуже, чем просто чтение устаревших данных:\n\n- `ROLLBACK` отменяет изменения только **записавшей** транзакции. T2 уже сделала commit, поэтому ее выплата остается.\n- Действие читателя в реальном мире (деньги отправлены, товар отгружен, письмо ушло) откатить вообще нельзя.\n\nСравни со **stale read**: значение, зафиксированное пять минут назад и с тех пор изменившееся, — *старое*, но оно существовало. Dirty-значение могло не существовать никогда. Поэтому почти любой практичный уровень isolation отказывается показывать uncommitted данные."
+          },
+          "feedback": {
+            "correct": { "en": "Right — the reader keeps a decision built on a value that was erased.", "ru": "Верно — у читателя осталось решение, построенное на стертом значении." },
+            "incorrect": { "en": "ROLLBACK restores 100, but T2's committed payout used a value that never existed.", "ru": "ROLLBACK возвращает 100, но зафиксированная выплата T2 опиралась на значение, которого не было." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "rollback-p1-why-dangerous",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why is a dirty read especially dangerous when the writing transaction later rolls back?",
+            "ru": "Почему dirty read особенно опасен, если записавшая транзакция потом делает rollback?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "The reader acted on a value that never became part of committed history", "ru": "Читатель принял решение по значению, которое так и не стало частью committed history" }, "correct": true },
+            { "id": "b", "text": { "en": "The reading transaction is rolled back together with the writer", "ru": "Читающая транзакция откатывается вместе с записавшей" }, "correct": false,
+              "feedback": { "en": "ROLLBACK affects only the writer; a committed reader keeps its work.", "ru": "ROLLBACK затрагивает только записавшую транзакцию; зафиксированный читатель сохраняет работу." } },
+            { "id": "c", "text": { "en": "The row stays locked forever after the rollback", "ru": "После rollback строка остается заблокированной навсегда" }, "correct": false,
+              "feedback": { "en": "ROLLBACK releases the writer's locks; the damage is the reader's decision.", "ru": "ROLLBACK снимает блокировки записавшей транзакции; ущерб — в решении читателя." } }
+          ],
+          "feedback": {
+            "correct": { "en": "The value vanishes from history, but the decision made from it does not.", "ru": "Значение исчезает из истории, а решение по нему — нет." },
+            "incorrect": { "en": "The rollback erases the value, but not the reader's already-committed decision.", "ru": "Rollback стирает значение, но не уже зафиксированное решение читателя." }
+          }
+        },
+        {
+          "id": "rollback-p2-stale-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Reading a committed value that is five minutes out of date counts as a dirty read.",
+            "ru": "Чтение committed значения пятиминутной давности считается dirty read."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": { "en": "That is a stale read; dirty means specifically uncommitted.", "ru": "Это stale read; dirty означает именно uncommitted." },
+            "incorrect": { "en": "No — old but committed data is stale, not dirty.", "ru": "Нет — старые, но committed данные — stale, а не dirty." }
+          }
+        },
+        {
+          "id": "rollback-p3-match-terms",
+          "type": "match_pairs",
+          "prompt": { "en": "Match each term to what it means for a transaction's data.", "ru": "Соотнеси каждый термин с тем, что он означает для данных транзакции." },
+          "pairs": [
+            { "id": "commit", "left": { "en": "COMMIT", "ru": "COMMIT" }, "right": { "en": "Makes the changes part of committed history", "ru": "Делает изменения частью committed history" } },
+            { "id": "rollback", "left": { "en": "ROLLBACK", "ru": "ROLLBACK" }, "right": { "en": "Discards the transaction's uncommitted changes", "ru": "Отменяет uncommitted изменения транзакции" } },
+            { "id": "dirty", "left": { "en": "dirty read", "ru": "dirty read" }, "right": { "en": "Reads a value that is not committed", "ru": "Читает значение, которое не зафиксировано" } },
+            { "id": "stale", "left": { "en": "stale read", "ru": "stale read" }, "right": { "en": "Reads a committed value that has since changed", "ru": "Читает committed значение, которое с тех пор изменилось" } }
+          ],
+          "feedback": {
+            "correct": { "en": "Dirty is about commit status; stale is only about age.", "ru": "Dirty — про статус commit; stale — только про давность." },
+            "incorrect": { "en": "COMMIT publishes, ROLLBACK discards; dirty = uncommitted, stale = merely old.", "ru": "COMMIT публикует, ROLLBACK отменяет; dirty = uncommitted, stale = просто старое." }
+          }
+        },
+        {
+          "id": "rollback-p4-fill-rollback",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the missing SQL keyword.", "ru": "Впиши пропущенное SQL-ключевое слово." },
+          "text": {
+            "en": "A dirty read is dangerous because the writer may still ___, leaving the reader with a value that never became committed.",
+            "ru": "Dirty read опасен тем, что записавшая транзакция еще может сделать ___, и у читателя останется значение, которое так и не стало committed."
+          },
+          "blanks": [
+            { "en": ["ROLLBACK", "rollback", "roll back"], "ru": ["ROLLBACK", "rollback"] }
+          ],
+          "feedback": {
+            "correct": { "en": "The rollback removes the value but not the decision made from it.", "ru": "Rollback убирает значение, но не решение, принятое по нему." },
+            "incorrect": { "en": "It is ROLLBACK: the value disappears from history, the decision stays.", "ru": "Это ROLLBACK: значение исчезает из истории, а решение остается." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "non-repeatable-read",
+      "title": { "en": "Non-repeatable read", "ru": "Non-repeatable read" },
+      "summary": {
+        "en": "The same row read twice in one transaction returns different values because another transaction committed an update in between.",
+        "ru": "Одна и та же строка, прочитанная дважды в одной транзакции, дает разные значения, потому что между чтениями другая транзакция сделала committed update."
+      },
+      "discovery": [
+        {
+          "id": "nrr-d1-second-select",
+          "type": "predict_output",
+          "prompt": {
+            "en": "T1 is still open and repeats its own query. The database shows only committed data and takes no snapshot. What does the second SELECT return?",
+            "ru": "T1 все еще открыта и повторяет свой же запрос. База показывает только committed данные и не делает snapshot. Что вернет второй SELECT?"
+          },
+          "code": "-- T1 (only committed data is visible, no snapshot is taken)\nBEGIN;\nSELECT balance FROM accounts WHERE id = 1;   -- returns 100\n\n-- T2\nBEGIN;\nUPDATE accounts SET balance = 120 WHERE id = 1;\nCOMMIT;\n\n-- T1, same transaction, repeats its own query\nSELECT balance FROM accounts WHERE id = 1;",
+          "codeLang": "sql",
+          "options": [
+            { "id": "a", "text": { "en": "120", "ru": "120" }, "correct": true },
+            { "id": "b", "text": { "en": "100, because T1 already read the row once", "ru": "100, потому что T1 уже читала эту строку" }, "correct": false,
+              "feedback": { "en": "Nothing pins the row for T1; a plain re-read sees the newest committed value.", "ru": "Ничто не закрепляет строку за T1; обычное повторное чтение видит свежее committed значение." } },
+            { "id": "c", "text": { "en": "An error, because the row changed under T1", "ru": "Ошибку, потому что строка изменилась под T1" }, "correct": false,
+              "feedback": { "en": "The re-read succeeds; it simply returns a different number.", "ru": "Повторное чтение проходит успешно; просто возвращает другое число." } }
+          ],
+          "reveal": {
+            "en": "A **non-repeatable read** is when one transaction reads the *same row* twice and gets different values, because another transaction committed an `UPDATE` in between.\n\n```mermaid\nsequenceDiagram\n  participant T1 as Transaction A\n  participant DB as Database\n  participant T2 as Transaction B\n  T1->>DB: SELECT balance = 100\n  T2->>DB: UPDATE balance = 120 and COMMIT\n  T1->>DB: SELECT balance again\n  DB-->>T1: balance = 120\n```\n\nThe crucial difference from a dirty read is **commit status**: here the second value is committed and completely real. Nothing illegal happened — the problem is that A never got a **stable view** of that row, so any logic that assumed \"the balance I read is still the balance\" is now wrong. Two reads inside one transaction, two answers: the read was not repeatable.",
+            "ru": "**Non-repeatable read** — это когда одна транзакция читает *одну и ту же строку* дважды и получает разные значения, потому что между чтениями другая транзакция сделала committed `UPDATE`.\n\n```mermaid\nsequenceDiagram\n  participant T1 as Транзакция A\n  participant DB as База данных\n  participant T2 as Транзакция B\n  T1->>DB: SELECT balance = 100\n  T2->>DB: UPDATE balance = 120 и COMMIT\n  T1->>DB: SELECT balance снова\n  DB-->>T1: balance = 120\n```\n\nКлючевое отличие от dirty read — **статус commit**: здесь второе значение зафиксировано и абсолютно настоящее. Ничего незаконного не произошло — проблема в том, что A так и не получила **стабильный вид** этой строки, поэтому любая логика с расчетом \"прочитанный баланс все еще актуален\" теперь неверна. Два чтения в одной транзакции, два ответа: чтение оказалось неповторяемым."
+          },
+          "feedback": {
+            "correct": { "en": "Right — the second read sees B's committed 120.", "ru": "Верно — второе чтение видит зафиксированные 120 из B." },
+            "incorrect": { "en": "Without a snapshot, the second read returns the newest committed value, 120.", "ru": "Без snapshot второе чтение вернет свежее committed значение — 120." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "nrr-p1-uncommitted-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A non-repeatable read means the second read saw uncommitted data.",
+            "ru": "Non-repeatable read означает, что второе чтение увидело uncommitted данные."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": { "en": "The second value is committed and real — that is what separates it from a dirty read.", "ru": "Второе значение committed и настоящее — этим оно и отличается от dirty read." },
+            "incorrect": { "en": "No — the second value is committed; reading uncommitted data is a dirty read.", "ru": "Нет — второе значение committed; чтение uncommitted данных — это dirty read." }
+          }
+        },
+        {
+          "id": "nrr-p2-what-makes",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What makes a read non-repeatable?",
+            "ru": "Из-за чего чтение становится non-repeatable?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Another transaction committed an update to the same row between the two reads", "ru": "Другая транзакция сделала committed update той же строки между двумя чтениями" }, "correct": true },
+            { "id": "b", "text": { "en": "The reading transaction updated the row itself between the reads", "ru": "Читающая транзакция сама обновила строку между чтениями" }, "correct": false,
+              "feedback": { "en": "Seeing your own change is expected behaviour, not an anomaly.", "ru": "Видеть свое же изменение — ожидаемое поведение, а не аномалия." } },
+            { "id": "c", "text": { "en": "The second read used a different WHERE condition", "ru": "Второе чтение использовало другое условие WHERE" }, "correct": false,
+              "feedback": { "en": "The anomaly requires the same row read the same way twice.", "ru": "Для аномалии нужна одна и та же строка, прочитанная одинаково дважды." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Same row, same query, someone else's committed update in between.", "ru": "Та же строка, тот же запрос, чужой committed update между ними." },
+            "incorrect": { "en": "It takes another transaction's committed update to the same row between two reads.", "ru": "Нужен чужой committed update той же строки между двумя чтениями." }
+          }
+        },
+        {
+          "id": "nrr-p3-sort-timeline",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Put the steps of a non-repeatable read in the order they happen.",
+            "ru": "Расставь шаги non-repeatable read в порядке их выполнения."
+          },
+          "steps": [
+            { "id": "s1", "text": { "en": "Transaction A reads a row and gets 100", "ru": "Транзакция A читает строку и получает 100" } },
+            { "id": "s2", "text": { "en": "Transaction B updates the same row to 120 and commits", "ru": "Транзакция B обновляет ту же строку до 120 и делает commit" } },
+            { "id": "s3", "text": { "en": "Transaction A reads the same row again, still inside its own transaction", "ru": "Транзакция A читает ту же строку снова, все еще внутри своей транзакции" } },
+            { "id": "s4", "text": { "en": "A gets 120: the same read produced two different committed values", "ru": "A получает 120: одно и то же чтение дало два разных committed значения" } }
+          ],
+          "feedback": {
+            "correct": { "en": "The update must commit between A's two reads for the anomaly to show.", "ru": "Чтобы аномалия проявилась, update должен зафиксироваться между двумя чтениями A." },
+            "incorrect": { "en": "A reads, B updates and commits, A re-reads and sees the new value.", "ru": "A читает, B обновляет и делает commit, A перечитывает и видит новое значение." }
+          }
+        },
+        {
+          "id": "nrr-p4-fill-committed",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the missing word.", "ru": "Впиши пропущенное слово." },
+          "text": {
+            "en": "In a non-repeatable read the second value is already ___ by the other transaction, unlike in a dirty read.",
+            "ru": "При non-repeatable read второе значение уже ___ другой транзакцией, в отличие от dirty read."
+          },
+          "blanks": [
+            { "en": ["committed"], "ru": ["committed"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Commit status is what separates a non-repeatable read from a dirty read.", "ru": "Статус commit — то, что отличает non-repeatable read от dirty read." },
+            "incorrect": { "en": "It is committed: the value is real, it just changed mid-transaction.", "ru": "Это committed: значение настоящее, оно лишь изменилось посреди транзакции." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "phantom-read",
+      "title": { "en": "Phantom read", "ru": "Phantom read" },
+      "summary": {
+        "en": "Running the same predicate query twice returns a different SET of rows, because another transaction committed an insert or delete.",
+        "ru": "Один и тот же predicate query, выполненный дважды, дает другой НАБОР строк, потому что другая транзакция зафиксировала insert или delete."
+      },
+      "discovery": [
+        {
+          "id": "phantom-d1-second-count",
+          "type": "predict_output",
+          "prompt": {
+            "en": "T1 repeats its own count. The database shows only committed data and takes no snapshot. What does the second count return?",
+            "ru": "T1 повторяет свой же подсчет. База показывает только committed данные и не делает snapshot. Что вернет второй подсчет?"
+          },
+          "code": "-- T1 (only committed data is visible, no snapshot is taken)\nBEGIN;\nSELECT count(*) FROM orders WHERE status = 'PENDING';   -- returns 3\n\n-- T2\nBEGIN;\nINSERT INTO orders (id, status) VALUES (99, 'PENDING');\nCOMMIT;\n\n-- T1, same transaction, repeats its own query\nSELECT count(*) FROM orders WHERE status = 'PENDING';",
+          "codeLang": "sql",
+          "options": [
+            { "id": "a", "text": { "en": "4", "ru": "4" }, "correct": true },
+            { "id": "b", "text": { "en": "3, because T1 already counted these rows", "ru": "3, потому что T1 уже посчитала эти строки" }, "correct": false,
+              "feedback": { "en": "The count is not remembered; the query runs again against current committed data.", "ru": "Результат не запоминается; запрос выполняется снова по текущим committed данным." } },
+            { "id": "c", "text": { "en": "3, because rows inserted by others stay invisible until T1 ends", "ru": "3, потому что вставленные другими строки не видны, пока T1 не закончится" }, "correct": false,
+              "feedback": { "en": "That is snapshot behaviour, which this level does not provide.", "ru": "Это поведение snapshot, которого этот уровень не дает." } }
+          ],
+          "reveal": {
+            "en": "A **predicate query** is a query that selects rows by a *condition* (`WHERE status = 'PENDING'`) rather than by one known id. The rows it returns are its **row set**.\n\nA **phantom read** is when the same predicate query, run twice in one transaction, returns a different row set — because another transaction committed an `INSERT` or `DELETE` that changed which rows match. The extra (or missing) row is the \"phantom\".\n\n```mermaid\nflowchart LR\n  Q1[\"first run: status = PENDING gives 3 rows\"] --> I[\"another transaction commits an INSERT\"]\n  I --> Q2[\"same query again: 4 rows\"]\n```\n\nWhy give it a separate name from a non-repeatable read? Because of what it takes to prevent it. Locking the three rows you already saw does not help — the problem is a row that **did not exist** when you looked. Guarding a condition needs something wider than a row lock, which the next atom gets into.",
+            "ru": "**Predicate query** — это запрос, который выбирает строки по *условию* (`WHERE status = 'PENDING'`), а не по одному известному id. Строки, которые он возвращает, — это его **набор строк**.\n\n**Phantom read** — это когда один и тот же predicate query, выполненный дважды в одной транзакции, дает другой набор строк, потому что другая транзакция зафиксировала `INSERT` или `DELETE`, изменивший, какие строки подходят. Лишняя (или пропавшая) строка и есть \"фантом\".\n\n```mermaid\nflowchart LR\n  Q1[\"первый запуск: status = PENDING дает 3 строки\"] --> I[\"другая транзакция фиксирует INSERT\"]\n  I --> Q2[\"тот же запрос снова: 4 строки\"]\n```\n\nЗачем отдельное название, если есть non-repeatable read? Из-за того, что нужно для предотвращения. Заблокировать три уже увиденные строки бесполезно — проблема в строке, которой **не существовало**, когда ты смотрел. Защита условия требует чего-то более широкого, чем блокировка строки; об этом — следующий атом."
+          },
+          "feedback": {
+            "correct": { "en": "Right — the committed INSERT added a matching row, so the count grows to 4.", "ru": "Верно — зафиксированный INSERT добавил подходящую строку, поэтому счет вырос до 4." },
+            "incorrect": { "en": "The committed INSERT adds a matching row, so the second count returns 4.", "ru": "Зафиксированный INSERT добавляет подходящую строку, поэтому второй подсчет вернет 4." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "phantom-p1-row-set-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A phantom read is about the set of rows matching a condition, not about one row's value.",
+            "ru": "Phantom read относится к набору строк, подходящих под условие, а не к значению одной строки."
+          },
+          "answer": true,
+          "feedback": {
+            "correct": { "en": "The shape of the change is the row set — that is the defining trait.", "ru": "Меняется именно набор строк — это определяющий признак." },
+            "incorrect": { "en": "It is true: a phantom changes which rows match, not a value inside one row.", "ru": "Это правда: фантом меняет, какие строки подходят, а не значение внутри строки." }
+          }
+        },
+        {
+          "id": "phantom-p2-which-operation",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which committed operation by another transaction can cause a phantom read?",
+            "ru": "Какая зафиксированная операция другой транзакции может вызвать phantom read?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "An INSERT or DELETE that changes which rows match the condition", "ru": "INSERT или DELETE, который меняет, какие строки подходят под условие" }, "correct": true },
+            { "id": "b", "text": { "en": "An UPDATE of a column that the condition does not use", "ru": "UPDATE колонки, которая не участвует в условии" }, "correct": false,
+              "feedback": { "en": "That changes a value inside an already-matching row: a non-repeatable read.", "ru": "Это меняет значение внутри уже подходящей строки: non-repeatable read." } },
+            { "id": "c", "text": { "en": "A SELECT over the same rows", "ru": "SELECT по тем же строкам" }, "correct": false,
+              "feedback": { "en": "A read changes nothing, so it cannot create phantoms.", "ru": "Чтение ничего не меняет, поэтому фантомов не создает." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Only appearing or disappearing rows create phantoms.", "ru": "Фантомы создают только появляющиеся или исчезающие строки." },
+            "incorrect": { "en": "A phantom needs a committed INSERT or DELETE that changes the matching set.", "ru": "Для фантома нужен committed INSERT или DELETE, меняющий набор подходящих строк." }
+          }
+        },
+        {
+          "id": "phantom-p3-word-bank",
+          "type": "word_bank",
+          "prompt": { "en": "Assemble what a phantom read changes.", "ru": "Собери, что меняет phantom read." },
+          "tokens": {
+            "en": ["a", "phantom", "read", "changes", "which", "rows", "match", "the", "condition"],
+            "ru": ["phantom", "read", "меняет", "какие", "строки", "подходят", "под", "условие"]
+          },
+          "distractors": {
+            "en": ["value", "uncommitted"],
+            "ru": ["значение", "uncommitted"]
+          },
+          "feedback": {
+            "correct": { "en": "The row set changes; the values inside the old rows may be untouched.", "ru": "Меняется набор строк; значения в старых строках могут быть нетронуты." },
+            "incorrect": { "en": "A phantom read changes which rows match the condition.", "ru": "Phantom read меняет, какие строки подходят под условие." }
+          }
+        },
+        {
+          "id": "phantom-p4-fill-insert-delete",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the two SQL statements that create phantoms.", "ru": "Впиши два SQL-оператора, которые создают фантомы." },
+          "text": {
+            "en": "A phantom read appears when another transaction commits an ___ or a ___ that changes which rows match the query.",
+            "ru": "Phantom read появляется, когда другая транзакция фиксирует ___ или ___, меняющий набор подходящих под запрос строк."
+          },
+          "blanks": [
+            { "en": ["INSERT", "insert"], "ru": ["INSERT", "insert"] },
+            { "en": ["DELETE", "delete"], "ru": ["DELETE", "delete"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Rows appear or disappear; that is what a phantom is.", "ru": "Строки появляются или исчезают — это и есть фантом." },
+            "incorrect": { "en": "INSERT and DELETE: they change membership, an UPDATE changes a value.", "ru": "INSERT и DELETE: они меняют состав набора, а UPDATE меняет значение." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "nrr-vs-phantom",
+      "title": { "en": "Non-repeatable read vs phantom read", "ru": "Non-repeatable read против phantom read" },
+      "summary": {
+        "en": "A non-repeatable read changes an existing row's value; a phantom read changes which rows match — so they need different protection.",
+        "ru": "Non-repeatable read меняет значение существующей строки; phantom read меняет, какие строки подходят, — поэтому защита нужна разная."
+      },
+      "discovery": [
+        {
+          "id": "compare-d1-classify-update",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "T1 runs `SELECT total FROM orders WHERE id = 7` twice. Between the two runs, another transaction commits `UPDATE orders SET total = 150 WHERE id = 7`. Which anomaly did T1 hit?",
+            "ru": "T1 дважды выполняет `SELECT total FROM orders WHERE id = 7`. Между запусками другая транзакция фиксирует `UPDATE orders SET total = 150 WHERE id = 7`. С какой аномалией столкнулась T1?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Non-repeatable read", "ru": "Non-repeatable read" }, "correct": true },
+            { "id": "b", "text": { "en": "Phantom read", "ru": "Phantom read" }, "correct": false,
+              "feedback": { "en": "The matching set never changed — one existing row returned a new value.", "ru": "Набор подходящих строк не изменился — одна существующая строка дала новое значение." } },
+            { "id": "c", "text": { "en": "Dirty read", "ru": "Dirty read" }, "correct": false,
+              "feedback": { "en": "The other transaction committed, so the value is real, not dirty.", "ru": "Другая транзакция сделала commit, поэтому значение настоящее, а не dirty." } }
+          ],
+          "reveal": {
+            "en": "Both anomalies need the other transaction to have **committed**, so commit status cannot tell them apart. The question is *what changed*:\n\n```mermaid\nflowchart TD\n  S[\"same query twice, other transaction committed\"] --> Q{\"what changed?\"}\n  Q -->|\"the value of an existing row\"| N[\"non-repeatable read\"]\n  Q -->|\"which rows match\"| P[\"phantom read\"]\n```\n\nThis distinction is not pedantry — it decides which tool can save you:\n\n- A **row lock** reserves one *known* row, so it can stop that row's value from shifting under you.\n- No row lock helps against a row that does not exist yet. Guarding a predicate like \"all open orders over $100\" needs **predicate locking** or **range locking** (which lock a whole condition or key range, not a row), **serializable checks**, or a **stable snapshot** that freezes the transaction's whole view.",
+            "ru": "Обе аномалии требуют, чтобы другая транзакция сделала **commit**, поэтому по статусу commit их не различить. Вопрос в том, *что изменилось*:\n\n```mermaid\nflowchart TD\n  S[\"тот же запрос дважды, другая транзакция сделала commit\"] --> Q{\"что изменилось?\"}\n  Q -->|\"значение существующей строки\"| N[\"non-repeatable read\"]\n  Q -->|\"какие строки подходят\"| P[\"phantom read\"]\n```\n\nЭто различие — не придирка: от него зависит, какой инструмент поможет.\n\n- **Row lock** резервирует одну *известную* строку и может не дать ее значению измениться под тобой.\n- Против строки, которой еще нет, никакой row lock не поможет. Для защиты predicate вроде \"all open orders over $100\" нужны **predicate locking** или **range locking** (они блокируют целое условие или диапазон ключей, а не строку), **serializable checks** либо **stable snapshot**, который замораживает весь вид транзакции."
+          },
+          "feedback": {
+            "correct": { "en": "Same row, new committed value — that is a non-repeatable read.", "ru": "Та же строка, новое committed значение — это non-repeatable read." },
+            "incorrect": { "en": "One existing row changed value, so it is a non-repeatable read.", "ru": "У одной существующей строки изменилось значение, значит это non-repeatable read." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "compare-p1-classify-insert",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "T1 runs `SELECT * FROM orders WHERE status = 'OPEN'` twice. Between the runs, another transaction commits an INSERT of a new OPEN order. Which anomaly did T1 hit?",
+            "ru": "T1 дважды выполняет `SELECT * FROM orders WHERE status = 'OPEN'`. Между запусками другая транзакция фиксирует INSERT нового заказа со статусом OPEN. С какой аномалией столкнулась T1?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Phantom read", "ru": "Phantom read" }, "correct": true },
+            { "id": "b", "text": { "en": "Non-repeatable read", "ru": "Non-repeatable read" }, "correct": false,
+              "feedback": { "en": "No existing row changed value; a new row joined the matching set.", "ru": "Ни одна существующая строка не изменила значение; в набор добавилась новая строка." } },
+            { "id": "c", "text": { "en": "Lost update", "ru": "Lost update" }, "correct": false,
+              "feedback": { "en": "T1 only reads; lost update requires two overlapping writes.", "ru": "T1 только читает; для lost update нужны две пересекающиеся записи." } }
+          ],
+          "feedback": {
+            "correct": { "en": "A new matching row appeared, so the row set changed.", "ru": "Появилась новая подходящая строка, значит изменился набор строк." },
+            "incorrect": { "en": "A committed INSERT changed which rows match: that is a phantom read.", "ru": "Committed INSERT изменил набор подходящих строк: это phantom read." }
+          }
+        },
+        {
+          "id": "compare-p2-same-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Non-repeatable read and phantom read are two names for the same anomaly.",
+            "ru": "Non-repeatable read и phantom read — два названия одной и той же аномалии."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": { "en": "One changes a row's value, the other changes which rows match.", "ru": "Одна меняет значение строки, другая — какие строки подходят." },
+            "incorrect": { "en": "No — value of an existing row versus membership of the matching set.", "ru": "Нет — значение существующей строки против состава набора подходящих строк." }
+          }
+        },
+        {
+          "id": "compare-p3-match-locks",
+          "type": "match_pairs",
+          "prompt": { "en": "Match each protection mechanism to what it guards.", "ru": "Соотнеси каждый механизм защиты с тем, что он охраняет." },
+          "pairs": [
+            { "id": "rowlock", "left": { "en": "Row lock", "ru": "Row lock" }, "right": { "en": "One known row", "ru": "Одну известную строку" } },
+            { "id": "predicate", "left": { "en": "Predicate or range lock", "ru": "Predicate или range lock" }, "right": { "en": "A whole condition, including rows that do not exist yet", "ru": "Целое условие, включая строки, которых еще нет" } },
+            { "id": "snapshot", "left": { "en": "Stable snapshot", "ru": "Stable snapshot" }, "right": { "en": "The transaction's whole view of the data it reads", "ru": "Весь вид данных, которые читает транзакция" } }
+          ],
+          "feedback": {
+            "correct": { "en": "A row lock cannot guard a row that does not exist yet — that needs a predicate.", "ru": "Row lock не защитит строку, которой еще нет, — для этого нужен predicate." },
+            "incorrect": { "en": "Row lock = one row; predicate/range lock = a condition; snapshot = a frozen view.", "ru": "Row lock — одна строка; predicate/range lock — условие; snapshot — замороженный вид." }
+          }
+        },
+        {
+          "id": "compare-p4-fill-value-rows",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the two missing words.", "ru": "Впиши два пропущенных слова." },
+          "text": {
+            "en": "A non-repeatable read changes a row's ___, while a phantom read changes which ___ match the condition.",
+            "ru": "Non-repeatable read меняет ___ строки, а phantom read меняет, какие ___ подходят под условие."
+          },
+          "blanks": [
+            { "en": ["value"], "ru": ["значение"] },
+            { "en": ["rows", "row"], "ru": ["строки", "строк"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Value versus membership — that is the whole distinction.", "ru": "Значение против состава набора — в этом все различие." },
+            "incorrect": { "en": "Value for non-repeatable read, rows for phantom read.", "ru": "Значение — для non-repeatable read, строки — для phantom read." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "lost-update",
+      "title": { "en": "Lost update", "ru": "Lost update" },
+      "summary": {
+        "en": "Two transactions read the same old value, both compute a new one, and the later write silently overwrites the earlier one.",
+        "ru": "Две транзакции читают одно старое значение, обе вычисляют новое, и более поздняя запись молча перезаписывает раннюю."
+      },
+      "discovery": [
+        {
+          "id": "lost-d1-stock-nine",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Two items were sold by two transactions. What value is stored after both commit?",
+            "ru": "Две транзакции продали по одной штуке. Какое значение сохранится после обоих commit?"
+          },
+          "code": "-- stored stock is 10; each transaction sells one item\n\n-- T1\nBEGIN;\nSELECT stock FROM products WHERE id = 1;   -- reads 10\n\n-- T2\nBEGIN;\nSELECT stock FROM products WHERE id = 1;   -- reads 10\n\n-- T1 computes 10 - 1\nUPDATE products SET stock = 9 WHERE id = 1;\nCOMMIT;\n\n-- T2 computes 10 - 1 from its own read\nUPDATE products SET stock = 9 WHERE id = 1;\nCOMMIT;",
+          "codeLang": "sql",
+          "options": [
+            { "id": "a", "text": { "en": "9", "ru": "9" }, "correct": true },
+            { "id": "b", "text": { "en": "8", "ru": "8" }, "correct": false,
+              "feedback": { "en": "8 would need the second transaction to subtract from the first one's result.", "ru": "Для 8 второй транзакции пришлось бы вычитать из результата первой." } },
+            { "id": "c", "text": { "en": "10, because the two updates cancel out", "ru": "10, потому что два update гасят друг друга" }, "correct": false,
+              "feedback": { "en": "Both UPDATE statements succeeded; the value did drop once.", "ru": "Оба UPDATE выполнились; значение все-таки уменьшилось один раз." } }
+          ],
+          "reveal": {
+            "en": "**Lost update** is a **write-write** problem, not a reading problem. Both transactions performed a **read-modify-write** cycle: read `10`, compute `10 - 1`, write `9`. The later write wins, so one transaction's work simply disappears — two items sold, one decrement stored.\n\n```mermaid\nsequenceDiagram\n  participant A as Transaction A\n  participant DB as Database\n  participant B as Transaction B\n  A->>DB: SELECT stock, gets 10\n  B->>DB: SELECT stock, gets 10\n  A->>DB: UPDATE stock = 9, COMMIT\n  B->>DB: UPDATE stock = 9, COMMIT\n  Note over DB: one decrement is lost\n```\n\nThe defect lives in the **gap** between the read, the computation in application code, and the write. Nothing in the SQL is malformed — each transaction did exactly what it was told, using a number that was accurate when it was read and obsolete when it was written.",
+            "ru": "**Lost update** — это проблема **write-write**, а не чтения. Обе транзакции выполнили цикл **read-modify-write**: прочитали `10`, вычислили `10 - 1`, записали `9`. Побеждает более поздняя запись, поэтому работа одной транзакции просто исчезает: продали две штуки, а сохранилось одно уменьшение.\n\n```mermaid\nsequenceDiagram\n  participant A as Транзакция A\n  participant DB as База данных\n  participant B as Транзакция B\n  A->>DB: SELECT stock, получает 10\n  B->>DB: SELECT stock, получает 10\n  A->>DB: UPDATE stock = 9, COMMIT\n  B->>DB: UPDATE stock = 9, COMMIT\n  Note over DB: одно уменьшение потеряно\n```\n\nДефект живет в **промежутке** между чтением, вычислением в коде приложения и записью. В SQL нет ничего некорректного — каждая транзакция сделала ровно то, что ей сказали, с числом, которое было верным на момент чтения и устарело на момент записи."
+          },
+          "feedback": {
+            "correct": { "en": "Right — both wrote 9, so one sale vanished.", "ru": "Верно — обе записали 9, поэтому одна продажа исчезла." },
+            "incorrect": { "en": "Both computed 9 from the same old 10, so the stored value is 9 — one decrement lost.", "ru": "Обе вычислили 9 из одной старой 10, поэтому сохранилось 9 — одно уменьшение потеряно." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "lost-p1-write-write-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Lost update is a write-write problem: one transaction's write overwrites another's result.",
+            "ru": "Lost update — проблема write-write: запись одной транзакции перезаписывает результат другой."
+          },
+          "answer": true,
+          "feedback": {
+            "correct": { "en": "The later write wins and the earlier transaction's work disappears.", "ru": "Побеждает более поздняя запись, и работа первой транзакции исчезает." },
+            "incorrect": { "en": "It is true — two writes collide, and the later one silently wins.", "ru": "Это правда — две записи сталкиваются, и более поздняя молча побеждает." }
+          }
+        },
+        {
+          "id": "lost-p2-balance-600",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A balance is 500. Two transactions each read it and write 500 + 100 back. Both commit. What does the lost update produce?",
+            "ru": "Баланс равен 500. Две транзакции читают его и записывают обратно 500 + 100. Обе делают commit. Что даст lost update?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "600", "ru": "600" }, "correct": true },
+            { "id": "b", "text": { "en": "700", "ru": "700" }, "correct": false,
+              "feedback": { "en": "700 is the correct total; lost update is exactly the case where you do not get it.", "ru": "700 — правильная сумма; lost update — как раз тот случай, когда ее не получают." } },
+            { "id": "c", "text": { "en": "500", "ru": "500" }, "correct": false,
+              "feedback": { "en": "One write did land, so the balance changed once.", "ru": "Одна запись все же прошла, поэтому баланс изменился один раз." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Both computed 600 from the same old 500, so one deposit is gone.", "ru": "Обе вычислили 600 из одной старой 500, поэтому один взнос потерян." },
+            "incorrect": { "en": "Both wrote 600, so only one of the two deposits survived.", "ru": "Обе записали 600, поэтому из двух взносов выжил только один." }
+          }
+        },
+        {
+          "id": "lost-p3-sort-timeline",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Put the steps of a lost update in the order they happen.",
+            "ru": "Расставь шаги lost update в порядке их выполнения."
+          },
+          "steps": [
+            { "id": "s1", "text": { "en": "Transaction A reads stock = 10", "ru": "Транзакция A читает stock = 10" } },
+            { "id": "s2", "text": { "en": "Transaction B reads the same stock = 10", "ru": "Транзакция B читает тот же stock = 10" } },
+            { "id": "s3", "text": { "en": "A writes stock = 9 and commits", "ru": "A записывает stock = 9 и делает commit" } },
+            { "id": "s4", "text": { "en": "B writes stock = 9, computed from its own old read, and commits", "ru": "B записывает stock = 9, вычисленное из своего старого чтения, и делает commit" } },
+            { "id": "s5", "text": { "en": "Two items were sold, but the stored value dropped by only one", "ru": "Продали две штуки, но сохраненное значение уменьшилось только на одну" } }
+          ],
+          "feedback": {
+            "correct": { "en": "Both reads happen before either write — that overlap is the anomaly.", "ru": "Оба чтения происходят до любой записи — это пересечение и есть аномалия." },
+            "incorrect": { "en": "Both read the old value first, then both write; the later write wins.", "ru": "Сначала обе читают старое значение, затем обе записывают; побеждает поздняя запись." }
+          }
+        },
+        {
+          "id": "lost-p4-fill-read-write",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the two missing words of the cycle's name.", "ru": "Впиши два пропущенных слова в названии цикла." },
+          "text": {
+            "en": "Lost update comes from a ___-modify-___ cycle performed without conflict control.",
+            "ru": "Lost update возникает из цикла ___-modify-___, выполненного без conflict control."
+          },
+          "blanks": [
+            { "en": ["read"], "ru": ["read"] },
+            { "en": ["write"], "ru": ["write"] }
+          ],
+          "feedback": {
+            "correct": { "en": "The gap between the read and the write is where the update gets lost.", "ru": "Именно в промежутке между чтением и записью update и теряется." },
+            "incorrect": { "en": "It is read-modify-write: the value read is stale by the time it is written.", "ru": "Это read-modify-write: прочитанное значение устаревает к моменту записи." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "lost-update-vs-dirty-read",
+      "title": { "en": "Lost update is not a read anomaly", "ru": "Lost update — не аномалия чтения" },
+      "summary": {
+        "en": "Lost update can happen even when every read saw committed data, because the defect is the read-modify-write gap.",
+        "ru": "Lost update может случиться даже когда каждое чтение видело committed данные, потому что дефект — в промежутке read-modify-write."
+      },
+      "discovery": [
+        {
+          "id": "lostvs-d1-safe-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A database that never exposes dirty reads is automatically safe from lost update.",
+            "ru": "База данных, которая никогда не показывает dirty reads, автоматически защищена от lost update."
+          },
+          "answer": false,
+          "reveal": {
+            "en": "Preventing dirty reads controls **what a transaction sees**. Lost update is about **what a transaction writes** — so the two guarantees do not overlap at all.\n\nIn the classic `stock = 10` case, both transactions read a perfectly committed `10`. Every read was legal. The damage came later, when the second `UPDATE` wrote a value computed from a number that had gone stale in the meantime.\n\nThis is the database form of a **race condition**: the outcome depends on how two interleaved read-modify-write cycles happen to line up. It is exactly the same mistake as two threads doing `counter = counter + 1` in memory — the medium changed, the bug did not. So \"we never see uncommitted data\" is not an answer to \"can we lose an update?\"",
+            "ru": "Предотвращение dirty reads управляет тем, **что транзакция видит**. Lost update — про то, **что транзакция записывает**, поэтому эти две гарантии вообще не пересекаются.\n\nВ классическом случае со `stock = 10` обе транзакции прочитали абсолютно committed `10`. Каждое чтение было законным. Ущерб возник позже, когда второй `UPDATE` записал значение, вычисленное из числа, которое к тому моменту устарело.\n\nЭто версия **race condition** в базе данных: результат зависит от того, как совпали два чередующихся цикла read-modify-write. Ровно та же ошибка, что у двух потоков с `counter = counter + 1` в памяти — среда изменилась, баг нет. Поэтому \"мы никогда не видим uncommitted данные\" не отвечает на вопрос \"можем ли мы потерять update?\""
+          },
+          "feedback": {
+            "correct": { "en": "Right — the two problems are independent.", "ru": "Верно — это две независимые проблемы." },
+            "incorrect": { "en": "It is false: both transactions can read committed data and still overwrite each other.", "ru": "Неверно: обе транзакции могут читать committed данные и все равно перезаписать друг друга." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "lostvs-p1-still-possible",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Two transactions read only committed data and never see each other's uncommitted work. Which anomaly is still possible?",
+            "ru": "Две транзакции читают только committed данные и никогда не видят uncommitted работу друг друга. Какая аномалия все еще возможна?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Lost update", "ru": "Lost update" }, "correct": true },
+            { "id": "b", "text": { "en": "Dirty read", "ru": "Dirty read" }, "correct": false,
+              "feedback": { "en": "A dirty read requires reading uncommitted data, which is excluded here.", "ru": "Dirty read требует чтения uncommitted данных, а это здесь исключено." } },
+            { "id": "c", "text": { "en": "None of them", "ru": "Ни одна" }, "correct": false,
+              "feedback": { "en": "Hiding uncommitted data says nothing about two overlapping read-modify-write cycles.", "ru": "Сокрытие uncommitted данных ничего не говорит о двух пересекающихся циклах read-modify-write." } }
+          ],
+          "feedback": {
+            "correct": { "en": "The reads were clean; the write conflict is a separate problem.", "ru": "Чтения были чистыми; конфликт записи — отдельная проблема." },
+            "incorrect": { "en": "Lost update needs no dirty read at all — only two overlapping writes.", "ru": "Lost update не требует dirty read вообще — нужны лишь две пересекающиеся записи." }
+          }
+        },
+        {
+          "id": "lostvs-p2-java-only-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Lost update happens only between Java threads, not between database transactions.",
+            "ru": "Lost update случается только между Java-потоками, а не между транзакциями базы данных."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": { "en": "Any read-modify-write without conflict control can lose an update, in memory or in SQL.", "ru": "Любой read-modify-write без conflict control может потерять update — и в памяти, и в SQL." },
+            "incorrect": { "en": "No — transactions doing read-modify-write hit exactly the same problem.", "ru": "Нет — транзакции с read-modify-write сталкиваются точно с той же проблемой." }
+          }
+        },
+        {
+          "id": "lostvs-p3-word-bank",
+          "type": "word_bank",
+          "prompt": { "en": "Assemble what kind of problem lost update is.", "ru": "Собери, к какому типу проблем относится lost update." },
+          "tokens": {
+            "en": ["lost", "update", "is", "a", "write", "conflict", "not", "a", "read", "anomaly"],
+            "ru": ["lost", "update", "это", "конфликт", "записи,", "а", "не", "аномалия", "чтения"]
+          },
+          "distractors": {
+            "en": ["uncommitted"],
+            "ru": ["uncommitted"]
+          },
+          "feedback": {
+            "correct": { "en": "That is why isolation aimed at reads does not automatically fix it.", "ru": "Поэтому isolation, нацеленный на чтения, не исправляет ее автоматически." },
+            "incorrect": { "en": "Lost update is a write conflict, not a read anomaly.", "ru": "Lost update — это конфликт записи, а не аномалия чтения." }
+          }
+        },
+        {
+          "id": "lostvs-p4-fill-race",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the missing term.", "ru": "Впиши пропущенный термин." },
+          "text": {
+            "en": "Lost update is the database version of a ___ condition: the result depends on how two read-modify-write cycles interleave.",
+            "ru": "Lost update — это версия ___ condition в базе данных: результат зависит от того, как чередуются два цикла read-modify-write."
+          },
+          "blanks": [
+            { "en": ["race"], "ru": ["race"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Same mistake as two threads incrementing a shared counter.", "ru": "Та же ошибка, что у двух потоков, увеличивающих общий счетчик." },
+            "incorrect": { "en": "It is a race condition — the same bug as in concurrent in-memory code.", "ru": "Это race condition — тот же баг, что и в параллельном коде в памяти." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "read-committed",
+      "title": { "en": "READ COMMITTED", "ru": "READ COMMITTED" },
+      "summary": {
+        "en": "READ COMMITTED prevents dirty reads by showing only committed data, but still allows non-repeatable reads and phantoms.",
+        "ru": "READ COMMITTED предотвращает dirty reads, показывая только committed данные, но по-прежнему допускает non-repeatable reads и фантомы."
+      },
+      "discovery": [
+        {
+          "id": "rc-d1-still-observable",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A transaction runs at READ COMMITTED. Which of these can it still observe?",
+            "ru": "Транзакция работает на READ COMMITTED. Что из этого она все еще может увидеть?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "A row whose value changed between its two reads", "ru": "Строку, значение которой изменилось между двумя ее чтениями" }, "correct": true },
+            { "id": "b", "text": { "en": "A value another transaction wrote and has not committed", "ru": "Значение, которое другая транзакция записала и не зафиксировала" }, "correct": false,
+              "feedback": { "en": "That is the dirty read this level exists to prevent.", "ru": "Это и есть dirty read, для предотвращения которого существует этот уровень." } },
+            { "id": "c", "text": { "en": "Nothing changing at all until it commits", "ru": "Полную неизменность данных до своего commit" }, "correct": false,
+              "feedback": { "en": "That needs a stable snapshot, which this level does not take.", "ru": "Для этого нужен stable snapshot, которого этот уровень не делает." } }
+          ],
+          "reveal": {
+            "en": "An **isolation level** is the contract that says *which anomalies the database promises to prevent* for a transaction.\n\n**READ COMMITTED** makes one promise: every statement sees only **committed** data. That kills dirty reads outright.\n\n```mermaid\nflowchart LR\n  RC[\"READ COMMITTED\"] --> P[\"prevents: dirty read\"]\n  RC --> A[\"still allows: non-repeatable read, phantom read\"]\n```\n\nWhat it does *not* promise is stability over time. Each statement gets a fresh look at the newest committed data, so two identical queries in one transaction can disagree — a non-repeatable read, or a phantom if the row set changed. And lost update is untouched: whether you lose one depends entirely on how you write your updates.\n\nThis is why \"we use READ COMMITTED\" is only a partial answer in an interview: it names the one anomaly you are safe from.",
+            "ru": "**Isolation level** — это контракт, который говорит, *какие аномалии база обещает предотвратить* для транзакции.\n\n**READ COMMITTED** дает одно обещание: каждый запрос видит только **committed** данные. Это полностью убивает dirty reads.\n\n```mermaid\nflowchart LR\n  RC[\"READ COMMITTED\"] --> P[\"предотвращает: dirty read\"]\n  RC --> A[\"все еще допускает: non-repeatable read, phantom read\"]\n```\n\nЧего он *не* обещает — так это стабильности во времени. Каждый запрос заново смотрит на свежие committed данные, поэтому два одинаковых запроса в одной транзакции могут расходиться: это non-repeatable read или phantom, если изменился набор строк. А lost update он вообще не касается: потеряешь ли ты update, зависит только от того, как написаны твои update-запросы.\n\nПоэтому \"мы используем READ COMMITTED\" — лишь частичный ответ на собеседовании: он называет ровно одну аномалию, от которой ты защищен."
+          },
+          "feedback": {
+            "correct": { "en": "Only committed data — but not the same committed data twice.", "ru": "Только committed данные — но не одни и те же committed данные дважды." },
+            "incorrect": { "en": "READ COMMITTED hides uncommitted values, yet a row can still change between two reads.", "ru": "READ COMMITTED скрывает uncommitted значения, но строка все же может измениться между двумя чтениями." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "rc-p1-prevents-dirty-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "The READ COMMITTED isolation level prevents dirty reads.",
+            "ru": "Уровень isolation READ COMMITTED предотвращает dirty reads."
+          },
+          "answer": true,
+          "feedback": {
+            "correct": { "en": "Showing only committed data is exactly its guarantee.", "ru": "Показывать только committed данные — ровно его гарантия." },
+            "incorrect": { "en": "It does: every statement sees only committed data.", "ru": "Предотвращает: каждый запрос видит только committed данные." }
+          }
+        },
+        {
+          "id": "rc-p2-still-allows",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which anomaly does READ COMMITTED normally still allow?",
+            "ru": "Какую аномалию READ COMMITTED обычно все еще допускает?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Non-repeatable read", "ru": "Non-repeatable read" }, "correct": true },
+            { "id": "b", "text": { "en": "Dirty read", "ru": "Dirty read" }, "correct": false,
+              "feedback": { "en": "Preventing dirty reads is precisely what this level guarantees.", "ru": "Предотвращение dirty reads — как раз то, что гарантирует этот уровень." } },
+            { "id": "c", "text": { "en": "None — it prevents all four anomalies", "ru": "Никакую — он предотвращает все четыре аномалии" }, "correct": false,
+              "feedback": { "en": "It usually still allows non-repeatable reads and phantoms.", "ru": "Обычно он все еще допускает non-repeatable reads и фантомы." } }
+          ],
+          "feedback": {
+            "correct": { "en": "It guarantees committed data, not a stable view over time.", "ru": "Он гарантирует committed данные, а не стабильный вид во времени." },
+            "incorrect": { "en": "Non-repeatable reads and phantoms survive READ COMMITTED.", "ru": "Non-repeatable reads и фантомы переживают READ COMMITTED." }
+          }
+        },
+        {
+          "id": "rc-p3-fill-read-committed",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the two-word name of the isolation level.", "ru": "Впиши название уровня isolation из двух слов." },
+          "text": {
+            "en": "The isolation level that prevents dirty reads by showing only committed data is ___ ___.",
+            "ru": "Уровень isolation, который предотвращает dirty reads, показывая только committed данные, — это ___ ___."
+          },
+          "blanks": [
+            { "en": ["READ", "read"], "ru": ["READ", "read"] },
+            { "en": ["COMMITTED", "committed"], "ru": ["COMMITTED", "committed"] }
+          ],
+          "feedback": {
+            "correct": { "en": "READ COMMITTED: committed data only, nothing more promised.", "ru": "READ COMMITTED: только committed данные, больше ничего не обещано." },
+            "incorrect": { "en": "It is READ COMMITTED — the level that removes dirty reads.", "ru": "Это READ COMMITTED — уровень, который убирает dirty reads." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "snapshots-and-serializable",
+      "title": { "en": "Snapshots and SERIALIZABLE", "ru": "Snapshots и SERIALIZABLE" },
+      "summary": {
+        "en": "A stable snapshot (REPEATABLE READ / snapshot isolation) prevents ordinary non-repeatable reads; SERIALIZABLE aims at some safe serial order.",
+        "ru": "Stable snapshot (REPEATABLE READ / snapshot isolation) предотвращает обычные non-repeatable reads; SERIALIZABLE стремится к некоторому безопасному последовательному порядку."
+      },
+      "discovery": [
+        {
+          "id": "snapshot-d1-second-select",
+          "type": "predict_output",
+          "prompt": {
+            "en": "T1 works from a stable snapshot taken when it started. What does its second SELECT return?",
+            "ru": "T1 работает по stable snapshot, сделанному при ее старте. Что вернет ее второй SELECT?"
+          },
+          "code": "-- T1 works from a stable snapshot taken at its start\nBEGIN;\nSELECT balance FROM accounts WHERE id = 1;   -- returns 100\n\n-- T2\nBEGIN;\nUPDATE accounts SET balance = 120 WHERE id = 1;\nCOMMIT;\n\n-- T1, same transaction\nSELECT balance FROM accounts WHERE id = 1;",
+          "codeLang": "sql",
+          "options": [
+            { "id": "a", "text": { "en": "100", "ru": "100" }, "correct": true },
+            { "id": "b", "text": { "en": "120", "ru": "120" }, "correct": false,
+              "feedback": { "en": "120 is the no-snapshot behaviour; a snapshot keeps T1's view unchanged.", "ru": "120 — поведение без snapshot; snapshot сохраняет вид T1 неизменным." } },
+            { "id": "c", "text": { "en": "An error, because the row was modified by T2", "ru": "Ошибку, потому что строку изменила T2" }, "correct": false,
+              "feedback": { "en": "The read succeeds — it is served from the snapshot version.", "ru": "Чтение проходит успешно — его обслуживает версия из snapshot." } }
+          ],
+          "reveal": {
+            "en": "A **stable snapshot** is a consistent picture of the database as of one moment, which the transaction keeps reading from no matter what others commit afterwards. Levels built on it are called **REPEATABLE READ** or **snapshot isolation**. Because the picture does not move, repeating a read gives the same answer — ordinary non-repeatable reads are gone.\n\n**SERIALIZABLE** goes further: the result must look as if the concurrent transactions had run one after another in *some* safe order. They still run at the same time; the database detects unsafe combinations and refuses one of them instead.\n\n```mermaid\nflowchart LR\n  A[\"READ COMMITTED: committed data only\"] --> B[\"REPEATABLE READ / snapshot: a stable view\"]\n  B --> C[\"SERIALIZABLE: some safe serial order\"]\n```\n\nOne caution for interviews: these are **standard names**, and each database implements them its own way. Say what the standard promises, then say what your database actually does — they are not always the same thing.",
+            "ru": "**Stable snapshot** — это согласованная картина базы на один момент времени, из которой транзакция продолжает читать, что бы другие ни зафиксировали позже. Уровни на его основе называются **REPEATABLE READ** или **snapshot isolation**. Поскольку картина не двигается, повторное чтение дает тот же ответ — обычные non-repeatable reads исчезают.\n\n**SERIALIZABLE** идет дальше: результат должен выглядеть так, будто параллельные транзакции выполнялись одна за другой в *некотором* безопасном порядке. Они по-прежнему работают одновременно; база обнаруживает опасные комбинации и отклоняет одну из транзакций.\n\n```mermaid\nflowchart LR\n  A[\"READ COMMITTED: только committed данные\"] --> B[\"REPEATABLE READ / snapshot: стабильный вид\"]\n  B --> C[\"SERIALIZABLE: некоторый безопасный последовательный порядок\"]\n```\n\nОдно предупреждение для собеседования: это **названия из стандарта**, и каждая база реализует их по-своему. Скажи, что обещает стандарт, а затем — что реально делает твоя база; это не всегда одно и то же."
+          },
+          "feedback": {
+            "correct": { "en": "Right — the snapshot keeps serving 100.", "ru": "Верно — snapshot продолжает отдавать 100." },
+            "incorrect": { "en": "A stable snapshot freezes T1's view, so the second read still returns 100.", "ru": "Stable snapshot замораживает вид T1, поэтому второе чтение снова вернет 100." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "snapshot-p1-prevents-nrr-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A stable transaction snapshot prevents ordinary non-repeatable reads.",
+            "ru": "Stable snapshot транзакции предотвращает обычные non-repeatable reads."
+          },
+          "answer": true,
+          "feedback": {
+            "correct": { "en": "The view does not move, so a repeated read gives the same value.", "ru": "Вид не меняется, поэтому повторное чтение дает то же значение." },
+            "incorrect": { "en": "It does — the transaction keeps reading from one frozen picture.", "ru": "Предотвращает — транзакция продолжает читать из одной замороженной картины." }
+          }
+        },
+        {
+          "id": "snapshot-p2-serializable-goal",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does the SERIALIZABLE isolation level try to guarantee?",
+            "ru": "Что пытается гарантировать уровень isolation SERIALIZABLE?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "That concurrent transactions behave like some safe serial order", "ru": "Что параллельные транзакции ведут себя как некоторый безопасный последовательный порядок" }, "correct": true },
+            { "id": "b", "text": { "en": "That transactions actually run one at a time in a queue", "ru": "Что транзакции реально выполняются по одной, в очереди" }, "correct": false,
+              "feedback": { "en": "They still run concurrently; unsafe patterns are rejected instead.", "ru": "Они по-прежнему выполняются параллельно; вместо этого отклоняются опасные схемы." } },
+            { "id": "c", "text": { "en": "That no transaction is ever aborted", "ru": "Что ни одна транзакция никогда не откатывается" }, "correct": false,
+              "feedback": { "en": "It buys safety partly by aborting unsafe combinations.", "ru": "Он покупает безопасность частично за счет отката опасных комбинаций." } }
+          ],
+          "feedback": {
+            "correct": { "en": "The outcome must match some serial order, not the execution itself.", "ru": "Совпадать с последовательным порядком должен результат, а не само выполнение." },
+            "incorrect": { "en": "The promise is about the outcome: it must match some safe serial order.", "ru": "Обещание касается результата: он должен совпадать с некоторым безопасным последовательным порядком." }
+          }
+        },
+        {
+          "id": "snapshot-p3-sort-levels",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order these isolation levels from the weakest guarantee to the strongest.",
+            "ru": "Расставь уровни isolation от самой слабой гарантии к самой сильной."
+          },
+          "steps": [
+            { "id": "s1", "text": { "en": "READ COMMITTED: statements see only committed data", "ru": "READ COMMITTED: запросы видят только committed данные" } },
+            { "id": "s2", "text": { "en": "REPEATABLE READ / snapshot isolation: a stable view of the data read", "ru": "REPEATABLE READ / snapshot isolation: стабильный вид прочитанных данных" } },
+            { "id": "s3", "text": { "en": "SERIALIZABLE: the result must match some safe serial order", "ru": "SERIALIZABLE: результат должен совпадать с некоторым безопасным последовательным порядком" } }
+          ],
+          "feedback": {
+            "correct": { "en": "Each level adds a promise the weaker one did not make.", "ru": "Каждый уровень добавляет обещание, которого не давал более слабый." },
+            "incorrect": { "en": "Committed data, then a stable view, then a safe serial order.", "ru": "Committed данные, затем стабильный вид, затем безопасный последовательный порядок." }
+          }
+        },
+        {
+          "id": "snapshot-p4-fill-repeatable-read",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the two-word name of the isolation level.", "ru": "Впиши название уровня isolation из двух слов." },
+          "text": {
+            "en": "The level whose stable snapshot prevents ordinary non-repeatable reads is ___ ___.",
+            "ru": "Уровень, чей stable snapshot предотвращает обычные non-repeatable reads, — это ___ ___."
+          },
+          "blanks": [
+            { "en": ["REPEATABLE", "repeatable"], "ru": ["REPEATABLE", "repeatable"] },
+            { "en": ["READ", "read"], "ru": ["READ", "read"] }
+          ],
+          "feedback": {
+            "correct": { "en": "REPEATABLE READ: the name says exactly what it fixes.", "ru": "REPEATABLE READ: название прямо говорит, что он исправляет." },
+            "incorrect": { "en": "It is REPEATABLE READ, also known as snapshot isolation.", "ru": "Это REPEATABLE READ, также известный как snapshot isolation." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "postgres-read-uncommitted",
+      "title": { "en": "The PostgreSQL READ UNCOMMITTED trap", "ru": "Ловушка READ UNCOMMITTED в PostgreSQL" },
+      "summary": {
+        "en": "PostgreSQL accepts READ UNCOMMITTED but runs it as READ COMMITTED, so it never exposes dirty reads.",
+        "ru": "PostgreSQL принимает READ UNCOMMITTED, но выполняет его как READ COMMITTED, поэтому dirty reads не показывает никогда."
+      },
+      "discovery": [
+        {
+          "id": "pg-d1-read-uncommitted",
+          "type": "predict_output",
+          "prompt": {
+            "en": "In PostgreSQL, another open transaction has written 50 without committing. What does this SELECT return?",
+            "ru": "В PostgreSQL другая открытая транзакция записала 50 без commit. Что вернет этот SELECT?"
+          },
+          "code": "-- PostgreSQL. The committed balance is 100.\n-- Another open transaction has written 50 without committing.\nBEGIN TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;\nSELECT balance FROM accounts WHERE id = 1;",
+          "codeLang": "sql",
+          "options": [
+            { "id": "a", "text": { "en": "100, the committed value", "ru": "100, committed значение" }, "correct": true },
+            { "id": "b", "text": { "en": "50, the uncommitted value", "ru": "50, uncommitted значение" }, "correct": false,
+              "feedback": { "en": "PostgreSQL never exposes uncommitted data, whatever level you ask for.", "ru": "PostgreSQL не показывает uncommitted данные, какой уровень ни запроси." } },
+            { "id": "c", "text": { "en": "An error: READ UNCOMMITTED is not a valid level", "ru": "Ошибку: READ UNCOMMITTED — недопустимый уровень" }, "correct": false,
+              "feedback": { "en": "The statement is accepted; the level is silently treated as READ COMMITTED.", "ru": "Запрос принимается; уровень молча трактуется как READ COMMITTED." } }
+          ],
+          "reveal": {
+            "en": "**READ UNCOMMITTED** is the SQL standard's weakest isolation level — the one level where dirty reads are *permitted*.\n\nPostgreSQL's twist: it **accepts** the syntax but does not implement the behaviour. A transaction that asks for `READ UNCOMMITTED` is simply run as `READ COMMITTED`, so uncommitted data stays invisible.\n\n```mermaid\nflowchart LR\n  R[\"request: READ UNCOMMITTED\"] --> P[\"PostgreSQL runs READ COMMITTED\"]\n  P --> N[\"dirty reads are not observable\"]\n```\n\nThe interview trap is a half-truth: \"PostgreSQL supports all four standard isolation levels\" is true *by name* only, and \"so PostgreSQL can do dirty reads\" is false. The general lesson is the one to carry: the standard defines names, an implementation defines behaviour, and you should answer about both separately.",
+            "ru": "**READ UNCOMMITTED** — самый слабый уровень isolation в SQL standard, единственный, где dirty reads *разрешены*.\n\nОсобенность PostgreSQL: он **принимает** синтаксис, но не реализует поведение. Транзакция, запросившая `READ UNCOMMITTED`, просто выполняется как `READ COMMITTED`, поэтому uncommitted данные остаются невидимыми.\n\n```mermaid\nflowchart LR\n  R[\"запрос: READ UNCOMMITTED\"] --> P[\"PostgreSQL выполняет READ COMMITTED\"]\n  P --> N[\"dirty reads не наблюдаемы\"]\n```\n\nЛовушка на собеседовании — это полуправда: \"PostgreSQL поддерживает все четыре уровня стандарта\" верно только *по названиям*, а \"значит, в PostgreSQL бывают dirty reads\" — неверно. Общий вывод стоит запомнить: стандарт задает названия, реализация задает поведение, и говорить о них надо отдельно."
+          },
+          "feedback": {
+            "correct": { "en": "Right — PostgreSQL serves the committed 100.", "ru": "Верно — PostgreSQL отдает committed 100." },
+            "incorrect": { "en": "PostgreSQL runs READ UNCOMMITTED as READ COMMITTED, so it returns 100.", "ru": "PostgreSQL выполняет READ UNCOMMITTED как READ COMMITTED, поэтому вернет 100." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "pg-p1-syntax-error-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In PostgreSQL, asking for the READ UNCOMMITTED isolation level raises a syntax error.",
+            "ru": "В PostgreSQL запрос уровня isolation READ UNCOMMITTED вызывает syntax error."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": { "en": "It is accepted and quietly treated as READ COMMITTED.", "ru": "Он принимается и тихо трактуется как READ COMMITTED." },
+            "incorrect": { "en": "No — the level is accepted; it just behaves like READ COMMITTED.", "ru": "Нет — уровень принимается; он лишь ведет себя как READ COMMITTED." }
+          }
+        },
+        {
+          "id": "pg-p2-what-happens",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What actually happens in PostgreSQL when a transaction requests READ UNCOMMITTED?",
+            "ru": "Что на самом деле происходит в PostgreSQL, когда транзакция запрашивает READ UNCOMMITTED?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "It is accepted and behaves like READ COMMITTED", "ru": "Он принимается и ведет себя как READ COMMITTED" }, "correct": true },
+            { "id": "b", "text": { "en": "Dirty reads become possible for that transaction", "ru": "Для этой транзакции становятся возможны dirty reads" }, "correct": false,
+              "feedback": { "en": "PostgreSQL does not expose uncommitted data at any level.", "ru": "PostgreSQL не показывает uncommitted данные ни на одном уровне." } },
+            { "id": "c", "text": { "en": "The transaction is rejected as unsupported", "ru": "Транзакция отклоняется как неподдерживаемая" }, "correct": false,
+              "feedback": { "en": "The name is accepted; it is mapped to stronger behaviour.", "ru": "Название принимается; оно отображается на более строгое поведение." } }
+          ],
+          "feedback": {
+            "correct": { "en": "The name is supported, the weak behaviour is not.", "ru": "Название поддерживается, слабое поведение — нет." },
+            "incorrect": { "en": "PostgreSQL accepts the level and runs it as READ COMMITTED.", "ru": "PostgreSQL принимает уровень и выполняет его как READ COMMITTED." }
+          }
+        },
+        {
+          "id": "pg-p3-fill-uncommitted",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the missing word.", "ru": "Впиши пропущенное слово." },
+          "text": {
+            "en": "In PostgreSQL, a transaction that asks for READ UNCOMMITTED still never sees ___ data.",
+            "ru": "В PostgreSQL транзакция, запросившая READ UNCOMMITTED, все равно никогда не видит ___ данные."
+          },
+          "blanks": [
+            { "en": ["uncommitted"], "ru": ["uncommitted"] }
+          ],
+          "feedback": {
+            "correct": { "en": "The requested level changes nothing about dirty reads there.", "ru": "Запрошенный уровень ничего не меняет для dirty reads в этой базе." },
+            "incorrect": { "en": "It is uncommitted data — PostgreSQL keeps it hidden at every level.", "ru": "Это uncommitted данные — PostgreSQL скрывает их на любом уровне." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "preventing-lost-update",
+      "title": { "en": "Preventing lost update", "ru": "Предотвращение lost update" },
+      "summary": {
+        "en": "SELECT ... FOR UPDATE, a version column, an atomic UPDATE, constraints and retry logic prevent or detect lost updates.",
+        "ru": "SELECT ... FOR UPDATE, version column, atomic UPDATE, constraints и retry logic предотвращают или обнаруживают lost updates."
+      },
+      "discovery": [
+        {
+          "id": "prevent-d1-spot-blind-write",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "Two clients run this transaction at the same time, each selling one item. What is the defect?",
+            "ru": "Два клиента выполняют эту транзакцию одновременно, каждый продает одну штуку. В чем дефект?"
+          },
+          "code": "-- Goal: sell one item. Two clients run this at the same time.\nBEGIN;\nSELECT stock FROM products WHERE id = 1;   -- the application reads 10\nUPDATE products SET stock = 9 WHERE id = 1;\nCOMMIT;",
+          "codeLang": "sql",
+          "options": [
+            { "id": "a", "text": { "en": "The new value is computed from an earlier read, so a concurrent run overwrites it", "ru": "Новое значение вычислено из более раннего чтения, поэтому параллельный запуск его перезапишет" }, "correct": true },
+            { "id": "b", "text": { "en": "The transaction is missing a second SELECT after the UPDATE", "ru": "В транзакции нет второго SELECT после UPDATE" }, "correct": false,
+              "feedback": { "en": "Re-reading afterwards does not stop the other transaction's overwrite.", "ru": "Повторное чтение после записи не предотвратит чужую перезапись." } },
+            { "id": "c", "text": { "en": "COMMIT should come before the UPDATE", "ru": "COMMIT должен идти перед UPDATE" }, "correct": false,
+              "feedback": { "en": "Committing before writing would just end the transaction early.", "ru": "Commit перед записью просто завершил бы транзакцию раньше времени." } }
+          ],
+          "reveal": {
+            "en": "The literal `stock = 9` is a **blind write**: a constant computed outside the database from a value that may already be obsolete. Four tools fix or detect this:\n\n```\n-- 1. atomic update: the database computes from the current row\nUPDATE products SET stock = stock - 1 WHERE id = 1;\n\n-- 2. optimistic locking: write only if the row has not changed since it was read\nUPDATE products SET stock = 9, version = 4 WHERE id = 1 AND version = 3;\n```\n\n- **Atomic UPDATE** — the arithmetic happens inside the statement, on the current row, so there is no stale copy to overwrite with.\n- **Optimistic locking with a version column** — the `WHERE` clause checks the version the row had when it was read. If someone else changed it, zero rows are updated and the application knows to **retry**.\n- **`SELECT ... FOR UPDATE`** — locks the known row when reading it, so the second transaction waits until the first one finishes instead of working from a stale value.\n- **Constraints** — a `UNIQUE` or `CHECK` constraint can make the bad final state impossible regardless of interleaving.",
+            "ru": "Литерал `stock = 9` — это **слепая запись**: константа, вычисленная вне базы из значения, которое могло уже устареть. Это исправляют или обнаруживают четыре инструмента:\n\n```\n-- 1. atomic update: база считает от текущей строки\nUPDATE products SET stock = stock - 1 WHERE id = 1;\n\n-- 2. optimistic locking: пишем, только если строка не изменилась с момента чтения\nUPDATE products SET stock = 9, version = 4 WHERE id = 1 AND version = 3;\n```\n\n- **Atomic UPDATE** — арифметика выполняется внутри запроса, по текущей строке, поэтому нет устаревшей копии, которой можно затереть данные.\n- **Optimistic locking с version column** — в `WHERE` проверяется версия, которая была у строки при чтении. Если ее кто-то изменил, обновится нуль строк, и приложение поймет, что нужен **retry**.\n- **`SELECT ... FOR UPDATE`** — блокирует известную строку при чтении, поэтому вторая транзакция ждет завершения первой, а не работает с устаревшим значением.\n- **Constraints** — `UNIQUE` или `CHECK` constraint может сделать плохое итоговое состояние невозможным при любом чередовании."
+          },
+          "feedback": {
+            "correct": { "en": "A blind write of a stale constant is the classic lost-update shape.", "ru": "Слепая запись устаревшей константы — классическая форма lost update." },
+            "incorrect": { "en": "The bug is writing a constant computed from an earlier read; a concurrent run overwrites it.", "ru": "Баг — запись константы, вычисленной из более раннего чтения; параллельный запуск ее перезапишет." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "prevent-p1-which-update",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which UPDATE cannot lose a concurrent decrement of the same row?",
+            "ru": "Какой UPDATE не может потерять параллельное уменьшение той же строки?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "UPDATE products SET stock = stock - 1 WHERE id = 1", "ru": "UPDATE products SET stock = stock - 1 WHERE id = 1" }, "correct": true },
+            { "id": "b", "text": { "en": "UPDATE products SET stock = 9 WHERE id = 1", "ru": "UPDATE products SET stock = 9 WHERE id = 1" }, "correct": false,
+              "feedback": { "en": "9 was computed from an earlier read, so a concurrent write is overwritten.", "ru": "9 вычислено из более раннего чтения, поэтому параллельная запись будет затерта." } },
+            { "id": "c", "text": { "en": "UPDATE products SET stock = 9 WHERE id = 1 AND stock > 0", "ru": "UPDATE products SET stock = 9 WHERE id = 1 AND stock > 0" }, "correct": false,
+              "feedback": { "en": "The guard prevents negative stock but still writes a stale constant.", "ru": "Проверка не дает уйти в минус, но все равно записывает устаревшую константу." } }
+          ],
+          "feedback": {
+            "correct": { "en": "The database computes the new value from the current row.", "ru": "База вычисляет новое значение по текущей строке." },
+            "incorrect": { "en": "Only the atomic form, stock = stock - 1, is computed inside the database.", "ru": "Только атомарная форма stock = stock - 1 вычисляется внутри базы." }
+          }
+        },
+        {
+          "id": "prevent-p2-version-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Optimistic locking with a version column detects a lost update by updating zero rows when the version has changed.",
+            "ru": "Optimistic locking с version column обнаруживает lost update, обновляя нуль строк, если версия изменилась."
+          },
+          "answer": true,
+          "feedback": {
+            "correct": { "en": "Zero updated rows is the conflict signal that triggers a retry.", "ru": "Нуль обновленных строк — сигнал конфликта, который запускает retry." },
+            "incorrect": { "en": "It is true: the version check in WHERE fails, so nothing is written.", "ru": "Это правда: проверка версии в WHERE не проходит, поэтому ничего не записывается." }
+          }
+        },
+        {
+          "id": "prevent-p3-match-tools",
+          "type": "match_pairs",
+          "prompt": { "en": "Match each tool to how it stops or detects a lost update.", "ru": "Соотнеси каждый инструмент с тем, как он останавливает или обнаруживает lost update." },
+          "pairs": [
+            { "id": "forupdate", "left": { "en": "SELECT ... FOR UPDATE", "ru": "SELECT ... FOR UPDATE" }, "right": { "en": "Locks a known row so the other transaction waits", "ru": "Блокирует известную строку, и другая транзакция ждет" } },
+            { "id": "version", "left": { "en": "Version column", "ru": "Version column" }, "right": { "en": "The write updates zero rows if the row changed since it was read", "ru": "Запись обновляет нуль строк, если строка изменилась после чтения" } },
+            { "id": "atomic", "left": { "en": "UPDATE ... SET stock = stock - 1", "ru": "UPDATE ... SET stock = stock - 1" }, "right": { "en": "Computes the new value inside the database", "ru": "Вычисляет новое значение внутри базы данных" } },
+            { "id": "retry", "left": { "en": "Retry logic", "ru": "Retry logic" }, "right": { "en": "Redoes the work after a conflict was detected", "ru": "Переделывает работу после обнаруженного конфликта" } }
+          ],
+          "feedback": {
+            "correct": { "en": "Locks prevent the conflict; versions detect it and retries repair it.", "ru": "Блокировки предотвращают конфликт; версии его обнаруживают, а retry исправляет." },
+            "incorrect": { "en": "FOR UPDATE locks, a version column detects, an atomic UPDATE avoids, a retry repairs.", "ru": "FOR UPDATE блокирует, version column обнаруживает, atomic UPDATE избегает, retry исправляет." }
+          }
+        },
+        {
+          "id": "prevent-p4-fill-for-update",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the missing SQL tokens.", "ru": "Впиши пропущенные SQL-токены." },
+          "text": {
+            "en": "To reserve one known row you read it with SELECT ... ___ ___; to make a counter safe you write SET stock = ___ - 1.",
+            "ru": "Чтобы зарезервировать одну известную строку, читай ее через SELECT ... ___ ___; чтобы счетчик был безопасен, пиши SET stock = ___ - 1."
+          },
+          "blanks": [
+            { "en": ["FOR", "for"], "ru": ["FOR", "for"] },
+            { "en": ["UPDATE", "update"], "ru": ["UPDATE", "update"] },
+            { "en": ["stock"], "ru": ["stock"] }
+          ],
+          "feedback": {
+            "correct": { "en": "One reserves the row, the other never leaves the database.", "ru": "Первое резервирует строку, второе вообще не выходит из базы." },
+            "incorrect": { "en": "SELECT ... FOR UPDATE locks the row; SET stock = stock - 1 is the atomic form.", "ru": "SELECT ... FOR UPDATE блокирует строку; SET stock = stock - 1 — атомарная форма." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "isolation-tradeoffs",
+      "title": { "en": "The cost of stronger isolation", "ru": "Цена более строгого isolation" },
+      "summary": {
+        "en": "Stronger isolation buys safety with waiting, aborts, deadlocks and retries, so it is often better to protect the specific invariant.",
+        "ru": "Более строгий isolation покупает безопасность ценой ожидания, aborts, deadlocks и retries, поэтому часто лучше защитить конкретный invariant."
+      },
+      "discovery": [
+        {
+          "id": "tradeoff-d1-serializable-everywhere",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A checkout service occasionally loses inventory updates. The team switches every transaction in the application to SERIALIZABLE. What is the most likely result?",
+            "ru": "Сервис оформления заказов иногда теряет обновления остатков. Команда переводит все транзакции приложения на SERIALIZABLE. Каков наиболее вероятный результат?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "The anomaly is prevented, but the system waits more and must retry aborted transactions", "ru": "Аномалия предотвращена, но система больше ждет и должна повторять откаченные транзакции" }, "correct": true },
+            { "id": "b", "text": { "en": "Throughput improves, because there are fewer conflicts to handle", "ru": "Пропускная способность растет, потому что конфликтов становится меньше" }, "correct": false,
+              "feedback": { "en": "Stronger isolation adds conflict detection and waiting; it does not speed things up.", "ru": "Более строгий isolation добавляет обнаружение конфликтов и ожидание; быстрее не становится." } },
+            { "id": "c", "text": { "en": "Nothing changes, because isolation levels only affect reads", "ru": "Ничего не меняется, потому что isolation levels влияют только на чтения" }, "correct": false,
+              "feedback": { "en": "Isolation levels also change how conflicting writes are detected and handled.", "ru": "Isolation levels меняют и то, как обнаруживаются и обрабатываются конфликтующие записи." } }
+          ],
+          "reveal": {
+            "en": "Higher isolation is never free. It is paid for with **blocking** (transactions waiting on each other), **aborts** (the database cancelling a transaction it cannot serialize), **deadlocks** (two transactions each holding what the other needs), **retry work**, and snapshot maintenance.\n\nSo the practical answer is usually not \"raise the level everywhere\" but \"protect the specific **invariant**\" — the rule about your data that must never be violated:\n\n```mermaid\nflowchart TD\n  I[\"which invariant is at risk?\"] --> A[\"only one active booking: UNIQUE constraint\"]\n  I --> B[\"a counter must not lose increments: atomic UPDATE\"]\n  I --> C[\"one known row edited at a time: SELECT ... FOR UPDATE\"]\n  I --> D[\"a long edit screen: optimistic locking with a version column\"]\n```\n\nEach of these is cheap, local, and targeted at one rule. `SERIALIZABLE` is the blunt instrument you reach for when the invariant spans a whole predicate and nothing narrower will express it.",
+            "ru": "Более высокий isolation никогда не бесплатен. За него платят **blocking** (транзакции ждут друг друга), **aborts** (база отменяет транзакцию, которую не может сериализовать), **deadlocks** (две транзакции держат то, что нужно другой), **retry work** и поддержкой snapshots.\n\nПоэтому практичный ответ обычно не \"поднять уровень везде\", а \"защитить конкретный **invariant**\" — правило о данных, которое нельзя нарушать:\n\n```mermaid\nflowchart TD\n  I[\"какой invariant под угрозой?\"] --> A[\"только одна активная бронь: UNIQUE constraint\"]\n  I --> B[\"счетчик не должен терять инкременты: atomic UPDATE\"]\n  I --> C[\"одна известная строка правится по одному: SELECT ... FOR UPDATE\"]\n  I --> D[\"длинный экран редактирования: optimistic locking с version column\"]\n```\n\nКаждый из вариантов дешев, локален и нацелен на одно правило. `SERIALIZABLE` — грубый инструмент, к которому обращаются, когда invariant охватывает целый predicate и ничем более узким его не выразить."
+          },
+          "feedback": {
+            "correct": { "en": "Safety goes up, and so does waiting and retry work.", "ru": "Безопасность растет — и вместе с ней ожидание и работа по retry." },
+            "incorrect": { "en": "It does prevent the anomaly, but at the price of blocking, aborts and retries.", "ru": "Аномалию это предотвратит, но ценой blocking, aborts и retries." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "tradeoff-p1-free-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Raising the isolation level is free: it prevents anomalies without any runtime cost.",
+            "ru": "Повышение уровня isolation бесплатно: оно предотвращает аномалии без затрат во время работы."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": { "en": "It costs blocking, aborts, deadlocks, retries and snapshot upkeep.", "ru": "Оно стоит blocking, aborts, deadlocks, retries и поддержки snapshots." },
+            "incorrect": { "en": "No — safety is bought with more waiting, aborts and retry work.", "ru": "Нет — безопасность покупается ожиданием, aborts и работой по retry." }
+          }
+        },
+        {
+          "id": "tradeoff-p2-match-invariants",
+          "type": "match_pairs",
+          "prompt": { "en": "Match each invariant to the narrow mechanism that protects it.", "ru": "Соотнеси каждый invariant с узким механизмом, который его защищает." },
+          "pairs": [
+            { "id": "booking", "left": { "en": "Only one active booking per user", "ru": "Только одна активная бронь на пользователя" }, "right": { "en": "A UNIQUE constraint", "ru": "UNIQUE constraint" } },
+            { "id": "counter", "left": { "en": "A counter must not lose increments", "ru": "Счетчик не должен терять инкременты" }, "right": { "en": "An atomic UPDATE in one statement", "ru": "Atomic UPDATE в одном запросе" } },
+            { "id": "known-row", "left": { "en": "One known row edited by one transaction at a time", "ru": "Одна известная строка правится одной транзакцией за раз" }, "right": { "en": "SELECT ... FOR UPDATE", "ru": "SELECT ... FOR UPDATE" } },
+            { "id": "edit-screen", "left": { "en": "A long edit screen that must not silently overwrite", "ru": "Длинный экран редактирования, который не должен молча перезаписывать" }, "right": { "en": "Optimistic locking with a version column", "ru": "Optimistic locking с version column" } }
+          ],
+          "feedback": {
+            "correct": { "en": "Each invariant has a cheaper, more precise guard than raising isolation.", "ru": "У каждого invariant есть более дешевая и точная защита, чем повышение isolation." },
+            "incorrect": { "en": "Constraints for uniqueness, atomic updates for counters, FOR UPDATE for a known row, versions for edit screens.", "ru": "Constraints для уникальности, atomic updates для счетчиков, FOR UPDATE для известной строки, версии для экранов редактирования." }
+          }
+        },
+        {
+          "id": "tradeoff-p3-fill-aborts",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the missing cost.", "ru": "Впиши пропущенную издержку." },
+          "text": {
+            "en": "Stronger isolation buys safety with more blocking, ___ and retries.",
+            "ru": "Более строгий isolation покупает безопасность ценой большего blocking, ___ и retries."
+          },
+          "blanks": [
+            { "en": ["aborts", "abort"], "ru": ["aborts", "abort"] }
+          ],
+          "feedback": {
+            "correct": { "en": "An abort is the database refusing a transaction it cannot serialize.", "ru": "Abort — это отказ базы от транзакции, которую она не может сериализовать." },
+            "incorrect": { "en": "It is aborts: the database cancels transactions it cannot serialize.", "ru": "Это aborts: база отменяет транзакции, которые не может сериализовать." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "anomaly-toolkit",
+      "title": { "en": "Naming and fixing the anomaly", "ru": "Назвать аномалию и исправить ее" },
+      "summary": {
+        "en": "Read a two-transaction timeline, name every anomaly in it, and pick the mechanism that fits the invariant at risk.",
+        "ru": "Прочитать таймлайн двух транзакций, назвать в нем все аномалии и выбрать механизм под invariant, который под угрозой."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "cap-d1-mixed-timeline",
+          "type": "predict_output",
+          "prompt": {
+            "en": "What does read (a) return, and which anomalies did T1 hit?",
+            "ru": "Что вернет чтение (a) и с какими аномалиями столкнулась T1?"
+          },
+          "code": "-- PostgreSQL default isolation level. Stored stock is 10.\n\n-- T1\nBEGIN;\nSELECT stock FROM products WHERE id = 1;   -- returns 10\n\n-- T2\nBEGIN;\nUPDATE products SET stock = 7 WHERE id = 1;\nCOMMIT;\n\n-- T1, same transaction\nSELECT stock FROM products WHERE id = 1;      -- (a)\nUPDATE products SET stock = 9 WHERE id = 1;   -- 10 - 1, from T1's first read\nCOMMIT;",
+          "codeLang": "sql",
+          "options": [
+            { "id": "a", "text": { "en": "(a) returns 7; T1 hit a non-repeatable read, and its final write is a lost update", "ru": "(a) вернет 7; T1 столкнулась с non-repeatable read, а ее итоговая запись — lost update" }, "correct": true },
+            { "id": "b", "text": { "en": "(a) returns 10, and T1 hit a dirty read", "ru": "(a) вернет 10, и T1 столкнулась с dirty read" }, "correct": false,
+              "feedback": { "en": "Nothing uncommitted was read, and the default level does not pin T1's earlier value.", "ru": "Ничего uncommitted не читалось, а уровень по умолчанию не закрепляет прежнее значение за T1." } },
+            { "id": "c", "text": { "en": "(a) returns 7; T1 hit a phantom read", "ru": "(a) вернет 7; T1 столкнулась с phantom read" }, "correct": false,
+              "feedback": { "en": "The set of matching rows never changed — one row's value did.", "ru": "Набор подходящих строк не менялся — изменилось значение одной строки." } },
+            { "id": "d", "text": { "en": "(a) returns 7, and no anomaly happened because both transactions committed", "ru": "(a) вернет 7, и аномалий нет, потому что обе транзакции сделали commit" }, "correct": false,
+              "feedback": { "en": "Committing does not help: T1's final 9 discarded T2's committed 7.", "ru": "Commit не помогает: итоговая 9 из T1 стерла зафиксированную 7 из T2." } }
+          ],
+          "reveal": {
+            "en": "Two separate anomalies stack up in one timeline.\n\n1. PostgreSQL's default level is `READ COMMITTED`, so read (a) sees T2's committed `7` — T1's two identical reads returned `10` and `7`: a **non-repeatable read**.\n2. T1 then writes `9`, a number it computed from its *first* read of `10`. That blind write discards T2's committed `7`: a **lost update**.\n\n```mermaid\nflowchart TD\n  T[\"two overlapping transactions\"] --> R{\"what went wrong?\"}\n  R -->|\"read uncommitted data\"| D[\"dirty read: fix with READ COMMITTED\"]\n  R -->|\"same row, new committed value\"| N[\"non-repeatable read: fix with a stable snapshot\"]\n  R -->|\"same condition, new row set\"| P[\"phantom read: fix with predicate or range locking, or SERIALIZABLE\"]\n  R -->|\"read-modify-write overlap\"| L[\"lost update: fix with FOR UPDATE, a version column, or an atomic UPDATE\"]\n```\n\nThe narrow fix here is one line: `UPDATE products SET stock = stock - 1 WHERE id = 1` leaves the final value at `6` and cannot lose T2's change. `SELECT ... FOR UPDATE` on T1's first read would work too, at the cost of making T2 wait.",
+            "ru": "В одном таймлайне складываются две разные аномалии.\n\n1. Уровень по умолчанию в PostgreSQL — `READ COMMITTED`, поэтому чтение (a) видит зафиксированную `7` из T2: два одинаковых чтения T1 дали `10` и `7` — это **non-repeatable read**.\n2. Затем T1 записывает `9` — число, вычисленное из ее *первого* чтения `10`. Эта слепая запись стирает зафиксированную `7` из T2: это **lost update**.\n\n```mermaid\nflowchart TD\n  T[\"две пересекающиеся транзакции\"] --> R{\"что пошло не так?\"}\n  R -->|\"прочитаны uncommitted данные\"| D[\"dirty read: лечится READ COMMITTED\"]\n  R -->|\"та же строка, новое committed значение\"| N[\"non-repeatable read: лечится stable snapshot\"]\n  R -->|\"то же условие, новый набор строк\"| P[\"phantom read: лечится predicate или range locking, либо SERIALIZABLE\"]\n  R -->|\"пересечение read-modify-write\"| L[\"lost update: лечится FOR UPDATE, version column или atomic UPDATE\"]\n```\n\nУзкое исправление здесь — одна строка: `UPDATE products SET stock = stock - 1 WHERE id = 1` оставит итоговое значение `6` и не сможет потерять изменение T2. `SELECT ... FOR UPDATE` на первом чтении T1 тоже сработал бы, но ценой ожидания T2."
+          },
+          "feedback": {
+            "correct": { "en": "Both at once: the re-read changed, and the blind write erased T2's work.", "ru": "Сразу обе: перечитанное значение изменилось, а слепая запись стерла работу T2." },
+            "incorrect": { "en": "Read (a) returns 7 (non-repeatable read), and writing 9 discards T2's 7 (lost update).", "ru": "Чтение (a) вернет 7 (non-repeatable read), а запись 9 стирает 7 из T2 (lost update)." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "cap-p1-atomic-decrement",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Both sales use an atomic decrement. Stored stock is 10. What is the final stock after both commit?",
+            "ru": "Обе продажи используют атомарное уменьшение. Сохраненный stock равен 10. Каким он будет после обоих commit?"
+          },
+          "code": "-- Stored stock is 10. PostgreSQL default isolation level.\n\n-- T1\nBEGIN;\nUPDATE products SET stock = stock - 1 WHERE id = 1;\n\n-- T2\nBEGIN;\nUPDATE products SET stock = stock - 1 WHERE id = 1;   -- waits for T1\n\n-- T1\nCOMMIT;\n-- T2\nCOMMIT;",
+          "codeLang": "sql",
+          "options": [
+            { "id": "a", "text": { "en": "8", "ru": "8" }, "correct": true },
+            { "id": "b", "text": { "en": "9", "ru": "9" }, "correct": false,
+              "feedback": { "en": "9 is the lost-update outcome; an atomic decrement computes from the current row instead.", "ru": "9 — результат lost update; атомарное уменьшение считает от текущей строки." } },
+            { "id": "c", "text": { "en": "10, because T2 was blocked", "ru": "10, потому что T2 была заблокирована" }, "correct": false,
+              "feedback": { "en": "T2 only waits for T1 to finish, then applies its own decrement.", "ru": "T2 лишь ждет завершения T1, а затем применяет свое уменьшение." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Neither decrement is computed outside the database, so neither is lost.", "ru": "Ни одно уменьшение не вычисляется вне базы, поэтому ни одно не теряется." },
+            "incorrect": { "en": "Each statement subtracts from the current value, so two sales give 8.", "ru": "Каждый запрос вычитает из текущего значения, поэтому две продажи дают 8." }
+          }
+        },
+        {
+          "id": "cap-p2-spot-version-check",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This write is meant to implement optimistic locking for a row that was read with version = 3. What is the defect?",
+            "ru": "Эта запись должна реализовать optimistic locking для строки, прочитанной с version = 3. В чем дефект?"
+          },
+          "code": "-- Optimistic locking attempt. The row was read with version = 3.\nBEGIN;\nUPDATE products SET stock = 9, version = 4 WHERE id = 1;\nCOMMIT;",
+          "codeLang": "sql",
+          "options": [
+            { "id": "a", "text": { "en": "The WHERE clause never checks version = 3, so a concurrent change is overwritten instead of detected", "ru": "В WHERE нет проверки version = 3, поэтому параллельное изменение перезаписывается, а не обнаруживается" }, "correct": true },
+            { "id": "b", "text": { "en": "The writer should not increment the version column itself", "ru": "Записывающая транзакция не должна сама увеличивать version" }, "correct": false,
+              "feedback": { "en": "Incrementing the version is correct; the missing part is the check.", "ru": "Увеличивать версию правильно; не хватает именно проверки." } },
+            { "id": "c", "text": { "en": "The UPDATE needs a FOR UPDATE clause to work", "ru": "Чтобы это работало, UPDATE нужен FOR UPDATE" }, "correct": false,
+              "feedback": { "en": "FOR UPDATE belongs to a SELECT; optimistic locking deliberately takes no lock.", "ru": "FOR UPDATE относится к SELECT; optimistic locking сознательно не берет блокировку." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Without the version predicate the update is just a blind write.", "ru": "Без предиката по версии этот update — просто слепая запись." },
+            "incorrect": { "en": "It needs WHERE id = 1 AND version = 3, so a changed row updates zero rows.", "ru": "Нужно WHERE id = 1 AND version = 3, чтобы у изменившейся строки обновилось нуль строк." }
+          }
+        },
+        {
+          "id": "cap-p3-sort-classify",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the questions that identify which anomaly a two-transaction timeline shows.",
+            "ru": "Расставь по порядку вопросы, которые определяют, какую аномалию показывает таймлайн двух транзакций."
+          },
+          "steps": [
+            { "id": "s1", "text": { "en": "Had the other transaction committed when the value was read?", "ru": "Сделала ли другая транзакция commit к моменту чтения значения?" } },
+            { "id": "s2", "text": { "en": "If it had not, the reader hit a dirty read", "ru": "Если нет, читатель столкнулся с dirty read" } },
+            { "id": "s3", "text": { "en": "If it had, did the same row return a different value? Then it is a non-repeatable read", "ru": "Если да, дала ли та же строка другое значение? Тогда это non-repeatable read" } },
+            { "id": "s4", "text": { "en": "Or did the set of matching rows change? Then it is a phantom read", "ru": "Или изменился набор подходящих строк? Тогда это phantom read" } },
+            { "id": "s5", "text": { "en": "Finally, did both transactions read, compute and write the same value? Then an update was lost", "ru": "Наконец, обе ли транзакции прочитали, вычислили и записали одно значение? Тогда update потерян" } }
+          ],
+          "feedback": {
+            "correct": { "en": "Commit status first, then what changed, then the write conflict.", "ru": "Сначала статус commit, потом что изменилось, потом конфликт записи." },
+            "incorrect": { "en": "Ask about commit status first, then value vs row set, then overlapping writes.", "ru": "Сначала спроси про статус commit, потом значение против набора строк, потом пересекающиеся записи." }
+          }
+        },
+        {
+          "id": "cap-p4-match-fixes",
+          "type": "match_pairs",
+          "prompt": { "en": "Match each anomaly to the mechanism that prevents it.", "ru": "Соотнеси каждую аномалию с механизмом, который ее предотвращает." },
+          "pairs": [
+            { "id": "dirty", "left": { "en": "Dirty read", "ru": "Dirty read" }, "right": { "en": "READ COMMITTED, which shows only committed data", "ru": "READ COMMITTED, который показывает только committed данные" } },
+            { "id": "nrr", "left": { "en": "Non-repeatable read", "ru": "Non-repeatable read" }, "right": { "en": "A stable snapshot, as in REPEATABLE READ", "ru": "Stable snapshot, как в REPEATABLE READ" } },
+            { "id": "phantom", "left": { "en": "Phantom read", "ru": "Phantom read" }, "right": { "en": "Predicate or range locking, or SERIALIZABLE", "ru": "Predicate или range locking, либо SERIALIZABLE" } },
+            { "id": "lost", "left": { "en": "Lost update", "ru": "Lost update" }, "right": { "en": "SELECT ... FOR UPDATE, a version column, or an atomic UPDATE", "ru": "SELECT ... FOR UPDATE, version column или atomic UPDATE" } }
+          ],
+          "feedback": {
+            "correct": { "en": "Read anomalies are an isolation question; lost update is a write-conflict question.", "ru": "Аномалии чтения — вопрос isolation; lost update — вопрос конфликта записи." },
+            "incorrect": { "en": "Isolation levels handle the three read anomalies; locks, versions or atomic updates handle lost update.", "ru": "Isolation levels решают три аномалии чтения; блокировки, версии или atomic updates — lost update." }
+          }
+        },
+        {
+          "id": "cap-p5-fill-three-names",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the three anomaly names.", "ru": "Впиши названия трех аномалий." },
+          "text": {
+            "en": "Reading uncommitted data is a ___ read; the same row returning a new committed value is a ___ read; a changed set of matching rows is a ___ read.",
+            "ru": "Чтение uncommitted данных — это ___ read; та же строка с новым committed значением — это ___ read; изменившийся набор подходящих строк — это ___ read."
+          },
+          "blanks": [
+            { "en": ["dirty"], "ru": ["dirty"] },
+            { "en": ["non-repeatable", "non repeatable"], "ru": ["non-repeatable", "non repeatable"] },
+            { "en": ["phantom"], "ru": ["phantom"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Commit status separates the first; value versus row set separates the other two.", "ru": "Первую отделяет статус commit; остальные две — значение против набора строк." },
+            "incorrect": { "en": "Dirty (uncommitted), non-repeatable (row value), phantom (row set).", "ru": "Dirty (uncommitted), non-repeatable (значение строки), phantom (набор строк)." }
+          }
+        }
+      ]
+    }
+  ]
+}

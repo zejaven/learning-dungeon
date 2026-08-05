@@ -1,0 +1,3002 @@
+{
+  "schemaVersion": 1,
+  "topicId": "inbox-pattern",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "at-least-once",
+      "title": {
+        "en": "At-least-once delivery",
+        "ru": "Доставка at-least-once"
+      },
+      "summary": {
+        "en": "Brokers redeliver: if the consumer crashes before ack-ing or the ack is lost, the same message arrives again.",
+        "ru": "Брокеры доставляют повторно: если потребитель упал до ack или ack потерян, то же сообщение придёт снова."
+      },
+      "discovery": [
+        {
+          "id": "alo-d1-crash-before-ack",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A consumer finishes handling a message but crashes before it sends the acknowledgement to the broker. What does the broker do?",
+            "ru": "Потребитель дообработал сообщение, но упал до отправки подтверждения брокеру. Что сделает брокер?"
+          },
+          "reveal": {
+            "en": "A **broker** (Kafka, RabbitMQ, SQS, …) hands a message to a consumer and waits for an **acknowledgement (ack)** — the consumer's signal that the message is handled and may be forgotten. Without that ack the broker assumes nothing happened and sends the message again.\n\n```mermaid\nsequenceDiagram\n  participant B as Broker\n  participant C as Consumer\n  B->>C: deliver m1\n  Note over C: work done, crash before ack\n  B->>C: deliver m1 again\n```\n\nThis is **at-least-once** delivery: a message is never silently lost, but it can arrive more than once. Redelivery happens when the consumer crashes after doing the work but before ack-ing, when the ack itself is lost on the way back, or when a consumer group rebalances. **Exactly-once** delivery — every message arriving exactly one time — is what you would like, and it is what brokers almost never give you. So a duplicate is not an exotic failure: it is the normal contract you must design for.",
+            "ru": "**Брокер** (Kafka, RabbitMQ, SQS, …) отдаёт сообщение потребителю и ждёт **подтверждения (ack)** — сигнала, что сообщение обработано и его можно забыть. Без ack брокер считает, что ничего не произошло, и присылает сообщение снова.\n\n```mermaid\nsequenceDiagram\n  participant B as Брокер\n  participant C as Потребитель\n  B->>C: доставить m1\n  Note over C: работа сделана, сбой до ack\n  B->>C: доставить m1 снова\n```\n\nЭто доставка **at-least-once**: сообщение никогда не теряется молча, но может прийти больше одного раза. Повторная доставка случается, когда потребитель падает после выполнения работы, но до ack; когда сам ack теряется по пути; или когда происходит ребаланс группы потребителей. Доставка **exactly-once** — каждое сообщение ровно один раз — это то, чего хочется, и то, чего брокеры почти никогда не дают. Значит, дубликат — не экзотический сбой, а нормальный контракт, под который надо проектировать."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — no ack, so the broker assumes the message still needs handling.",
+              "ru": "Верно — ack нет, поэтому брокер считает, что сообщение ещё не обработано."
+            },
+            "incorrect": {
+              "en": "The broker redelivers: without an ack it cannot know the work was done.",
+              "ru": "Брокер доставит снова: без ack он не может знать, что работа сделана."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Delivers the same message again",
+                "ru": "Доставит то же сообщение снова"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Marks the message as done and moves on",
+                "ru": "Пометит сообщение как обработанное и пойдёт дальше"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The broker learns a message is done only from the ack; without it the message is still outstanding.",
+                "ru": "Брокер узнаёт об обработке только из ack; без него сообщение всё ещё считается необработанным."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Drops the message so no duplicate can appear",
+                "ru": "Выбросит сообщение, чтобы не появился дубликат"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Brokers err toward redelivery, not loss — dropping unacked messages would silently lose work.",
+                "ru": "Брокеры склоняются к повторной доставке, а не к потере: выбрасывание неподтверждённых сообщений тихо теряло бы работу."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "alo-p1-exactly-once-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Message brokers such as Kafka, RabbitMQ and SQS normally guarantee exactly-once delivery.",
+            "ru": "Брокеры сообщений вроде Kafka, RabbitMQ и SQS обычно гарантируют доставку exactly-once."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The practical guarantee is at-least-once: the same message can arrive more than once.",
+              "ru": "Практическая гарантия — at-least-once: то же сообщение может прийти больше одного раза."
+            },
+            "incorrect": {
+              "en": "No — brokers almost never give exactly-once; the practical guarantee is at-least-once.",
+              "ru": "Нет — брокеры почти никогда не дают exactly-once; практическая гарантия — at-least-once."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "alo-p2-causes",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which situation causes a broker to redeliver a message that was already handled?",
+            "ru": "Какая ситуация заставит брокер повторно доставить уже обработанное сообщение?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "No ack reached the broker, so from its point of view the message is still pending.",
+              "ru": "До брокера не дошёл ack, поэтому с его точки зрения сообщение ещё в работе."
+            },
+            "incorrect": {
+              "en": "Redelivery follows a missing ack, a crash before ack, or a consumer group rebalance.",
+              "ru": "Повторная доставка следует за потерянным ack, падением до ack или ребалансом группы потребителей."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The consumer crashed after doing the work but before ack-ing",
+                "ru": "Потребитель упал после выполнения работы, но до ack"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The message body changed while it sat in the queue",
+                "ru": "Тело сообщения изменилось, пока оно лежало в очереди"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Brokers do not rewrite message bodies; redelivery is about a missing acknowledgement.",
+                "ru": "Брокеры не переписывают тела сообщений; повторная доставка связана с отсутствием подтверждения."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The consumer processed the message faster than expected",
+                "ru": "Потребитель обработал сообщение быстрее, чем ожидалось"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Speed is irrelevant — what matters is whether the broker received the ack.",
+                "ru": "Скорость ни при чём — важно лишь, получил ли брокер ack."
+              }
+            }
+          ]
+        },
+        {
+          "id": "alo-p3-match-terms",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each messaging term to its meaning.",
+            "ru": "Соотнеси каждый термин обмена сообщениями с его значением."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The ack is what stops redelivery; without it the broker tries again.",
+              "ru": "Именно ack останавливает повторную доставку; без него брокер пробует снова."
+            },
+            "incorrect": {
+              "en": "at-least-once = possibly more than once; exactly-once delivery is what brokers do not provide.",
+              "ru": "at-least-once — возможно больше одного раза; доставку exactly-once брокеры не дают."
+            }
+          },
+          "pairs": [
+            {
+              "id": "alo",
+              "left": {
+                "en": "at-least-once delivery",
+                "ru": "доставка at-least-once"
+              },
+              "right": {
+                "en": "A message may arrive more than once, but is never silently lost",
+                "ru": "Сообщение может прийти больше одного раза, но не теряется молча"
+              }
+            },
+            {
+              "id": "eo",
+              "left": {
+                "en": "exactly-once delivery",
+                "ru": "доставка exactly-once"
+              },
+              "right": {
+                "en": "The guarantee brokers almost never provide",
+                "ru": "Гарантия, которую брокеры почти никогда не дают"
+              }
+            },
+            {
+              "id": "ack",
+              "left": {
+                "en": "acknowledgement (ack)",
+                "ru": "подтверждение (ack)"
+              },
+              "right": {
+                "en": "The consumer's signal that the broker may stop redelivering",
+                "ru": "Сигнал потребителя, что брокер может прекратить повторные доставки"
+              }
+            },
+            {
+              "id": "rebalance",
+              "left": {
+                "en": "consumer group rebalance",
+                "ru": "ребаланс группы потребителей"
+              },
+              "right": {
+                "en": "One more reason an already-handled message comes back",
+                "ru": "Ещё одна причина, по которой уже обработанное сообщение вернётся"
+              }
+            }
+          ]
+        },
+        {
+          "id": "alo-p4-fill-guarantee",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the delivery guarantee brokers actually offer.",
+            "ru": "Впиши гарантию доставки, которую брокеры действительно дают."
+          },
+          "feedback": {
+            "correct": {
+              "en": "at-least-once: never silently lost, but possibly repeated.",
+              "ru": "at-least-once: не теряется молча, но может повториться."
+            },
+            "incorrect": {
+              "en": "It is at-least-once — the same message can arrive more than once.",
+              "ru": "Это at-least-once — то же сообщение может прийти больше одного раза."
+            }
+          },
+          "text": {
+            "en": "The practical guarantee of a message broker is ___ delivery.",
+            "ru": "Практическая гарантия брокера сообщений — доставка ___."
+          },
+          "answers": {
+            "en": [
+              "at-least-once",
+              "at least once"
+            ],
+            "ru": [
+              "at-least-once",
+              "at least once"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "duplicate-effects",
+      "title": {
+        "en": "Why a duplicate hurts",
+        "ru": "Чем опасен дубликат"
+      },
+      "summary": {
+        "en": "A naive consumer applies its side effect on every delivery, so a redelivered message means a double charge.",
+        "ru": "Наивный потребитель применяет побочный эффект при каждой доставке, поэтому повторная доставка означает двойное списание."
+      },
+      "discovery": [
+        {
+          "id": "dup-d1-predict-double",
+          "type": "predict_output",
+          "prompt": {
+            "en": "This consumer has no deduplication. Predict the total charged.",
+            "ru": "У этого потребителя нет дедупликации. Предскажи итоговую сумму списания."
+          },
+          "code": "// naive consumer: applies the effect on every delivery\nonMessage(id = \"m1\", effect = \"charge 100\")   // first delivery\nonMessage(id = \"m1\", effect = \"charge 100\")   // broker redelivery\n\nprint(totalCharged)",
+          "codeLang": "text",
+          "reveal": {
+            "en": "A **side effect** is the change a message causes in the world: money moved, an order created, an email sent. A naive consumer runs that side effect once per *delivery*, but at-least-once delivery means deliveries repeat — so the customer is charged 200 for one purchase.\n\n```mermaid\nflowchart LR\n  D1[\"delivery 1\"] --> W1[\"charge 100\"]\n  D2[\"redelivery of the same message\"] --> W2[\"charge 100 again\"]\n  W2 --> R[\"total 200 — wrong\"]\n```\n\nWhat you want instead is an **idempotent** consumer: handling the same message twice leaves the system in exactly the same state as handling it once. Concretely, the second delivery must be a **no-op** — it does nothing at all. Note it must not *undo* the first effect either; the first effect is correct and stands.",
+            "ru": "**Побочный эффект** — это изменение, которое сообщение вносит в мир: перевод денег, созданный заказ, отправленное письмо. Наивный потребитель выполняет этот эффект один раз на каждую *доставку*, но at-least-once означает, что доставки повторяются — и клиента спишут на 200 за одну покупку.\n\n```mermaid\nflowchart LR\n  D1[\"доставка 1\"] --> W1[\"списать 100\"]\n  D2[\"повторная доставка того же сообщения\"] --> W2[\"списать 100 ещё раз\"]\n  W2 --> R[\"итого 200 — неверно\"]\n```\n\nНужен же **идемпотентный** потребитель: обработка одного и того же сообщения дважды оставляет систему ровно в том же состоянии, что и одна обработка. Конкретно: вторая доставка должна быть **no-op** — не делать вообще ничего. При этом она не должна и *отменять* первый эффект: первый эффект верен и остаётся."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two deliveries, two charges — the classic double charge.",
+              "ru": "Две доставки — два списания: классическое двойное списание."
+            },
+            "incorrect": {
+              "en": "Nothing here detects the repeat, so the effect runs on both deliveries: 200.",
+              "ru": "Здесь ничто не распознаёт повтор, поэтому эффект применится на обеих доставках: 200."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "200",
+                "ru": "200"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "100",
+                "ru": "100"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the result you want, but nothing in this consumer recognises the repeated message.",
+                "ru": "Это желаемый результат, но в этом потребителе ничто не распознаёт повторное сообщение."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The second delivery fails with an error",
+                "ru": "Вторая доставка завершится ошибкой"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing fails — to a naive consumer the redelivery looks like ordinary new work.",
+                "ru": "Ничего не падает — для наивного потребителя повторная доставка выглядит как обычная новая работа."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "dup-p1-double-charge-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Under at-least-once delivery, a consumer that applies its side effect on every delivery can charge a customer twice for one purchase.",
+            "ru": "При доставке at-least-once потребитель, применяющий побочный эффект при каждой доставке, может списать с клиента дважды за одну покупку."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Duplicate deliveries turn into duplicate effects unless the consumer is idempotent.",
+              "ru": "Повторные доставки превращаются в повторные эффекты, если потребитель не идемпотентен."
+            },
+            "incorrect": {
+              "en": "It can — that is exactly the double-charge problem the Inbox pattern exists to prevent.",
+              "ru": "Может — это ровно та проблема двойного списания, ради которой существует паттерн Inbox."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "dup-p2-what-should-happen",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In the Inbox pattern, what should a redelivered message do to the system's state?",
+            "ru": "Что, согласно паттерну Inbox, повторно доставленное сообщение должно сделать с состоянием системы?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "A duplicate is a no-op: the first effect already happened and stays.",
+              "ru": "Дубликат — это no-op: первый эффект уже произошёл и остаётся."
+            },
+            "incorrect": {
+              "en": "Nothing at all — the duplicate must neither repeat nor undo the original effect.",
+              "ru": "Вообще ничего — дубликат не должен ни повторять, ни отменять исходный эффект."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Nothing — it must be a no-op",
+                "ru": "Ничего — это должен быть no-op"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Apply the effect again, since the broker resent it for a reason",
+                "ru": "Применить эффект снова — раз брокер прислал повторно, значит не зря"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The broker resends because it never saw an ack, not because the work is needed again.",
+                "ru": "Брокер шлёт снова, потому что не увидел ack, а не потому, что работу надо повторить."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Roll back the effect that the first delivery applied",
+                "ru": "Откатить эффект, применённый первой доставкой"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The first effect is the correct one; undoing it would lose the work entirely.",
+                "ru": "Первый эффект — правильный; отмена полностью потеряла бы работу."
+              }
+            }
+          ]
+        },
+        {
+          "id": "dup-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the goal of an idempotent consumer.",
+            "ru": "Собери цель идемпотентного потребителя."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Many deliveries, one effect — that is idempotent consumption.",
+              "ru": "Много доставок, один эффект — это и есть идемпотентное потребление."
+            },
+            "incorrect": {
+              "en": "An idempotent consumer applies the effect only once, however often the message arrives.",
+              "ru": "Идемпотентный потребитель применяет эффект только один раз, сколько бы раз сообщение ни пришло."
+            }
+          },
+          "tokens": {
+            "en": [
+              "an",
+              "idempotent",
+              "consumer",
+              "applies",
+              "the",
+              "effect",
+              "only",
+              "once"
+            ],
+            "ru": [
+              "идемпотентный",
+              "потребитель",
+              "применяет",
+              "эффект",
+              "только",
+              "один",
+              "раз"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "twice",
+              "broker"
+            ],
+            "ru": [
+              "дважды",
+              "брокер"
+            ]
+          }
+        },
+        {
+          "id": "dup-p4-fill-idempotent",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing property name.",
+            "ru": "Впиши название пропущенного свойства."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Idempotent: repeat the operation, get the same state.",
+              "ru": "Идемпотентный: повтори операцию — получишь то же состояние."
+            },
+            "incorrect": {
+              "en": "The word is idempotent — repeating the operation changes nothing further.",
+              "ru": "Это слово «идемпотентный» — повтор операции ничего больше не меняет."
+            }
+          },
+          "text": {
+            "en": "A consumer is ___ when handling the same message twice leaves the same state as handling it once.",
+            "ru": "Потребитель ___, когда двукратная обработка одного сообщения оставляет то же состояние, что и однократная."
+          },
+          "answers": {
+            "en": [
+              "idempotent"
+            ],
+            "ru": [
+              "идемпотентен",
+              "идемпотентный",
+              "idempotent"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "inbox-table",
+      "title": {
+        "en": "The inbox table",
+        "ru": "Таблица inbox"
+      },
+      "summary": {
+        "en": "The consumer keeps a table of already-processed message ids in the same database as its business data, with a UNIQUE id.",
+        "ru": "Потребитель держит таблицу уже обработанных id сообщений в той же базе, что и бизнес-данные, с UNIQUE на id."
+      },
+      "discovery": [
+        {
+          "id": "tbl-d1-where",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "An idempotent consumer must remember which message ids it has already processed. Where should that record live?",
+            "ru": "Идемпотентный потребитель должен помнить, какие id сообщений он уже обработал. Где должна жить эта запись?"
+          },
+          "reveal": {
+            "en": "The consumer keeps an **inbox table** — a list of the ids of messages it has already processed — in the **same database** as its business data:\n\n```sql\nCREATE TABLE inbox (\n  message_id   VARCHAR(64) PRIMARY KEY,\n  processed_at TIMESTAMP NOT NULL\n);\n```\n\nComparing an incoming id against that table is the **dedup check** (deduplication): it is how a repeat is recognised. Two properties make the table work:\n\n- The **UNIQUE** constraint on `message_id` (here via the primary key) is the real guard — the database itself refuses a second row for the same id, even if two deliveries race.\n- Being in the *same* database is what later lets the id record and the business work commit together. An in-memory set would be wiped by the very restart that triggers redeliveries, and a separate database could not join the same transaction.\n\n```mermaid\nflowchart LR\n  C[\"consumer\"] --> DB[\"one database\"]\n  DB --> I[\"inbox table: processed message ids\"]\n  DB --> B[\"business tables: balances, orders\"]\n```",
+            "ru": "Потребитель держит **таблицу inbox** — список id уже обработанных сообщений — в **той же базе данных**, что и бизнес-данные:\n\n```sql\nCREATE TABLE inbox (\n  message_id   VARCHAR(64) PRIMARY KEY,\n  processed_at TIMESTAMP NOT NULL\n);\n```\n\nСверка входящего id с этой таблицей — это **проверка на дубль** (дедупликация): именно так распознаётся повтор. Работать таблице позволяют два свойства:\n\n- Ограничение **UNIQUE** на `message_id` (здесь — через первичный ключ) и есть настоящий страж: сама база откажет во второй строке с тем же id, даже если две доставки идут наперегонки.\n- Нахождение в *той же* базе — то, что позже позволит записи id и бизнес-работе закоммититься вместе. Множество в памяти стёр бы тот самый перезапуск, который и вызывает повторные доставки, а отдельная база не смогла бы участвовать в одной транзакции.\n\n```mermaid\nflowchart LR\n  C[\"потребитель\"] --> DB[\"одна база данных\"]\n  DB --> I[\"таблица inbox: id обработанных сообщений\"]\n  DB --> B[\"бизнес-таблицы: балансы, заказы\"]\n```"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Same database as the business data — that is what makes one shared transaction possible.",
+              "ru": "Та же база, что и бизнес-данные, — именно это делает возможной одну общую транзакцию."
+            },
+            "incorrect": {
+              "en": "It belongs in the same database as the business data, so both can commit together.",
+              "ru": "Ей место в той же базе, что и бизнес-данные, чтобы обе записи коммитились вместе."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "In a table in the same database as the business data",
+                "ru": "В таблице той же базы данных, где лежат бизнес-данные"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "In an in-memory set inside the consumer process",
+                "ru": "В множестве в памяти процесса-потребителя"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Memory is lost on restart — exactly when redeliveries arrive — and it cannot join the business transaction.",
+                "ru": "Память теряется при перезапуске — как раз когда приходят повторные доставки — и не участвует в бизнес-транзакции."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "In a separate database dedicated to deduplication",
+                "ru": "В отдельной базе, выделенной под дедупликацию"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A separate database cannot take part in the same local transaction as the business write.",
+                "ru": "Отдельная база не может участвовать в той же локальной транзакции, что и бизнес-запись."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "tbl-p1-same-db-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In the Inbox pattern, the inbox table lives in the same database as the consumer's business data.",
+            "ru": "В паттерне Inbox таблица inbox живёт в той же базе данных, что и бизнес-данные потребителя."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Same database, so the dedup record and the business write can share one transaction.",
+              "ru": "Та же база — поэтому запись дедупликации и бизнес-запись могут делить одну транзакцию."
+            },
+            "incorrect": {
+              "en": "It does — a dedup record in another store could not commit atomically with the work.",
+              "ru": "Живёт — запись дедупликации в другом хранилище не смогла бы закоммититься атомарно с работой."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "tbl-p2-real-guard",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In an inbox table, what actually guarantees that the same message id cannot be recorded twice?",
+            "ru": "Что в таблице inbox на самом деле гарантирует, что один и тот же id сообщения не запишется дважды?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The UNIQUE constraint is enforced by the database itself, even under concurrent deliveries.",
+              "ru": "Ограничение UNIQUE обеспечивает сама база — даже при конкурентных доставках."
+            },
+            "incorrect": {
+              "en": "The UNIQUE constraint on the id column is the real guard; an application-level check alone can be raced.",
+              "ru": "Настоящий страж — ограничение UNIQUE на колонке id; проверка только в приложении может проиграть гонку."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A UNIQUE constraint on the message id column",
+                "ru": "Ограничение UNIQUE на колонке с id сообщения"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The application checking the id before it inserts",
+                "ru": "Проверка id приложением перед вставкой"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That check is useful, but two concurrent deliveries can both pass it; only the constraint is a hard guard.",
+                "ru": "Проверка полезна, но две конкурентные доставки могут обе её пройти; жёсткий страж — только ограничение."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The broker refusing to redeliver an id it already sent",
+                "ru": "Отказ брокера повторно слать id, который он уже отправлял"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Redelivery is exactly what at-least-once allows; the broker is never the guard.",
+                "ru": "Повторная доставка — это ровно то, что допускает at-least-once; брокер стражем не бывает."
+              }
+            }
+          ]
+        },
+        {
+          "id": "tbl-p3-match-stores",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "In the Inbox pattern, match each store to what it holds.",
+            "ru": "Соотнеси каждое хранилище паттерна Inbox с тем, что в нём лежит."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The inbox holds ids only; the effect of the work lives in the business tables.",
+              "ru": "В inbox лежат только id; результат работы — в бизнес-таблицах."
+            },
+            "incorrect": {
+              "en": "inbox = processed ids, business tables = the effect, broker = messages awaiting delivery.",
+              "ru": "inbox — обработанные id, бизнес-таблицы — эффект, брокер — сообщения к доставке."
+            }
+          },
+          "pairs": [
+            {
+              "id": "inbox",
+              "left": {
+                "en": "inbox table",
+                "ru": "таблица inbox"
+              },
+              "right": {
+                "en": "Ids of the messages already processed",
+                "ru": "Id уже обработанных сообщений"
+              }
+            },
+            {
+              "id": "business",
+              "left": {
+                "en": "business tables",
+                "ru": "бизнес-таблицы"
+              },
+              "right": {
+                "en": "The effect of the work, such as account balances",
+                "ru": "Результат работы, например балансы счетов"
+              }
+            },
+            {
+              "id": "broker",
+              "left": {
+                "en": "broker",
+                "ru": "брокер"
+              },
+              "right": {
+                "en": "Messages waiting to be delivered or redelivered",
+                "ru": "Сообщения, ожидающие доставки или повторной доставки"
+              }
+            }
+          ]
+        },
+        {
+          "id": "tbl-p4-fill-table",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the description of the inbox table.",
+            "ru": "Дополни описание таблицы inbox."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Ids of processed messages, protected by a UNIQUE constraint.",
+              "ru": "Id обработанных сообщений, защищённые ограничением UNIQUE."
+            },
+            "incorrect": {
+              "en": "It stores message ids, and a UNIQUE constraint on that column is the real guard.",
+              "ru": "В ней хранятся id сообщений, а настоящий страж — ограничение UNIQUE на этой колонке."
+            }
+          },
+          "text": {
+            "en": "The inbox table stores processed message ___, and a ___ constraint on that column is the real guard.",
+            "ru": "Таблица inbox хранит ___ обработанных сообщений, а настоящий страж — ограничение ___ на этой колонке."
+          },
+          "blanks": [
+            {
+              "en": [
+                "ids",
+                "id"
+              ],
+              "ru": [
+                "id",
+                "идентификаторы"
+              ]
+            },
+            {
+              "en": [
+                "UNIQUE",
+                "unique"
+              ],
+              "ru": [
+                "UNIQUE",
+                "unique"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dedup-check",
+      "title": {
+        "en": "The dedup check",
+        "ru": "Проверка на дубль"
+      },
+      "summary": {
+        "en": "For each message: is the id already in the inbox? If yes, skip it; if no, insert the id, do the work and commit.",
+        "ru": "Для каждого сообщения: id уже в inbox? Если да — пропустить; если нет — вставить id, сделать работу и закоммитить."
+      },
+      "discovery": [
+        {
+          "id": "chk-d1-sort-algorithm",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Put the steps an idempotent consumer takes for one incoming message in order.",
+            "ru": "Расставь по порядку шаги, которые идемпотентный потребитель делает для одного входящего сообщения."
+          },
+          "reveal": {
+            "en": "The whole algorithm is four decisions and it runs per message:\n\n```mermaid\nflowchart TD\n  M[\"message with a unique id\"] --> Q{\"id already in inbox?\"}\n  Q -->|yes| S[\"skip: redelivery, apply no effect\"]\n  Q -->|no| T[\"one local transaction: insert id + do the business work\"]\n  T --> C[\"commit together\"]\n```\n\nWhy is *skipping* the right answer for a known id? Because the id is only ever recorded together with the completed work — so seeing the id means the effect already happened, and repeating it would be the double charge. Why insert the id **and** do the work in the same step? Because that is what keeps the two facts (\"this message is done\" and \"its effect is applied\") from ever disagreeing. The next atom shows what happens when they do.",
+            "ru": "Весь алгоритм — четыре решения, и он выполняется для каждого сообщения:\n\n```mermaid\nflowchart TD\n  M[\"сообщение с уникальным id\"] --> Q{\"id уже в inbox?\"}\n  Q -->|да| S[\"пропустить: повторная доставка, эффект не применять\"]\n  Q -->|нет| T[\"одна локальная транзакция: вставить id + сделать бизнес-работу\"]\n  T --> C[\"коммит вместе\"]\n```\n\nПочему для известного id правильный ответ — *пропустить*? Потому что id записывается только вместе с завершённой работой: раз id есть, эффект уже произошёл, и повтор дал бы двойное списание. Почему вставка id **и** работа — один шаг? Потому что именно это не даёт двум фактам («сообщение обработано» и «его эффект применён») разойтись. Следующий атом покажет, что бывает, когда они расходятся."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Look up first, then either skip or record-and-work, then commit.",
+              "ru": "Сначала посмотреть, затем либо пропустить, либо записать-и-сделать, затем коммит."
+            },
+            "incorrect": {
+              "en": "The order is: read the id, look it up, skip if present, otherwise insert plus work, then commit.",
+              "ru": "Порядок такой: прочитать id, найти его, пропустить если есть, иначе вставить и сделать работу, затем коммит."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Read the message's unique id",
+                "ru": "Прочитать уникальный id сообщения"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Look that id up in the inbox table",
+                "ru": "Найти этот id в таблице inbox"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "If the id is already there, skip the message and apply no effect",
+                "ru": "Если id уже есть, пропустить сообщение и не применять эффект"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Otherwise insert the id and do the business work",
+                "ru": "Иначе вставить id и выполнить бизнес-работу"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "Commit",
+                "ru": "Сделать коммит"
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "chk-p1-predict-total",
+          "type": "predict_output",
+          "prompt": {
+            "en": "This consumer deduplicates by message id. Predict the total charged.",
+            "ru": "Этот потребитель дедуплицирует по id сообщения. Предскажи итоговую сумму списания."
+          },
+          "code": "// inbox consumer: dedup by message id, one transaction per message\nreceive(id = \"m1\", effect = \"charge 100\")   // new id\nreceive(id = \"m1\", effect = \"charge 100\")   // redelivery\nreceive(id = \"m2\", effect = \"charge 100\")   // different id\n\nprint(totalCharged)",
+          "codeLang": "text",
+          "feedback": {
+            "correct": {
+              "en": "Two distinct ids, two effects; the repeat of m1 is skipped.",
+              "ru": "Два разных id — два эффекта; повтор m1 пропущен."
+            },
+            "incorrect": {
+              "en": "m1 applies once, its redelivery is skipped, m2 applies once: 200.",
+              "ru": "m1 применяется один раз, его повтор пропущен, m2 применяется один раз: 200."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "200",
+                "ru": "200"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "300",
+                "ru": "300"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The second delivery of m1 is a duplicate by id and is skipped, so only two effects apply.",
+                "ru": "Вторая доставка m1 — дубликат по id и пропускается, поэтому применяются только два эффекта."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "100",
+                "ru": "100"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "m2 carries a different id, so it is a genuinely new message and its effect is applied.",
+                "ru": "У m2 другой id, значит это по-настоящему новое сообщение, и его эффект применяется."
+              }
+            }
+          ]
+        },
+        {
+          "id": "chk-p2-known-id-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In the Inbox pattern, a message whose id is already in the inbox table is processed again just to be safe.",
+            "ru": "В паттерне Inbox сообщение, id которого уже есть в таблице inbox, на всякий случай обрабатывается снова."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A known id means the effect already happened, so the message is skipped.",
+              "ru": "Известный id означает, что эффект уже произошёл, поэтому сообщение пропускается."
+            },
+            "incorrect": {
+              "en": "No — a known id is skipped; reprocessing it would be exactly the duplicate effect you are preventing.",
+              "ru": "Нет — известный id пропускается; повторная обработка была бы тем самым дублирующим эффектом."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "chk-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the inbox dedup rule.",
+            "ru": "Собери правило дедупликации в inbox."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Known id, no effect: that is what makes the consumer idempotent.",
+              "ru": "Известный id — никакого эффекта: именно это делает потребителя идемпотентным."
+            },
+            "incorrect": {
+              "en": "If the id is already in the inbox, skip the message and apply no effect.",
+              "ru": "Если id уже есть в inbox, пропусти сообщение и не применяй эффект."
+            }
+          },
+          "tokens": {
+            "en": [
+              "if",
+              "the",
+              "id",
+              "is",
+              "already",
+              "in",
+              "the",
+              "inbox,",
+              "skip",
+              "the",
+              "message"
+            ],
+            "ru": [
+              "если",
+              "id",
+              "уже",
+              "есть",
+              "в",
+              "inbox,",
+              "пропусти",
+              "сообщение"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "process",
+              "again"
+            ],
+            "ru": [
+              "обработай",
+              "снова"
+            ]
+          }
+        },
+        {
+          "id": "chk-p4-fill-branch",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the branch taken for a brand-new message id.",
+            "ru": "Дополни ветку для совершенно нового id сообщения."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Insert the id, do the work, commit — all in one go.",
+              "ru": "Вставить id, сделать работу, закоммитить — всё за один раз."
+            },
+            "incorrect": {
+              "en": "For a new id the consumer inserts it, does the business work, and commits.",
+              "ru": "Для нового id потребитель вставляет его, делает бизнес-работу и коммитит."
+            }
+          },
+          "text": {
+            "en": "If the message id is not yet in the inbox, insert the id, do the ___ work, and then ___.",
+            "ru": "Если id сообщения ещё нет в inbox, вставь id, сделай ___-работу, а затем сделай ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "business"
+              ],
+              "ru": [
+                "бизнес"
+              ]
+            },
+            {
+              "en": [
+                "commit",
+                "commits"
+              ],
+              "ru": [
+                "коммит",
+                "commit"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "one-transaction",
+      "title": {
+        "en": "One local transaction",
+        "ru": "Одна локальная транзакция"
+      },
+      "summary": {
+        "en": "The dedup record and the business work commit or roll back together in one local ACID transaction.",
+        "ru": "Запись дедупликации и бизнес-работа коммитятся или откатываются вместе в одной локальной ACID-транзакции."
+      },
+      "discovery": [
+        {
+          "id": "tx-d1-rollback",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A consumer inserts the message id into the inbox and applies the charge in one transaction. The charge fails and the transaction rolls back. What is in the inbox table afterwards?",
+            "ru": "Потребитель вставляет id сообщения в inbox и применяет списание в одной транзакции. Списание падает, транзакция откатывается. Что окажется в таблице inbox?"
+          },
+          "reveal": {
+            "en": "A **local transaction** is a unit of work inside one database, delimited by `BEGIN` … `COMMIT`. It is **atomic**: either every statement in it takes effect, or none does — a rollback undoes them all, regardless of the order they were written in.\n\n```mermaid\nflowchart LR\n  S[\"BEGIN\"] --> I[\"INSERT the message id into inbox\"]\n  I --> W[\"apply the business change\"]\n  W --> C[\"COMMIT: both, or neither\"]\n```\n\nPutting the dedup record and the business work in that one transaction means the two facts can never disagree: \"this message is recorded as done\" is true exactly when \"its effect is applied\" is true. That is what upgrades at-least-once *delivery* into **effectively-once** *processing* — the message may arrive any number of times, but its effect lands exactly once. Note the ack goes to the broker only after the commit; acking earlier would risk losing an uncommitted message.",
+            "ru": "**Локальная транзакция** — это единица работы внутри одной базы, ограниченная `BEGIN` … `COMMIT`. Она **атомарна**: либо действуют все её операторы, либо ни один — откат отменяет их все, независимо от порядка написания.\n\n```mermaid\nflowchart LR\n  S[\"BEGIN\"] --> I[\"INSERT id сообщения в inbox\"]\n  I --> W[\"применить бизнес-изменение\"]\n  W --> C[\"COMMIT: оба или ни одного\"]\n```\n\nПоместив запись дедупликации и бизнес-работу в одну такую транзакцию, вы не даёте двум фактам разойтись: «сообщение помечено обработанным» истинно ровно тогда, когда истинно «его эффект применён». Именно это превращает *доставку* at-least-once в *обработку* **effectively-once**: сообщение может прийти сколько угодно раз, но его эффект применится ровно один. Заметь: ack уходит брокеру только после коммита; более ранний ack рисковал бы потерять незакоммиченное сообщение."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A rollback undoes the whole transaction, insert included.",
+              "ru": "Откат отменяет всю транзакцию, включая вставку."
+            },
+            "incorrect": {
+              "en": "Nothing remains — the insert was part of the rolled-back transaction.",
+              "ru": "Не останется ничего — вставка была частью откаченной транзакции."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Nothing — the id insert was rolled back too",
+                "ru": "Ничего — вставка id тоже откатилась"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The id, because it was inserted before the charge",
+                "ru": "Id — ведь он был вставлен до списания"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Statement order does not matter inside a transaction: a rollback undoes every statement in it.",
+                "ru": "Порядок операторов внутри транзакции не важен: откат отменяет каждый из них."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The id, marked as failed",
+                "ru": "Id, помеченный как неудачный"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no half-committed state; the transaction leaves no trace at all.",
+                "ru": "Полузакоммиченного состояния не бывает; транзакция не оставляет следов."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "tx-p1-together-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In the Inbox pattern, the dedup record and the business work must commit or roll back together.",
+            "ru": "В паттерне Inbox запись дедупликации и бизнес-работа должны коммититься или откатываться вместе."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Atomicity is what makes \"recorded\" and \"applied\" always agree.",
+              "ru": "Атомарность — то, что всегда согласует «записано» и «применено»."
+            },
+            "incorrect": {
+              "en": "They must — otherwise the system can end up with one of them without the other.",
+              "ru": "Должны — иначе система окажется с одним без другого."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "tx-p2-why-one",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why must the inbox insert and the business work share one transaction in the Inbox pattern?",
+            "ru": "Почему в паттерне Inbox вставка в inbox и бизнес-работа должны быть в одной транзакции?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Correctness: the two facts can never disagree if they commit together.",
+              "ru": "Корректность: два факта не могут разойтись, если коммитятся вместе."
+            },
+            "incorrect": {
+              "en": "So the system can never have one without the other — it is a correctness requirement.",
+              "ru": "Чтобы одно никогда не оказалось без другого — это требование корректности."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "So the system can never end up with one of them without the other",
+                "ru": "Чтобы система никогда не оказалась с одним из них без другого"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Because a single transaction runs faster than two",
+                "ru": "Потому что одна транзакция выполняется быстрее двух"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It is a correctness requirement, not a performance optimisation.",
+                "ru": "Это требование корректности, а не оптимизация производительности."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "So the broker can retry the two parts separately",
+                "ru": "Чтобы брокер мог перепослать две части по отдельности"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The broker knows nothing about the consumer's transactions; it only redelivers whole messages.",
+                "ru": "Брокер ничего не знает о транзакциях потребителя; он лишь повторно доставляет сообщения целиком."
+              }
+            }
+          ]
+        },
+        {
+          "id": "tx-p3-sort-statements",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the statements an inbox consumer executes for one new message.",
+            "ru": "Расставь по порядку операторы, которые потребитель с inbox выполняет для одного нового сообщения."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Everything database-side is inside the transaction; the ack comes after the commit.",
+              "ru": "Всё, что касается базы, — внутри транзакции; ack идёт после коммита."
+            },
+            "incorrect": {
+              "en": "BEGIN, look the id up, insert it and apply the change, COMMIT, and only then acknowledge.",
+              "ru": "BEGIN, найти id, вставить его и применить изменение, COMMIT, и только потом подтвердить."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "BEGIN the local transaction",
+                "ru": "BEGIN — начать локальную транзакцию"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Look the message id up in the inbox table",
+                "ru": "Найти id сообщения в таблице inbox"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Insert the id and apply the business change",
+                "ru": "Вставить id и применить бизнес-изменение"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "COMMIT the transaction",
+                "ru": "COMMIT — закоммитить транзакцию"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "Acknowledge the message to the broker",
+                "ru": "Подтвердить сообщение брокеру"
+              }
+            }
+          ]
+        },
+        {
+          "id": "tx-p4-fill-atomic",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the atomicity rule of the Inbox pattern.",
+            "ru": "Дополни правило атомарности паттерна Inbox."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One local transaction: both commit or both roll back.",
+              "ru": "Одна локальная транзакция: оба коммитятся или оба откатываются."
+            },
+            "incorrect": {
+              "en": "They share one local transaction, so they either both commit or both roll back.",
+              "ru": "Они делят одну локальную транзакцию, поэтому либо оба коммитятся, либо оба откатываются."
+            }
+          },
+          "text": {
+            "en": "The dedup record and the business work share one local ___, so they both ___ or both roll back.",
+            "ru": "Запись дедупликации и бизнес-работа делят одну локальную ___, поэтому они вместе ___ или вместе откатываются."
+          },
+          "blanks": [
+            {
+              "en": [
+                "transaction",
+                "tx"
+              ],
+              "ru": [
+                "транзакцию",
+                "транзакция",
+                "transaction"
+              ]
+            },
+            {
+              "en": [
+                "commit"
+              ],
+              "ru": [
+                "коммитятся",
+                "коммитят",
+                "commit"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "split-transaction-risk",
+      "title": {
+        "en": "What breaks if you split them",
+        "ru": "Что ломается, если их разделить"
+      },
+      "summary": {
+        "en": "Two transactions and a crash between them: either the work repeats, or the message looks done while its effect never happened.",
+        "ru": "Две транзакции и падение между ними: либо работа повторится, либо сообщение помечено обработанным, а эффекта не было."
+      },
+      "discovery": [
+        {
+          "id": "spl-d1-spot-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This consumer records the id and does the work in two separate transactions. What goes wrong if it crashes at the marked point?",
+            "ru": "Этот потребитель записывает id и делает работу в двух разных транзакциях. Что пойдёт не так, если он упадёт в отмеченной точке?"
+          },
+          "code": "// handling message m1\ntx1: { charge(100); commit; }\n\n// <-- crash here\n\ntx2: { insert inbox row for \"m1\"; commit; }",
+          "codeLang": "text",
+          "reveal": {
+            "en": "Splitting the dedup record from the work leaves a window in which a crash breaks you — and it breaks you in **both** directions, depending on which transaction committed first:\n\n```mermaid\nflowchart TD\n  A[\"work commits, id record does not\"] --> B[\"redelivery does the work AGAIN: double effect\"]\n  C[\"id record commits, work does not\"] --> D[\"message looks done, effect never happened: silent loss\"]\n```\n\nNeither failure announces itself. In the first case the customer is charged twice; in the second the money never moves but every future redelivery is skipped as a \"duplicate\", so nothing ever fixes it. There is no ordering of two transactions that removes the window — the only fix is to put both in **one** transaction, where a crash before the commit leaves the message untouched and the redelivery simply redoes it cleanly.",
+            "ru": "Разделение записи дедупликации и работы оставляет окно, в котором падение вас ломает — причём **в обе** стороны, в зависимости от того, какая транзакция закоммитилась первой:\n\n```mermaid\nflowchart TD\n  A[\"работа закоммичена, запись id — нет\"] --> B[\"повторная доставка делает работу СНОВА: двойной эффект\"]\n  C[\"запись id закоммичена, работа — нет\"] --> D[\"сообщение выглядит обработанным, эффекта не было: тихая потеря\"]\n```\n\nНи один из сбоев о себе не заявляет. В первом случае клиента спишут дважды; во втором деньги не двигаются, но каждая будущая повторная доставка пропускается как «дубликат», и это уже никогда не починится. Никакой порядок двух транзакций окно не убирает — единственное решение: поместить оба действия в **одну** транзакцию, где падение до коммита оставляет сообщение нетронутым, а повторная доставка спокойно делает всё заново."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The work is committed but unrecorded, so the redelivery repeats it.",
+              "ru": "Работа закоммичена, но не записана, поэтому повторная доставка её повторит."
+            },
+            "incorrect": {
+              "en": "tx1 committed the charge but no inbox row exists, so the redelivery charges again.",
+              "ru": "tx1 закоммитила списание, но строки в inbox нет, поэтому повторная доставка спишет снова."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The next redelivery of m1 charges the card a second time",
+                "ru": "Следующая повторная доставка m1 спишет с карты второй раз"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing — the consumer will resume at tx2 after restart",
+                "ru": "Ничего — после перезапуска потребитель продолжит с tx2"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A crash leaves nothing to resume; only the broker's redelivery comes back, and it finds no inbox row.",
+                "ru": "После падения продолжать нечего; возвращается лишь повторная доставка от брокера, а строки в inbox нет."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The charge is rolled back automatically",
+                "ru": "Списание откатится автоматически"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "tx1 already committed; a later crash cannot undo a committed transaction.",
+                "ru": "tx1 уже закоммичена; последующее падение не может отменить закоммиченную транзакцию."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "spl-p1-id-first",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "An inbox consumer commits the inbox row in one transaction, then crashes before committing the business work in another. What is the result?",
+            "ru": "Потребитель с inbox коммитит строку inbox в одной транзакции, затем падает до коммита бизнес-работы в другой. Каков результат?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The id is recorded, so every redelivery is skipped and the effect never happens.",
+              "ru": "Id записан, поэтому каждая повторная доставка пропускается, а эффект так и не происходит."
+            },
+            "incorrect": {
+              "en": "Silent loss: the message counts as processed, but its effect was never applied.",
+              "ru": "Тихая потеря: сообщение считается обработанным, но эффект не применялся."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The effect is silently lost — redeliveries are skipped as duplicates",
+                "ru": "Эффект тихо теряется — повторные доставки пропускаются как дубликаты"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The effect is applied twice",
+                "ru": "Эффект применяется дважды"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the opposite order's failure; here the recorded id prevents the work from ever running.",
+                "ru": "Это сбой обратного порядка; здесь записанный id вообще не даёт работе выполниться."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The broker keeps resending until the work succeeds",
+                "ru": "Брокер будет слать снова, пока работа не удастся"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Redeliveries do arrive, but the inbox already says the message is done, so each one is skipped.",
+                "ru": "Повторные доставки приходят, но inbox уже говорит, что сообщение обработано, и каждая пропускается."
+              }
+            }
+          ]
+        },
+        {
+          "id": "spl-p2-safe-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Recording the message id in one transaction and doing the business work in another is a safe way to implement the Inbox pattern.",
+            "ru": "Запись id сообщения в одной транзакции и бизнес-работа в другой — безопасный способ реализовать паттерн Inbox."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A crash between the two either repeats the work or silently loses it.",
+              "ru": "Падение между ними либо повторит работу, либо тихо её потеряет."
+            },
+            "incorrect": {
+              "en": "It is not — a crash in the gap either reprocesses the message or loses its effect.",
+              "ru": "Небезопасный — падение в промежутке либо переобработает сообщение, либо потеряет его эффект."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "spl-p3-match-scenarios",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each commit scenario in an inbox consumer to its consequence.",
+            "ru": "Соотнеси каждый сценарий коммита в потребителе с inbox с его последствием."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Only the single-transaction case keeps the record and the effect in step.",
+              "ru": "Только вариант с одной транзакцией держит запись и эффект в согласии."
+            },
+            "incorrect": {
+              "en": "Work-only → repeated effect; id-only → silent loss; one transaction → both or neither.",
+              "ru": "Только работа — повтор эффекта; только id — тихая потеря; одна транзакция — оба или ни одного."
+            }
+          },
+          "pairs": [
+            {
+              "id": "work-only",
+              "left": {
+                "en": "Work commits, the id record does not",
+                "ru": "Работа закоммичена, запись id — нет"
+              },
+              "right": {
+                "en": "The redelivery applies the effect a second time",
+                "ru": "Повторная доставка применяет эффект второй раз"
+              }
+            },
+            {
+              "id": "id-only",
+              "left": {
+                "en": "The id record commits, the work does not",
+                "ru": "Запись id закоммичена, работа — нет"
+              },
+              "right": {
+                "en": "The effect is silently lost forever",
+                "ru": "Эффект тихо теряется навсегда"
+              }
+            },
+            {
+              "id": "both",
+              "left": {
+                "en": "Both in one local transaction",
+                "ru": "Оба в одной локальной транзакции"
+              },
+              "right": {
+                "en": "Both survive a crash, or neither does",
+                "ru": "Оба переживают падение или ни один"
+              }
+            }
+          ]
+        },
+        {
+          "id": "spl-p4-fill-consequences",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the two failures of splitting the record from the work.",
+            "ru": "Назови два сбоя, возникающих при разделении записи и работы."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Repeat or loss — the two sides of a non-atomic consumer.",
+              "ru": "Повтор или потеря — две стороны неатомарного потребителя."
+            },
+            "incorrect": {
+              "en": "A crash in the gap either repeats the work or silently loses the effect.",
+              "ru": "Падение в промежутке либо повторяет работу, либо тихо теряет эффект."
+            }
+          },
+          "text": {
+            "en": "With the id record and the work in separate transactions, a crash between them either ___ the work or silently ___ the effect.",
+            "ru": "Когда запись id и работа в разных транзакциях, падение между ними либо ___ работу, либо тихо ___ эффект."
+          },
+          "blanks": [
+            {
+              "en": [
+                "repeats",
+                "repeat",
+                "reprocesses"
+              ],
+              "ru": [
+                "повторит",
+                "повторяет",
+                "переобработает"
+              ]
+            },
+            {
+              "en": [
+                "loses",
+                "lose"
+              ],
+              "ru": [
+                "потеряет",
+                "теряет"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "idempotency-key",
+      "title": {
+        "en": "The idempotency key",
+        "ru": "Ключ идемпотентности"
+      },
+      "summary": {
+        "en": "Deduplicate by the producer's stable unique message id, never by the payload.",
+        "ru": "Дедуплицируй по стабильному уникальному id сообщения от производителя, но не по payload."
+      },
+      "discovery": [
+        {
+          "id": "key-d1-same-payload",
+          "type": "predict_output",
+          "prompt": {
+            "en": "This consumer deduplicates by the message body instead of the id. Predict the total charged.",
+            "ru": "Этот потребитель дедуплицирует по телу сообщения, а не по id. Предскажи итоговую сумму списания."
+          },
+          "code": "// consumer dedups by message PAYLOAD, not by id\nreceive(id = \"m1\", payload = \"charge card 100\")\nreceive(id = \"m2\", payload = \"charge card 100\")   // a second real purchase\n\nprint(totalCharged)",
+          "codeLang": "text",
+          "reveal": {
+            "en": "The **payload** is the message body — the data describing what to do. The **idempotency key** is whatever value you deduplicate on, and it must be the producer's **stable unique message id**, not the payload.\n\nThe key has to satisfy two opposite requirements at once:\n\n- **Different events must get different keys.** Two genuinely distinct events can carry an identical body — a customer really did buy the same item twice, as above. Dedup by payload silently drops the second real purchase.\n- **The same logical message must keep the same key across redeliveries.** That is why the **producer** stamps the id when it creates the message. If the consumer generated one on arrival, every redelivery would get a fresh id and nothing would ever be recognised as a duplicate.\n\n```mermaid\nflowchart LR\n  P[\"producer stamps a stable unique id\"] --> B[\"broker may redeliver that same id\"]\n  B --> C[\"consumer dedups on the id\"]\n```",
+            "ru": "**Payload** — это тело сообщения, данные о том, что нужно сделать. **Ключ идемпотентности** — то значение, по которому вы дедуплицируете, и им должен быть стабильный уникальный **id сообщения** от производителя, а не payload.\n\nКлюч обязан одновременно удовлетворять двум противоположным требованиям:\n\n- **Разные события должны получать разные ключи.** Два по-настоящему разных события могут нести одинаковое тело — клиент действительно купил тот же товар дважды, как выше. Дедуп по payload молча отбросит вторую реальную покупку.\n- **Одно логическое сообщение должно сохранять тот же ключ при повторных доставках.** Поэтому id проставляет **производитель** при создании сообщения. Если бы id генерировал потребитель при получении, каждая повторная доставка получала бы новый id и дубликат никогда бы не распознавался.\n\n```mermaid\nflowchart LR\n  P[\"производитель ставит стабильный уникальный id\"] --> B[\"брокер может повторно доставить тот же id\"]\n  B --> C[\"потребитель дедуплицирует по id\"]\n```"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Identical payloads look like duplicates, so a real purchase is dropped.",
+              "ru": "Одинаковые payload выглядят дубликатами, поэтому реальная покупка отбрасывается."
+            },
+            "incorrect": {
+              "en": "Payload dedup treats the second, genuinely new message as a repeat: only 100 is charged.",
+              "ru": "Дедуп по payload считает второе, по-настоящему новое сообщение повтором: спишется только 100."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "100 — the second real purchase is silently dropped",
+                "ru": "100 — вторая реальная покупка молча отбрасывается"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "200 — both messages are applied",
+                "ru": "200 — применяются оба сообщения"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is what id-based dedup would give; keyed on the payload, the second message looks identical.",
+                "ru": "Так было бы при дедупе по id; при ключе-payload второе сообщение выглядит идентичным."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "An error, because two messages share a payload",
+                "ru": "Ошибка, потому что у двух сообщений одинаковый payload"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing fails — the loss is silent, which is exactly what makes payload dedup dangerous.",
+                "ru": "Ничего не падает — потеря тихая, чем дедуп по payload и опасен."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "key-p1-what-is-key",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In the Inbox pattern, what is the idempotency key?",
+            "ru": "Что является ключом идемпотентности в паттерне Inbox?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The producer's stable unique message id — the same across every redelivery.",
+              "ru": "Стабильный уникальный id сообщения от производителя — одинаковый при всех повторных доставках."
+            },
+            "incorrect": {
+              "en": "It is the stable unique message id stamped by the producer.",
+              "ru": "Это стабильный уникальный id сообщения, проставленный производителем."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The producer's stable unique message id",
+                "ru": "Стабильный уникальный id сообщения от производителя"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A hash of the message body",
+                "ru": "Хэш тела сообщения"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Two genuinely different events can carry an identical body, so a body hash would drop a real one.",
+                "ru": "Два по-настоящему разных события могут нести одинаковое тело, и хэш тела отбросил бы реальное."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The time the consumer received the message",
+                "ru": "Время получения сообщения потребителем"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "An arrival time differs on every delivery, so it could never identify a redelivery.",
+                "ru": "Время получения различается при каждой доставке, поэтому повтор по нему не опознать."
+              }
+            }
+          ]
+        },
+        {
+          "id": "key-p2-who-assigns-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In the Inbox pattern, the consumer generates the message id at the moment it receives a message.",
+            "ru": "В паттерне Inbox потребитель генерирует id сообщения в момент его получения."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The producer assigns it, so every redelivery carries the same id.",
+              "ru": "Его назначает производитель, поэтому каждая повторная доставка несёт тот же id."
+            },
+            "incorrect": {
+              "en": "No — the producer assigns it; a consumer-generated id would be new on every redelivery.",
+              "ru": "Нет — его назначает производитель; сгенерированный потребителем id был бы новым при каждой доставке."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "key-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the rule for choosing the dedup key.",
+            "ru": "Собери правило выбора ключа дедупликации."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The id identifies the message; the payload only describes the work.",
+              "ru": "Id идентифицирует сообщение; payload лишь описывает работу."
+            },
+            "incorrect": {
+              "en": "Dedup by the stable message id, not by the payload.",
+              "ru": "Дедуплицируй по стабильному id сообщения, а не по payload."
+            }
+          },
+          "tokens": {
+            "en": [
+              "dedup",
+              "by",
+              "the",
+              "stable",
+              "message",
+              "id,",
+              "not",
+              "by",
+              "the",
+              "payload"
+            ],
+            "ru": [
+              "дедуплицируй",
+              "по",
+              "стабильному",
+              "id",
+              "сообщения,",
+              "а",
+              "не",
+              "по",
+              "payload"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "timestamp"
+            ],
+            "ru": [
+              "времени"
+            ]
+          }
+        },
+        {
+          "id": "key-p4-fill-key",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the idempotency-key rule.",
+            "ru": "Дополни правило ключа идемпотентности."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Key on the id; identical bodies can belong to distinct legitimate events.",
+              "ru": "Ключ — id; одинаковые тела могут принадлежать разным законным событиям."
+            },
+            "incorrect": {
+              "en": "Dedup by the message id, because two different events can carry the same payload.",
+              "ru": "Дедуплицируй по id сообщения, потому что два разных события могут нести одинаковый payload."
+            }
+          },
+          "text": {
+            "en": "Deduplicate by the message ___, because two different events can carry the same ___.",
+            "ru": "Дедуплицируй по ___ сообщения, потому что два разных события могут нести одинаковый ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "id"
+              ],
+              "ru": [
+                "id",
+                "идентификатору"
+              ]
+            },
+            {
+              "en": [
+                "payload",
+                "body"
+              ],
+              "ru": [
+                "payload"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "effectively-once",
+      "title": {
+        "en": "Effectively-once, not exactly-once",
+        "ru": "Effectively-once, а не exactly-once"
+      },
+      "summary": {
+        "en": "Delivery stays at-least-once; the inbox makes the processing effectively-once, and true exactly-once delivery is impossible.",
+        "ru": "Доставка остаётся at-least-once; inbox делает обработку effectively-once, а настоящая доставка exactly-once невозможна."
+      },
+      "discovery": [
+        {
+          "id": "eo-d1-claim-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Once a consumer has an inbox table, the broker delivers each message exactly once.",
+            "ru": "Как только у потребителя появилась таблица inbox, брокер доставляет каждое сообщение ровно один раз."
+          },
+          "reveal": {
+            "en": "The inbox changes nothing about **delivery**. The broker still sends the same message as often as it likes; the inbox only changes what the consumer *does* with the repeats.\n\n```mermaid\nflowchart LR\n  D[\"delivery: still at-least-once\"] --> I[\"inbox dedup by message id\"]\n  I --> P[\"processing: effectively-once\"]\n```\n\nThat distinction is the phrase interviewers listen for: **effectively-once processing**, not exactly-once delivery. The effect lands exactly once even though the message may arrive many times.\n\nAnd true end-to-end exactly-once *delivery* is not merely hard, it is **impossible** over an unreliable network — the **two-generals problem**. A sender can never be certain its message arrived, because the confirmation can itself be lost; and no extra round of confirmations fixes that, since the last message in any chain can always be the one that goes missing. So you are always choosing between resending (at-least-once, plus dedup) and risking loss.",
+            "ru": "Inbox ничего не меняет в **доставке**. Брокер по-прежнему шлёт одно и то же сообщение сколько захочет; inbox меняет лишь то, что потребитель *делает* с повторами.\n\n```mermaid\nflowchart LR\n  D[\"доставка: всё ещё at-least-once\"] --> I[\"дедуп по id сообщения в inbox\"]\n  I --> P[\"обработка: effectively-once\"]\n```\n\nЭто различие — та формулировка, которую ждут на собеседовании: **обработка effectively-once**, а не доставка exactly-once. Эффект применяется ровно один раз, хотя сообщение может прийти много раз.\n\nА настоящая сквозная *доставка* exactly-once не просто трудна — она **невозможна** в ненадёжной сети (**проблема двух генералов**). Отправитель никогда не может быть уверен, что сообщение дошло, ведь потеряться может и само подтверждение; дополнительные раунды подтверждений не спасают, потому что последнее сообщение в любой цепочке всегда может пропасть. Так что выбор всегда между повторной отправкой (at-least-once плюс дедуп) и риском потери."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Delivery is unchanged — only the consumer's handling of duplicates changes.",
+              "ru": "Доставка не меняется — меняется лишь обработка дубликатов потребителем."
+            },
+            "incorrect": {
+              "en": "No — delivery is still at-least-once; the inbox gives effectively-once processing.",
+              "ru": "Нет — доставка всё ещё at-least-once; inbox даёт обработку effectively-once."
+            }
+          },
+          "answer": false
+        }
+      ],
+      "practice": [
+        {
+          "id": "eo-p1-what-it-gives",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The Inbox pattern turns at-least-once delivery into what?",
+            "ru": "Во что паттерн Inbox превращает доставку at-least-once?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Effectively-once processing: the effect lands once, however many deliveries arrive.",
+              "ru": "Обработку effectively-once: эффект применяется один раз, сколько бы доставок ни пришло."
+            },
+            "incorrect": {
+              "en": "Effectively-once processing — the delivery guarantee itself is unchanged.",
+              "ru": "Обработку effectively-once — сама гарантия доставки не меняется."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Effectively-once processing",
+                "ru": "Обработку effectively-once"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Exactly-once delivery",
+                "ru": "Доставку exactly-once"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Delivery is untouched: the broker still redelivers, the effect just stops repeating.",
+                "ru": "Доставка не затронута: брокер всё ещё доставляет повторно, просто эффект перестаёт повторяться."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A guarantee that no message is ever redelivered",
+                "ru": "Гарантию, что сообщение никогда не будет доставлено повторно"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Redelivery still happens; the inbox just makes it harmless.",
+                "ru": "Повторные доставки остаются; inbox лишь делает их безвредными."
+              }
+            }
+          ]
+        },
+        {
+          "id": "eo-p2-why-impossible",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why is true end-to-end exactly-once delivery impossible?",
+            "ru": "Почему настоящая сквозная доставка exactly-once невозможна?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The two-generals problem: the confirmation can be lost just like the message.",
+              "ru": "Проблема двух генералов: подтверждение может потеряться так же, как и сообщение."
+            },
+            "incorrect": {
+              "en": "Over an unreliable network the sender can never be sure the message arrived — the two-generals problem.",
+              "ru": "В ненадёжной сети отправитель не может быть уверен, что сообщение дошло, — проблема двух генералов."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Over an unreliable network a sender can never be certain the message arrived — the two-generals problem",
+                "ru": "В ненадёжной сети отправитель никогда не уверен, что сообщение дошло, — проблема двух генералов"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Because databases are too slow to keep up with brokers",
+                "ru": "Потому что базы данных не поспевают за брокерами"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It is a fundamental result about unreliable networks, not a performance limit.",
+                "ru": "Это фундаментальный результат о ненадёжных сетях, а не ограничение производительности."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Because message ids are not unique enough",
+                "ru": "Потому что id сообщений недостаточно уникальны"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Ids are stable and unique; the impossibility is about acknowledgements that can be lost.",
+                "ru": "Id стабильны и уникальны; невозможность связана с подтверждениями, которые могут теряться."
+              }
+            }
+          ]
+        },
+        {
+          "id": "eo-p3-match-guarantees",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each guarantee to what it actually means.",
+            "ru": "Соотнеси каждую гарантию с тем, что она на самом деле означает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Delivery and processing are separate guarantees; only the second one the inbox can change.",
+              "ru": "Доставка и обработка — разные гарантии; inbox меняет только вторую."
+            },
+            "incorrect": {
+              "en": "at-least-once = repeated delivery; effectively-once = one effect; exactly-once delivery = impossible.",
+              "ru": "at-least-once — повторная доставка; effectively-once — один эффект; exactly-once доставка — невозможна."
+            }
+          },
+          "pairs": [
+            {
+              "id": "alo",
+              "left": {
+                "en": "at-least-once delivery",
+                "ru": "доставка at-least-once"
+              },
+              "right": {
+                "en": "The broker may hand over the same message more than once",
+                "ru": "Брокер может передать одно сообщение больше одного раза"
+              }
+            },
+            {
+              "id": "efo",
+              "left": {
+                "en": "effectively-once processing",
+                "ru": "обработка effectively-once"
+              },
+              "right": {
+                "en": "The effect lands once even though delivery repeats",
+                "ru": "Эффект применяется один раз, хотя доставка повторяется"
+              }
+            },
+            {
+              "id": "exo",
+              "left": {
+                "en": "exactly-once delivery",
+                "ru": "доставка exactly-once"
+              },
+              "right": {
+                "en": "Impossible end-to-end over an unreliable network",
+                "ru": "Невозможна сквозным образом в ненадёжной сети"
+              }
+            }
+          ]
+        },
+        {
+          "id": "eo-p4-fill-guarantees",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the sentence that separates delivery from processing.",
+            "ru": "Дополни фразу, разделяющую доставку и обработку."
+          },
+          "feedback": {
+            "correct": {
+              "en": "at-least-once delivery plus dedup equals effectively-once processing.",
+              "ru": "Доставка at-least-once плюс дедуп равно обработке effectively-once."
+            },
+            "incorrect": {
+              "en": "Delivery stays at-least-once; the inbox makes processing effectively-once.",
+              "ru": "Доставка остаётся at-least-once; inbox делает обработку effectively-once."
+            }
+          },
+          "text": {
+            "en": "Delivery stays ___-once; the inbox makes the processing ___-once.",
+            "ru": "Доставка остаётся ___-once; inbox делает обработку ___-once."
+          },
+          "blanks": [
+            {
+              "en": [
+                "at-least"
+              ],
+              "ru": [
+                "at-least"
+              ]
+            },
+            {
+              "en": [
+                "effectively"
+              ],
+              "ru": [
+                "effectively"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "inbox-vs-outbox",
+      "title": {
+        "en": "Inbox vs Outbox",
+        "ru": "Inbox против Outbox"
+      },
+      "summary": {
+        "en": "Outbox is producer-side reliable publishing; Inbox is consumer-side idempotent consumption.",
+        "ru": "Outbox — надёжная публикация на стороне производителя; Inbox — идемпотентное потребление на стороне потребителя."
+      },
+      "discovery": [
+        {
+          "id": "vs-d1-which-side",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A service writes its business change and an \"to-send\" event row into one database transaction, and a separate relay later publishes that event to the broker. Which pattern is that?",
+            "ru": "Сервис пишет бизнес-изменение и строку события «к отправке» в одну транзакцию БД, а отдельный релей потом публикует это событие в брокер. Какой это паттерн?"
+          },
+          "reveal": {
+            "en": "That is the **Outbox** pattern, and it is the other half of reliable messaging:\n\n- **Outbox** (producer side) — the business change and an event row go into the same DB transaction; a **relay** then reads those rows and publishes them. It solves *\"publish exactly when the DB commits\"* — no event without a committed change, no committed change without an event.\n- **Inbox** (consumer side) — dedup incoming messages by id so at-least-once delivery is processed effectively-once. It solves *\"apply each message's effect once\"*.\n\n```mermaid\nflowchart LR\n  PW[\"producer: business change + outbox row in one TX\"] --> Relay[\"relay publishes\"]\n  Relay --> Broker[\"broker: at-least-once\"]\n  Broker --> Dedup[\"consumer: inbox dedup by id + work in one TX\"]\n```\n\nNotice the shared idea — a local transaction covering both the business change and the messaging bookkeeping — applied at opposite ends. And notice why the relay makes the Inbox necessary: a relay that crashes after publishing but before marking the row sent will publish again, which is one more source of the duplicates the consumer must absorb.",
+            "ru": "Это паттерн **Outbox**, вторая половина надёжного обмена сообщениями:\n\n- **Outbox** (сторона производителя) — бизнес-изменение и строка события попадают в одну транзакцию БД; затем **релей** читает эти строки и публикует их. Решает задачу *«опубликовать ровно тогда, когда БД закоммитилась»*: нет события без закоммиченного изменения и нет закоммиченного изменения без события.\n- **Inbox** (сторона потребителя) — дедуп входящих сообщений по id, чтобы доставка at-least-once обрабатывалась effectively-once. Решает задачу *«применить эффект каждого сообщения один раз»*.\n\n```mermaid\nflowchart LR\n  PW[\"производитель: бизнес-изменение + строка outbox в одной TX\"] --> Relay[\"релей публикует\"]\n  Relay --> Broker[\"брокер: at-least-once\"]\n  Broker --> Dedup[\"потребитель: дедуп по id в inbox + работа в одной TX\"]\n```\n\nОбрати внимание на общую идею — локальная транзакция, покрывающая и бизнес-изменение, и учёт сообщений, — применённую на противоположных концах. И заметь, почему релей делает Inbox необходимым: релей, упавший после публикации, но до пометки строки отправленной, опубликует снова — ещё один источник дубликатов, которые потребитель обязан поглотить."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That is the Outbox: producer-side publishing tied to the DB commit.",
+              "ru": "Это Outbox: публикация на стороне производителя, привязанная к коммиту БД."
+            },
+            "incorrect": {
+              "en": "It is the Outbox pattern — the producer-side counterpart of the Inbox.",
+              "ru": "Это паттерн Outbox — аналог Inbox на стороне производителя."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The Outbox pattern, on the producer side",
+                "ru": "Паттерн Outbox, на стороне производителя"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The Inbox pattern, on the consumer side",
+                "ru": "Паттерн Inbox, на стороне потребителя"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The Inbox sits on the receiving side and deduplicates incoming ids; this service is publishing.",
+                "ru": "Inbox стоит на принимающей стороне и дедуплицирует входящие id; этот сервис публикует."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Neither — that is just a normal publish",
+                "ru": "Ни тот, ни другой — это обычная публикация"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A normal publish happens outside the transaction, so it can be lost or sent without the DB commit.",
+                "ru": "Обычная публикация происходит вне транзакции, поэтому может потеряться или уйти без коммита БД."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "vs-p1-same-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "The Inbox and Outbox patterns are two names for the same technique.",
+            "ru": "Inbox и Outbox — два названия одной и той же техники."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Outbox is producer-side publishing; Inbox is consumer-side idempotent consumption.",
+              "ru": "Outbox — публикация у производителя; Inbox — идемпотентное потребление у потребителя."
+            },
+            "incorrect": {
+              "en": "No — they sit on opposite ends: Outbox publishes reliably, Inbox consumes idempotently.",
+              "ru": "Нет — они на противоположных концах: Outbox надёжно публикует, Inbox идемпотентно потребляет."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "vs-p2-outbox-problem",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What problem does the Outbox pattern solve that the Inbox pattern does not?",
+            "ru": "Какую задачу решает Outbox, но не решает Inbox?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Publishing an event exactly when the business change commits.",
+              "ru": "Публикацию события ровно тогда, когда коммитится бизнес-изменение."
+            },
+            "incorrect": {
+              "en": "Outbox ties the publish to the DB commit; skipping repeats is the Inbox's job.",
+              "ru": "Outbox привязывает публикацию к коммиту БД; пропуск повторов — задача Inbox."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Publishing an event exactly when the database change commits",
+                "ru": "Публикация события ровно тогда, когда коммитится изменение в базе"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Skipping messages that were already handled",
+                "ru": "Пропуск сообщений, которые уже обработаны"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the Inbox's job on the consumer side.",
+                "ru": "Это задача Inbox на стороне потребителя."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Making the broker deliver each message exactly once",
+                "ru": "Заставить брокер доставлять каждое сообщение ровно один раз"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Neither pattern changes the broker's delivery guarantee; both live in the services around it.",
+                "ru": "Ни один из паттернов не меняет гарантию доставки брокера; оба живут в сервисах вокруг него."
+              }
+            }
+          ]
+        },
+        {
+          "id": "vs-p3-match-roles",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each part of reliable messaging to its role.",
+            "ru": "Соотнеси каждую часть надёжного обмена сообщениями с её ролью."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Outbox publishes reliably, the relay ships the rows, the Inbox absorbs the duplicates.",
+              "ru": "Outbox надёжно публикует, релей отправляет строки, Inbox поглощает дубликаты."
+            },
+            "incorrect": {
+              "en": "Outbox = producer side, relay = publisher of outbox rows, Inbox = consumer side, broker = at-least-once transport.",
+              "ru": "Outbox — сторона производителя, релей — публикует строки outbox, Inbox — сторона потребителя, брокер — транспорт at-least-once."
+            }
+          },
+          "pairs": [
+            {
+              "id": "outbox",
+              "left": {
+                "en": "Outbox",
+                "ru": "Outbox"
+              },
+              "right": {
+                "en": "Producer side: business change and event row in one transaction",
+                "ru": "Сторона производителя: бизнес-изменение и строка события в одной транзакции"
+              }
+            },
+            {
+              "id": "relay",
+              "left": {
+                "en": "relay",
+                "ru": "релей"
+              },
+              "right": {
+                "en": "Reads outbox rows and publishes them to the broker",
+                "ru": "Читает строки outbox и публикует их в брокер"
+              }
+            },
+            {
+              "id": "inbox",
+              "left": {
+                "en": "Inbox",
+                "ru": "Inbox"
+              },
+              "right": {
+                "en": "Consumer side: dedup by id and the work in one transaction",
+                "ru": "Сторона потребителя: дедуп по id и работа в одной транзакции"
+              }
+            },
+            {
+              "id": "broker",
+              "left": {
+                "en": "broker",
+                "ru": "брокер"
+              },
+              "right": {
+                "en": "Carries messages between them with at-least-once delivery",
+                "ru": "Переносит сообщения между ними с доставкой at-least-once"
+              }
+            }
+          ]
+        },
+        {
+          "id": "vs-p4-fill-sides",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the pattern on each side of the broker.",
+            "ru": "Назови паттерн с каждой стороны от брокера."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Outbox publishes, Inbox consumes — the two halves of reliable messaging.",
+              "ru": "Outbox публикует, Inbox потребляет — две половины надёжного обмена сообщениями."
+            },
+            "incorrect": {
+              "en": "Outbox is producer-side reliable publishing; Inbox is consumer-side idempotent consumption.",
+              "ru": "Outbox — надёжная публикация у производителя; Inbox — идемпотентное потребление у потребителя."
+            }
+          },
+          "text": {
+            "en": "___ is the producer-side pattern for reliable publishing; ___ is the consumer-side pattern for idempotent consumption.",
+            "ru": "___ — паттерн производителя для надёжной публикации; ___ — паттерн потребителя для идемпотентного потребления."
+          },
+          "blanks": [
+            {
+              "en": [
+                "Outbox",
+                "outbox"
+              ],
+              "ru": [
+                "Outbox",
+                "outbox"
+              ]
+            },
+            {
+              "en": [
+                "Inbox",
+                "inbox"
+              ],
+              "ru": [
+                "Inbox",
+                "inbox"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "retention-window",
+      "title": {
+        "en": "Purging the inbox",
+        "ru": "Очистка inbox"
+      },
+      "summary": {
+        "en": "Old ids are purged on a retention policy whose window must be longer than the broker's maximum redelivery delay.",
+        "ru": "Старые id чистят по политике ретенции, окно которой должно превышать максимальную задержку повторной доставки у брокера."
+      },
+      "discovery": [
+        {
+          "id": "ret-d1-purge-early",
+          "type": "predict_output",
+          "prompt": {
+            "en": "This consumer purges its inbox aggressively. Predict the total charged.",
+            "ru": "Этот потребитель агрессивно чистит свой inbox. Предскажи итоговую сумму списания."
+          },
+          "code": "// inbox consumer with a very short retention window\nreceive(id = \"m1\", effect = \"charge 100\")   // new id: processed\npurgeInboxOlderThan(minutes = 1)            // m1's id is forgotten\nreceive(id = \"m1\", effect = \"charge 100\")   // late redelivery of m1\n\nprint(totalCharged)",
+          "codeLang": "text",
+          "reveal": {
+            "en": "The inbox grows by one row for every distinct message, forever, so you delete old ids on a **retention policy**: a rule such as \"purge rows whose `processed_at` is older than N days\". The **retention window** is that N.\n\nThe trap is that the window is not free to choose. It must be **longer than the broker's maximum redelivery delay** — the longest time that can pass before the broker gives up retrying a message:\n\n```mermaid\nflowchart TD\n  W{\"retention window longer than max redelivery delay?\"}\n  W -->|yes| S[\"a late duplicate is still recognised and skipped\"]\n  W -->|no| D[\"the forgotten id looks brand new: effect applied twice\"]\n```\n\nPurge too early, as above, and a forgotten id is indistinguishable from a first-ever message — you are back to the double charge, but now with a bug that only appears under slow redeliveries. Keep everything forever and the table grows without bound. The window is the balance between those two.",
+            "ru": "Inbox растёт на строку с каждым новым сообщением — бесконечно, поэтому старые id удаляют по **политике ретенции**: правилу вида «чистить строки, у которых `processed_at` старше N дней». **Окно ретенции** — это и есть N.\n\nЛовушка в том, что окно нельзя выбирать произвольно. Оно должно быть **больше максимальной задержки повторной доставки** у брокера — самого долгого времени, которое может пройти до того, как брокер перестанет повторять сообщение:\n\n```mermaid\nflowchart TD\n  W{\"окно ретенции больше максимальной задержки повторной доставки?\"}\n  W -->|да| S[\"поздний дубликат по-прежнему распознаётся и пропускается\"]\n  W -->|нет| D[\"забытый id выглядит совершенно новым: эффект применится дважды\"]\n```\n\nОчистите слишком рано, как выше, — и забытый id неотличим от сообщения, пришедшего впервые: вы снова получаете двойное списание, но теперь это баг, проявляющийся только при медленных повторных доставках. Храните всё вечно — таблица растёт неограниченно. Окно и есть баланс между этими крайностями."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The purge erased the evidence, so the late duplicate looked new.",
+              "ru": "Очистка стёрла свидетельство, и поздний дубликат выглядел новым."
+            },
+            "incorrect": {
+              "en": "m1's id was purged, so its redelivery was not recognised as a duplicate: 200.",
+              "ru": "Id m1 был вычищен, поэтому его повторная доставка не распозналась как дубликат: 200."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "200",
+                "ru": "200"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "100 — the inbox still remembers m1",
+                "ru": "100 — inbox всё ещё помнит m1"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The purge removed m1's row, and dedup can only skip ids that are still in the table.",
+                "ru": "Очистка удалила строку m1, а дедуп пропускает только те id, что ещё есть в таблице."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "An error, because m1's inbox row is missing",
+                "ru": "Ошибка, потому что строки m1 в inbox нет"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing fails — a forgotten id simply looks like a brand-new message.",
+                "ru": "Ничего не падает — забытый id просто выглядит как совершенно новое сообщение."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "ret-p1-forever-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In the Inbox pattern, the inbox table can simply be kept forever, so a cleanup policy is optional.",
+            "ru": "В паттерне Inbox таблицу inbox можно просто хранить вечно, поэтому политика очистки необязательна."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It gains a row per distinct message and grows without bound, so old ids must be purged.",
+              "ru": "Она получает строку на каждое новое сообщение и растёт неограниченно, поэтому старые id надо чистить."
+            },
+            "incorrect": {
+              "en": "No — the table grows with every distinct message, so a retention policy is required.",
+              "ru": "Нет — таблица растёт с каждым новым сообщением, поэтому политика ретенции обязательна."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "ret-p2-purge-risk",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What is the risk of purging inbox ids too aggressively?",
+            "ru": "Чем рискует слишком агрессивная очистка id из inbox?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "A forgotten id is indistinguishable from a new message, so its effect repeats.",
+              "ru": "Забытый id неотличим от нового сообщения, поэтому его эффект повторится."
+            },
+            "incorrect": {
+              "en": "A late duplicate of a purged id looks brand new and gets processed a second time.",
+              "ru": "Поздний дубликат вычищенного id выглядит новым и обрабатывается второй раз."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A late duplicate of a forgotten id looks new and is processed a second time",
+                "ru": "Поздний дубликат забытого id выглядит новым и обрабатывается второй раз"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The business tables lose rows along with the inbox",
+                "ru": "Вместе с inbox теряют строки и бизнес-таблицы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Purging touches only the inbox table; the business data is untouched.",
+                "ru": "Очистка затрагивает только таблицу inbox; бизнес-данные не трогаются."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The broker stops redelivering messages",
+                "ru": "Брокер перестаёт доставлять сообщения повторно"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The broker knows nothing about the inbox table; its redelivery behaviour is unchanged.",
+                "ru": "Брокер ничего не знает о таблице inbox; его поведение при повторной доставке не меняется."
+              }
+            }
+          ]
+        },
+        {
+          "id": "ret-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the rule for sizing the retention window.",
+            "ru": "Собери правило выбора размера окна ретенции."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Outlast the slowest possible redelivery and no duplicate can slip through.",
+              "ru": "Переживи самую медленную повторную доставку — и ни один дубликат не проскочит."
+            },
+            "incorrect": {
+              "en": "The retention window must outlast the maximum redelivery delay.",
+              "ru": "Окно ретенции должно превышать максимальную задержку повторной доставки."
+            }
+          },
+          "tokens": {
+            "en": [
+              "the",
+              "retention",
+              "window",
+              "must",
+              "outlast",
+              "the",
+              "maximum",
+              "redelivery",
+              "delay"
+            ],
+            "ru": [
+              "окно",
+              "ретенции",
+              "должно",
+              "превышать",
+              "максимальную",
+              "задержку",
+              "повторной",
+              "доставки"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "shorter"
+            ],
+            "ru": [
+              "короче"
+            ]
+          }
+        },
+        {
+          "id": "ret-p4-fill-window",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the cleanup rule for an inbox table.",
+            "ru": "Дополни правило очистки таблицы inbox."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Retention policy, window longer than the maximum redelivery delay.",
+              "ru": "Политика ретенции, окно больше максимальной задержки повторной доставки."
+            },
+            "incorrect": {
+              "en": "Purge on a retention policy whose window exceeds the broker's maximum redelivery delay.",
+              "ru": "Чисти по политике ретенции, окно которой превышает максимальную задержку повторной доставки у брокера."
+            }
+          },
+          "text": {
+            "en": "Old inbox ids are purged on a ___ policy whose window must be longer than the broker's maximum ___ delay.",
+            "ru": "Старые id из inbox чистят по политике ___, окно которой должно быть больше максимальной задержки ___ у брокера."
+          },
+          "blanks": [
+            {
+              "en": [
+                "retention"
+              ],
+              "ru": [
+                "ретенции",
+                "retention"
+              ]
+            },
+            {
+              "en": [
+                "redelivery"
+              ],
+              "ru": [
+                "повторной доставки",
+                "redelivery"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "when-inbox-is-needed",
+      "title": {
+        "en": "When you need an inbox",
+        "ru": "Когда inbox действительно нужен"
+      },
+      "summary": {
+        "en": "The inbox matters when the effect is not idempotent; an effect in an external system needs the message id as that call's idempotency key instead.",
+        "ru": "Inbox важен, когда эффект не идемпотентен; для эффекта во внешней системе ключом идемпотентности того вызова становится id сообщения."
+      },
+      "discovery": [
+        {
+          "id": "need-d1-external",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The consumer's side effect is a call to an external payment provider that cannot take part in your database transaction. What do you do?",
+            "ru": "Побочный эффект потребителя — вызов внешнего платёжного провайдера, который не может участвовать в вашей транзакции БД. Что делать?"
+          },
+          "reveal": {
+            "en": "Two questions decide how much machinery you need:\n\n```mermaid\nflowchart TD\n  Q{\"is applying the effect twice harmful?\"}\n  Q -->|no| N[\"a naturally idempotent effect may need no dedup at all\"]\n  Q -->|yes| Y{\"does the effect live in your database?\"}\n  Y -->|yes| I[\"inbox row + business work in one local transaction\"]\n  Y -->|no| E[\"pass the message id as the downstream call's idempotency key\"]\n```\n\nFirst: **is a repeat actually harmful?** Some effects are naturally idempotent — setting a status to `ACTIVE` produces the same state whether it runs once or five times. There you may need no inbox at all. The inbox earns its cost when the effect *accumulates*, like charging an amount or sending an email.\n\nSecond: **can the effect join your transaction?** An external system cannot be enlisted in your local transaction — there is nothing of theirs to roll back — so the inbox alone cannot protect it. The tactic there is to push idempotency downstream: send the **message id as the idempotency key of that call**, so the provider itself recognises a retry and charges once.",
+            "ru": "Сколько механики вам нужно, решают два вопроса:\n\n```mermaid\nflowchart TD\n  Q{\"повторное применение эффекта вредно?\"}\n  Q -->|нет| N[\"естественно идемпотентному эффекту дедуп может быть не нужен вовсе\"]\n  Q -->|да| Y{\"эффект живёт в вашей базе данных?\"}\n  Y -->|да| I[\"строка inbox + бизнес-работа в одной локальной транзакции\"]\n  Y -->|нет| E[\"передать id сообщения как ключ идемпотентности нижестоящего вызова\"]\n```\n\nПервый: **вреден ли повтор на самом деле?** Некоторые эффекты естественно идемпотентны — установка статуса в `ACTIVE` даёт то же состояние и с одного раза, и с пяти. Тогда inbox может быть не нужен вовсе. Inbox окупается, когда эффект *накапливается*: списание суммы, отправка письма.\n\nВторой: **может ли эффект войти в вашу транзакцию?** Внешнюю систему нельзя включить в вашу локальную транзакцию — у неё нечего откатывать, — поэтому один inbox её не защитит. Тактика здесь — вынести идемпотентность вниз по потоку: отправить **id сообщения как ключ идемпотентности этого вызова**, чтобы провайдер сам распознал повтор и списал один раз."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Push idempotency downstream: the message id becomes that call's key.",
+              "ru": "Вынеси идемпотентность вниз по потоку: id сообщения становится ключом того вызова."
+            },
+            "incorrect": {
+              "en": "Make the downstream call idempotent, using the message id as its idempotency key.",
+              "ru": "Сделай нижестоящий вызов идемпотентным, используя id сообщения как ключ идемпотентности."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Make the downstream call itself idempotent, using the message id as its key",
+                "ru": "Сделать сам нижестоящий вызов идемпотентным, используя id сообщения как его ключ"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Put the inbox row and the external call in one transaction anyway",
+                "ru": "Всё равно поместить строку inbox и внешний вызов в одну транзакцию"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "An external system cannot be enlisted in your local transaction; there is nothing there to roll back.",
+                "ru": "Внешнюю систему нельзя включить в вашу локальную транзакцию; там нечего откатывать."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Skip deduplication entirely — the provider will sort it out",
+                "ru": "Вообще отказаться от дедупликации — провайдер разберётся"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Without a key the provider cannot tell a retry from a genuinely new payment.",
+                "ru": "Без ключа провайдер не отличит повтор от по-настоящему нового платежа."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "need-p1-harmless-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "If applying a message's effect twice is genuinely harmless, a consumer may not need an inbox at all.",
+            "ru": "Если двукратное применение эффекта сообщения действительно безвредно, потребителю inbox может быть не нужен вовсе."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Dedup exists to protect non-idempotent effects; a harmless repeat needs no protection.",
+              "ru": "Дедуп защищает неидемпотентные эффекты; безвредный повтор защищать не от чего."
+            },
+            "incorrect": {
+              "en": "It may not — the inbox earns its cost only when applying the effect twice is harmful.",
+              "ru": "Может и не понадобиться — inbox окупается, только когда двойное применение эффекта вредно."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "need-p2-which-effect",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which side effect most needs inbox deduplication?",
+            "ru": "Какой побочный эффект больше всего нуждается в дедупликации через inbox?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Charging accumulates: run it twice and the balance is wrong.",
+              "ru": "Списание накапливается: выполни дважды — и баланс неверен."
+            },
+            "incorrect": {
+              "en": "Charging an amount accumulates on repeat; an idempotent SET or a read does not.",
+              "ru": "Списание суммы накапливается при повторе; идемпотентный SET или чтение — нет."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Charging a card by an amount",
+                "ru": "Списание с карты определённой суммы"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Setting a user's status to ACTIVE",
+                "ru": "Установка статуса пользователя в ACTIVE"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "An idempotent SET produces the same state whether it runs once or twice.",
+                "ru": "Идемпотентный SET даёт то же состояние и при одном, и при двух выполнениях."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Reading a row to build a report",
+                "ru": "Чтение строки для построения отчёта"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A read changes nothing, so repeating it is harmless by definition.",
+                "ru": "Чтение ничего не меняет, поэтому его повтор безвреден по определению."
+              }
+            }
+          ]
+        },
+        {
+          "id": "need-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the rule for when an inbox is worth its cost.",
+            "ru": "Собери правило о том, когда inbox окупается."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Non-idempotent effects are the ones that need protecting.",
+              "ru": "Защищать нужно именно неидемпотентные эффекты."
+            },
+            "incorrect": {
+              "en": "An inbox matters when the effect is not idempotent.",
+              "ru": "Inbox важен, когда эффект не идемпотентен."
+            }
+          },
+          "tokens": {
+            "en": [
+              "an",
+              "inbox",
+              "matters",
+              "when",
+              "the",
+              "effect",
+              "is",
+              "not",
+              "idempotent"
+            ],
+            "ru": [
+              "inbox",
+              "важен,",
+              "когда",
+              "эффект",
+              "не",
+              "идемпотентен"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "always"
+            ],
+            "ru": [
+              "всегда"
+            ]
+          }
+        },
+        {
+          "id": "need-p4-fill-external",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the tactic for an effect in an external system.",
+            "ru": "Дополни тактику для эффекта во внешней системе."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The same key, pushed one hop downstream.",
+              "ru": "Тот же ключ, вынесенный на шаг вниз по потоку."
+            },
+            "incorrect": {
+              "en": "Use the message id as the downstream call's idempotency key.",
+              "ru": "Используй id сообщения как ключ идемпотентности нижестоящего вызова."
+            }
+          },
+          "text": {
+            "en": "When the side effect lives in an external system, make the downstream call idempotent using the ___ ___ as its key.",
+            "ru": "Когда побочный эффект во внешней системе, сделай нижестоящий вызов идемпотентным, используя ___ ___ в качестве ключа."
+          },
+          "blanks": [
+            {
+              "en": [
+                "message"
+              ],
+              "ru": [
+                "id"
+              ]
+            },
+            {
+              "en": [
+                "id"
+              ],
+              "ru": [
+                "сообщения"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "inbox-end-to-end",
+      "title": {
+        "en": "Putting it together",
+        "ru": "Собираем всё вместе"
+      },
+      "summary": {
+        "en": "One message's whole journey: a stable id, at-least-once delivery, dedup plus work in one transaction, and a retention window that outlasts redelivery.",
+        "ru": "Весь путь одного сообщения: стабильный id, доставка at-least-once, дедуп и работа в одной транзакции, окно ретенции длиннее повторной доставки."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "cap-d1-full-flow",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Trace this whole sequence from scratch. Predict the total charged.",
+            "ru": "Проследи всю последовательность с нуля. Предскажи итоговую сумму списания."
+          },
+          "code": "// inbox consumer: dedup by message id, one transaction per message\nreceive(id = \"m1\", payload = \"charge card 100\")   // new id\nreceive(id = \"m1\", payload = \"charge card 100\")   // redelivery after a lost ack\nreceive(id = \"m2\", payload = \"charge card 100\")   // a second real purchase\npurgeInboxOlderThan(days = 30)                    // m1 and m2 are still inside the window\nreceive(id = \"m1\", payload = \"charge card 100\")   // late redelivery of m1\n\nprint(totalCharged)",
+          "codeLang": "text",
+          "reveal": {
+            "en": "Every atom of this topic shows up in that one trace:\n\n```mermaid\nflowchart LR\n  P[\"producer stamps a stable unique id\"] --> B[\"broker: at-least-once delivery\"]\n  B --> Q{\"id already in inbox?\"}\n  Q -->|yes| S[\"skip: no effect\"]\n  Q -->|no| T[\"one local transaction: insert id + business work\"]\n  T --> C[\"commit, then ack: effectively-once processing\"]\n  C --> R[\"purge old ids: window longer than max redelivery delay\"]\n```\n\nWalking the code: `m1` is new, so its id is inserted and 100 is charged in one transaction. The second `m1` is a redelivery — its id is already there, so it is skipped. `m2` has an identical payload but a *different id*, so it is a genuinely new message and charges another 100; dedup is by id, never by payload. The purge keeps 30 days, longer than the redelivery delay, so `m1`'s id is still recorded and the late redelivery is skipped too. Total: 200 — two real purchases, two charges, three deliveries of `m1` absorbed.",
+            "ru": "В этой одной трассе видны все атомы темы:\n\n```mermaid\nflowchart LR\n  P[\"производитель ставит стабильный уникальный id\"] --> B[\"брокер: доставка at-least-once\"]\n  B --> Q{\"id уже в inbox?\"}\n  Q -->|да| S[\"пропустить: без эффекта\"]\n  Q -->|нет| T[\"одна локальная транзакция: вставить id + бизнес-работа\"]\n  T --> C[\"коммит, затем ack: обработка effectively-once\"]\n  C --> R[\"чистка старых id: окно длиннее максимальной задержки повторной доставки\"]\n```\n\nРазбор кода: `m1` новый, поэтому его id вставляется и 100 списывается в одной транзакции. Второй `m1` — повторная доставка: его id уже есть, и он пропускается. У `m2` тот же payload, но *другой id*, значит это по-настоящему новое сообщение, и оно списывает ещё 100; дедуп идёт по id, никогда по payload. Очистка хранит 30 дней — дольше задержки повторной доставки, поэтому id `m1` ещё записан и поздняя повторная доставка тоже пропускается. Итого 200: две реальные покупки, два списания, три доставки `m1` поглощены."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two distinct ids, two effects; both repeats of m1 absorbed.",
+              "ru": "Два разных id — два эффекта; оба повтора m1 поглощены."
+            },
+            "incorrect": {
+              "en": "m1 charges once and m2 charges once; the two repeats of m1 are skipped by id: 200.",
+              "ru": "m1 списывает один раз и m2 один раз; два повтора m1 пропускаются по id: 200."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "200",
+                "ru": "200"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "300",
+                "ru": "300"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Both later deliveries of m1 repeat an id already in the inbox, so they apply no effect.",
+                "ru": "Обе поздние доставки m1 повторяют id, уже лежащий в inbox, поэтому эффекта не применяют."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "100",
+                "ru": "100"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "m2 carries a different id, so it is a distinct legitimate message even though its payload matches.",
+                "ru": "У m2 другой id, значит это отдельное законное сообщение, хотя payload совпадает."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cap-p1-spot-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This consumer deduplicates by message id. What is the defect?",
+            "ru": "Этот потребитель дедуплицирует по id сообщения. В чём дефект?"
+          },
+          "code": "// handling message m\nbegin();\n  if (inboxContains(m.id)) { commit(); return; }\n  insertInbox(m.id);\ncommit();\n\ncharge(m.amount);   // after the transaction\nack(m);",
+          "codeLang": "text",
+          "feedback": {
+            "correct": {
+              "en": "The id is committed without the work, so a crash before the charge loses it silently.",
+              "ru": "Id закоммичен без работы, поэтому падение до списания тихо её теряет."
+            },
+            "incorrect": {
+              "en": "The charge sits outside the transaction that records the id — they must be atomic.",
+              "ru": "Списание вне транзакции, записывающей id, — они должны быть атомарны."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The charge happens outside the transaction that records the id, so a crash after the commit loses the effect forever",
+                "ru": "Списание происходит вне транзакции, записывающей id, поэтому падение после коммита теряет эффект навсегда"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It should deduplicate on the payload rather than the id",
+                "ru": "Дедуплицировать надо было по payload, а не по id"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The id is the correct key — identical payloads can be distinct legitimate events.",
+                "ru": "Id — правильный ключ: одинаковые payload могут быть разными законными событиями."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It acknowledges the message too late; the ack should come before the work",
+                "ru": "Оно подтверждает сообщение слишком поздно; ack должен идти до работы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Acking after the work is right; the defect is that the id record and the work are not atomic.",
+                "ru": "Ack после работы — правильно; дефект в том, что запись id и работа не атомарны."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p2-predict-ids",
+          "type": "predict_output",
+          "prompt": {
+            "en": "This consumer deduplicates by message id. Predict the total refunded.",
+            "ru": "Этот потребитель дедуплицирует по id сообщения. Предскажи итоговую сумму возврата."
+          },
+          "code": "// inbox consumer: dedup by message id, one transaction per message\nreceive(id = \"a1\", payload = \"refund 50\")\nreceive(id = \"a2\", payload = \"refund 50\")   // identical payload, different id\nreceive(id = \"a2\", payload = \"refund 50\")   // redelivery of a2\n\nprint(totalRefunded)",
+          "codeLang": "text",
+          "feedback": {
+            "correct": {
+              "en": "Two distinct ids refund; the repeat of a2 is skipped.",
+              "ru": "Два разных id дают возврат; повтор a2 пропускается."
+            },
+            "incorrect": {
+              "en": "a1 and a2 are different messages, so both refund; the third line repeats a2 and is skipped: 100.",
+              "ru": "a1 и a2 — разные сообщения, поэтому оба дают возврат; третья строка повторяет a2 и пропускается: 100."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "100",
+                "ru": "100"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "50",
+                "ru": "50"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Dedup is by id, not payload: a1 and a2 are two genuinely different refunds.",
+                "ru": "Дедуп идёт по id, а не по payload: a1 и a2 — два по-настоящему разных возврата."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "150",
+                "ru": "150"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The third line repeats id a2, which the inbox recognises and skips.",
+                "ru": "Третья строка повторяет id a2, который inbox распознаёт и пропускает."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p3-sort-lifecycle",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the complete lifecycle of one message under the Inbox pattern.",
+            "ru": "Расставь по порядку полный жизненный цикл одного сообщения в паттерне Inbox."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Stamp, deliver, check, apply-or-skip, commit and ack, purge later.",
+              "ru": "Проставить, доставить, проверить, применить-или-пропустить, коммит и ack, потом очистка."
+            },
+            "incorrect": {
+              "en": "The producer stamps the id, the broker delivers, the consumer checks and works in one TX, commits, acks, and purges later.",
+              "ru": "Производитель ставит id, брокер доставляет, потребитель проверяет и работает в одной TX, коммитит, подтверждает и позже чистит."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "The producer stamps a stable unique id on the message",
+                "ru": "Производитель проставляет сообщению стабильный уникальный id"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "The broker delivers it, possibly more than once",
+                "ru": "Брокер доставляет его, возможно не один раз"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Inside one local transaction, the consumer looks the id up in the inbox",
+                "ru": "Внутри одной локальной транзакции потребитель ищет id в inbox"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "If the id is new it inserts it and applies the business work; if it is known it applies nothing",
+                "ru": "Если id новый — вставляет его и выполняет бизнес-работу; если известен — не делает ничего"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "It commits the transaction and then acknowledges the message",
+                "ru": "Коммитит транзакцию, а затем подтверждает сообщение"
+              }
+            },
+            {
+              "id": "s6",
+              "text": {
+                "en": "Much later, ids older than the retention window are purged",
+                "ru": "Много позже id старше окна ретенции вычищаются"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p4-match-mechanisms",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "In the Inbox pattern, match each mechanism to its job in the whole flow.",
+            "ru": "Соотнеси каждый механизм паттерна Inbox с его ролью во всём процессе."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Id identifies, transaction binds, constraint guards, window bounds, Outbox covers the other side.",
+              "ru": "Id опознаёт, транзакция связывает, ограничение стережёт, окно ограничивает, Outbox закрывает другую сторону."
+            },
+            "incorrect": {
+              "en": "stable id → recognises repeats, one TX → atomicity, UNIQUE → hard guard, window → bounded growth, Outbox → producer side.",
+              "ru": "стабильный id — распознаёт повторы, одна TX — атомарность, UNIQUE — жёсткий страж, окно — ограниченный рост, Outbox — сторона производителя."
+            }
+          },
+          "pairs": [
+            {
+              "id": "id",
+              "left": {
+                "en": "stable unique message id",
+                "ru": "стабильный уникальный id сообщения"
+              },
+              "right": {
+                "en": "Identifies a redelivery of the same message",
+                "ru": "Опознаёт повторную доставку того же сообщения"
+              }
+            },
+            {
+              "id": "tx",
+              "left": {
+                "en": "one local transaction",
+                "ru": "одна локальная транзакция"
+              },
+              "right": {
+                "en": "Keeps the dedup record and the business work atomic",
+                "ru": "Держит запись дедупликации и бизнес-работу атомарными"
+              }
+            },
+            {
+              "id": "unique",
+              "left": {
+                "en": "UNIQUE constraint on the id",
+                "ru": "ограничение UNIQUE на id"
+              },
+              "right": {
+                "en": "The database-level guard against a second row",
+                "ru": "Страж на уровне базы против второй строки"
+              }
+            },
+            {
+              "id": "window",
+              "left": {
+                "en": "retention window",
+                "ru": "окно ретенции"
+              },
+              "right": {
+                "en": "Bounds the table's growth without forgetting late duplicates",
+                "ru": "Ограничивает рост таблицы, не забывая поздние дубликаты"
+              }
+            },
+            {
+              "id": "outbox",
+              "left": {
+                "en": "Outbox pattern",
+                "ru": "паттерн Outbox"
+              },
+              "right": {
+                "en": "The producer-side half of reliable messaging",
+                "ru": "Половина надёжного обмена сообщениями на стороне производителя"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p5-fill-answer",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill in the key parts of the 60-second answer about the Inbox pattern.",
+            "ru": "Впиши ключевые части 60-секундного ответа о паттерне Inbox."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That is the whole pattern in one sentence: at-least-once in, id-keyed dedup, one transaction, effectively-once out.",
+              "ru": "Это весь паттерн в одном предложении: at-least-once на входе, дедуп по id, одна транзакция, effectively-once на выходе."
+            },
+            "incorrect": {
+              "en": "Brokers deliver at-least-once; dedup by message id and do the work in one local transaction, giving effectively-once processing.",
+              "ru": "Брокеры доставляют at-least-once; дедуп по id сообщения и работа в одной локальной транзакции дают обработку effectively-once."
+            }
+          },
+          "text": {
+            "en": "Brokers deliver ___-once, so the consumer records each message ___ and does the business work in one local ___; that makes the processing ___-once.",
+            "ru": "Брокеры доставляют ___-once, поэтому потребитель записывает ___ каждого сообщения и делает бизнес-работу в одной локальной ___; это делает обработку ___-once."
+          },
+          "blanks": [
+            {
+              "en": [
+                "at-least"
+              ],
+              "ru": [
+                "at-least"
+              ]
+            },
+            {
+              "en": [
+                "id"
+              ],
+              "ru": [
+                "id"
+              ]
+            },
+            {
+              "en": [
+                "transaction",
+                "tx"
+              ],
+              "ru": [
+                "транзакции",
+                "транзакция",
+                "transaction"
+              ]
+            },
+            {
+              "en": [
+                "effectively"
+              ],
+              "ru": [
+                "effectively"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

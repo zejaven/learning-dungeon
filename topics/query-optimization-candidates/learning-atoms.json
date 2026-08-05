@@ -1,0 +1,3475 @@
+{
+  "schemaVersion": 1,
+  "topicId": "query-optimization-candidates",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "impact-first",
+      "title": {
+        "en": "Impact, not duration",
+        "ru": "Влияние, а не длительность"
+      },
+      "summary": {
+        "en": "You choose a query to optimize by its impact in production, not by which single run looks slowest.",
+        "ru": "Запрос для оптимизации выбирают по влиянию в продакшене, а не по тому, какой одиночный запуск выглядит самым медленным."
+      },
+      "discovery": [
+        {
+          "id": "impact-d1-which-first",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Two queries are listed on a dashboard. Which one do you investigate first?",
+            "ru": "На дашборде перечислены два запроса. Какой из них ты изучишь первым?"
+          },
+          "code": "Query A:       1 run per day,       5 s per run\nQuery B: 200 000 runs per hour,   80 ms per run",
+          "codeLang": "text",
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Query B — in total it consumes far more database time",
+                "ru": "Запрос B — суммарно он потребляет намного больше времени базы данных"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Query A — 5 s is the slowest single run",
+                "ru": "Запрос A — 5 с это самый медленный одиночный запуск"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The slowest single run can be a rare outlier; one sample is not a ranking.",
+                "ru": "Самый медленный одиночный запуск может быть редким выбросом; один замер это не ранжирование."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Query A, because a 5 s query always breaks a user request",
+                "ru": "Запрос A, потому что запрос на 5 с всегда ломает пользовательский запрос"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "One run per day may touch no user flow at all; impact has to be measured.",
+                "ru": "Один запуск в день может вообще не касаться пользовательского пути; влияние нужно измерять."
+              }
+            }
+          ],
+          "reveal": {
+            "en": "Optimization is not a hunt for slow queries — it is a hunt for **impact**. A query's impact in production combines three things:\n\n```mermaid\nflowchart LR\n  S[\"how slow\"] --> I[\"impact\"]\n  F[\"how often it runs\"] --> I\n  P[\"how important the path\"] --> I\n  I --> D{\"worth tuning now?\"}\n```\n\nQuery B costs the database about 16 000 seconds of work per hour (200 000 × 80 ms). Query A costs 5 seconds per day. A looks worse on one line of a log, but B is where a small per-call saving turns into a large win.\n\nThat is why you start from production evidence rather than from the SQL text: latency percentiles, total database time, call counts, timeouts, lock waits, CPU and I/O pressure, and which user flow is affected. The next steps drill each of those.",
+            "ru": "Оптимизация — это не охота на медленные запросы, а охота на **влияние**. Влияние запроса в продакшене складывается из трёх вещей:\n\n```mermaid\nflowchart LR\n  S[\"насколько медленно\"] --> I[\"влияние\"]\n  F[\"как часто выполняется\"] --> I\n  P[\"насколько важен путь\"] --> I\n  I --> D{\"стоит ли тюнить сейчас?\"}\n```\n\nЗапрос B стоит базе примерно 16 000 секунд работы в час (200 000 × 80 мс). Запрос A стоит 5 секунд в день. A выглядит хуже в одной строке лога, но именно у B небольшая экономия на вызов превращается в большой выигрыш.\n\nПоэтому начинают не с текста SQL, а с данных продакшена: перцентили задержки, суммарное время базы данных, число вызовов, таймауты, ожидания блокировок, нагрузка на CPU и I/O и затронутый пользовательский путь. Дальше разберём каждый пункт."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — frequency multiplies a small saving into a large one.",
+              "ru": "Верно — частота превращает небольшую экономию в большую."
+            },
+            "incorrect": {
+              "en": "Rank by impact: how slow, how often, and how important the path.",
+              "ru": "Ранжируй по влиянию: насколько медленно, как часто и насколько важен путь."
+            }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "impact-p1-longest-run-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "The query to optimize first is the one with the longest single recorded run.",
+            "ru": "Оптимизировать первым нужно запрос с самым долгим одиночным запуском."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": {
+              "en": "A single long run can be a rare outlier; impact ranks candidates.",
+              "ru": "Один долгий запуск может быть редким выбросом; кандидатов ранжирует влияние."
+            },
+            "incorrect": {
+              "en": "No — one long run is a single sample; frequency and the affected flow matter too.",
+              "ru": "Нет — один долгий запуск это единственный замер; важны также частота и затронутый путь."
+            }
+          }
+        },
+        {
+          "id": "impact-p2-facts-mc",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which set of facts identifies a query worth optimizing in production?",
+            "ru": "Какой набор фактов определяет запрос, который стоит оптимизировать в продакшене?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Latency percentiles, call count, total database time and the affected user flow",
+                "ru": "Перцентили задержки, число вызовов, суммарное время базы данных и затронутый пользовательский путь"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The number of tables the query joins",
+                "ru": "Число таблиц, которые джойнит запрос"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A complex-looking query can be rare and cheap; impact comes from measurements.",
+                "ru": "Сложно выглядящий запрос может быть редким и дешёвым; влияние берётся из измерений."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The largest duration ever recorded for it",
+                "ru": "Максимальная когда-либо зафиксированная длительность"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A maximum is one sample, and it is often a rare outlier.",
+                "ru": "Максимум это один замер, и часто это редкий выброс."
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Those are the production facts that make impact comparable between queries.",
+              "ru": "Это те данные продакшена, которые делают влияние сравнимым между запросами."
+            },
+            "incorrect": {
+              "en": "Impact is measured: percentiles, calls, total database time and the affected flow.",
+              "ru": "Влияние измеряют: перцентили, вызовы, суммарное время базы и затронутый путь."
+            }
+          }
+        },
+        {
+          "id": "impact-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the rule for selecting optimization candidates.",
+            "ru": "Собери правило выбора кандидатов на оптимизацию."
+          },
+          "tokens": {
+            "en": [
+              "rank",
+              "candidates",
+              "by",
+              "production",
+              "impact,",
+              "not",
+              "by",
+              "raw",
+              "duration"
+            ],
+            "ru": [
+              "ранжируй",
+              "кандидатов",
+              "по",
+              "влиянию",
+              "в",
+              "продакшене,",
+              "а",
+              "не",
+              "по",
+              "длительности"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "alphabetically"
+            ],
+            "ru": [
+              "по алфавиту"
+            ]
+          },
+          "feedback": {
+            "correct": {
+              "en": "Impact combines duration, frequency and the importance of the path.",
+              "ru": "Влияние объединяет длительность, частоту и важность пути."
+            },
+            "incorrect": {
+              "en": "The rule is: rank candidates by production impact, not by raw duration.",
+              "ru": "Правило такое: ранжируй кандидатов по влиянию в продакшене, а не по длительности."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "tail-latency",
+      "title": {
+        "en": "Tail latency: p95 and p99",
+        "ru": "Хвостовые задержки: p95 и p99"
+      },
+      "summary": {
+        "en": "Averages hide the slow tail, so candidates are judged at p95 and p99.",
+        "ru": "Средние прячут медленный хвост, поэтому кандидатов оценивают по p95 и p99."
+      },
+      "discovery": [
+        {
+          "id": "tail-d1-average-hides",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "An endpoint's average database time is 40 ms, yet users keep reporting freezes. Which metric most likely explains the complaints?",
+            "ru": "Среднее время базы данных для endpoint — 40 мс, но пользователи продолжают жаловаться на подвисания. Какая метрика скорее всего объяснит жалобы?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Its p99 latency",
+                "ru": "Его p99 latency"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The average is authoritative, so the complaints must be unrelated to the database",
+                "ru": "Среднее авторитетно, значит жалобы не связаны с базой данных"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Averages hide the slow tail: a few very slow runs barely move the mean.",
+                "ru": "Средние прячут медленный хвост: несколько очень медленных запусков почти не двигают среднее."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The average latency of the whole database",
+                "ru": "Средняя задержка всей базы данных"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Another average hides the same tail, just at a larger scale.",
+                "ru": "Ещё одно среднее прячет тот же хвост, только в большем масштабе."
+              }
+            }
+          ],
+          "reveal": {
+            "en": "A **percentile** is a latency value that a given share of runs stays under. **p95** is the value 95% of runs finish faster than; **p99** is the value 99% finish faster than. The runs above p95/p99 are the **tail**.\n\n```\n1000 runs of one query\np50     =  20 ms   half of the runs are faster than this\np95     = 150 ms   1 run in 20 is slower than this\np99     = 900 ms   1 run in 100 is slower than this\naverage =  40 ms   <- hides the 900 ms tail completely\n```\n\nWhy percentiles and not the mean? Users experience individual requests, not your average. With 200 000 calls per hour, \"1 in 100 is slower than 900 ms\" means 2 000 bad experiences every hour — while the average still reads a comfortable 40 ms. A candidate is judged slow when it is slow at a meaningful percentile, not when one rare sample looks bad.",
+            "ru": "**Перцентиль** — это значение задержки, ниже которого остаётся заданная доля запусков. **p95** — значение, быстрее которого завершаются 95% запусков; **p99** — быстрее которого 99%. Запуски выше p95/p99 и есть **хвост**.\n\n```\n1000 запусков одного запроса\np50     =  20 мс   половина запусков быстрее\np95     = 150 мс   1 запуск из 20 медленнее\np99     = 900 мс   1 запуск из 100 медленнее\nсреднее =  40 мс   <- полностью прячет хвост в 900 мс\n```\n\nПочему перцентили, а не среднее? Пользователь переживает конкретный запрос, а не твоё среднее. При 200 000 вызовов в час «1 из 100 медленнее 900 мс» — это 2 000 плохих впечатлений каждый час, хотя среднее по-прежнему показывает комфортные 40 мс. Кандидат считается медленным, когда он медленный на значимом перцентиле, а не когда плохо выглядит один редкий замер."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the tail is what users feel, and the mean hides it.",
+              "ru": "Верно — пользователи чувствуют хвост, а среднее его прячет."
+            },
+            "incorrect": {
+              "en": "Look at p99: a few very slow runs barely change a 40 ms average.",
+              "ru": "Смотри на p99: несколько очень медленных запусков почти не меняют среднее в 40 мс."
+            }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "tail-p1-average-enough-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Average latency alone is enough to decide whether a query is slow for users.",
+            "ru": "Одной средней задержки достаточно, чтобы решить, медленный ли запрос для пользователей."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": {
+              "en": "Averages hide tail latency; p95 and p99 expose what users feel.",
+              "ru": "Средние прячут хвостовую задержку; p95 и p99 показывают то, что чувствуют пользователи."
+            },
+            "incorrect": {
+              "en": "No — a good average can still hide a slow tail at p95 and p99.",
+              "ru": "Нет — хорошее среднее всё равно может прятать медленный хвост на p95 и p99."
+            }
+          }
+        },
+        {
+          "id": "tail-p2-p99-meaning",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A query's p99 latency is 900 ms. What does that mean?",
+            "ru": "У запроса p99 latency равен 900 мс. Что это значит?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "1% of its runs are slower than 900 ms",
+                "ru": "1% его запусков медленнее 900 мс"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Its average run takes 900 ms",
+                "ru": "Его средний запуск занимает 900 мс"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That would be the mean; a percentile is a threshold, not an average.",
+                "ru": "Это было бы среднее; перцентиль — это порог, а не среднее."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "99% of its runs are slower than 900 ms",
+                "ru": "99% его запусков медленнее 900 мс"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Reversed — p99 is the value 99% of runs stay under.",
+                "ru": "Наоборот — p99 это значение, ниже которого остаются 99% запусков."
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "p99 marks the slowest 1% — the tail users complain about.",
+              "ru": "p99 отмечает самый медленный 1% — тот хвост, на который жалуются."
+            },
+            "incorrect": {
+              "en": "p99 = 900 ms means 99% of runs are faster and 1% are slower than that.",
+              "ru": "p99 = 900 мс означает, что 99% запусков быстрее, а 1% медленнее."
+            }
+          }
+        },
+        {
+          "id": "tail-p3-match-metrics",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each latency metric to what it tells you about a query.",
+            "ru": "Соотнеси каждую метрику задержки с тем, что она говорит о запросе."
+          },
+          "pairs": [
+            {
+              "id": "p50",
+              "left": {
+                "en": "p50",
+                "ru": "p50"
+              },
+              "right": {
+                "en": "The typical run: half are faster",
+                "ru": "Типичный запуск: половина быстрее"
+              }
+            },
+            {
+              "id": "p95",
+              "left": {
+                "en": "p95",
+                "ru": "p95"
+              },
+              "right": {
+                "en": "1 run in 20 is slower — a repeatable slow tail",
+                "ru": "1 запуск из 20 медленнее — повторяющийся медленный хвост"
+              }
+            },
+            {
+              "id": "p99",
+              "left": {
+                "en": "p99",
+                "ru": "p99"
+              },
+              "right": {
+                "en": "1 run in 100 is slower — the worst experiences",
+                "ru": "1 запуск из 100 медленнее — самые плохие впечатления"
+              }
+            },
+            {
+              "id": "avg",
+              "left": {
+                "en": "average",
+                "ru": "среднее"
+              },
+              "right": {
+                "en": "One number that can hide the tail entirely",
+                "ru": "Одно число, которое может полностью спрятать хвост"
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Percentiles describe the distribution; a single average flattens it.",
+              "ru": "Перцентили описывают распределение; одно среднее его сглаживает."
+            },
+            "incorrect": {
+              "en": "p50 is typical, p95 and p99 are the tail, and the average can hide both.",
+              "ru": "p50 — типичное значение, p95 и p99 — хвост, а среднее может спрятать и то и другое."
+            }
+          }
+        },
+        {
+          "id": "tail-p4-fill-percentiles",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two percentiles used to judge a query's slowness.",
+            "ru": "Впиши два перцентиля, по которым оценивают медлительность запроса."
+          },
+          "text": {
+            "en": "Judge a candidate at ___ and ___, not at the average.",
+            "ru": "Оценивай кандидата по ___ и ___, а не по среднему."
+          },
+          "blanks": [
+            {
+              "en": [
+                "p95"
+              ],
+              "ru": [
+                "p95"
+              ]
+            },
+            {
+              "en": [
+                "p99"
+              ],
+              "ru": [
+                "p99"
+              ]
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "p95 and p99 are the tail metrics users actually feel.",
+              "ru": "p95 и p99 — хвостовые метрики, которые реально чувствуют пользователи."
+            },
+            "incorrect": {
+              "en": "They are p95 and p99 — the average hides the slow tail.",
+              "ru": "Это p95 и p99 — среднее прячет медленный хвост."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "total-db-time",
+      "title": {
+        "en": "Total database time",
+        "ru": "Суммарное время базы данных"
+      },
+      "summary": {
+        "en": "total time = mean time × calls, so a frequent fast query can outrank a rare slow one.",
+        "ru": "суммарное время = среднее время × число вызовов, поэтому частый быстрый запрос может обойти редкий медленный."
+      },
+      "discovery": [
+        {
+          "id": "total-d1-predict-ranking",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Predict which statement name this query returns.",
+            "ru": "Предскажи, какое имя statement вернёт этот запрос."
+          },
+          "code": "-- collected metrics (simplified)\n-- statement       calls      mean_ms\n-- report_totals       1       5000.0\n-- fetch_cart     200000         80.0\n\nSELECT statement\nFROM statement_metrics\nORDER BY mean_ms * calls DESC\nLIMIT 1;",
+          "codeLang": "sql",
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "fetch_cart",
+                "ru": "fetch_cart"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "report_totals",
+                "ru": "report_totals"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It wins on mean time, but 1 call × 5000 ms is a tiny share of total time.",
+                "ru": "Он выигрывает по среднему времени, но 1 вызов × 5000 мс — крошечная доля суммарного времени."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "An error — mean time cannot be multiplied by a call count",
+                "ru": "Ошибка — среднее время нельзя умножать на число вызовов"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That product is exactly how total time is defined.",
+                "ru": "Именно это произведение и есть определение суммарного времени."
+              }
+            }
+          ],
+          "reveal": {
+            "en": "Three numbers describe one statement pattern:\n\n- **calls** — how many times it ran in the window.\n- **mean time** — the average duration of one run.\n- **total time** — `mean time × calls`, the share of database capacity it consumed.\n\n```\nreport_totals:      1 call  x 5000 ms =      5 000 ms total\nfetch_cart:   200 000 calls x   80 ms = 16 000 000 ms total\n```\n\n`fetch_cart` consumes over 3000× more database time, even though every single run is fast. That is why a useful **first sort** of candidates is total time, not max time: the database spends its capacity on totals, so shaving 10 ms off a query called 200 000 times frees far more capacity than shaving 2 s off a query called once. In PostgreSQL these numbers come from the `pg_stat_statements` view, covered next.",
+            "ru": "Один statement описывают три числа:\n\n- **calls** — сколько раз он выполнился за окно наблюдения.\n- **среднее время (mean time)** — средняя длительность одного запуска.\n- **суммарное время (total time)** — `среднее время × calls`, то есть доля потреблённой ёмкости базы.\n\n```\nreport_totals:       1 вызов x 5000 мс =      5 000 мс суммарно\nfetch_cart:   200 000 вызовов x   80 мс = 16 000 000 мс суммарно\n```\n\n`fetch_cart` потребляет более чем в 3000 раз больше времени базы, хотя каждый его запуск быстрый. Поэтому полезная **первая сортировка** кандидатов — по суммарному времени, а не по максимальному: база тратит ёмкость на суммы, и снять 10 мс с запроса, вызванного 200 000 раз, освобождает гораздо больше ёмкости, чем снять 2 с с запроса, вызванного один раз. В PostgreSQL эти числа берут из представления `pg_stat_statements` — о нём дальше."
+          },
+          "feedback": {
+            "correct": {
+              "en": "200 000 × 80 ms beats 1 × 5000 ms by a wide margin.",
+              "ru": "200 000 × 80 мс с большим отрывом обходит 1 × 5000 мс."
+            },
+            "incorrect": {
+              "en": "Ordering by mean_ms * calls is total time: fetch_cart consumes 16 000 000 ms, report_totals only 5 000 ms.",
+              "ru": "Сортировка по mean_ms * calls — это суммарное время: fetch_cart потребляет 16 000 000 мс, report_totals лишь 5 000 мс."
+            }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "total-p1-first-sort",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which first sort ranks optimization candidates by how much database capacity they consume?",
+            "ru": "Какая первая сортировка ранжирует кандидатов на оптимизацию по потреблённой ёмкости базы данных?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Total time, computed as mean time × calls",
+                "ru": "Суммарное время, посчитанное как среднее время × calls"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Max time, descending",
+                "ru": "Максимальное время по убыванию"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Max time is one sample and is often a rare outlier.",
+                "ru": "Максимальное время — это один замер, и часто это редкий выброс."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Call count alone, descending",
+                "ru": "Только число вызовов по убыванию"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A 1 ms query can have a huge call count and still be cheap in total.",
+                "ru": "Запрос на 1 мс может иметь огромное число вызовов и всё равно быть дешёвым суммарно."
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Total time is the only one of the three that combines duration with frequency.",
+              "ru": "Из трёх вариантов только суммарное время объединяет длительность с частотой."
+            },
+            "incorrect": {
+              "en": "Rank by total time = mean time × calls; duration or frequency alone misleads.",
+              "ru": "Ранжируй по суммарному времени = среднее время × calls; отдельно длительность или частота вводят в заблуждение."
+            }
+          }
+        },
+        {
+          "id": "total-p2-frequent-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A query that runs 200 000 times per hour at 80 ms can consume more database time than a query that takes 5 s once per day.",
+            "ru": "Запрос, который выполняется 200 000 раз в час по 80 мс, может потреблять больше времени базы данных, чем запрос на 5 с раз в сутки."
+          },
+          "answer": true,
+          "feedback": {
+            "correct": {
+              "en": "16 000 000 ms against 5 000 ms — frequency dominates the total.",
+              "ru": "16 000 000 мс против 5 000 мс — частота определяет сумму."
+            },
+            "incorrect": {
+              "en": "It can: 200 000 × 80 ms is 16 000 000 ms, while 1 × 5 s is only 5 000 ms.",
+              "ru": "Может: 200 000 × 80 мс это 16 000 000 мс, а 1 × 5 с — всего 5 000 мс."
+            }
+          }
+        },
+        {
+          "id": "total-p3-match-metrics",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each statement metric to its meaning.",
+            "ru": "Соотнеси каждую метрику statement с её значением."
+          },
+          "pairs": [
+            {
+              "id": "calls",
+              "left": {
+                "en": "calls",
+                "ru": "calls"
+              },
+              "right": {
+                "en": "How many times the statement ran",
+                "ru": "Сколько раз выполнился statement"
+              }
+            },
+            {
+              "id": "mean",
+              "left": {
+                "en": "mean time",
+                "ru": "среднее время"
+              },
+              "right": {
+                "en": "The average duration of one run",
+                "ru": "Средняя длительность одного запуска"
+              }
+            },
+            {
+              "id": "total",
+              "left": {
+                "en": "total time",
+                "ru": "суммарное время"
+              },
+              "right": {
+                "en": "mean time × calls — the consumed share of capacity",
+                "ru": "среднее время × calls — потреблённая доля ёмкости"
+              }
+            },
+            {
+              "id": "max",
+              "left": {
+                "en": "max time",
+                "ru": "максимальное время"
+              },
+              "right": {
+                "en": "The single longest run recorded",
+                "ru": "Единственный самый долгий зафиксированный запуск"
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Only total time answers \"how much of the database did this cost?\".",
+              "ru": "Только суммарное время отвечает на вопрос «сколько базы это стоило?»."
+            },
+            "incorrect": {
+              "en": "calls counts runs, mean time averages them, total time multiplies both, max time is one outlier.",
+              "ru": "calls считает запуски, среднее время их усредняет, суммарное время — их произведение, максимальное время — один выброс."
+            }
+          }
+        },
+        {
+          "id": "total-p4-fill-formula",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the total-time formula.",
+            "ru": "Дополни формулу суммарного времени."
+          },
+          "text": {
+            "en": "total time = ___ × ___",
+            "ru": "суммарное время = ___ × ___"
+          },
+          "blanks": [
+            {
+              "en": [
+                "mean time",
+                "mean_time",
+                "mean",
+                "mean_exec_time"
+              ],
+              "ru": [
+                "среднее время",
+                "среднее",
+                "mean time",
+                "mean_time"
+              ]
+            },
+            {
+              "en": [
+                "calls",
+                "call count",
+                "number of calls"
+              ],
+              "ru": [
+                "calls",
+                "вызовы",
+                "число вызовов"
+              ]
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "That product is what ranks candidates by consumed database capacity.",
+              "ru": "Это произведение и ранжирует кандидатов по потреблённой ёмкости базы."
+            },
+            "incorrect": {
+              "en": "total time = mean time × calls — duration alone ignores how often the query runs.",
+              "ru": "суммарное время = среднее время × calls — одна длительность игнорирует частоту выполнения."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "evidence-sources",
+      "title": {
+        "en": "Where the evidence comes from",
+        "ru": "Откуда берутся доказательства"
+      },
+      "summary": {
+        "en": "Slow-query logs, APM traces, pg_stat_statements and dashboards each answer a different question, so you use several.",
+        "ru": "Slow-query logs, APM traces, pg_stat_statements и дашборды отвечают каждый на свой вопрос, поэтому используют несколько источников."
+      },
+      "discovery": [
+        {
+          "id": "evidence-d1-match-sources",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "One user complains about a slow page. Match each evidence source to the question it can answer.",
+            "ru": "Пользователь жалуется на медленную страницу. Соотнеси каждый источник доказательств с вопросом, на который он отвечает."
+          },
+          "pairs": [
+            {
+              "id": "slowlog",
+              "left": {
+                "en": "slow-query log",
+                "ru": "slow-query log"
+              },
+              "right": {
+                "en": "Which statements crossed the time threshold",
+                "ru": "Какие statements перешли порог времени"
+              }
+            },
+            {
+              "id": "apm",
+              "left": {
+                "en": "APM trace",
+                "ru": "APM trace"
+              },
+              "right": {
+                "en": "Which request or background job paid the cost",
+                "ru": "Какой request или фоновая job заплатила эту цену"
+              }
+            },
+            {
+              "id": "pgss",
+              "left": {
+                "en": "pg_stat_statements",
+                "ru": "pg_stat_statements"
+              },
+              "right": {
+                "en": "How much total time one statement pattern consumes",
+                "ru": "Сколько суммарного времени потребляет один шаблон statement"
+              }
+            },
+            {
+              "id": "dash",
+              "left": {
+                "en": "dashboards",
+                "ru": "дашборды"
+              },
+              "right": {
+                "en": "Pressure on CPU, I/O, locks, connections and replication",
+                "ru": "Давление на CPU, I/O, locks, connections и replication"
+              }
+            }
+          ],
+          "reveal": {
+            "en": "No single source answers everything, so triage reads several:\n\n```mermaid\nflowchart TD\n  Q[\"one slow page report\"] --> L[\"slow-query log: statements over the threshold\"]\n  Q --> A[\"APM trace: which request paid, and how much was DB time\"]\n  Q --> S[\"pg_stat_statements: calls, mean time, total time per pattern\"]\n  Q --> D[\"dashboards: CPU, I/O, locks, connections, replication\"]\n```\n\n- A **slow-query log** is the database's log of statements that took longer than a configured threshold. It gives you leads — one line each — but not how often the statement runs or who called it.\n- An **APM trace** is a per-request timeline recorded by the application. It shows which endpoint or background job paid, and how much of the request was database time versus other work.\n- **pg_stat_statements** is a PostgreSQL view that aggregates each *normalized* statement (its literal values stripped) with calls, mean time and total time — the ranking data from the previous step.\n- **Dashboards** show saturation: CPU, I/O, lock waits, connection usage and replication delay. They tell you the system is under pressure, not which statement caused it.\n\nThe log and the trace are the classic pair: the log names the statement, the trace names the caller and shows whether the database was even the bottleneck.",
+            "ru": "Ни один источник не отвечает на всё, поэтому при триаже смотрят несколько:\n\n```mermaid\nflowchart TD\n  Q[\"одна жалоба на медленную страницу\"] --> L[\"slow-query log: statements выше порога\"]\n  Q --> A[\"APM trace: кто заплатил и сколько было времени базы\"]\n  Q --> S[\"pg_stat_statements: calls, среднее и суммарное время по шаблону\"]\n  Q --> D[\"дашборды: CPU, I/O, locks, connections, replication\"]\n```\n\n- **Slow-query log** — лог базы данных со statements, которые заняли больше настроенного порога. Он даёт зацепки — по строке на каждую — но не говорит, как часто statement выполняется и кто его вызвал.\n- **APM trace** — таймлайн одного request, записанный приложением. Показывает, какой endpoint или фоновая job заплатила и какая часть request была временем базы, а какая — другой работой.\n- **pg_stat_statements** — представление PostgreSQL, которое агрегирует каждый *нормализованный* statement (с убранными литералами) вместе с calls, средним и суммарным временем — это данные для ранжирования из предыдущего шага.\n- **Дашборды** показывают saturation: CPU, I/O, ожидания блокировок, использование соединений и задержку репликации. Они говорят, что система под давлением, но не какой statement его создал.\n\nЛог и trace — классическая пара: лог называет statement, а trace называет вызывающего и показывает, была ли база вообще узким местом."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Each source answers one question — together they describe the whole problem.",
+              "ru": "Каждый источник отвечает на один вопрос — вместе они описывают всю проблему."
+            },
+            "incorrect": {
+              "en": "Logs list threshold-crossing statements, traces name the caller, pg_stat_statements ranks totals, dashboards show pressure.",
+              "ru": "Логи перечисляют statements выше порога, traces называют вызывающего, pg_stat_statements ранжирует суммы, дашборды показывают давление."
+            }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "evidence-p1-which-request",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which evidence source tells you which request or background job paid for a slow query?",
+            "ru": "Какой источник доказательств говорит, какой request или фоновая job заплатила за медленный запрос?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "An APM trace",
+                "ru": "APM trace"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The slow-query log",
+                "ru": "Slow-query log"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The log names the statement that crossed the threshold, not the caller.",
+                "ru": "Лог называет statement, перешедший порог, а не вызывающего."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "pg_stat_statements",
+                "ru": "pg_stat_statements"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It aggregates per statement pattern; it does not attribute work to a request.",
+                "ru": "Оно агрегирует по шаблону statement и не привязывает работу к request."
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Traces come from the application side, so they know the caller.",
+              "ru": "Traces приходят со стороны приложения, поэтому знают вызывающего."
+            },
+            "incorrect": {
+              "en": "Only an APM trace links a statement to the request or job that ran it.",
+              "ru": "Только APM trace связывает statement с request или job, которые его запустили."
+            }
+          }
+        },
+        {
+          "id": "evidence-p2-dashboards-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Dashboards for CPU, I/O, locks, connections and replication tell you which statement was slow.",
+            "ru": "Дашборды по CPU, I/O, locks, connections и replication говорят, какой statement был медленным."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": {
+              "en": "They show pressure on the system; identifying the statement needs logs or pg_stat_statements.",
+              "ru": "Они показывают давление на систему; определить statement помогут логи или pg_stat_statements."
+            },
+            "incorrect": {
+              "en": "No — dashboards show saturation, not statements; use the slow-query log or pg_stat_statements for that.",
+              "ru": "Нет — дашборды показывают saturation, а не statements; для этого нужны slow-query log или pg_stat_statements."
+            }
+          }
+        },
+        {
+          "id": "evidence-p3-log-and-trace",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why read both the slow-query log and APM traces instead of only one of them?",
+            "ru": "Почему читают и slow-query log, и APM traces, а не что-то одно?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The log shows which statement was slow; the trace shows which request paid and how much of it was database time",
+                "ru": "Лог показывает, какой statement был медленным; trace показывает, какой request заплатил и какая доля была временем базы"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "They report the same numbers, so reading both double-checks the log",
+                "ru": "Они сообщают одни и те же числа, поэтому чтение обоих перепроверяет лог"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "They answer different questions: statement-level threshold hits versus request-level cost.",
+                "ru": "Они отвечают на разные вопросы: превышение порога на уровне statement против стоимости на уровне request."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Traces replace logs completely once APM is installed",
+                "ru": "Traces полностью заменяют логи, как только установлен APM"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The log still names the exact statements that crossed the threshold.",
+                "ru": "Лог по-прежнему называет конкретные statements, которые перешли порог."
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "One names the statement, the other names the caller and the share of the request.",
+              "ru": "Один называет statement, другой — вызывающего и долю request."
+            },
+            "incorrect": {
+              "en": "The log is statement-level and database-side; the trace is request-level and application-side.",
+              "ru": "Лог работает на уровне statement со стороны базы; trace — на уровне request со стороны приложения."
+            }
+          }
+        },
+        {
+          "id": "evidence-p4-fill-view",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the PostgreSQL view used for ranking candidates.",
+            "ru": "Назови представление PostgreSQL, по которому ранжируют кандидатов."
+          },
+          "text": {
+            "en": "The view reporting calls, mean time and total time per normalized statement is ___.",
+            "ru": "Представление, которое сообщает calls, среднее и суммарное время по нормализованному statement, — это ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "pg_stat_statements"
+              ],
+              "ru": [
+                "pg_stat_statements"
+              ]
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "It is the usual starting point for a total-time ranking.",
+              "ru": "Это обычная стартовая точка для ранжирования по суммарному времени."
+            },
+            "incorrect": {
+              "en": "It is pg_stat_statements — the slow-query log has no call counts or totals.",
+              "ru": "Это pg_stat_statements — в slow-query log нет ни числа вызовов, ни сумм."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "candidate-signals",
+      "title": {
+        "en": "Signals of a good candidate",
+        "ru": "Признаки хорошего кандидата"
+      },
+      "summary": {
+        "en": "A candidate is worth a look when it is slow at p95/p99, very frequent, on a critical path, causing errors and waits, or wasteful in its plan.",
+        "ru": "Кандидат достоин внимания, если он медленный на p95/p99, очень частый, на критичном пути, вызывает ошибки и ожидания или расточителен по плану."
+      },
+      "discovery": [
+        {
+          "id": "signals-d1-weakest",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which of these is the WEAKEST optimization candidate?",
+            "ru": "Какой из этих запросов — САМЫЙ СЛАБЫЙ кандидат на оптимизацию?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A rarely used admin export: slow, but it runs at night and blocks nothing",
+                "ru": "Редко используемый admin-экспорт: медленный, но выполняется ночью и никого не блокирует"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A login query whose p99 is 2 s",
+                "ru": "Запрос login, у которого p99 равен 2 с"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A critical path plus a bad tail is a strong candidate, not a weak one.",
+                "ru": "Критичный путь плюс плохой хвост — это сильный кандидат, а не слабый."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A statement that holds locks until other statements time out",
+                "ru": "Statement, который держит блокировки, пока другие statements не упадут по таймауту"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Errors, timeouts and lock waits make a candidate urgent.",
+                "ru": "Ошибки, таймауты и ожидания блокировок делают кандидата срочным."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "A statement that accounts for a third of database CPU",
+                "ru": "Statement, на который приходится треть CPU базы данных"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A large share of database resources is one of the strongest signals.",
+                "ru": "Большая доля ресурсов базы — один из самых сильных сигналов."
+              }
+            }
+          ],
+          "reveal": {
+            "en": "A good candidate shows at least one of five signals:\n\n```mermaid\nflowchart TD\n  C[\"good candidate\"] --> S1[\"slow at p95 or p99\"]\n  C --> S2[\"runs very often\"]\n  C --> S3[\"on a critical user path\"]\n  C --> S4[\"causes errors, timeouts, lock waits, pool exhaustion, replica lag\"]\n  C --> S5[\"plan shows wasted work\"]\n```\n\nNew terms in that list:\n\n- A **critical user path** is a flow the product depends on: login, checkout, search, billing.\n- A **lock wait** is a statement sitting idle because another transaction holds a lock it needs.\n- **Connection pool exhaustion** is all pooled connections being busy, so new requests queue before they even reach the database.\n- A **read replica** is a copy of the database serving reads; **replica lag** is how far behind the primary it has fallen.\n- A **query plan** is the database's description of how it will execute the statement — the step that reveals wasted work (drilled later with `EXPLAIN`).\n\nOne signal is enough to justify a closer look. A query with none of them — slow but rare, isolated and harmless — is a weak candidate no matter how bad its duration looks.",
+            "ru": "У хорошего кандидата есть хотя бы один из пяти сигналов:\n\n```mermaid\nflowchart TD\n  C[\"хороший кандидат\"] --> S1[\"медленный на p95 или p99\"]\n  C --> S2[\"выполняется очень часто\"]\n  C --> S3[\"на критичном пользовательском пути\"]\n  C --> S4[\"вызывает ошибки, таймауты, ожидания блокировок, исчерпание пула, replica lag\"]\n  C --> S5[\"план показывает лишнюю работу\"]\n```\n\nНовые термины из этого списка:\n\n- **Критичный пользовательский путь** — поток, от которого зависит продукт: login, checkout, search, billing.\n- **Lock wait (ожидание блокировки)** — statement простаивает, потому что нужную ему блокировку держит другая транзакция.\n- **Исчерпание пула соединений** — все соединения пула заняты, и новые requests стоят в очереди, не доходя до базы.\n- **Read replica** — копия базы, обслуживающая чтения; **replica lag** — насколько она отстала от основной базы.\n- **План запроса** — описание того, как база собирается выполнить statement; именно он показывает лишнюю работу (разберём дальше через `EXPLAIN`).\n\nОдного сигнала достаточно, чтобы присмотреться внимательнее. Запрос, у которого нет ни одного — медленный, но редкий, изолированный и безвредный, — слабый кандидат, как бы плохо ни выглядела его длительность."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Slow but rare, isolated and harmless means almost nothing to win.",
+              "ru": "Медленный, но редкий, изолированный и безвредный — выигрывать почти нечего."
+            },
+            "incorrect": {
+              "en": "The other three each carry a real impact signal: critical path, timeouts, or a large resource share.",
+              "ru": "У остальных трёх есть реальный сигнал влияния: критичный путь, таймауты или большая доля ресурсов."
+            }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "signals-p1-strongest",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which query is the strongest optimization candidate?",
+            "ru": "Какой запрос — самый сильный кандидат на оптимизацию?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Product search: p99 of 1.5 s, 50 000 calls per hour",
+                "ru": "Поиск товаров: p99 1,5 с, 50 000 вызовов в час"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Monthly finance export: 40 s, one call per month on a read replica",
+                "ru": "Месячный финансовый экспорт: 40 с, один вызов в месяц на read replica"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Rare, isolated work has almost no system impact even when it is slow.",
+                "ru": "Редкая изолированная работа почти не влияет на систему, даже если медленная."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Internal health check: 2 ms, 60 calls per minute",
+                "ru": "Внутренний health check: 2 мс, 60 вызовов в минуту"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It is fast and cheap in total — there is nothing meaningful to win.",
+                "ru": "Он быстрый и суммарно дешёвый — выигрывать нечего."
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "A bad tail plus high frequency on a user-facing path is the classic candidate.",
+              "ru": "Плохой хвост плюс высокая частота на пользовательском пути — классический кандидат."
+            },
+            "incorrect": {
+              "en": "Search combines three signals: bad p99, high call count and a user-facing path.",
+              "ru": "У поиска сразу три сигнала: плохой p99, высокое число вызовов и пользовательский путь."
+            }
+          }
+        },
+        {
+          "id": "signals-p2-locks-urgent-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Lock waits and connection-pool exhaustion make a query urgent even when its average runtime is not large.",
+            "ru": "Ожидания блокировок и исчерпание пула соединений делают запрос срочным, даже если его среднее время невелико."
+          },
+          "answer": true,
+          "feedback": {
+            "correct": {
+              "en": "Other statements pile up behind it, so the damage is far wider than its own runtime.",
+              "ru": "За ним скапливаются другие statements, поэтому ущерб гораздо шире его собственного времени."
+            },
+            "incorrect": {
+              "en": "They do — waiting statements queue behind it, so a modest runtime still stalls the system.",
+              "ru": "Делают — за ним выстраиваются ожидающие statements, поэтому даже скромное время тормозит систему."
+            }
+          }
+        },
+        {
+          "id": "signals-p3-match-why",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each candidate signal to why it matters.",
+            "ru": "Соотнеси каждый сигнал кандидата с тем, почему он важен."
+          },
+          "pairs": [
+            {
+              "id": "frequent",
+              "left": {
+                "en": "Runs very often",
+                "ru": "Выполняется очень часто"
+              },
+              "right": {
+                "en": "A small per-call saving multiplies into a large capacity win",
+                "ru": "Небольшая экономия на вызов превращается в большой выигрыш ёмкости"
+              }
+            },
+            {
+              "id": "tail",
+              "left": {
+                "en": "p99 far above p50",
+                "ru": "p99 намного выше p50"
+              },
+              "right": {
+                "en": "A repeatable slow tail that users actually feel",
+                "ru": "Повторяющийся медленный хвост, который реально чувствуют пользователи"
+              }
+            },
+            {
+              "id": "path",
+              "left": {
+                "en": "On the checkout path",
+                "ru": "На пути checkout"
+              },
+              "right": {
+                "en": "The delay hits a flow the business depends on",
+                "ru": "Задержка бьёт по потоку, от которого зависит бизнес"
+              }
+            },
+            {
+              "id": "locks",
+              "left": {
+                "en": "Causes lock waits and timeouts",
+                "ru": "Вызывает ожидания блокировок и таймауты"
+              },
+              "right": {
+                "en": "Other statements pile up behind it",
+                "ru": "За ним скапливаются другие statements"
+              }
+            },
+            {
+              "id": "plan",
+              "left": {
+                "en": "Reads far more rows than it returns",
+                "ru": "Читает намного больше строк, чем возвращает"
+              },
+              "right": {
+                "en": "The work is wasted, so there is a concrete fix",
+                "ru": "Работа тратится напрасно, значит есть конкретное исправление"
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Every signal describes a different way the query costs the system.",
+              "ru": "Каждый сигнал описывает свой способ, которым запрос стоит системе."
+            },
+            "incorrect": {
+              "en": "Frequency multiplies savings, tails hurt users, critical paths hurt the business, locks block others, waste means a fix exists.",
+              "ru": "Частота множит экономию, хвосты бьют по пользователям, критичные пути — по бизнесу, блокировки держат других, а лишняя работа означает, что исправление существует."
+            }
+          }
+        },
+        {
+          "id": "signals-p4-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the minimum bar for taking a query into the optimization queue.",
+            "ru": "Собери минимальное условие для попадания запроса в очередь на оптимизацию."
+          },
+          "tokens": {
+            "en": [
+              "a",
+              "candidate",
+              "needs",
+              "at",
+              "least",
+              "one",
+              "impact",
+              "signal"
+            ],
+            "ru": [
+              "кандидату",
+              "нужен",
+              "хотя",
+              "бы",
+              "один",
+              "сигнал",
+              "влияния"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "duration"
+            ],
+            "ru": [
+              "длительность"
+            ]
+          },
+          "feedback": {
+            "correct": {
+              "en": "Bad tail, high frequency, critical path, errors and waits, or plan waste — any one of them.",
+              "ru": "Плохой хвост, высокая частота, критичный путь, ошибки и ожидания или лишняя работа в плане — любой из них."
+            },
+            "incorrect": {
+              "en": "A candidate needs at least one impact signal; duration by itself is not one.",
+              "ru": "Кандидату нужен хотя бы один сигнал влияния; сама по себе длительность им не является."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "normalized-statements",
+      "title": {
+        "en": "Grouping equivalent SQL",
+        "ru": "Группировка эквивалентного SQL"
+      },
+      "summary": {
+        "en": "Normalizing literals turns thousands of near-identical log lines into one ranked statement pattern.",
+        "ru": "Нормализация литералов превращает тысячи почти одинаковых строк лога в один шаблон statement для ранжирования."
+      },
+      "discovery": [
+        {
+          "id": "norm-d1-how-many",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Your slow-query log contains thousands of lines like these. How many optimization candidates are they?",
+            "ru": "В твоём slow-query log тысячи строк вроде этих. Сколько это кандидатов на оптимизацию?"
+          },
+          "code": "SELECT * FROM orders WHERE id = 10;\nSELECT * FROM orders WHERE id = 11;\nSELECT * FROM orders WHERE id = 12;",
+          "codeLang": "sql",
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "One — the literals differ, the statement does not",
+                "ru": "Один — различаются литералы, а не statement"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Thousands — every distinct id value is a different query",
+                "ru": "Тысячи — каждое отдельное значение id это отдельный запрос"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That mistakes many copies of one statement for many different statements.",
+                "ru": "Так множество копий одного statement принимают за множество разных statements."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "One per table touched by the log",
+                "ru": "По одному на каждую таблицу, встречающуюся в логе"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Grouping is by statement pattern, not by table: one table can host many patterns.",
+                "ru": "Группируют по шаблону statement, а не по таблице: в одной таблице может быть много шаблонов."
+              }
+            }
+          ],
+          "reveal": {
+            "en": "**Normalizing** a statement means replacing its literal values with placeholders, so equivalent statements collapse into one **pattern**:\n\n```\nraw log lines                          normalized pattern\nWHERE id = 10  ->\nWHERE id = 11  ->   WHERE id = $1      calls = 3\nWHERE id = 12  ->\n```\n\nWhy this matters for candidate selection: ranking by total time needs the *calls* of one pattern added up. Without normalization, a statement running 200 000 times becomes 200 000 entries of one call each — every one of them looks trivial, and the hottest statement in the system never rises to the top of your list. You would also be counting many copies of one problem as many different problems.\n\n`pg_stat_statements` normalizes automatically. A raw slow-query log does not, so you group its lines yourself before ranking.",
+            "ru": "**Нормализовать** statement — значит заменить его литеральные значения на placeholders, чтобы эквивалентные statements слились в один **шаблон**:\n\n```\nстроки лога                            нормализованный шаблон\nWHERE id = 10  ->\nWHERE id = 11  ->   WHERE id = $1      calls = 3\nWHERE id = 12  ->\n```\n\nПочему это важно при выборе кандидатов: для ранжирования по суммарному времени нужно сложить *calls* одного шаблона. Без нормализации statement, выполнившийся 200 000 раз, превращается в 200 000 записей по одному вызову — каждая выглядит незначительной, и самый горячий statement системы никогда не поднимется наверх списка. Ты также будешь считать множество копий одной проблемы множеством разных проблем.\n\n`pg_stat_statements` нормализует автоматически. Сырой slow-query log — нет, поэтому его строки группируют самостоятельно перед ранжированием."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One pattern, many literals — that is a single candidate.",
+              "ru": "Один шаблон, много литералов — это один кандидат."
+            },
+            "incorrect": {
+              "en": "It is one pattern: the id is a literal, so the lines describe the same statement.",
+              "ru": "Это один шаблон: id — литерал, поэтому строки описывают один и тот же statement."
+            }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "norm-p1-two-literals-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "When ranking optimization candidates, `WHERE id = 10` and `WHERE id = 11` should be counted as two different candidates.",
+            "ru": "При ранжировании кандидатов на оптимизацию `WHERE id = 10` и `WHERE id = 11` нужно считать двумя разными кандидатами."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": {
+              "en": "They are one normalized pattern; their calls belong in one total.",
+              "ru": "Это один нормализованный шаблон; их вызовы идут в одну сумму."
+            },
+            "incorrect": {
+              "en": "No — normalize the literals so both lines count as one statement pattern.",
+              "ru": "Нет — нормализуй литералы, чтобы обе строки считались одним шаблоном statement."
+            }
+          }
+        },
+        {
+          "id": "norm-p2-why",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why normalize literals before ranking queries by impact?",
+            "ru": "Зачем нормализовать литералы перед ранжированием запросов по влиянию?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "So all calls of one statement pattern add up into one total time",
+                "ru": "Чтобы все вызовы одного шаблона statement сложились в одно суммарное время"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "So the database can cache the results of the query",
+                "ru": "Чтобы база данных могла кэшировать результаты запроса"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Normalization is a grouping step in your report, not a caching feature.",
+                "ru": "Нормализация — шаг группировки в отчёте, а не механизм кэширования."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "So the query itself becomes faster",
+                "ru": "Чтобы сам запрос стал быстрее"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Grouping changes what your report shows, not how the statement runs.",
+                "ru": "Группировка меняет то, что показывает отчёт, а не то, как выполняется statement."
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Without it the hottest statement hides as thousands of one-call entries.",
+              "ru": "Без неё самый горячий statement прячется в тысячах записей по одному вызову."
+            },
+            "incorrect": {
+              "en": "The point is aggregation: one pattern, all its calls, one total time to rank by.",
+              "ru": "Смысл в агрегации: один шаблон, все его вызовы, одно суммарное время для ранжирования."
+            }
+          }
+        },
+        {
+          "id": "norm-p3-spot-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This script ranks candidates straight from a raw slow-query log. What is wrong with it?",
+            "ru": "Этот скрипт ранжирует кандидатов прямо по сырому slow-query log. Что в нём не так?"
+          },
+          "code": "SELECT log_line, COUNT(*) AS hits, SUM(duration_ms) AS total_ms\nFROM slow_log\nGROUP BY log_line\nORDER BY total_ms DESC\nLIMIT 10;",
+          "codeLang": "sql",
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It groups by the raw line, so one statement pattern splits into thousands of groups",
+                "ru": "Он группирует по сырой строке, поэтому один шаблон statement распадается на тысячи групп"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It should order by hits instead of total_ms",
+                "ru": "Нужно сортировать по hits вместо total_ms"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Total time is the right ranking metric; the defect is the unnormalized grouping key.",
+                "ru": "Суммарное время — правильная метрика ранжирования; дефект в ненормализованном ключе группировки."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "COUNT(*) should be COUNT(1)",
+                "ru": "COUNT(*) нужно заменить на COUNT(1)"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Those are equivalent; the defect is grouping text that still contains literals.",
+                "ru": "Это эквивалентные варианты; дефект в группировке текста, в котором остались литералы."
+              }
+            }
+          ],
+          "reveal": {
+            "en": "The ranking metric here is right — `SUM(duration_ms)` is total time — but the grouping key is raw text. Every distinct literal makes its own group, so the aggregation never happens:\n\n```\nGROUP BY log_line          GROUP BY normalized statement\n\"...WHERE id = 10\"  1 call   \"...WHERE id = $1\"  200 000 calls\n\"...WHERE id = 11\"  1 call\n\"...WHERE id = 12\"  1 call\n```\n\nThe left column puts 200 000 trivial rows in your top-10 list and hides the real hot statement. Normalize the literals first, then rank — that is exactly what `pg_stat_statements` does for you.",
+            "ru": "Метрика ранжирования здесь верная — `SUM(duration_ms)` это суммарное время — но ключ группировки это сырой текст. Каждый отдельный литерал образует свою группу, поэтому агрегация не происходит:\n\n```\nGROUP BY log_line            GROUP BY нормализованный statement\n\"...WHERE id = 10\"  1 вызов   \"...WHERE id = $1\"  200 000 вызовов\n\"...WHERE id = 11\"  1 вызов\n\"...WHERE id = 12\"  1 вызов\n```\n\nЛевый вариант забивает твой top-10 двумястами тысячами незначительных строк и прячет настоящий горячий statement. Сначала нормализуй литералы, потом ранжируй — именно это `pg_stat_statements` делает за тебя."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the grouping key still contains the literals.",
+              "ru": "Верно — в ключе группировки остались литералы."
+            },
+            "incorrect": {
+              "en": "The grouping key is the problem: raw lines with literals never aggregate into one pattern.",
+              "ru": "Проблема в ключе группировки: сырые строки с литералами никогда не сложатся в один шаблон."
+            }
+          }
+        },
+        {
+          "id": "norm-p4-fill-term",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the step that makes equivalent statements group together.",
+            "ru": "Назови шаг, который заставляет эквивалентные statements группироваться вместе."
+          },
+          "text": {
+            "en": "Replacing literal values with placeholders so equivalent SQL counts as one pattern is called ___.",
+            "ru": "Замена литеральных значений на placeholders, чтобы эквивалентный SQL считался одним шаблоном, называется ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "normalization",
+                "normalizing",
+                "normalisation"
+              ],
+              "ru": [
+                "нормализация",
+                "нормализацией",
+                "normalization"
+              ]
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Normalized patterns are what call counts and total time are aggregated over.",
+              "ru": "Именно по нормализованным шаблонам агрегируют число вызовов и суммарное время."
+            },
+            "incorrect": {
+              "en": "It is normalization — without it one hot statement hides as many one-call entries.",
+              "ru": "Это нормализация — без неё один горячий statement прячется как множество записей по одному вызову."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "db-time-vs-app-time",
+      "title": {
+        "en": "Database time vs application time",
+        "ru": "Время базы данных против времени приложения"
+      },
+      "summary": {
+        "en": "A slow request is not always one slow statement: serialization, network calls, cache misses and N+1 patterns also cost time.",
+        "ru": "Медленный request — не всегда один медленный statement: время тратят также сериализация, сетевые вызовы, cache misses и паттерн N+1."
+      },
+      "discovery": [
+        {
+          "id": "apptime-d1-trace",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "An APM trace of one slow request looks like this. What should you look at first?",
+            "ru": "APM trace одного медленного request выглядит так. На что смотреть первым?"
+          },
+          "code": "GET /orders/42                total 1200 ms\n  database                          720 ms\n    240 statements x 3 ms each\n    slowest single statement          6 ms\n  json serialization                120 ms\n  external service call             300 ms",
+          "codeLang": "text",
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The 240 statements — a fetching pattern that issues one query per row",
+                "ru": "240 statements — паттерн выборки, который делает по запросу на каждую строку"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The slowest single statement, at 6 ms",
+                "ru": "Самый медленный одиночный statement на 6 мс"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "No statement here is slow; the number of statements is the cost.",
+                "ru": "Здесь нет медленных statements; стоимость создаёт их количество."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Add an index for the slowest statement",
+                "ru": "Добавить индекс для самого медленного statement"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "An index cannot remove 239 extra round trips.",
+                "ru": "Индекс не уберёт 239 лишних round trips."
+              }
+            }
+          ],
+          "reveal": {
+            "en": "Before blaming one statement, split the request into **database time** and **application time**:\n\n```mermaid\nflowchart TD\n  R[\"slow request\"] --> D[\"database time\"]\n  R --> A[\"application time\"]\n  D --> D1[\"one heavy statement\"]\n  D --> D2[\"hundreds of small statements\"]\n  A --> A1[\"serialization, network calls, cache misses\"]\n```\n\nThe trace above has 720 ms of database time made of 240 statements at 3 ms — none of them slow, all of them together expensive. That shape is the **N+1 pattern**: one query for a list, then one more query per row of that list. The fix is not SQL tuning; it is batching, a different fetching strategy, or prepared statements.\n\nThe remaining 480 ms are not database time at all: JSON serialization and an external call. A query plan cannot help there. So the first question in triage is always *where did the time go*, not *which SQL looks worst*.",
+            "ru": "Прежде чем винить один statement, раздели request на **время базы данных** и **время приложения**:\n\n```mermaid\nflowchart TD\n  R[\"медленный request\"] --> D[\"время базы данных\"]\n  R --> A[\"время приложения\"]\n  D --> D1[\"один тяжёлый statement\"]\n  D --> D2[\"сотни маленьких statements\"]\n  A --> A1[\"сериализация, сетевые вызовы, cache misses\"]\n```\n\nВ trace выше 720 мс времени базы складываются из 240 statements по 3 мс — ни один не медленный, а все вместе дорогие. Это форма **паттерна N+1**: один запрос за список, затем ещё по одному запросу на каждую его строку. Исправление здесь не в тюнинге SQL, а в batching, другой стратегии выборки или prepared statements.\n\nОстальные 480 мс — вообще не время базы: сериализация JSON и внешний вызов. План запроса тут не поможет. Поэтому первый вопрос триажа всегда «куда ушло время», а не «какой SQL выглядит хуже всех»."
+          },
+          "feedback": {
+            "correct": {
+              "en": "240 fast statements cost more than any one of them; the count is the problem.",
+              "ru": "240 быстрых statements стоят больше любого из них; проблема в количестве."
+            },
+            "incorrect": {
+              "en": "No single statement is slow — 240 of them are. That is the N+1 pattern.",
+              "ru": "Ни один statement не медленный — их 240. Это паттерн N+1."
+            }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "apptime-p1-always-one-sql-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "If a request is slow, the cause is always one slow SQL statement.",
+            "ru": "Если request медленный, причина всегда в одном медленном SQL statement."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": {
+              "en": "Serialization, network calls, cache misses, locks and N+1 patterns all cost request time.",
+              "ru": "Сериализация, сетевые вызовы, cache misses, блокировки и паттерн N+1 — всё это тратит время request."
+            },
+            "incorrect": {
+              "en": "No — the time may sit in application work, in hundreds of small queries, or in waits.",
+              "ru": "Нет — время может уходить на работу приложения, на сотни маленьких запросов или на ожидания."
+            }
+          }
+        },
+        {
+          "id": "apptime-p2-many-small",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A trace shows hundreds of small, individually fast queries inside one request. What do you examine first?",
+            "ru": "Trace показывает сотни маленьких, по отдельности быстрых запросов внутри одного request. Что изучаешь первым?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Batching, the fetching strategy and prepared statements",
+                "ru": "Batching, стратегию выборки и prepared statements"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The query plan of the fastest statement",
+                "ru": "План запроса самого быстрого statement"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Each statement is already fast; the round-trip count is the cost.",
+                "ru": "Каждый statement уже быстрый; стоимость создаёт число round trips."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A new index on every table involved",
+                "ru": "Новый индекс на каждую задействованную таблицу"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Indexes cannot remove round trips, and unmatched ones only cost writes and storage.",
+                "ru": "Индексы не убирают round trips, а неподходящие лишь добавляют стоимость записи и хранения."
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Many small queries is a fetching problem, not a single-statement problem.",
+              "ru": "Много маленьких запросов — проблема выборки, а не одного statement."
+            },
+            "incorrect": {
+              "en": "Reduce the number of round trips: batching, fetching strategy, prepared statements.",
+              "ru": "Сокращай число round trips: batching, стратегия выборки, prepared statements."
+            }
+          }
+        },
+        {
+          "id": "apptime-p3-match-symptoms",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each symptom to the first place to look.",
+            "ru": "Соотнеси каждый симптом с тем, куда смотреть в первую очередь."
+          },
+          "pairs": [
+            {
+              "id": "many",
+              "left": {
+                "en": "Hundreds of tiny queries in one request",
+                "ru": "Сотни крошечных запросов в одном request"
+              },
+              "right": {
+                "en": "Fetching strategy and batching",
+                "ru": "Стратегия выборки и batching"
+              }
+            },
+            {
+              "id": "heavy",
+              "left": {
+                "en": "One statement reading far more rows than it returns",
+                "ru": "Один statement читает намного больше строк, чем возвращает"
+              },
+              "right": {
+                "en": "The query plan of that statement",
+                "ru": "План запроса этого statement"
+              }
+            },
+            {
+              "id": "app",
+              "left": {
+                "en": "Request slow, but database time is small",
+                "ru": "Request медленный, но времени базы мало"
+              },
+              "right": {
+                "en": "Application work: serialization, network calls, cache misses",
+                "ru": "Работа приложения: сериализация, сетевые вызовы, cache misses"
+              }
+            },
+            {
+              "id": "waits",
+              "left": {
+                "en": "Queries sitting idle and piling up",
+                "ru": "Запросы простаивают и скапливаются"
+              },
+              "right": {
+                "en": "Lock waits and the connection pool",
+                "ru": "Ожидания блокировок и пул соединений"
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "The symptom decides which evidence is worth opening first.",
+              "ru": "Симптом решает, какие доказательства стоит открыть первыми."
+            },
+            "incorrect": {
+              "en": "Many small queries means fetching; one heavy query means the plan; small DB time means application work.",
+              "ru": "Много маленьких запросов — про выборку; один тяжёлый — про план; мало времени базы — про работу приложения."
+            }
+          }
+        },
+        {
+          "id": "apptime-p4-fill-n1",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the pattern being described.",
+            "ru": "Назови описанный паттерн."
+          },
+          "text": {
+            "en": "One query for the list plus one more query per row is the ___ query pattern.",
+            "ru": "Один запрос за список плюс ещё по одному запросу на каждую строку — это паттерн ___ запросов."
+          },
+          "blanks": [
+            {
+              "en": [
+                "N+1",
+                "n + 1"
+              ],
+              "ru": [
+                "N+1",
+                "n + 1"
+              ]
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Its fix is batching or another fetching strategy, not SQL tuning.",
+              "ru": "Его исправление — batching или другая стратегия выборки, а не тюнинг SQL."
+            },
+            "incorrect": {
+              "en": "It is the N+1 pattern: each individual query is fast, the count is what hurts.",
+              "ru": "Это паттерн N+1: каждый отдельный запрос быстрый, а вредит их количество."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "plan-evidence",
+      "title": {
+        "en": "Read the plan before changing anything",
+        "ru": "Сначала прочитай план, потом меняй"
+      },
+      "summary": {
+        "en": "EXPLAIN and EXPLAIN ANALYZE show where the work goes, so the plan is inspected before rewriting SQL or adding an index.",
+        "ru": "EXPLAIN и EXPLAIN ANALYZE показывают, куда уходит работа, поэтому план изучают до переписывания SQL или добавления индекса."
+      },
+      "discovery": [
+        {
+          "id": "plan-d1-estimate-gap",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A plan reports these row counts for one step. What does the gap tell you?",
+            "ru": "План сообщает такие числа строк для одного шага. О чём говорит этот разрыв?"
+          },
+          "code": "EXPLAIN ANALYZE\nSELECT * FROM orders WHERE status = 'NEW';\n\n-- estimated rows:        50\n-- actual rows:    2 400 000",
+          "codeLang": "sql",
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The planner's estimates are wrong or stale, so it may have chosen a bad plan",
+                "ru": "Оценки планировщика неверны или устарели, поэтому он мог выбрать плохой план"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The query returned the wrong rows",
+                "ru": "Запрос вернул неправильные строки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The gap is about the planner's prediction, not about correctness of the result.",
+                "ru": "Разрыв говорит о прогнозе планировщика, а не о правильности результата."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — estimates are approximate, so the size of the gap does not matter",
+                "ru": "Ни о чём — оценки приблизительны, поэтому размер разрыва не важен"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A gap of five orders of magnitude is exactly the signal that the plan was built on bad information.",
+                "ru": "Разрыв в пять порядков — как раз сигнал, что план построен на плохих данных."
+              }
+            }
+          ],
+          "reveal": {
+            "en": "A **query plan** is the database's description of how it will execute a statement. Two commands show it:\n\n- `EXPLAIN` prints the plan **without running** the statement — estimates only.\n- `EXPLAIN ANALYZE` **runs** the statement and adds the actual row counts and timings next to the estimates.\n\nWhat wasted work looks like in a plan:\n\n```mermaid\nflowchart LR\n  P[\"query plan\"] --> W1[\"rows read far exceed rows returned\"]\n  P --> W2[\"bad join order\"]\n  P --> W3[\"missing or unused index\"]\n  P --> W4[\"large sort\"]\n  P --> W5[\"estimate far from actual\"]\n```\n\nThe estimate-versus-actual gap above (50 predicted, 2 400 000 real) matters because the planner *chose* this plan believing it would touch 50 rows. With stale statistics it can pick a join order or access path that is disastrous for the real data volume.\n\nWhy read the plan before changing SQL or adding an index? The plan is what tells you which fix is credible. Skip it and you are guessing — and a guessed index costs writes and storage while changing nothing.",
+            "ru": "**План запроса** — описание того, как база собирается выполнить statement. Его показывают две команды:\n\n- `EXPLAIN` печатает план **без выполнения** statement — только оценки.\n- `EXPLAIN ANALYZE` **выполняет** statement и добавляет рядом с оценками реальные числа строк и времена выполнения.\n\nКак выглядит лишняя работа в плане:\n\n```mermaid\nflowchart LR\n  P[\"план запроса\"] --> W1[\"прочитано строк намного больше, чем возвращено\"]\n  P --> W2[\"плохой порядок JOIN\"]\n  P --> W3[\"отсутствующий или неиспользуемый индекс\"]\n  P --> W4[\"большой sort\"]\n  P --> W5[\"оценка далеко от факта\"]\n```\n\nРазрыв между оценкой и фактом выше (50 предсказанных против 2 400 000 реальных) важен потому, что планировщик *выбрал* этот план, считая, что затронет 50 строк. При устаревшей статистике он может выбрать порядок JOIN или путь доступа, катастрофический для реального объёма данных.\n\nЗачем читать план до изменения SQL или добавления индекса? План говорит, какое исправление правдоподобно. Без него ты гадаешь — а угаданный индекс стоит записей и места, ничего не меняя."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the planner decided on numbers that turned out to be wrong.",
+              "ru": "Верно — планировщик принял решение по числам, которые оказались неверными."
+            },
+            "incorrect": {
+              "en": "A large estimate-versus-actual gap means the plan was chosen on bad information.",
+              "ru": "Большой разрыв между оценкой и фактом означает, что план выбран по плохим данным."
+            }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "plan-p1-why-before-index",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why inspect the query plan before adding an index?",
+            "ru": "Зачем изучать план запроса до добавления индекса?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The plan shows which predicates, joins and sorts actually cost time, so the index can match them",
+                "ru": "План показывает, какие predicates, joins и sorts реально стоят времени, чтобы индекс им соответствовал"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "An index always helps; the plan only confirms it afterwards",
+                "ru": "Индекс всегда помогает; план лишь подтверждает это потом"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "An index helps only when it matches the predicates, join columns, ordering and selectivity.",
+                "ru": "Индекс помогает только когда совпадает с predicates, join columns, ordering и selectivity."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Running EXPLAIN makes the query faster by itself",
+                "ru": "Запуск EXPLAIN сам по себе ускоряет запрос"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "EXPLAIN only reports the plan; it changes nothing about the statement.",
+                "ru": "EXPLAIN только сообщает план; в statement он ничего не меняет."
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "The plan turns \"add an index\" from a guess into a targeted fix.",
+              "ru": "План превращает «добавить индекс» из догадки в точечное исправление."
+            },
+            "incorrect": {
+              "en": "Without the plan you cannot know which columns, order or selectivity the index must match.",
+              "ru": "Без плана нельзя знать, каким колонкам, порядку и selectivity должен соответствовать индекс."
+            }
+          }
+        },
+        {
+          "id": "plan-p2-analyze-executes-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "EXPLAIN ANALYZE can report actual row counts and timings because it really executes the statement.",
+            "ru": "EXPLAIN ANALYZE может сообщать реальные числа строк и времена, потому что действительно выполняет statement."
+          },
+          "answer": true,
+          "feedback": {
+            "correct": {
+              "en": "That is why it can be compared with the estimates side by side.",
+              "ru": "Именно поэтому его можно сравнивать с оценками рядом."
+            },
+            "incorrect": {
+              "en": "It does execute the statement — plain EXPLAIN is the one that only estimates.",
+              "ru": "Он действительно выполняет statement — только оценивает обычный EXPLAIN."
+            }
+          }
+        },
+        {
+          "id": "plan-p3-sort-steps",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the steps of using a query plan as evidence.",
+            "ru": "Расставь по порядку шаги использования плана запроса как доказательства."
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Run EXPLAIN ANALYZE on the real statement",
+                "ru": "Выполнить EXPLAIN ANALYZE на реальном statement"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Compare estimated rows with actual rows",
+                "ru": "Сравнить estimated rows с actual rows"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Find the step that reads far more rows than it returns",
+                "ru": "Найти шаг, который читает намного больше строк, чем возвращает"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Choose a fix that removes that specific work",
+                "ru": "Выбрать исправление, которое убирает именно эту работу"
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Evidence first, then a fix aimed at the step that wastes the work.",
+              "ru": "Сначала доказательство, затем исправление, нацеленное на шаг, который тратит работу зря."
+            },
+            "incorrect": {
+              "en": "Run the plan, compare estimates with reality, locate the wasteful step, then fix that step.",
+              "ru": "Получи план, сравни оценки с реальностью, найди расточительный шаг, затем исправь именно его."
+            }
+          }
+        },
+        {
+          "id": "plan-p4-fill-explain",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two commands.",
+            "ru": "Впиши две команды."
+          },
+          "text": {
+            "en": "___ shows the plan without running the statement; ___ runs it and reports actual rows and time.",
+            "ru": "___ показывает план без выполнения statement; ___ выполняет его и сообщает реальные строки и время."
+          },
+          "blanks": [
+            {
+              "en": [
+                "EXPLAIN"
+              ],
+              "ru": [
+                "EXPLAIN"
+              ]
+            },
+            {
+              "en": [
+                "EXPLAIN ANALYZE"
+              ],
+              "ru": [
+                "EXPLAIN ANALYZE"
+              ]
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Estimates alone versus estimates next to reality.",
+              "ru": "Только оценки против оценок рядом с реальностью."
+            },
+            "incorrect": {
+              "en": "EXPLAIN estimates; EXPLAIN ANALYZE executes and adds the actual rows and timings.",
+              "ru": "EXPLAIN оценивает; EXPLAIN ANALYZE выполняет и добавляет реальные строки и времена."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "smallest-credible-fix",
+      "title": {
+        "en": "The smallest credible fix",
+        "ru": "Минимальное правдоподобное исправление"
+      },
+      "summary": {
+        "en": "Pick the smallest fix the evidence supports, because every optimization has a cost and an index is not the default answer.",
+        "ru": "Выбирай минимальное исправление, подтверждённое данными, потому что у любой оптимизации есть цена, и индекс — не ответ по умолчанию."
+      },
+      "discovery": [
+        {
+          "id": "fix-d1-smallest",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The plan shows this statement reading 2 000 000 rows to return 20. Which first move is smallest and most credible?",
+            "ru": "План показывает, что этот statement читает 2 000 000 строк, чтобы вернуть 20. Какой первый шаг самый маленький и правдоподобный?"
+          },
+          "code": "SELECT id, total\nFROM orders\nWHERE status = 'NEW'\nORDER BY created_at DESC\nLIMIT 20;",
+          "codeLang": "sql",
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Add one index that matches the status filter and the created_at ordering",
+                "ru": "Добавить один индекс, который соответствует фильтру по status и сортировке по created_at"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Add an index on every column of the table",
+                "ru": "Добавить индекс на каждую колонку таблицы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Unmatched indexes slow every write and take space without helping this query.",
+                "ru": "Неподходящие индексы замедляют каждую запись и занимают место, не помогая этому запросу."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Rewrite the service to cache the whole table in memory",
+                "ru": "Переписать сервис так, чтобы кэшировать всю таблицу в памяти"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is a far bigger change than the evidence supports, with its own new failure modes.",
+                "ru": "Это изменение намного больше, чем подтверждают данные, и со своими новыми способами сломаться."
+              }
+            }
+          ],
+          "reveal": {
+            "en": "The plan told you exactly what is wasted: rows read for a `status` filter and an ordering that the storage cannot satisfy directly. So the fix should remove *that* work and nothing more. The usual menu, from cheapest to largest:\n\n- a better **predicate** (the condition in `WHERE`) so fewer rows qualify;\n- a **composite index** — one index over several columns, matching a filter plus an ordering;\n- a **covering index** — an index that already contains every column the query needs, so the table itself is not read;\n- selecting **fewer columns**;\n- **pagination** instead of returning everything;\n- **batching** or a different **fetching strategy** when the problem is the number of queries.\n\nAn index is only useful when it matches the query's **predicates**, its join columns, its ordering and its **selectivity** — how small a fraction of the table the condition actually keeps. A condition matching most rows gains nothing from an index.\n\nWhy the smallest one? Every optimization has a price: indexes slow writes and take storage, rewrites can change behaviour, and ORM fetch changes move load from one endpoint to another rather than removing it. A minimal, targeted change is also the only kind you can honestly measure afterwards.",
+            "ru": "План уже сказал, что тратится зря: строки, прочитанные для фильтра по `status`, и сортировка, которую хранилище не может отдать напрямую. Значит, исправление должно убрать *именно эту* работу и не больше. Обычное меню, от самого дешёвого к самому крупному:\n\n- лучший **predicate** (условие в `WHERE`), чтобы подходило меньше строк;\n- **composite index** — один индекс по нескольким колонкам, покрывающий фильтр вместе с сортировкой;\n- **covering index** — индекс, который уже содержит все нужные запросу колонки, поэтому саму таблицу читать не нужно;\n- выбор **меньшего числа колонок**;\n- **pagination** вместо возврата всего;\n- **batching** или другая **стратегия выборки**, когда проблема в количестве запросов.\n\nИндекс полезен только когда совпадает с **predicates** запроса, его join columns, его ordering и его **selectivity** — тем, насколько малую долю таблицы реально оставляет условие. Условие, под которое подходит большинство строк, от индекса ничего не получит.\n\nПочему именно минимальное? У любой оптимизации есть цена: индексы замедляют записи и занимают место, переписывание может изменить поведение, а изменения ORM fetching переносят нагрузку с одного endpoint на другой вместо того, чтобы её убрать. К тому же только минимальное точечное изменение можно потом честно измерить."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One index matching both the filter and the ordering removes exactly the waste shown.",
+              "ru": "Один индекс, покрывающий и фильтр, и сортировку, убирает именно показанную лишнюю работу."
+            },
+            "incorrect": {
+              "en": "Match the fix to the evidence: one index for this filter and ordering, nothing broader.",
+              "ru": "Подгоняй исправление под данные: один индекс под этот фильтр и сортировку, ничего шире."
+            }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "fix-p1-index-truth",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which statement about adding an index to speed up a query is correct?",
+            "ru": "Какое утверждение о добавлении индекса для ускорения запроса верно?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It helps only when it matches the predicates, join columns, ordering and selectivity, and it costs writes and storage",
+                "ru": "Он помогает только когда совпадает с predicates, join columns, ordering и selectivity, и стоит записей и места"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It is the first thing to try for any slow query",
+                "ru": "Это первое, что стоит попробовать для любого медленного запроса"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Index-first is guessing; the plan decides whether an index is the right fix at all.",
+                "ru": "«Сначала индекс» — это гадание; правильно ли вообще исправлять индексом, решает план."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It is free, because it only affects reads",
+                "ru": "Он бесплатен, потому что влияет только на чтения"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Every write has to maintain it, and it occupies storage.",
+                "ru": "Его приходится поддерживать при каждой записи, и он занимает место."
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "An index is a trade, not a free win — which is why the plan comes first.",
+              "ru": "Индекс — это сделка, а не бесплатный выигрыш; поэтому сначала план."
+            },
+            "incorrect": {
+              "en": "Indexes help only when they match the query, and they always cost writes and storage.",
+              "ru": "Индексы помогают только когда соответствуют запросу, и всегда стоят записей и места."
+            }
+          }
+        },
+        {
+          "id": "fix-p2-orm-moves-load-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Changing an ORM fetching strategy can move load from one endpoint to another instead of removing it.",
+            "ru": "Изменение стратегии выборки ORM может перенести нагрузку с одного endpoint на другой вместо того, чтобы её убрать."
+          },
+          "answer": true,
+          "feedback": {
+            "correct": {
+              "en": "That is why the after-measurement has to cover more than the endpoint you tuned.",
+              "ru": "Поэтому измерение «после» должно охватывать не только тот endpoint, который ты тюнил."
+            },
+            "incorrect": {
+              "en": "It can — eager loading for one screen can add work to every other user of the same entity.",
+              "ru": "Может — eager loading для одного экрана добавляет работу всем остальным потребителям той же сущности."
+            }
+          }
+        },
+        {
+          "id": "fix-p3-match-evidence-fix",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each piece of plan or trace evidence to the focused fix it justifies.",
+            "ru": "Соотнеси каждое доказательство из плана или trace с точечным исправлением, которое оно обосновывает."
+          },
+          "pairs": [
+            {
+              "id": "predicate",
+              "left": {
+                "en": "Reads many rows, returns few, filtered on one column",
+                "ru": "Читает много строк, возвращает мало, фильтр по одной колонке"
+              },
+              "right": {
+                "en": "An index matching that predicate",
+                "ru": "Индекс, соответствующий этому predicate"
+              }
+            },
+            {
+              "id": "pagination",
+              "left": {
+                "en": "Returns thousands of rows the screen never shows",
+                "ru": "Возвращает тысячи строк, которые экран никогда не показывает"
+              },
+              "right": {
+                "en": "Pagination",
+                "ru": "Pagination"
+              }
+            },
+            {
+              "id": "batching",
+              "left": {
+                "en": "Hundreds of tiny queries per request",
+                "ru": "Сотни крошечных запросов на один request"
+              },
+              "right": {
+                "en": "Batching or another fetching strategy",
+                "ru": "Batching или другая стратегия выборки"
+              }
+            },
+            {
+              "id": "columns",
+              "left": {
+                "en": "Selects columns nobody uses",
+                "ru": "Выбирает колонки, которые никому не нужны"
+              },
+              "right": {
+                "en": "Select fewer columns",
+                "ru": "Выбирать меньше колонок"
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Each fix removes one specific kind of wasted work.",
+              "ru": "Каждое исправление убирает один конкретный вид лишней работы."
+            },
+            "incorrect": {
+              "en": "The evidence names the waste, and the waste names the fix — indexes are only one option.",
+              "ru": "Данные называют лишнюю работу, а она называет исправление — индексы лишь один из вариантов."
+            }
+          }
+        },
+        {
+          "id": "fix-p4-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the rule for choosing a fix.",
+            "ru": "Собери правило выбора исправления."
+          },
+          "tokens": {
+            "en": [
+              "pick",
+              "the",
+              "smallest",
+              "fix",
+              "the",
+              "evidence",
+              "supports"
+            ],
+            "ru": [
+              "выбери",
+              "минимальное",
+              "исправление,",
+              "которое",
+              "подтверждают",
+              "данные"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "index",
+              "first"
+            ],
+            "ru": [
+              "индекс",
+              "сначала"
+            ]
+          },
+          "feedback": {
+            "correct": {
+              "en": "Small and targeted is also the only change you can honestly measure.",
+              "ru": "Маленькое и точечное изменение — единственное, которое можно честно измерить."
+            },
+            "incorrect": {
+              "en": "The rule is: pick the smallest fix the evidence supports — not \"index first\".",
+              "ru": "Правило такое: выбери минимальное исправление, которое подтверждают данные, а не «сначала индекс»."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "business-priority",
+      "title": {
+        "en": "Business impact sets the priority",
+        "ru": "Приоритет задаёт влияние на бизнес"
+      },
+      "summary": {
+        "en": "The same runtime gets a different priority depending on the business flow, the resource share and how many other statements it blocks.",
+        "ru": "Одно и то же время выполнения получает разный приоритет в зависимости от бизнес-потока, доли ресурсов и того, сколько statements оно блокирует."
+      },
+      "discovery": [
+        {
+          "id": "priority-d1-checkout-vs-report",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Two queries both take 200 ms at p95: one runs on checkout, the other inside a nightly admin report on a read replica. Which has the higher priority?",
+            "ru": "Два запроса занимают по 200 мс на p95: один выполняется на checkout, другой внутри ночного admin-отчёта на read replica. У какого приоритет выше?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The checkout query",
+                "ru": "Запрос на checkout"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The report query, because reports touch far more data",
+                "ru": "Запрос отчёта, потому что отчёты трогают намного больше данных"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Data volume is not priority; the report runs off the traffic path and off peak hours.",
+                "ru": "Объём данных — не приоритет; отчёт идёт вне пути трафика и вне часов пик."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Equal priority — both are 200 ms",
+                "ru": "Приоритет одинаковый — оба по 200 мс"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Identical runtime, different impact: the flow it sits on decides.",
+                "ru": "Одинаковое время, разное влияние: решает путь, на котором находится запрос."
+              }
+            }
+          ],
+          "reveal": {
+            "en": "Duration alone never sets priority. What raises a candidate to the top:\n\n```mermaid\nflowchart LR\n  A[\"very slow, rare\"] --> B[\"fix if critical or risky\"]\n  C[\"moderate, frequent\"] --> D[\"usually high priority\"]\n  E[\"fast, on a critical path\"] --> F[\"watch p95 and p99\"]\n  G[\"slow, unused\"] --> H[\"low priority\"]\n```\n\n- **Hot user paths first**: login, checkout, search, feed rendering, payment status, and APIs with strict SLOs — an *SLO* is the latency or availability target promised for that API. A 100 ms win there reaches many users at once.\n- **Large resource share**: if one normalized statement accounts for a third of database CPU or I/O, optimizing it frees capacity for the whole system, not only for its own callers.\n- **Blast radius**: lock contention, deadlocks and pool exhaustion are urgent even at a modest average runtime, because other statements queue behind them and users see errors now.\n- **Reports, migrations and admin jobs** matter when they interfere with production traffic or breach their operational window. A two-hour nightly report on a read replica may be less urgent than a 200 ms checkout query.",
+            "ru": "Длительность сама по себе никогда не задаёт приоритет. Что поднимает кандидата наверх:\n\n```mermaid\nflowchart LR\n  A[\"очень медленный, редкий\"] --> B[\"исправлять, если критичен или рискован\"]\n  C[\"средний, частый\"] --> D[\"обычно высокий приоритет\"]\n  E[\"быстрый, на критичном пути\"] --> F[\"следить за p95 и p99\"]\n  G[\"медленный, неиспользуемый\"] --> H[\"низкий приоритет\"]\n```\n\n- **Сначала горячие пользовательские пути**: login, checkout, search, feed rendering, payment status и API со строгими SLO — *SLO* это обещанная для этого API цель по задержке или доступности. Выигрыш в 100 мс там достаётся сразу многим пользователям.\n- **Большая доля ресурсов**: если один нормализованный statement занимает треть CPU или I/O базы, его оптимизация освобождает ёмкость для всей системы, а не только для его вызывающих.\n- **Радиус поражения**: lock contention, deadlocks и исчерпание пула срочны даже при скромном среднем времени, потому что за ними выстраиваются другие statements и пользователи уже видят ошибки.\n- **Отчёты, миграции и admin jobs** важны, когда мешают продакшен-трафику или нарушают своё операционное окно. Двухчасовой ночной отчёт на read replica может быть менее срочным, чем checkout-запрос на 200 мс."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Same milliseconds, very different consequences.",
+              "ru": "Те же миллисекунды — совсем разные последствия."
+            },
+            "incorrect": {
+              "en": "Checkout is a hot user path; the nightly report is off the traffic path.",
+              "ru": "Checkout — горячий пользовательский путь; ночной отчёт находится вне пути трафика."
+            }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "priority-p1-resource-share",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "One normalized statement accounts for a third of database CPU. Why does that raise its priority?",
+            "ru": "Один нормализованный statement занимает треть CPU базы данных. Почему это поднимает его приоритет?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Optimizing it frees capacity for the whole system",
+                "ru": "Его оптимизация освобождает ёмкость для всей системы"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Because it must also be the slowest statement",
+                "ru": "Потому что он обязан быть и самым медленным statement"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Resource share and per-run duration are different things: many cheap runs can dominate CPU.",
+                "ru": "Доля ресурсов и длительность одного запуска — разные вещи: множество дешёвых запусков может забирать CPU."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Because CPU metrics always outrank latency metrics",
+                "ru": "Потому что метрики CPU всегда важнее метрик задержки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "No metric always wins; a one-third share simply means an unusually wide win.",
+                "ru": "Никакая метрика не побеждает всегда; доля в треть просто означает необычно широкий выигрыш."
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Freed capacity helps every other query sharing that database.",
+              "ru": "Освобождённая ёмкость помогает всем остальным запросам этой базы."
+            },
+            "incorrect": {
+              "en": "A large resource share means the win spreads across the whole system, not just one endpoint.",
+              "ru": "Большая доля ресурсов означает, что выигрыш распространяется на всю систему, а не на один endpoint."
+            }
+          }
+        },
+        {
+          "id": "priority-p2-nightly-report-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A nightly report that runs for two hours on a read replica is automatically more urgent than a 200 ms checkout query.",
+            "ru": "Ночной отчёт, который идёт два часа на read replica, автоматически срочнее checkout-запроса на 200 мс."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": {
+              "en": "Off the traffic path and inside its window, long runtime can be perfectly acceptable.",
+              "ru": "Вне пути трафика и внутри своего окна долгое выполнение может быть вполне приемлемым."
+            },
+            "incorrect": {
+              "en": "No — it becomes urgent only if it disturbs production traffic or breaches its operational window.",
+              "ru": "Нет — он становится срочным только если мешает продакшен-трафику или нарушает своё операционное окно."
+            }
+          }
+        },
+        {
+          "id": "priority-p3-sort-order",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order these candidates from the highest priority to the lowest.",
+            "ru": "Расставь этих кандидатов от самого высокого приоритета к самому низкому."
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Holds locks until other statements time out — users see errors now",
+                "ru": "Держит блокировки, пока другие statements не падают по таймауту — пользователи уже видят ошибки"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Checkout query: p99 of 3 s, 20 000 calls per hour",
+                "ru": "Запрос checkout: p99 3 с, 20 000 вызовов в час"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Nightly admin export that overruns its maintenance window",
+                "ru": "Ночной admin-экспорт, который выходит за своё окно обслуживания"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Slow query that no feature calls any more",
+                "ru": "Медленный запрос, который больше не вызывает ни одна функция"
+              }
+            }
+          ],
+          "reveal": {
+            "en": "The ordering follows blast radius, then reach, then schedule, then relevance:\n\n1. **Active damage first.** A statement whose locks make others time out is producing errors right now; every waiting statement piles up behind it.\n2. **Then the hot path at scale.** A bad p99 on checkout, 20 000 times an hour, is a large number of damaged user journeys — but they are slow, not failing.\n3. **Then the breached window.** An export that overruns its maintenance window risks colliding with production traffic; it is a real problem, but a scheduled and contained one.\n4. **Last, the unused query.** Slow but nobody calls it: fixing it buys nothing measurable.\n\nNotice that raw duration would have produced almost the opposite order.",
+            "ru": "Порядок следует за радиусом поражения, затем за охватом, затем за расписанием, затем за актуальностью:\n\n1. **Сначала активный ущерб.** Statement, из-за блокировок которого другие падают по таймауту, прямо сейчас производит ошибки; за ним скапливаются все ожидающие statements.\n2. **Затем горячий путь в масштабе.** Плохой p99 на checkout 20 000 раз в час — это множество испорченных пользовательских сценариев, но они медленные, а не сломанные.\n3. **Затем нарушенное окно.** Экспорт, выходящий за окно обслуживания, рискует столкнуться с продакшен-трафиком; это реальная проблема, но запланированная и ограниченная.\n4. **Последним — неиспользуемый запрос.** Медленный, но его никто не вызывает: исправление не даст измеримой пользы.\n\nОбрати внимание: сортировка по чистой длительности дала бы почти обратный порядок."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Errors now beat slow-for-many, which beats a breached window, which beats an unused query.",
+              "ru": "Ошибки сейчас важнее «медленно для многих», это важнее нарушенного окна, а оно важнее неиспользуемого запроса."
+            },
+            "incorrect": {
+              "en": "Rank by damage: active timeouts, then the hot path at scale, then the breached window, then the unused query.",
+              "ru": "Ранжируй по ущербу: активные таймауты, затем горячий путь в масштабе, затем нарушенное окно, затем неиспользуемый запрос."
+            }
+          }
+        },
+        {
+          "id": "priority-p4-fill-hot-path",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing hot user path.",
+            "ru": "Впиши пропущенный горячий пользовательский путь."
+          },
+          "text": {
+            "en": "Hot user paths get priority: login, ___, search and billing.",
+            "ru": "Приоритет у горячих пользовательских путей: login, ___, search и billing."
+          },
+          "blanks": [
+            {
+              "en": [
+                "checkout"
+              ],
+              "ru": [
+                "checkout",
+                "оформление заказа"
+              ]
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "A small win on a path everyone walks reaches many users at once.",
+              "ru": "Небольшой выигрыш на пути, по которому идут все, достаётся сразу многим пользователям."
+            },
+            "incorrect": {
+              "en": "It is checkout — one of the flows the business depends on directly.",
+              "ru": "Это checkout — один из потоков, от которых бизнес зависит напрямую."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "premature-tuning",
+      "title": {
+        "en": "When tuning is premature",
+        "ru": "Когда тюнинг преждевременен"
+      },
+      "summary": {
+        "en": "Without current impact evidence, tuning is premature: watch the query instead of changing it.",
+        "ru": "Без актуальных доказательств влияния тюнинг преждевременен: наблюдай за запросом, а не меняй его."
+      },
+      "discovery": [
+        {
+          "id": "premature-d1-stale-log",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A month-old slow-log line shows a 900 ms query. Today's dashboards show no timeouts, the statement runs twice a day, and no user flow depends on it. What do you do?",
+            "ru": "Строка slow-log месячной давности показывает запрос на 900 мс. Сегодняшние дашборды не показывают таймаутов, statement выполняется дважды в день, и от него не зависит ни один пользовательский путь. Что делать?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Watch it — do not tune it yet",
+                "ru": "Наблюдать — пока не тюнить"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Add an index immediately, since 900 ms is too slow",
+                "ru": "Сразу добавить индекс, ведь 900 мс это слишком медленно"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "An index adds write and storage cost for a win nobody will notice or be able to measure.",
+                "ru": "Индекс добавит стоимость записи и хранения ради выигрыша, который никто не заметит и не сможет измерить."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Rewrite the SQL to be safe",
+                "ru": "Переписать SQL на всякий случай"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Rewrites can change behaviour, and with no current baseline there is nothing to prove afterwards.",
+                "ru": "Переписывание может изменить поведение, а без актуальной базовой линии потом нечего доказывать."
+              }
+            }
+          ],
+          "reveal": {
+            "en": "Candidate selection has a legitimate answer of \"not now\". The decision flow makes it explicit:\n\n```mermaid\nflowchart TD\n  M[\"production metrics\"] --> C{\"high user or DB impact?\"}\n  C -->|no| W[\"watch, do not tune yet\"]\n  C -->|yes| P[\"inspect the query plan\"]\n  P --> E{\"evidence of wasted work?\"}\n  E -->|no| R[\"check application flow and data model\"]\n  E -->|yes| F[\"choose a focused fix\"]\n```\n\nSigns that optimizing now would be premature:\n\n- The symptom is not confirmed in the **current** time window — a month-old log line is not today's problem.\n- The statement is rare and off any critical path, so even a large relative win changes nothing measurable.\n- The plan shows no concrete waste; the cost is somewhere else, in the application flow or the data model.\n- You have no before-measurement, so you could not prove an improvement even if you made one.\n\nA slow-log entry is a **lead**, not a verdict: it tells you where to look, not what to change.",
+            "ru": "У выбора кандидатов есть законный ответ «не сейчас». Схема решения делает его явным:\n\n```mermaid\nflowchart TD\n  M[\"метрики продакшена\"] --> C{\"большое влияние на пользователей или базу?\"}\n  C -->|нет| W[\"наблюдать, пока не тюнить\"]\n  C -->|да| P[\"изучить план запроса\"]\n  P --> E{\"есть доказательство лишней работы?\"}\n  E -->|нет| R[\"проверить поток приложения и модель данных\"]\n  E -->|да| F[\"выбрать точечное исправление\"]\n```\n\nПризнаки того, что оптимизировать сейчас преждевременно:\n\n- Симптом не подтверждён в **текущем** временном окне — строка лога месячной давности это не сегодняшняя проблема.\n- Statement редкий и вне критичных путей, поэтому даже большой относительный выигрыш ничего измеримого не меняет.\n- План не показывает конкретной лишней работы; стоимость лежит в другом месте — в потоке приложения или модели данных.\n- У тебя нет измерения «до», поэтому улучшение нельзя было бы доказать, даже если оно случится.\n\nЗапись в slow log — это **зацепка**, а не приговор: она говорит, где смотреть, а не что менять."
+          },
+          "feedback": {
+            "correct": {
+              "en": "No current symptom, no frequency, no critical path — nothing to win yet.",
+              "ru": "Нет актуального симптома, нет частоты, нет критичного пути — выигрывать пока нечего."
+            },
+            "incorrect": {
+              "en": "The evidence is stale and the impact is absent; watching is the correct action.",
+              "ru": "Данные устарели, влияния нет; наблюдение — правильное действие."
+            }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "premature-p1-lead-not-verdict-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A statement appearing in the slow-query log is by itself a verdict that it must be optimized.",
+            "ru": "Появление statement в slow-query log само по себе является приговором, что его нужно оптимизировать."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": {
+              "en": "It is a lead: check frequency, the business path and plan evidence first.",
+              "ru": "Это зацепка: сначала проверь частоту, бизнес-путь и доказательства из плана."
+            },
+            "incorrect": {
+              "en": "No — the log only says it crossed a threshold once; that is a lead, not a verdict.",
+              "ru": "Нет — лог лишь говорит, что порог был превышен; это зацепка, а не приговор."
+            }
+          }
+        },
+        {
+          "id": "premature-p2-no-waste",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A query's slowness is confirmed in current metrics, but its plan shows no wasted work. What next?",
+            "ru": "Медлительность запроса подтверждена актуальными метриками, но его план не показывает лишней работы. Что дальше?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Check the application flow and the data model",
+                "ru": "Проверить поток приложения и модель данных"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Add indexes until it gets faster",
+                "ru": "Добавлять индексы, пока не станет быстрее"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Guessing indexes costs writes and storage and contradicts the plan you just read.",
+                "ru": "Гадание с индексами стоит записей и места и противоречит только что прочитанному плану."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Declare the query optimal and close the ticket",
+                "ru": "Объявить запрос оптимальным и закрыть тикет"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The symptom is real, so the cost is elsewhere: the flow, the transaction scope or the model.",
+                "ru": "Симптом реален, значит стоимость в другом месте: поток, границы транзакции или модель."
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "A clean plan redirects the search instead of ending it.",
+              "ru": "Чистый план перенаправляет поиск, а не завершает его."
+            },
+            "incorrect": {
+              "en": "No waste in the plan means the time goes somewhere else — the flow, the transaction scope or the model.",
+              "ru": "Отсутствие лишней работы в плане значит, что время уходит куда-то ещё — в поток, границы транзакции или модель."
+            }
+          }
+        },
+        {
+          "id": "premature-p3-match-actions",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each situation to the right next action.",
+            "ru": "Соотнеси каждую ситуацию с правильным следующим действием."
+          },
+          "pairs": [
+            {
+              "id": "stale",
+              "left": {
+                "en": "Stale log line, no current symptom",
+                "ru": "Устаревшая строка лога, актуального симптома нет"
+              },
+              "right": {
+                "en": "Confirm the symptom in today's metrics first",
+                "ru": "Сначала подтвердить симптом в сегодняшних метриках"
+              }
+            },
+            {
+              "id": "rare",
+              "left": {
+                "en": "Rare query off any critical path",
+                "ru": "Редкий запрос вне критичных путей"
+              },
+              "right": {
+                "en": "Watch it, do not tune yet",
+                "ru": "Наблюдать, пока не тюнить"
+              }
+            },
+            {
+              "id": "clean",
+              "left": {
+                "en": "Confirmed slow, but the plan shows no waste",
+                "ru": "Медлительность подтверждена, но план не показывает лишней работы"
+              },
+              "right": {
+                "en": "Look at the application flow and the data model",
+                "ru": "Смотреть на поток приложения и модель данных"
+              }
+            },
+            {
+              "id": "both",
+              "left": {
+                "en": "Confirmed impact plus a wasteful plan",
+                "ru": "Подтверждённое влияние плюс расточительный план"
+              },
+              "right": {
+                "en": "Choose a focused fix",
+                "ru": "Выбрать точечное исправление"
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Only confirmed impact together with plan evidence justifies a change.",
+              "ru": "Только подтверждённое влияние вместе с доказательством из плана оправдывает изменение."
+            },
+            "incorrect": {
+              "en": "Missing evidence means confirm, watch, or look elsewhere — not change the SQL.",
+              "ru": "Отсутствие доказательств означает подтвердить, наблюдать или искать в другом месте, а не менять SQL."
+            }
+          }
+        },
+        {
+          "id": "premature-p4-fill-lead",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing word.",
+            "ru": "Впиши пропущенное слово."
+          },
+          "text": {
+            "en": "A slow-query log entry is a ___, not a verdict.",
+            "ru": "Запись в slow-query log — это ___, а не приговор."
+          },
+          "blanks": [
+            {
+              "en": [
+                "lead",
+                "hint",
+                "clue"
+              ],
+              "ru": [
+                "зацепка",
+                "подсказка",
+                "lead"
+              ]
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "It says where to look; frequency, path and plan decide what to change.",
+              "ru": "Она говорит, где смотреть; что менять, решают частота, путь и план."
+            },
+            "incorrect": {
+              "en": "It is a lead — one threshold crossing says nothing about frequency or business impact.",
+              "ru": "Это зацепка — одно превышение порога ничего не говорит о частоте или влиянии на бизнес."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "prove-the-result",
+      "title": {
+        "en": "Prove that the change helped",
+        "ru": "Докажи, что изменение помогло"
+      },
+      "summary": {
+        "en": "An optimization is proven by comparing the same workload before and after: latency, total database time, plan shape, rows read, resources and errors.",
+        "ru": "Оптимизацию доказывают сравнением одной и той же нагрузки до и после: задержка, суммарное время базы, форма плана, прочитанные строки, ресурсы и ошибки."
+      },
+      "discovery": [
+        {
+          "id": "prove-d1-nicer-plan",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "You added an index and the plan now looks much nicer. Is the optimization proven?",
+            "ru": "Ты добавил индекс, и план теперь выглядит намного лучше. Оптимизация доказана?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "No — you must compare the same workload before and after on real metrics",
+                "ru": "Нет — нужно сравнить одну и ту же нагрузку до и после по реальным метрикам"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Yes — a better plan is the proof",
+                "ru": "Да — лучший план и есть доказательство"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A plan explains; it does not measure. The workload decides whether anything improved.",
+                "ru": "План объясняет, но не измеряет. Улучшилось ли что-то, решает нагрузка."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Yes, if the query is faster in a single manual run",
+                "ru": "Да, если запрос быстрее в одном ручном запуске"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "One run is a sample, often on warm cache; it is not a p95/p99 comparison under load.",
+                "ru": "Один запуск — это замер, часто на прогретом кэше; это не сравнение p95/p99 под нагрузкой."
+              }
+            }
+          ],
+          "reveal": {
+            "en": "The claim \"I optimized it\" is only true if the same workload got cheaper:\n\n```mermaid\nflowchart LR\n  B[\"before: p95/p99, total DB time, rows read, CPU and I/O, errors\"] --> CH[\"one focused change\"]\n  CH --> AF[\"after: the same metrics, the same workload\"]\n  AF --> V{\"did the queue get shorter?\"}\n  V -->|yes| K[\"keep\"]\n  V -->|no| RB[\"revert or rethink\"]\n```\n\nCompare, on the same workload: **p95/p99 latency**, **total database time**, the **plan shape**, **rows read**, **CPU and I/O**, and the **error rate**. Same workload matters — different traffic makes the two numbers incomparable, and you can \"prove\" an improvement that is really just a quiet hour.\n\nThen look for regressions, because a fix has a cost: the new index slows writes, the rewrite may have changed behaviour, and an ORM fetch change can have moved load onto a different endpoint. Proving the queue got shorter is the point; a prettier diagram is not.",
+            "ru": "Утверждение «я это оптимизировал» верно только если та же нагрузка стала дешевле:\n\n```mermaid\nflowchart LR\n  B[\"до: p95/p99, суммарное время базы, прочитанные строки, CPU и I/O, ошибки\"] --> CH[\"одно точечное изменение\"]\n  CH --> AF[\"после: те же метрики, та же нагрузка\"]\n  AF --> V{\"очередь стала короче?\"}\n  V -->|да| K[\"оставить\"]\n  V -->|нет| RB[\"откатить или переосмыслить\"]\n```\n\nСравнивай на одной и той же нагрузке: **p95/p99 latency**, **суммарное время базы данных**, **форму плана**, **прочитанные строки**, **CPU и I/O** и **error rate**. Одинаковая нагрузка важна — при разном трафике два числа несравнимы, и можно «доказать» улучшение, которое на самом деле просто тихий час.\n\nЗатем ищи регрессии, ведь у исправления есть цена: новый индекс замедляет записи, переписывание могло изменить поведение, а изменение ORM fetching могло перенести нагрузку на другой endpoint. Смысл в том, чтобы доказать, что очередь стала короче, а не в том, что схема стала красивее."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the plan is an explanation, the metrics are the proof.",
+              "ru": "Верно — план это объяснение, а доказательство это метрики."
+            },
+            "incorrect": {
+              "en": "A nicer plan is not a measured improvement; compare the same workload before and after.",
+              "ru": "Более красивый план — не измеренное улучшение; сравни одну и ту же нагрузку до и после."
+            }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "prove-p1-plan-proof-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A prettier query plan alone proves that an optimization helped.",
+            "ru": "Более красивый план запроса сам по себе доказывает, что оптимизация помогла."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": {
+              "en": "The plan explains the work; only before/after metrics on the same workload prove the win.",
+              "ru": "План объясняет работу; выигрыш доказывают только метрики до и после на одной нагрузке."
+            },
+            "incorrect": {
+              "en": "No — a plan can look better while latency, total database time and errors stay unchanged.",
+              "ru": "Нет — план может выглядеть лучше, пока задержка, суммарное время базы и ошибки не меняются."
+            }
+          }
+        },
+        {
+          "id": "prove-p2-which-comparison",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which comparison actually proves a query optimization?",
+            "ru": "Какое сравнение действительно доказывает оптимизацию запроса?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The same workload before and after: p95/p99, total database time, rows read, CPU and I/O, error rate",
+                "ru": "Одна и та же нагрузка до и после: p95/p99, суммарное время базы, прочитанные строки, CPU и I/O, error rate"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The new plan text next to the old plan text",
+                "ru": "Текст нового плана рядом с текстом старого плана"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Plans explain the work; they do not measure the result under load.",
+                "ru": "Планы объясняют работу; они не измеряют результат под нагрузкой."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A single timed run on a developer machine",
+                "ru": "Один запуск с замером времени на машине разработчика"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Different data and no concurrency — that is not the production workload.",
+                "ru": "Другие данные и нет конкурентности — это не продакшен-нагрузка."
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Same workload, same metrics, before and after — anything else is a story.",
+              "ru": "Одна нагрузка, одни метрики, до и после — всё остальное это рассказ."
+            },
+            "incorrect": {
+              "en": "Only a before/after comparison of production metrics on the same workload proves the change.",
+              "ru": "Изменение доказывает только сравнение продакшен-метрик до и после на одной нагрузке."
+            }
+          }
+        },
+        {
+          "id": "prove-p3-sort-steps",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the steps of proving an optimization.",
+            "ru": "Расставь по порядку шаги доказательства оптимизации."
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Record the baseline metrics for the statement",
+                "ru": "Зафиксировать базовые метрики statement"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Apply one focused change",
+                "ru": "Применить одно точечное изменение"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Compare the same metrics on the same workload",
+                "ru": "Сравнить те же метрики на той же нагрузке"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Check for regressions elsewhere: writes, other endpoints, error rate",
+                "ru": "Проверить регрессии в других местах: записи, другие endpoints, error rate"
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Baseline first — without it the after-numbers mean nothing.",
+              "ru": "Сначала базовая линия — без неё числа «после» ничего не значат."
+            },
+            "incorrect": {
+              "en": "Baseline, one change, the same comparison, then a regression check.",
+              "ru": "Базовая линия, одно изменение, то же сравнение, затем проверка регрессий."
+            }
+          }
+        },
+        {
+          "id": "prove-p4-fill-metrics",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the proof recipe.",
+            "ru": "Дополни рецепт доказательства."
+          },
+          "text": {
+            "en": "On the same workload, compare p95/p99 latency and total ___ time before and after, then check for ___.",
+            "ru": "На одной и той же нагрузке сравни p95/p99 latency и суммарное время ___ до и после, а затем проверь ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "database",
+                "db"
+              ],
+              "ru": [
+                "базы",
+                "базы данных",
+                "database"
+              ]
+            },
+            {
+              "en": [
+                "regressions",
+                "regression"
+              ],
+              "ru": [
+                "регрессии",
+                "регрессий",
+                "regressions"
+              ]
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Total database time shows the capacity win; the regression check shows what it cost.",
+              "ru": "Суммарное время базы показывает выигрыш ёмкости; проверка регрессий показывает его цену."
+            },
+            "incorrect": {
+              "en": "Compare total database time as well as latency, then look for regressions such as slower writes.",
+              "ru": "Сравнивай не только задержку, но и суммарное время базы данных, затем ищи регрессии вроде замедлившихся записей."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "recheck-after-growth",
+      "title": {
+        "en": "Optimized once is not optimized forever",
+        "ru": "Оптимизировано однажды — не значит навсегда"
+      },
+      "summary": {
+        "en": "Data volume, skew, statistics and workload change, so plans and metrics of an optimized query are rechecked later.",
+        "ru": "Объём данных, перекос, статистика и нагрузка меняются, поэтому планы и метрики оптимизированного запроса перепроверяют позже."
+      },
+      "discovery": [
+        {
+          "id": "recheck-d1-slow-again",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A query optimized a year ago is slow again. The SQL is unchanged and the index still exists. What is the most likely reason?",
+            "ru": "Запрос, оптимизированный год назад, снова медленный. SQL не менялся, индекс на месте. Какая причина наиболее вероятна?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The data and the workload grew or skewed, so the planner now decides differently",
+                "ru": "Данные и нагрузка выросли или перекосились, поэтому планировщик теперь решает иначе"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Indexes expire after a year",
+                "ru": "Индексы истекают через год"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Indexes do not expire; what changed is the data around them.",
+                "ru": "Индексы не истекают; изменились данные вокруг них."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The slow-query threshold in the log configuration must have been lowered",
+                "ru": "Порог slow-query в конфигурации лога, видимо, понизили"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A threshold changes what gets logged, not how the statement actually runs.",
+                "ru": "Порог меняет то, что попадает в лог, а не то, как statement реально выполняется."
+              }
+            }
+          ],
+          "reveal": {
+            "en": "A plan is chosen for the data as it was, using two things that drift:\n\n- **statistics** — the planner's stored summary of the data (how many rows, how values are distributed), used to make its estimates;\n- **skew** — some values being far more frequent than others, so an \"average\" estimate describes almost no real query.\n\n```mermaid\nflowchart LR\n  O[\"optimized once\"] --> G[\"data grows, distribution skews, workload shifts\"]\n  G --> S[\"statistics and estimates drift\"]\n  S --> P[\"planner may pick a worse plan\"]\n  P --> O2[\"re-check plan and metrics\"]\n```\n\nAs volume grows and distributions skew, estimates drift and the plan can flip to a worse one — with the same SQL and the same index. Meanwhile the workload changes too: new features add calls, so which statement dominates total database time is not the same as last year.\n\nSo candidate selection is a loop, not a one-off task: after significant growth, re-check the plans and the rankings you relied on.",
+            "ru": "План выбирается под данные в их текущем виде, опираясь на две дрейфующие вещи:\n\n- **статистика** — сохранённая планировщиком сводка о данных (сколько строк, как распределены значения), по которой он делает оценки;\n- **skew (перекос)** — когда одни значения встречаются намного чаще других, и «средняя» оценка не описывает почти ни один реальный запрос.\n\n```mermaid\nflowchart LR\n  O[\"оптимизировано однажды\"] --> G[\"данные растут, распределение перекашивается, нагрузка меняется\"]\n  G --> S[\"статистика и оценки дрейфуют\"]\n  S --> P[\"планировщик может выбрать худший план\"]\n  P --> O2[\"перепроверить план и метрики\"]\n```\n\nПо мере роста объёма и перекоса распределений оценки уплывают, и план может смениться на худший — при том же SQL и том же индексе. Параллельно меняется и нагрузка: новые функции добавляют вызовы, поэтому statement, доминирующий в суммарном времени базы, уже не тот, что год назад.\n\nПоэтому выбор кандидатов — это цикл, а не одноразовая задача: после существенного роста перепроверяй планы и рейтинги, на которые опирался."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Same SQL, different data — so a different plan and a different ranking.",
+              "ru": "Тот же SQL, другие данные — значит другой план и другой рейтинг."
+            },
+            "incorrect": {
+              "en": "Volume, skew, statistics and workload all changed around an unchanged statement.",
+              "ru": "Вокруг неизменного statement изменились объём, перекос, статистика и нагрузка."
+            }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "recheck-p1-stays-optimized-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Once a query has been optimized, it stays optimized regardless of later data growth.",
+            "ru": "Раз запрос оптимизирован, он остаётся оптимальным независимо от дальнейшего роста данных."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": {
+              "en": "Growth, skew, statistics and workload shift, so plans and metrics need re-checking.",
+              "ru": "Рост, перекос, статистика и нагрузка меняются, поэтому планы и метрики нужно перепроверять."
+            },
+            "incorrect": {
+              "en": "No — the planner re-decides on current statistics, and those change as the data grows.",
+              "ru": "Нет — планировщик решает заново по текущей статистике, а она меняется вместе с ростом данных."
+            }
+          }
+        },
+        {
+          "id": "recheck-p2-what-regresses",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which change can make an already-optimized statement regress?",
+            "ru": "Какое изменение может ухудшить уже оптимизированный statement?"
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Growth and skew in the data, which shift the planner's estimates",
+                "ru": "Рост и перекос данных, которые смещают оценки планировщика"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Lowering the slow-query threshold in the log configuration",
+                "ru": "Понижение порога slow-query в конфигурации лога"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That changes which statements get logged, not how they execute.",
+                "ru": "Это меняет то, какие statements попадают в лог, а не то, как они выполняются."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — a chosen plan is fixed for the lifetime of the statement",
+                "ru": "Ничего — выбранный план закреплён на всё время жизни statement"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The planner re-decides using current statistics, which change with the data.",
+                "ru": "Планировщик решает заново по текущей статистике, а она меняется вместе с данными."
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "The statement stayed the same; the data it runs against did not.",
+              "ru": "Statement остался тем же; данные, по которым он работает, — нет."
+            },
+            "incorrect": {
+              "en": "Data growth and skew move the estimates, and the planner can then pick a worse plan.",
+              "ru": "Рост и перекос данных смещают оценки, и планировщик может выбрать худший план."
+            }
+          }
+        },
+        {
+          "id": "recheck-p3-fill-drift",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two things that drift as data changes.",
+            "ru": "Впиши две вещи, которые дрейфуют вместе с изменением данных."
+          },
+          "text": {
+            "en": "A plan can flip to a worse one when data growth and ___ make the planner's ___ stale.",
+            "ru": "План может смениться на худший, когда рост данных и ___ делают ___ планировщика устаревшей."
+          },
+          "blanks": [
+            {
+              "en": [
+                "skew"
+              ],
+              "ru": [
+                "skew",
+                "перекос"
+              ]
+            },
+            {
+              "en": [
+                "statistics",
+                "stats"
+              ],
+              "ru": [
+                "статистику",
+                "статистика",
+                "statistics"
+              ]
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Estimates come from statistics, so stale statistics mean a badly chosen plan.",
+              "ru": "Оценки берутся из статистики, поэтому устаревшая статистика означает плохо выбранный план."
+            },
+            "incorrect": {
+              "en": "Skew and statistics: the planner estimates from stored statistics, and skew makes averages misleading.",
+              "ru": "Перекос и статистика: планировщик оценивает по сохранённой статистике, а перекос делает средние обманчивыми."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "triage-end-to-end",
+      "title": {
+        "en": "Putting triage together",
+        "ru": "Собираем триаж воедино"
+      },
+      "summary": {
+        "en": "One decision chain: confirm the symptom, group, rank by impact, read the plan, apply the smallest fix, prove the result.",
+        "ru": "Одна цепочка решений: подтвердить симптом, сгруппировать, ранжировать по влиянию, прочитать план, применить минимальное исправление, доказать результат."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "capstone-d1-rank-three",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Predict which statement this query returns — and note whether it is also the right first candidate.",
+            "ru": "Предскажи, какой statement вернёт этот запрос, и заметь, тот ли это первый кандидат."
+          },
+          "code": "-- normalized statements, last hour\n-- name           calls    mean_ms   p99_ms   path\n-- reports_export      2     4800.0     5100   admin export, read replica\n-- cart_fetch     180000       35.0      900   checkout\n-- session_ping   900000        1.2        4   health check\n\nSELECT name\nFROM statement_metrics\nORDER BY calls * mean_ms DESC\nLIMIT 1;",
+          "codeLang": "sql",
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "cart_fetch — the highest total time, and it sits on checkout",
+                "ru": "cart_fetch — самое большое суммарное время, и он находится на checkout"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "reports_export — the highest mean time and the worst p99",
+                "ru": "reports_export — самое большое среднее время и худший p99"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It wins on duration, but 2 calls make its total time about 9 600 ms — the smallest of the three.",
+                "ru": "Он выигрывает по длительности, но 2 вызова дают суммарно около 9 600 мс — меньше всех трёх."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "session_ping — by far the most calls",
+                "ru": "session_ping — вызовов больше всех"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "900 000 × 1.2 ms is 1 080 000 ms, far below cart_fetch's 6 300 000 ms.",
+                "ru": "900 000 × 1,2 мс это 1 080 000 мс, намного меньше, чем 6 300 000 мс у cart_fetch."
+              }
+            }
+          ],
+          "reveal": {
+            "en": "Both the arithmetic and the judgement point at `cart_fetch`:\n\n```\nreports_export:      2 x 4800.0 ms =     9 600 ms total\ncart_fetch:     180 000 x   35.0 ms = 6 300 000 ms total   <- winner\nsession_ping:   900 000 x    1.2 ms = 1 080 000 ms total\n```\n\nIt also has the second signal — p99 of 900 ms on **checkout**, a critical path — while `reports_export` runs twice an hour on a read replica, off the traffic path, and `session_ping` is cheap in total despite the huge call count.\n\nThe full chain from that ranking to a proven fix:\n\n```mermaid\nflowchart TD\n  M[\"production metrics: p95/p99, calls, errors, locks\"] --> G[\"group equivalent SQL into patterns\"]\n  G --> R[\"rank by impact: total time, calls, business path\"]\n  R --> C{\"high impact?\"}\n  C -->|no| W[\"watch, do not tune yet\"]\n  C -->|yes| P[\"inspect the plan with EXPLAIN ANALYZE\"]\n  P --> E{\"wasted work?\"}\n  E -->|no| A[\"check application flow and data model\"]\n  E -->|yes| F[\"smallest credible fix\"]\n  F --> V[\"measure the same workload before and after\"]\n```\n\nEvery box is one of the earlier atoms. The ranking only nominates a candidate; the plan decides what to change, and the before/after comparison decides whether you actually helped.",
+            "ru": "И арифметика, и здравый смысл указывают на `cart_fetch`:\n\n```\nreports_export:       2 x 4800,0 мс =     9 600 мс суммарно\ncart_fetch:      180 000 x   35,0 мс = 6 300 000 мс суммарно   <- победитель\nsession_ping:    900 000 x    1,2 мс = 1 080 000 мс суммарно\n```\n\nУ него есть и второй сигнал — p99 в 900 мс на **checkout**, критичном пути, — тогда как `reports_export` выполняется дважды в час на read replica вне пути трафика, а `session_ping` суммарно дешёвый, несмотря на огромное число вызовов.\n\nПолная цепочка от этого рейтинга к доказанному исправлению:\n\n```mermaid\nflowchart TD\n  M[\"метрики продакшена: p95/p99, calls, ошибки, блокировки\"] --> G[\"сгруппировать эквивалентный SQL в шаблоны\"]\n  G --> R[\"ранжировать по влиянию: суммарное время, calls, бизнес-путь\"]\n  R --> C{\"большое влияние?\"}\n  C -->|нет| W[\"наблюдать, пока не тюнить\"]\n  C -->|да| P[\"изучить план через EXPLAIN ANALYZE\"]\n  P --> E{\"есть лишняя работа?\"}\n  E -->|нет| A[\"проверить поток приложения и модель данных\"]\n  E -->|да| F[\"минимальное правдоподобное исправление\"]\n  F --> V[\"измерить одну и ту же нагрузку до и после\"]\n```\n\nКаждый блок — это один из предыдущих атомов. Рейтинг только выдвигает кандидата; что менять, решает план, а помог ли ты на самом деле — решает сравнение до и после."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Highest total time and a critical path — the ranking and the judgement agree.",
+              "ru": "Самое большое суммарное время и критичный путь — рейтинг и здравый смысл совпали."
+            },
+            "incorrect": {
+              "en": "Ordering by calls * mean_ms is total time: 180 000 × 35 ms = 6 300 000 ms wins.",
+              "ru": "Сортировка по calls * mean_ms это суммарное время: 180 000 × 35 мс = 6 300 000 мс побеждает."
+            }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "capstone-p1-next-action",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Predict the correct next action from this evidence.",
+            "ru": "Предскажи правильное следующее действие по этим данным."
+          },
+          "code": "APM trace: POST /checkout        p99 = 2400 ms\n  database time                       2100 ms  (1 statement, 1 call)\n  application time                     300 ms\n\nEXPLAIN ANALYZE of that statement:\n  estimated rows = 40, actual rows = 1 900 000\n  no index used on order_items.status",
+          "codeLang": "text",
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Add an index matching the status predicate, then compare p99 and total database time before and after",
+                "ru": "Добавить индекс под predicate по status, затем сравнить p99 и суммарное время базы до и после"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Look for an N+1 pattern of hundreds of small queries",
+                "ru": "Искать паттерн N+1 из сотен маленьких запросов"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The trace shows one statement and one call, so round trips are not the problem here.",
+                "ru": "Trace показывает один statement и один вызов, значит проблема не в round trips."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Watch it — the evidence is not strong enough yet",
+                "ru": "Наблюдать — доказательств пока недостаточно"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A confirmed p99 on checkout plus a plan reading 1 900 000 rows to return 40 is exactly enough evidence.",
+                "ru": "Подтверждённый p99 на checkout плюс план, читающий 1 900 000 строк ради 40, — это как раз достаточное доказательство."
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Critical path, database-dominated, wasteful plan, one targeted fix, then proof.",
+              "ru": "Критичный путь, доминирует база, расточительный план, одно точечное исправление, затем доказательство."
+            },
+            "incorrect": {
+              "en": "The time is in one statement whose plan reads 1 900 000 rows for 40 — fix that predicate, then measure.",
+              "ru": "Время уходит в один statement, чей план читает 1 900 000 строк ради 40 — исправь этот predicate, затем измерь."
+            }
+          }
+        },
+        {
+          "id": "capstone-p2-spot-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This candidate-selection script is used every week. What is wrong with it?",
+            "ru": "Этот скрипт выбора кандидатов используют каждую неделю. Что в нём не так?"
+          },
+          "code": "SELECT query, max_exec_time\nFROM pg_stat_statements\nORDER BY max_exec_time DESC\nLIMIT 5;\n\n-- then: for each result, add an index on every column in its WHERE clause",
+          "codeLang": "sql",
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It ranks by max time and then adds indexes without reading a plan, so it tunes rare outliers blindly",
+                "ru": "Он ранжирует по максимальному времени, а затем добавляет индексы, не читая план, то есть слепо тюнит редкие выбросы"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It should select more columns from the view",
+                "ru": "Нужно выбирать больше колонок из представления"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The output columns are not the defect; the ranking metric and the blind index step are.",
+                "ru": "Дефект не в выбранных колонках, а в метрике ранжирования и слепом добавлении индексов."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "LIMIT 5 is too small a list",
+                "ru": "LIMIT 5 — слишком короткий список"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "List length is not the defect: five well-ranked candidates would be fine.",
+                "ru": "Длина списка не дефект: пять правильно отранжированных кандидатов — это нормально."
+              }
+            }
+          ],
+          "reveal": {
+            "en": "Two mistakes stack up here.\n\n**Ranking by `max_exec_time`** surfaces whichever statement had one unlucky run — a cold cache, a lock wait, a one-off report. The metric that reflects consumed capacity is total time (`mean_exec_time * calls`), and business path and error signals decide priority among the top entries.\n\n**Adding an index per WHERE column** skips the plan entirely. An index helps only when it matches the predicates, join columns, ordering and selectivity; every index that does not slows every write and occupies storage. And because nothing was measured first, there is no baseline to prove any of it helped.\n\nA correct script ranks by total time, then hands the top entries to a human who reads `EXPLAIN ANALYZE`, applies the smallest credible fix, and compares the same workload before and after.",
+            "ru": "Здесь наложились две ошибки.\n\n**Ранжирование по `max_exec_time`** поднимает наверх тот statement, которому один раз не повезло — холодный кэш, ожидание блокировки, одноразовый отчёт. Потреблённую ёмкость отражает суммарное время (`mean_exec_time * calls`), а приоритет среди верхних записей решают бизнес-путь и сигналы об ошибках.\n\n**Добавление индекса на каждую колонку из WHERE** полностью пропускает план. Индекс помогает только когда совпадает с predicates, join columns, ordering и selectivity; каждый неподходящий индекс замедляет любую запись и занимает место. А поскольку сначала ничего не измерили, нет и базовой линии, чтобы доказать пользу.\n\nПравильный скрипт ранжирует по суммарному времени, а затем отдаёт верхние записи человеку, который читает `EXPLAIN ANALYZE`, применяет минимальное правдоподобное исправление и сравнивает одну и ту же нагрузку до и после."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Wrong ranking metric plus a fix chosen without evidence.",
+              "ru": "Неверная метрика ранжирования плюс исправление, выбранное без доказательств."
+            },
+            "incorrect": {
+              "en": "Rank by total time, not max time — and read the plan before adding any index.",
+              "ru": "Ранжируй по суммарному времени, а не по максимальному, и читай план до добавления индексов."
+            }
+          }
+        },
+        {
+          "id": "capstone-p3-sort-full",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the complete triage procedure for choosing and fixing a query.",
+            "ru": "Расставь по порядку полную процедуру триажа для выбора и исправления запроса."
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Confirm the symptom in the current time window: p95/p99, timeout rate, saturation",
+                "ru": "Подтвердить симптом в текущем временном окне: p95/p99, timeout rate, saturation"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Group equivalent SQL so literals do not split one pattern",
+                "ru": "Сгруппировать эквивалентный SQL, чтобы литералы не разбивали один шаблон"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Rank by impact: total time, calls, lock waits and the business flow",
+                "ru": "Ранжировать по влиянию: суммарное время, calls, ожидания блокировок и бизнес-поток"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Inspect the plan with EXPLAIN ANALYZE and compare estimated with actual rows",
+                "ru": "Изучить план через EXPLAIN ANALYZE и сравнить estimated rows с actual rows"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "Apply the smallest credible fix",
+                "ru": "Применить минимальное правдоподобное исправление"
+              }
+            },
+            {
+              "id": "s6",
+              "text": {
+                "en": "Compare the same workload before and after, and check for regressions",
+                "ru": "Сравнить одну и ту же нагрузку до и после и проверить регрессии"
+              }
+            }
+          ],
+          "reveal": {
+            "en": "Each step exists to stop a specific mistake:\n\n1. **Confirm** — stops you tuning a stale log line that no longer describes production.\n2. **Group** — stops thousands of literal variants hiding the one hot pattern.\n3. **Rank** — stops the rare outlier from outranking the frequent, business-critical statement.\n4. **Inspect the plan** — stops you guessing which change is credible, and shows whether there is any waste at all.\n5. **Smallest fix** — stops you paying for write cost, behaviour changes or moved load that the evidence never justified.\n6. **Measure** — stops \"it feels faster\" from counting as a result, and catches regressions the fix introduced.\n\nSkip a step and you get the classic failures: tuning yesterday's problem, optimizing an outlier, adding an index that changes nothing, or claiming a win nobody can reproduce.",
+            "ru": "Каждый шаг существует, чтобы предотвратить конкретную ошибку:\n\n1. **Подтвердить** — не даёт тюнить устаревшую строку лога, которая больше не описывает продакшен.\n2. **Сгруппировать** — не даёт тысячам вариантов с литералами прятать единственный горячий шаблон.\n3. **Ранжировать** — не даёт редкому выбросу обойти частый, критичный для бизнеса statement.\n4. **Изучить план** — не даёт гадать, какое изменение правдоподобно, и показывает, есть ли лишняя работа вообще.\n5. **Минимальное исправление** — не даёт платить стоимостью записи, изменением поведения или перенесённой нагрузкой, которых данные не оправдывали.\n6. **Измерить** — не даёт «кажется, стало быстрее» считаться результатом и ловит внесённые регрессии.\n\nПропусти шаг — и получишь классические провалы: тюнинг вчерашней проблемы, оптимизацию выброса, индекс, который ничего не меняет, или победу, которую никто не может воспроизвести."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Confirm, group, rank, read the plan, fix minimally, prove it.",
+              "ru": "Подтвердить, сгруппировать, ранжировать, прочитать план, исправить минимально, доказать."
+            },
+            "incorrect": {
+              "en": "Evidence comes before ranking, ranking before the plan, and the plan before any change.",
+              "ru": "Доказательства идут до ранжирования, ранжирование до плана, а план до любого изменения."
+            }
+          }
+        },
+        {
+          "id": "capstone-p4-match-roles",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each tool or metric to its role in the triage flow.",
+            "ru": "Соотнеси каждый инструмент или метрику с их ролью в процессе триажа."
+          },
+          "pairs": [
+            {
+              "id": "log",
+              "left": {
+                "en": "slow-query log",
+                "ru": "slow-query log"
+              },
+              "right": {
+                "en": "Lists the statements that crossed the time threshold",
+                "ru": "Перечисляет statements, перешедшие порог времени"
+              }
+            },
+            {
+              "id": "trace",
+              "left": {
+                "en": "APM trace",
+                "ru": "APM trace"
+              },
+              "right": {
+                "en": "Shows which request paid and how much of it was database time",
+                "ru": "Показывает, какой request заплатил и какая доля была временем базы"
+              }
+            },
+            {
+              "id": "total",
+              "left": {
+                "en": "mean time × calls",
+                "ru": "среднее время × calls"
+              },
+              "right": {
+                "en": "Ranks candidates by consumed database capacity",
+                "ru": "Ранжирует кандидатов по потреблённой ёмкости базы"
+              }
+            },
+            {
+              "id": "explain",
+              "left": {
+                "en": "EXPLAIN ANALYZE",
+                "ru": "EXPLAIN ANALYZE"
+              },
+              "right": {
+                "en": "Reveals wasted work and the estimate-versus-actual gap",
+                "ru": "Показывает лишнюю работу и разрыв между оценкой и фактом"
+              }
+            },
+            {
+              "id": "beforeafter",
+              "left": {
+                "en": "before/after comparison",
+                "ru": "сравнение до и после"
+              },
+              "right": {
+                "en": "Proves the change helped and catches regressions",
+                "ru": "Доказывает, что изменение помогло, и ловит регрессии"
+              }
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Find leads, attribute cost, rank, diagnose, then prove.",
+              "ru": "Найти зацепки, определить плательщика, отранжировать, поставить диагноз, затем доказать."
+            },
+            "incorrect": {
+              "en": "Logs and traces find and attribute, total time ranks, EXPLAIN ANALYZE diagnoses, before/after proves.",
+              "ru": "Логи и traces находят и атрибутируют, суммарное время ранжирует, EXPLAIN ANALYZE диагностирует, сравнение до и после доказывает."
+            }
+          }
+        },
+        {
+          "id": "capstone-p5-fill-chain",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the whole triage recipe.",
+            "ru": "Дополни весь рецепт триажа."
+          },
+          "text": {
+            "en": "Rank candidates by ___ × ___, confirm the wasted work with EXPLAIN ___, then prove the fix by comparing the same ___ before and after.",
+            "ru": "Ранжируй кандидатов по ___ × ___, подтверди лишнюю работу через EXPLAIN ___, затем докажи исправление, сравнив ту же ___ до и после."
+          },
+          "blanks": [
+            {
+              "en": [
+                "mean time",
+                "mean_time",
+                "mean",
+                "mean_exec_time"
+              ],
+              "ru": [
+                "среднее время",
+                "среднее",
+                "mean time",
+                "mean_time"
+              ]
+            },
+            {
+              "en": [
+                "calls",
+                "call count",
+                "number of calls"
+              ],
+              "ru": [
+                "calls",
+                "вызовы",
+                "число вызовов"
+              ]
+            },
+            {
+              "en": [
+                "ANALYZE"
+              ],
+              "ru": [
+                "ANALYZE"
+              ]
+            },
+            {
+              "en": [
+                "workload"
+              ],
+              "ru": [
+                "нагрузку",
+                "нагрузка",
+                "workload"
+              ]
+            }
+          ],
+          "feedback": {
+            "correct": {
+              "en": "Total time nominates, the plan diagnoses, the same workload proves.",
+              "ru": "Суммарное время выдвигает кандидата, план диагностирует, одна и та же нагрузка доказывает."
+            },
+            "incorrect": {
+              "en": "Rank by mean time × calls, diagnose with EXPLAIN ANALYZE, prove on the same workload.",
+              "ru": "Ранжируй по среднее время × calls, диагностируй через EXPLAIN ANALYZE, доказывай на той же нагрузке."
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

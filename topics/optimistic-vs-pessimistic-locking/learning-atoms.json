@@ -1,0 +1,2967 @@
+{
+  "schemaVersion": 1,
+  "topicId": "optimistic-vs-pessimistic-locking",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "lost-update",
+      "title": {
+        "en": "The lost update problem",
+        "ru": "Проблема потерянного обновления"
+      },
+      "summary": {
+        "en": "Two transactions read the same row, both write, and one silently overwrites the other; optimistic and pessimistic locking differ only in when they check for that clash.",
+        "ru": "Две транзакции читают одну строку, обе пишут, и одна молча затирает другую; оптимистичная и пессимистичная блокировки отличаются лишь моментом проверки конфликта."
+      },
+      "discovery": [
+        {
+          "id": "lost-update-d1-two-writers",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Both transactions read stock = 10, subtract 1 in application code, and commit. There is no version column and no lock. What is the final stock?",
+            "ru": "Обе транзакции читают stock = 10, вычитают 1 в коде приложения и коммитятся. Ни версионного столбца, ни блокировок нет. Каким будет итоговый stock?"
+          },
+          "code": "Tx A: SELECT stock FROM product WHERE id = 100;   -- reads 10\nTx B: SELECT stock FROM product WHERE id = 100;   -- reads 10\nTx A: UPDATE product SET stock = 9 WHERE id = 100; COMMIT;\nTx B: UPDATE product SET stock = 9 WHERE id = 100; COMMIT;",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "Both transactions read `stock = 10`, both compute `10 - 1 = 9`, and both write `9`. The second write silently overwrites the first, so one decrement simply disappears. This is the **lost update** anomaly.\n\n```mermaid\nsequenceDiagram\n  participant A as Tx A\n  participant Row as product row\n  participant B as Tx B\n  A->>Row: read stock = 10\n  B->>Row: read stock = 10\n  A->>Row: write stock = 9\n  B->>Row: write stock = 9\n  Note over Row: one decrement lost\n```\n\n**Optimistic** and **pessimistic** locking both exist to prevent exactly this. They differ only in *when* they check for the clash:\n\n- **Pessimistic** locking assumes a clash is likely, so it locks the row **up front**, at read time — the other transaction waits.\n- **Optimistic** locking assumes clashes are rare, holds no lock at all, and checks **at write time** whether anyone changed the row in the meantime.",
+            "ru": "Обе транзакции читают `stock = 10`, обе вычисляют `10 - 1 = 9` и обе записывают `9`. Вторая запись молча затирает первую, поэтому одно уменьшение просто исчезает. Это аномалия **потерянного обновления** (lost update).\n\n```mermaid\nsequenceDiagram\n  participant A as Tx A\n  participant Row as строка product\n  participant B as Tx B\n  A->>Row: читает stock = 10\n  B->>Row: читает stock = 10\n  A->>Row: пишет stock = 9\n  B->>Row: пишет stock = 9\n  Note over Row: одно уменьшение потеряно\n```\n\nИ **оптимистичная**, и **пессимистичная** блокировки существуют именно ради того, чтобы этого не произошло. Отличаются они лишь тем, *когда* проверяют конфликт:\n\n- **Пессимистичная** блокировка считает конфликт вероятным и блокирует строку **заранее**, в момент чтения — вторая транзакция ждёт.\n- **Оптимистичная** блокировка считает конфликты редкими, не держит никаких блокировок и проверяет **в момент записи**, менял ли строку кто-то ещё."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Both wrote 9 from the same stale value — one decrement vanished.",
+              "ru": "Обе записали 9 от одного устаревшего значения — одно уменьшение исчезло."
+            },
+            "incorrect": {
+              "en": "Both read 10 and both wrote 9, so the final value is 9 and one decrement is lost.",
+              "ru": "Обе прочитали 10 и обе записали 9, поэтому итог — 9, а одно уменьшение потеряно."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "9 — one of the two decrements is lost",
+                "ru": "9 — одно из двух уменьшений потеряно"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "8 — both decrements are applied",
+                "ru": "8 — применились оба уменьшения"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Both transactions computed 10 - 1 = 9 from the same starting value, so 8 is never written.",
+                "ru": "Обе транзакции посчитали 10 - 1 = 9 от одного и того же исходного значения, поэтому 8 никто не записывает."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The second commit fails with an error",
+                "ru": "Второй коммит завершится ошибкой"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing detects the clash here — detecting or preventing it is exactly what a locking strategy adds.",
+                "ru": "Здесь конфликт никто не обнаруживает — обнаружить или предотвратить его как раз и добавляет стратегия блокировки."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "lost-update-p1-same-goal",
+          "type": "true_false",
+          "prompt": {
+            "en": "Optimistic and pessimistic locking both exist to prevent the lost update anomaly.",
+            "ru": "И оптимистичная, и пессимистичная блокировка существуют, чтобы предотвратить аномалию потерянного обновления."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Same goal, different moment of checking.",
+              "ru": "Цель одна, момент проверки разный."
+            },
+            "incorrect": {
+              "en": "They do — the difference is only when they check for the conflict.",
+              "ru": "Обе — разница только в том, когда они проверяют конфликт."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "lost-update-p2-core-difference",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What is the core difference between optimistic and pessimistic locking?",
+            "ru": "В чём главное отличие оптимистичной блокировки от пессимистичной?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Pessimistic checks at read time by locking; optimistic checks at write time by comparing.",
+              "ru": "Пессимистичная проверяет при чтении, беря блокировку; оптимистичная — при записи, сравнивая."
+            },
+            "incorrect": {
+              "en": "It is the moment of the check: pessimistic locks at read time, optimistic compares at write time.",
+              "ru": "Дело в моменте проверки: пессимистичная блокирует при чтении, оптимистичная сравнивает при записи."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "When they check for a conflict: at read time vs at write time",
+                "ru": "Когда они проверяют конфликт: при чтении или при записи"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Which transaction isolation level they require",
+                "ru": "Какой уровень изоляции транзакций им нужен"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Both work at the usual isolation level; the difference is the moment of the check.",
+                "ru": "Обе работают на обычном уровне изоляции; отличие — в моменте проверки."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Whether they prevent a lost update at all",
+                "ru": "Предотвращают ли они потерянное обновление вообще"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Both prevent it — they just act at different moments.",
+                "ru": "Обе предотвращают — просто действуют в разные моменты."
+              }
+            }
+          ]
+        },
+        {
+          "id": "lost-update-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the difference between the two locking strategies.",
+            "ru": "Собери отличие двух стратегий блокировки."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One acts before the work, the other verifies after it.",
+              "ru": "Одна действует до работы, другая проверяет после неё."
+            },
+            "incorrect": {
+              "en": "Pessimistic locks up front; optimistic checks at write time.",
+              "ru": "Пессимистичная блокирует заранее; оптимистичная проверяет в момент записи."
+            }
+          },
+          "tokens": {
+            "en": [
+              "pessimistic",
+              "locks",
+              "up",
+              "front,",
+              "optimistic",
+              "checks",
+              "at",
+              "write",
+              "time"
+            ],
+            "ru": [
+              "пессимистичная",
+              "блокирует",
+              "заранее,",
+              "оптимистичная",
+              "проверяет",
+              "в",
+              "момент",
+              "записи"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "never",
+              "retries"
+            ],
+            "ru": [
+              "никогда",
+              "повторяет"
+            ]
+          }
+        },
+        {
+          "id": "lost-update-p4-fill-name",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the anomaly.",
+            "ru": "Назови аномалию."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Both locking strategies exist to stop it.",
+              "ru": "Обе стратегии блокировки существуют, чтобы её не допустить."
+            },
+            "incorrect": {
+              "en": "It is the lost update anomaly: one write silently replaces another.",
+              "ru": "Это аномалия lost update (потерянное обновление): одна запись молча заменяет другую."
+            }
+          },
+          "text": {
+            "en": "The anomaly where one transaction's write silently overwrites another's is called the ___ ___ anomaly.",
+            "ru": "Аномалия, при которой запись одной транзакции молча затирает запись другой, по-английски называется ___ ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "lost"
+              ],
+              "ru": [
+                "lost"
+              ]
+            },
+            {
+              "en": [
+                "update"
+              ],
+              "ru": [
+                "update"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "optimistic-version-column",
+      "title": {
+        "en": "The version column",
+        "ru": "Версионный столбец"
+      },
+      "summary": {
+        "en": "Optimistic locking needs a version column (@Version in JPA); Hibernate remembers the version it read and bumps it on every flush.",
+        "ru": "Оптимистичной блокировке нужен версионный столбец (@Version в JPA); Hibernate запоминает прочитанную версию и сам поднимает её при каждом flush."
+      },
+      "discovery": [
+        {
+          "id": "version-d1-what-to-add",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "You want optimistic locking on this entity. What do you add to it?",
+            "ru": "Вы хотите включить оптимистичную блокировку для этой сущности. Что к ней нужно добавить?"
+          },
+          "code": "@Entity\npublic class Product {\n    @Id private Long id;\n    private int stock;\n    // ??? add this for optimistic locking\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Optimistic locking needs a **version column**: an extra column whose value changes on every update of the row. In JPA you declare it with `@Version` on an `int`/`long` field (a timestamp also works):\n\n```java\n@Entity\npublic class Product {\n    @Id private Long id;\n    private int stock;\n    @Version private int version;\n}\n```\n\nWhen you load the entity, Hibernate remembers the version it read — say `5`. Nothing is locked at this moment: the version is just a value to compare later.\n\n**Hibernate manages this field itself**, raising it on every flush. You must never assign it in your own code — doing so would fake agreement with a row you have not actually seen.\n\nAnd the flip side: no `@Version` column means no check at all, so a concurrent write is silently overwritten.",
+            "ru": "Оптимистичной блокировке нужен **версионный столбец** — дополнительный столбец, значение которого меняется при каждом обновлении строки. В JPA его объявляют аннотацией `@Version` на поле типа `int`/`long` (timestamp тоже подходит):\n\n```java\n@Entity\npublic class Product {\n    @Id private Long id;\n    private int stock;\n    @Version private int version;\n}\n```\n\nПри загрузке сущности Hibernate запоминает прочитанную версию — скажем, `5`. В этот момент ничего не заблокировано: версия — просто значение, которое сравнят позже.\n\n**Полем управляет сам Hibernate**, поднимая версию при каждом flush. Присваивать её вручную нельзя — так вы подделали бы совпадение со строкой, которую на самом деле не видели.\n\nОбратная сторона: нет столбца `@Version` — нет и проверки, поэтому параллельная запись будет молча затёрта."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A version column is the whole mechanism of optimistic locking.",
+              "ru": "Версионный столбец — и есть весь механизм оптимистичной блокировки."
+            },
+            "incorrect": {
+              "en": "You add a @Version field: a column whose value changes on every update of the row.",
+              "ru": "Добавляют поле @Version — столбец, значение которого меняется при каждом обновлении строки."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A field annotated @Version, stored as a column",
+                "ru": "Поле с аннотацией @Version, хранящееся в столбце"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A boolean 'locked' column other transactions must check",
+                "ru": "Булев столбец «locked», который должны проверять другие транзакции"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Optimistic locking does not mark rows as taken; it compares a value that changes on every update.",
+                "ru": "Оптимистичная блокировка не помечает строки занятыми; она сравнивает значение, которое меняется при каждом обновлении."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — Hibernate protects every entity by default",
+                "ru": "Ничего — Hibernate по умолчанию защищает любую сущность"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Without a version column there is no check at all, and the lost update goes unnoticed.",
+                "ru": "Без версионного столбца проверки нет вовсе, и потерянное обновление проходит незамеченным."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "version-p1-manual-bump",
+          "type": "true_false",
+          "prompt": {
+            "en": "In JPA optimistic locking, the application must increment the @Version field itself before each update.",
+            "ru": "При оптимистичной блокировке в JPA приложение должно само увеличивать поле @Version перед каждым обновлением."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Hibernate manages @Version automatically on every flush.",
+              "ru": "Hibernate управляет @Version автоматически при каждом flush."
+            },
+            "incorrect": {
+              "en": "No — Hibernate bumps @Version on every flush; setting it by hand breaks the check.",
+              "ru": "Нет — Hibernate поднимает @Version при каждом flush; выставлять её вручную нельзя, это ломает проверку."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "version-p2-no-version-column",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A JPA entity has no @Version field and no lock is requested. What protects it from a lost update?",
+            "ru": "У JPA-сущности нет поля @Version и блокировка не запрашивается. Что защищает её от потерянного обновления?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "No version, no check — the concurrent write is silently overwritten.",
+              "ru": "Нет версии — нет проверки: параллельная запись молча затирается."
+            },
+            "incorrect": {
+              "en": "Nothing does: without @Version there is no check, and without an explicit lock there is no lock.",
+              "ru": "Ничто: без @Version нет проверки, а без явного запроса нет и блокировки."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Nothing — the concurrent write is silently overwritten",
+                "ru": "Ничто — параллельная запись молча затирается"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Hibernate falls back to a locking SELECT",
+                "ru": "Hibernate переходит на блокирующий SELECT"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Hibernate never takes a pessimistic lock on its own; you must request it explicitly.",
+                "ru": "Hibernate никогда не берёт пессимистичную блокировку сам; её нужно запросить явно."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The database's default isolation level",
+                "ru": "Уровень изоляции базы данных по умолчанию"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The default isolation level does not stop two transactions from overwriting each other's change to a row.",
+                "ru": "Уровень изоляции по умолчанию не мешает двум транзакциям затирать изменения друг друга в строке."
+              }
+            }
+          ]
+        },
+        {
+          "id": "version-p3-fill-annotation",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing annotation name.",
+            "ru": "Впиши имя пропущенной аннотации."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The annotated column is what the UPDATE later compares against.",
+              "ru": "Именно с этим столбцом позже сравнивает UPDATE."
+            },
+            "incorrect": {
+              "en": "It is @Version — the column Hibernate bumps and compares.",
+              "ru": "Это @Version — столбец, который Hibernate поднимает и сравнивает."
+            }
+          },
+          "text": {
+            "en": "In JPA, optimistic locking is enabled by annotating a field with @___.",
+            "ru": "В JPA оптимистичная блокировка включается аннотацией @___ на поле."
+          },
+          "answers": {
+            "en": [
+              "Version",
+              "version"
+            ],
+            "ru": [
+              "Version",
+              "version"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "optimistic-update-sql",
+      "title": {
+        "en": "The versioned UPDATE",
+        "ru": "UPDATE с версией"
+      },
+      "summary": {
+        "en": "Optimistic locking flushes UPDATE ... SET version = v + 1 WHERE id = ? AND version = v — a compare-and-set on the row.",
+        "ru": "Оптимистичная блокировка выполняет UPDATE ... SET version = v + 1 WHERE id = ? AND version = v — это compare-and-set по строке."
+      },
+      "discovery": [
+        {
+          "id": "opt-sql-d1-which-statement",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Product 100 was loaded at version 5 and its price changed to 42. Which statement does Hibernate flush at commit?",
+            "ru": "Товар 100 загрузили с версией 5 и поменяли цену на 42. Какой оператор Hibernate отправит при коммите?"
+          },
+          "code": "// product 100 was loaded with version = 5\nProduct p = em.find(Product.class, 100L);\np.setPrice(42);\n// commit -> Hibernate flushes ...",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Hibernate does not flush a blind `UPDATE`. It puts the version it read into the `WHERE` clause and sets the next version in the same statement:\n\n```sql\nUPDATE product\nSET price = 42, version = 6\nWHERE id = 100 AND version = 5;\n```\n\nRead it as a **compare-and-set** on the row: *apply the new values only if the version is still the one I read*. The check travels inside the statement, so the database decides the winner atomically — no lock is taken and no coordination between application nodes is needed.\n\n```mermaid\nflowchart LR\n  R[\"read row: version = 5\"] --> M[\"modify in memory\"]\n  M --> U[\"UPDATE ... SET version = 6 WHERE id = 100 AND version = 5\"]\n  U --> C{\"rows matched?\"}\n  C -->|\"1\"| OK[\"committed\"]\n  C -->|\"0\"| F[\"conflict\"]\n```",
+            "ru": "Hibernate не отправляет `UPDATE` вслепую. Он подставляет прочитанную версию в `WHERE` и в том же операторе выставляет следующую:\n\n```sql\nUPDATE product\nSET price = 42, version = 6\nWHERE id = 100 AND version = 5;\n```\n\nЧитайте это как **compare-and-set** по строке: *применить новые значения, только если версия всё ещё та, что я прочитал*. Проверка едет прямо в операторе, поэтому победителя атомарно определяет база — блокировка не берётся, и согласовывать что-либо между узлами приложения не нужно.\n\n```mermaid\nflowchart LR\n  R[\"чтение строки: version = 5\"] --> M[\"изменение в памяти\"]\n  M --> U[\"UPDATE ... SET version = 6 WHERE id = 100 AND version = 5\"]\n  U --> C{\"сколько строк совпало?\"}\n  C -->|\"1\"| OK[\"закоммичено\"]\n  C -->|\"0\"| F[\"конфликт\"]\n```"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The version you read goes into the WHERE; the next version goes into the SET.",
+              "ru": "Прочитанная версия уходит в WHERE, следующая — в SET."
+            },
+            "incorrect": {
+              "en": "It is UPDATE ... SET price = 42, version = 6 WHERE id = 100 AND version = 5.",
+              "ru": "Это UPDATE ... SET price = 42, version = 6 WHERE id = 100 AND version = 5."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "UPDATE product SET price = 42, version = 6 WHERE id = 100 AND version = 5",
+                "ru": "UPDATE product SET price = 42, version = 6 WHERE id = 100 AND version = 5"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "UPDATE product SET price = 42 WHERE id = 100",
+                "ru": "UPDATE product SET price = 42 WHERE id = 100"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A blind UPDATE is exactly what loses the other transaction's change; the version predicate is the whole point.",
+                "ru": "Именно слепой UPDATE и теряет чужое изменение; весь смысл — в предикате с версией."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "SELECT * FROM product WHERE id = 100 FOR UPDATE, then a plain UPDATE",
+                "ru": "SELECT * FROM product WHERE id = 100 FOR UPDATE, а затем обычный UPDATE"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is pessimistic locking; optimistic locking takes no lock at all.",
+                "ru": "Это пессимистичная блокировка; оптимистичная не берёт блокировок вообще."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "opt-sql-p1-which-clause",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In an optimistic-locking UPDATE, which part actually detects a concurrent change?",
+            "ru": "Какая часть UPDATE при оптимистичной блокировке действительно обнаруживает параллельное изменение?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "If the version moved, the WHERE stops matching and the update applies to nothing.",
+              "ru": "Если версия сдвинулась, WHERE перестаёт совпадать и обновлять становится нечего."
+            },
+            "incorrect": {
+              "en": "The AND version = ? predicate in the WHERE clause is what catches the clash.",
+              "ru": "Конфликт ловит предикат AND version = ? в блоке WHERE."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The AND version = ? predicate in the WHERE clause",
+                "ru": "Предикат AND version = ? в блоке WHERE"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The SET version = version + 1 assignment",
+                "ru": "Присваивание SET version = version + 1"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Bumping the version matters for the NEXT writer; this write's clash is caught by the WHERE predicate.",
+                "ru": "Поднятие версии важно для СЛЕДУЮЩЕГО писателя; конфликт этой записи ловит предикат в WHERE."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The transaction's isolation level",
+                "ru": "Уровень изоляции транзакции"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The check is written into the statement itself, not provided by the isolation level.",
+                "ru": "Проверка зашита в сам оператор, её не даёт уровень изоляции."
+              }
+            }
+          ]
+        },
+        {
+          "id": "opt-sql-p2-sort-flow",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Put the steps of an optimistic read-modify-write in order.",
+            "ru": "Расставь шаги цикла read-modify-write при оптимистичной блокировке по порядку."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The version is captured at read time and verified only at write time.",
+              "ru": "Версия запоминается при чтении и проверяется только при записи."
+            },
+            "incorrect": {
+              "en": "Read and remember the version, modify in memory, flush the versioned UPDATE, then commit if one row matched.",
+              "ru": "Прочитать и запомнить версию, изменить в памяти, отправить UPDATE с версией, затем закоммитить, если совпала одна строка."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Read the row and remember its version v",
+                "ru": "Прочитать строку и запомнить её версию v"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Modify the entity in memory",
+                "ru": "Изменить сущность в памяти"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Flush UPDATE ... SET version = v + 1 WHERE id = ? AND version = v",
+                "ru": "Отправить UPDATE ... SET version = v + 1 WHERE id = ? AND version = v"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Commit if exactly one row matched",
+                "ru": "Закоммитить, если совпала ровно одна строка"
+              }
+            }
+          ]
+        },
+        {
+          "id": "opt-sql-p3-fill-sql",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Product 100 was loaded at version 5 and its price set to 42. Complete the UPDATE that optimistic locking flushes.",
+            "ru": "Товар 100 загрузили с версией 5 и выставили цену 42. Дополни UPDATE, который отправит оптимистичная блокировка."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The new version is written, the old one is required by the WHERE.",
+              "ru": "Новая версия записывается, старая требуется в WHERE."
+            },
+            "incorrect": {
+              "en": "SET version = 6 writes the next version; WHERE version = 5 demands the one you read.",
+              "ru": "SET version = 6 записывает следующую версию; WHERE version = 5 требует ту, которую вы прочитали."
+            }
+          },
+          "text": {
+            "en": "UPDATE product SET price = 42, version = ___ WHERE id = 100 AND version = ___;",
+            "ru": "UPDATE product SET price = 42, version = ___ WHERE id = 100 AND version = ___;"
+          },
+          "blanks": [
+            {
+              "en": [
+                "6"
+              ],
+              "ru": [
+                "6"
+              ]
+            },
+            {
+              "en": [
+                "5"
+              ],
+              "ru": [
+                "5"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "zero-rows-conflict",
+      "title": {
+        "en": "Zero rows means conflict",
+        "ru": "Ноль строк — значит конфликт"
+      },
+      "summary": {
+        "en": "If the versioned UPDATE matches zero rows, someone else committed first: Hibernate throws OptimisticLockException and the application reloads and retries.",
+        "ru": "Если UPDATE с версией совпал с нулём строк, значит кто-то закоммитился раньше: Hibernate бросает OptimisticLockException, а приложение перечитывает и повторяет."
+      },
+      "discovery": [
+        {
+          "id": "zero-rows-d1-predict",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Transaction A already committed a change, so the row is now at version 6. Transaction B, which loaded it at version 5, flushes this. Predict what happens to B.",
+            "ru": "Транзакция A уже закоммитила изменение, поэтому строка теперь на версии 6. Транзакция B, загрузившая её с версией 5, отправляет это. Предскажи, что произойдёт с B."
+          },
+          "code": "UPDATE product\nSET price = 50, version = 6\nWHERE id = 100 AND version = 5;",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "The `WHERE` no longer matches: the row is at version 6, and B is asking for version 5. The statement affects **zero rows**. Hibernate checks the reported row count, sees `rowsUpdated == 0`, and throws **`OptimisticLockException`** (Hibernate's own `StaleObjectStateException`).\n\n```mermaid\nsequenceDiagram\n  participant A as Tx A\n  participant DB as Row (version=5)\n  participant B as Tx B\n  A->>DB: read (version=5)\n  B->>DB: read (version=5)\n  A->>DB: UPDATE WHERE version=5 -> 1 row, version becomes 6\n  B->>DB: UPDATE WHERE version=5 -> 0 rows\n  Note over B: OptimisticLockException\n```\n\nThis exception is **not a bug**. Under contention it is the expected signal that someone else won the race. The correct reaction is to **reload the row and retry the whole read-modify-write** against the fresh data. Repeating the same stale UPDATE, or forcing the version by hand, would simply throw away the other transaction's change — the very anomaly you were preventing.",
+            "ru": "`WHERE` больше не совпадает: строка на версии 6, а B просит версию 5. Оператор затрагивает **ноль строк**. Hibernate смотрит на количество затронутых строк, видит `rowsUpdated == 0` и бросает **`OptimisticLockException`** (в самом Hibernate — `StaleObjectStateException`).\n\n```mermaid\nsequenceDiagram\n  participant A as Tx A\n  participant DB as Строка (version=5)\n  participant B as Tx B\n  A->>DB: чтение (version=5)\n  B->>DB: чтение (version=5)\n  A->>DB: UPDATE WHERE version=5 -> 1 строка, версия становится 6\n  B->>DB: UPDATE WHERE version=5 -> 0 строк\n  Note over B: OptimisticLockException\n```\n\nЭто исключение — **не баг**. При конкуренции это ожидаемый сигнал, что гонку выиграл кто-то другой. Правильная реакция — **перечитать строку и повторить весь цикл read-modify-write** уже по свежим данным. Повторять тот же устаревший UPDATE или подставлять версию вручную нельзя: так вы просто выбросите чужое изменение — ровно ту аномалию, от которой защищались."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Zero rows matched, so Hibernate reports the conflict as an exception.",
+              "ru": "Совпало ноль строк, поэтому Hibernate сообщает о конфликте исключением."
+            },
+            "incorrect": {
+              "en": "The row moved to version 6, so the WHERE matches nothing and OptimisticLockException is thrown.",
+              "ru": "Строка ушла на версию 6, поэтому WHERE ни с чем не совпадает и бросается OptimisticLockException."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Zero rows match, and Hibernate throws OptimisticLockException",
+                "ru": "Совпадает ноль строк, и Hibernate бросает OptimisticLockException"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The row is updated to price 50",
+                "ru": "Строка обновляется, цена становится 50"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The row moved to version 6, so the WHERE clause no longer matches it.",
+                "ru": "Строка ушла на версию 6, поэтому условие WHERE её больше не находит."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "B waits until A releases the row",
+                "ru": "B ждёт, пока A освободит строку"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Optimistic locking never blocks — nothing was locked, so there is nothing to wait for.",
+                "ru": "Оптимистичная блокировка никогда не блокирует — ничего не заблокировано, ждать нечего."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "zero-rows-p1-bug-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "An OptimisticLockException means the application has a bug.",
+            "ru": "OptimisticLockException означает, что в приложении есть баг."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Under contention it is expected; the fix is a retry path, not a code fix.",
+              "ru": "При конкуренции это ожидаемо; нужен путь для повтора, а не правка кода."
+            },
+            "incorrect": {
+              "en": "No — it is the expected signal that another transaction committed first; reload and retry.",
+              "ru": "Нет — это ожидаемый сигнал, что другая транзакция закоммитилась раньше; перечитайте и повторите."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "zero-rows-p2-reaction",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "How should an application react to an OptimisticLockException?",
+            "ru": "Как приложение должно реагировать на OptimisticLockException?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The work has to be redone on the data that actually won.",
+              "ru": "Работу нужно переделать по тем данным, которые в итоге победили."
+            },
+            "incorrect": {
+              "en": "Reload the row and retry the whole read-modify-write on fresh data.",
+              "ru": "Перечитать строку и повторить весь цикл read-modify-write по свежим данным."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Reload the row and retry the whole read-modify-write",
+                "ru": "Перечитать строку и повторить весь цикл read-modify-write"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Set the version field by hand and repeat the same UPDATE",
+                "ru": "Выставить версию вручную и повторить тот же UPDATE"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That overwrites the other transaction's change — the very anomaly optimistic locking prevents.",
+                "ru": "Так вы затрёте чужое изменение — именно ту аномалию, от которой защищает оптимистичная блокировка."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Raise the transaction isolation level and repeat",
+                "ru": "Поднять уровень изоляции транзакции и повторить"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The conflict is real, not an isolation artefact; the work still has to be redone on fresh data.",
+                "ru": "Конфликт настоящий, а не артефакт изоляции; работу всё равно придётся переделать по свежим данным."
+              }
+            }
+          ]
+        },
+        {
+          "id": "zero-rows-p3-match-outcomes",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each outcome of an optimistic-locking UPDATE to what it means.",
+            "ru": "Соотнеси каждый исход UPDATE при оптимистичной блокировке с его смыслом."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The matched row count is the entire conflict signal.",
+              "ru": "Количество совпавших строк — и есть весь сигнал о конфликте."
+            },
+            "incorrect": {
+              "en": "One row means success, zero rows means someone won the race, and no version column means no check at all.",
+              "ru": "Одна строка — успех, ноль строк — гонку выиграл кто-то другой, нет версионного столбца — нет и проверки."
+            }
+          },
+          "pairs": [
+            {
+              "id": "one-row",
+              "left": {
+                "en": "1 row matched",
+                "ru": "Совпала 1 строка"
+              },
+              "right": {
+                "en": "The update applied and the version was bumped",
+                "ru": "Обновление применилось, версия поднята"
+              }
+            },
+            {
+              "id": "zero-rows",
+              "left": {
+                "en": "0 rows matched",
+                "ru": "Совпало 0 строк"
+              },
+              "right": {
+                "en": "Someone committed first; OptimisticLockException",
+                "ru": "Кто-то закоммитился раньше; OptimisticLockException"
+              }
+            },
+            {
+              "id": "no-version",
+              "left": {
+                "en": "No version column at all",
+                "ru": "Версионного столбца нет вовсе"
+              },
+              "right": {
+                "en": "No check happens; the lost update goes unnoticed",
+                "ru": "Проверки нет; потерянное обновление проходит незамеченным"
+              }
+            }
+          ]
+        },
+        {
+          "id": "zero-rows-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the conflict rule of optimistic locking.",
+            "ru": "Дополни правило конфликта при оптимистичной блокировке."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The row count is checked on every versioned flush.",
+              "ru": "Количество строк проверяется при каждом flush с версией."
+            },
+            "incorrect": {
+              "en": "Zero matched rows means a concurrent change, reported as OptimisticLockException.",
+              "ru": "Ноль совпавших строк означает параллельное изменение и сообщается как OptimisticLockException."
+            }
+          },
+          "text": {
+            "en": "When an optimistic-locking UPDATE matches ___ rows, Hibernate throws ___.",
+            "ru": "Когда UPDATE при оптимистичной блокировке совпадает с ___ строк, Hibernate бросает ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "0",
+                "zero"
+              ],
+              "ru": [
+                "0",
+                "ноль"
+              ]
+            },
+            {
+              "en": [
+                "OptimisticLockException"
+              ],
+              "ru": [
+                "OptimisticLockException"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "optimistic-holds-no-lock",
+      "title": {
+        "en": "Optimistic locking locks nothing",
+        "ru": "Оптимистичная блокировка ничего не блокирует"
+      },
+      "summary": {
+        "en": "Despite the name, optimistic locking never blocks anyone; it only detects a conflict at write time and lets the loser retry.",
+        "ru": "Несмотря на название, оптимистичная блокировка никого не блокирует; она лишь обнаруживает конфликт при записи, а проигравший повторяет попытку."
+      },
+      "discovery": [
+        {
+          "id": "no-lock-d1-think-time",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Transaction A loaded a row protected by optimistic locking and is 'thinking' for 30 seconds before saving. Meanwhile transaction B reads the same row, updates it and commits. What happens to B?",
+            "ru": "Транзакция A загрузила строку, защищённую оптимистичной блокировкой, и 30 секунд «думает» перед сохранением. Тем временем транзакция B читает ту же строку, меняет её и коммитится. Что происходит с B?"
+          },
+          "reveal": {
+            "en": "Despite the name, **optimistic locking locks nothing**. Between the read and the flush the row is completely free: any other transaction may read it, update it and commit.\n\nThat is the point. Nobody ever waits, so throughput stays high, and the strategy works unchanged across several application nodes — the check lives in the row itself, not in a lock held by one process.\n\nThe price is that a save can be **rejected**: whoever flushes last with a stale version loses and has to redo the work. So optimistic locking *detects* a conflict; it does not *prevent* one.\n\n```mermaid\nflowchart LR\n  P[\"pessimistic: lock at read time, others wait\"] --> PR[\"conflict prevented\"]\n  O[\"optimistic: no lock, version checked at write time\"] --> OR[\"conflict detected, loser retries\"]\n```",
+            "ru": "Несмотря на название, **оптимистичная блокировка ничего не блокирует**. Между чтением и записью строка полностью свободна: любая другая транзакция может её прочитать, изменить и закоммитить.\n\nВ этом и смысл. Никто никогда не ждёт, поэтому пропускная способность остаётся высокой, а стратегия без изменений работает на нескольких узлах приложения — проверка живёт в самой строке, а не в блокировке, которую держит один процесс.\n\nПлата за это — сохранение может быть **отклонено**: тот, кто записывает последним с устаревшей версией, проигрывает и переделывает работу. То есть оптимистичная блокировка *обнаруживает* конфликт, а не *предотвращает* его.\n\n```mermaid\nflowchart LR\n  P[\"пессимистичная: блокировка при чтении, остальные ждут\"] --> PR[\"конфликт предотвращён\"]\n  O[\"оптимистичная: без блокировки, проверка версии при записи\"] --> OR[\"конфликт обнаружен, проигравший повторяет\"]\n```"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Nothing was locked, so B proceeds freely and wins the race.",
+              "ru": "Ничего не заблокировано, поэтому B спокойно продолжает и выигрывает гонку."
+            },
+            "incorrect": {
+              "en": "B is never blocked: optimistic locking holds no lock, so B commits normally.",
+              "ru": "B никто не блокирует: оптимистичная блокировка не держит блокировок, поэтому B спокойно коммитится."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Nothing — B is never blocked and commits normally",
+                "ru": "Ничего — B никто не блокирует, и она спокойно коммитится"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "B blocks until A commits or rolls back",
+                "ru": "B блокируется, пока A не закоммитится или не откатится"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is pessimistic locking. Optimistic locking holds no lock, so there is nothing for B to wait on.",
+                "ru": "Это пессимистичная блокировка. Оптимистичная не держит блокировок, поэтому ждать B нечего."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "B fails immediately with OptimisticLockException",
+                "ru": "B сразу падает с OptimisticLockException"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "B commits first and wins; the exception hits whoever flushes with a stale version — here that is A.",
+                "ru": "B коммитится первой и выигрывает; исключение достаётся тому, кто пишет с устаревшей версией — здесь это A."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "no-lock-p1-holds-lock-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Optimistic locking holds a row lock from the moment the entity is loaded until commit.",
+            "ru": "Оптимистичная блокировка держит блокировку строки с момента загрузки сущности до коммита."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It holds no lock at all; the conflict is detected at write time.",
+              "ru": "Она вообще не держит блокировок; конфликт обнаруживается при записи."
+            },
+            "incorrect": {
+              "en": "No — optimistic locking takes no lock; between read and write the row is free for everyone.",
+              "ru": "Нет — оптимистичная блокировка не берёт блокировок; между чтением и записью строка свободна для всех."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "no-lock-p2-describe",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which description fits optimistic locking?",
+            "ru": "Какое описание подходит оптимистичной блокировке?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "It is a database-level compare-and-set on the row.",
+              "ru": "Это compare-and-set по строке на уровне базы данных."
+            },
+            "incorrect": {
+              "en": "It is a compare-and-set: write only if the version is still the one you read.",
+              "ru": "Это compare-and-set: записать, только если версия всё ещё та, что вы прочитали."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A compare-and-set on the row: write only if the version is unchanged",
+                "ru": "Compare-and-set по строке: записать, только если версия не изменилась"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A short exclusive row lock taken at read time",
+                "ru": "Короткая эксклюзивная блокировка строки, взятая при чтении"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is pessimistic locking; optimistic locking takes no lock at all.",
+                "ru": "Это пессимистичная блокировка; оптимистичная не берёт блокировок вообще."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A table-level lock held until commit",
+                "ru": "Блокировка уровня таблицы, удерживаемая до коммита"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Optimistic locking takes no lock, and row locks in PostgreSQL are per row, not per table.",
+                "ru": "Оптимистичная блокировка ничего не блокирует, а блокировки в PostgreSQL берутся по строке, а не по таблице."
+              }
+            }
+          ]
+        },
+        {
+          "id": "no-lock-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble what optimistic locking actually does with a conflict.",
+            "ru": "Собери, что оптимистичная блокировка на самом деле делает с конфликтом."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Detection at write time, not prevention at read time.",
+              "ru": "Обнаружение при записи, а не предотвращение при чтении."
+            },
+            "incorrect": {
+              "en": "Optimistic locking detects a conflict instead of preventing it.",
+              "ru": "Оптимистичная блокировка обнаруживает конфликт, а не предотвращает его."
+            }
+          },
+          "tokens": {
+            "en": [
+              "optimistic",
+              "locking",
+              "detects",
+              "a",
+              "conflict",
+              "instead",
+              "of",
+              "preventing",
+              "it"
+            ],
+            "ru": [
+              "оптимистичная",
+              "блокировка",
+              "обнаруживает",
+              "конфликт,",
+              "а",
+              "не",
+              "предотвращает",
+              "его"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "blocks",
+              "waits"
+            ],
+            "ru": [
+              "блокирует",
+              "ждёт"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "when-optimistic",
+      "title": {
+        "en": "When optimistic locking fits",
+        "ru": "Когда подходит оптимистичная блокировка"
+      },
+      "summary": {
+        "en": "Low contention, read-heavy work, and a long gap between load and save — such as a form edited across two HTTP requests.",
+        "ru": "Низкая конкуренция, преобладание чтения и большой разрыв между загрузкой и сохранением — например, форма, редактируемая между двумя HTTP-запросами."
+      },
+      "discovery": [
+        {
+          "id": "when-opt-d1-edit-form",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A user opens an edit form in one HTTP request, thinks for a minute, and saves in another request. Which strategy fits, and why?",
+            "ru": "Пользователь открывает форму редактирования в одном HTTP-запросе, минуту думает и сохраняет другим запросом. Какая стратегия подходит и почему?"
+          },
+          "reveal": {
+            "en": "Between the two requests the entity is **detached**: it lives in memory with no open transaction and no database connection behind it. A database lock cannot span that gap — a lock only exists inside a transaction — and holding one through a minute of think time would stall every other transaction on that row.\n\nOptimistic locking fits this perfectly: the version loaded with the form travels with the detached entity, and it is compared only at save time. If someone else edited the row meanwhile, the save is rejected and the user reloads.\n\nReach for optimistic locking when:\n\n- contention is **low** and reads dominate,\n- transactions are short,\n- or the read and the write are far apart in time.\n\nIt also scales across application nodes, because the check lives in the row itself rather than in a lock held by one process.",
+            "ru": "Между двумя запросами сущность находится в состоянии **detached**: она живёт в памяти без открытой транзакции и без соединения с базой. Блокировка БД не может перекрыть этот разрыв — она существует только внутри транзакции, — а держать её всю минуту раздумий значило бы застопорить все остальные транзакции по этой строке.\n\nОптимистичная блокировка подходит здесь идеально: версия, загруженная вместе с формой, едет с detached-сущностью и сравнивается только в момент сохранения. Если строку тем временем поменял кто-то другой, сохранение отклоняется и пользователь перезагружает данные.\n\nБерите оптимистичную блокировку, когда:\n\n- конкуренция **низкая** и преобладает чтение,\n- транзакции короткие,\n- или чтение и запись сильно разнесены во времени.\n\nОна к тому же хорошо масштабируется между узлами приложения, потому что проверка живёт в самой строке, а не в блокировке, которую держит один процесс."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A lock must never span a user's think time; a version check costs nothing until save.",
+              "ru": "Блокировка не должна перекрывать время раздумий пользователя; проверка версии ничего не стоит до сохранения."
+            },
+            "incorrect": {
+              "en": "Optimistic — a database lock cannot be held across two HTTP requests, but a version can.",
+              "ru": "Оптимистичная — блокировку БД нельзя держать между двумя HTTP-запросами, а версию можно."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Optimistic — no lock may be held across the user's think time",
+                "ru": "Оптимистичная — блокировку нельзя держать всё время раздумий пользователя"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Pessimistic — the row must not change while the form is open",
+                "ru": "Пессимистичная — строка не должна меняться, пока форма открыта"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Holding a row lock for a minute stalls every other transaction on that row; the version check costs nothing until save.",
+                "ru": "Держать блокировку строки минуту — застопорить все остальные транзакции по ней; проверка версии до сохранения бесплатна."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Neither — an entity outside a transaction cannot be protected",
+                "ru": "Никакая — сущность вне транзакции защитить нельзя"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The version travels with the detached entity and is checked when it is saved back.",
+                "ru": "Версия едет вместе с detached-сущностью и проверяется, когда её сохраняют обратно."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "when-opt-p1-workload",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which workload fits optimistic locking best?",
+            "ru": "Какая нагрузка лучше всего подходит для оптимистичной блокировки?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Rare clashes mean rare retries, and nobody ever waits.",
+              "ru": "Редкие конфликты — редкие повторы, и при этом никто не ждёт."
+            },
+            "incorrect": {
+              "en": "Read-heavy data with rare concurrent writes: conflicts are rare, so retries are rare.",
+              "ru": "Данные с преобладанием чтения и редкими параллельными записями: конфликты редки, значит редки и повторы."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Read-heavy data with rare concurrent writes",
+                "ru": "Данные с преобладанием чтения и редкими параллельными записями"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A single hot row updated hundreds of times per second",
+                "ru": "Одна горячая строка, обновляемая сотни раз в секунду"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Almost every save would collide and retry; a hot row calls for pessimistic locking.",
+                "ru": "Почти каждое сохранение конфликтовало бы и повторялось; горячая строка требует пессимистичной блокировки."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A job queue that many workers pull from at once",
+                "ru": "Очередь задач, из которой одновременно тянут много воркеров"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the SELECT ... FOR UPDATE SKIP LOCKED pattern — a pessimistic technique.",
+                "ru": "Это приём SELECT ... FOR UPDATE SKIP LOCKED — пессимистичная техника."
+              }
+            }
+          ]
+        },
+        {
+          "id": "when-opt-p2-two-requests-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Optimistic locking can protect an entity that was loaded in one HTTP request and saved in another.",
+            "ru": "Оптимистичная блокировка может защитить сущность, загруженную в одном HTTP-запросе и сохранённую в другом."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The version travels with the entity and is compared at save time.",
+              "ru": "Версия едет вместе с сущностью и сравнивается при сохранении."
+            },
+            "incorrect": {
+              "en": "It can — the version is carried by the detached entity, and no lock is needed in between.",
+              "ru": "Может — версию несёт сама detached-сущность, и блокировка между запросами не нужна."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "when-opt-p3-fill-detached",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing JPA term.",
+            "ru": "Впиши пропущенный термин JPA."
+          },
+          "feedback": {
+            "correct": {
+              "en": "No lock can span that state, but a version column can.",
+              "ru": "Блокировка это состояние не переживает, а версионный столбец — да."
+            },
+            "incorrect": {
+              "en": "It is a detached entity: loaded in one request, saved in another, with no transaction in between.",
+              "ru": "Это detached-сущность: загружена в одном запросе, сохранена в другом, без транзакции между ними."
+            }
+          },
+          "text": {
+            "en": "An entity loaded in one request and saved in another, with no open transaction in between, is called a ___ entity.",
+            "ru": "Сущность, загруженная в одном запросе и сохранённая в другом, без открытой транзакции между ними, называется ___-сущностью."
+          },
+          "answers": {
+            "en": [
+              "detached"
+            ],
+            "ru": [
+              "detached"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "pessimistic-lock-up-front",
+      "title": {
+        "en": "Locking up front",
+        "ru": "Блокировка заранее"
+      },
+      "summary": {
+        "en": "Pessimistic locking takes the row lock at read time, so other transactions wait until you commit or roll back.",
+        "ru": "Пессимистичная блокировка берёт блокировку строки в момент чтения, поэтому другие транзакции ждут вашего коммита или отката."
+      },
+      "discovery": [
+        {
+          "id": "pess-d1-second-tx",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Transaction A ran this and has not committed yet. Transaction B now runs the same em.find with PESSIMISTIC_WRITE on row 100. What happens to B?",
+            "ru": "Транзакция A выполнила это и ещё не закоммитилась. Теперь транзакция B выполняет такой же em.find с PESSIMISTIC_WRITE по строке 100. Что произойдёт с B?"
+          },
+          "code": "// Tx A, still open:\nProduct p = em.find(Product.class, 100L, LockModeType.PESSIMISTIC_WRITE);\np.setStock(p.getStock() - 1);",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Pessimistic locking takes the lock **at read time**, before anyone can clash. In JPA you ask for it explicitly by passing a `LockModeType`:\n\n```java\nProduct p = em.find(Product.class, 100L, LockModeType.PESSIMISTIC_WRITE);\n```\n\nThat acquires a **row-level lock**: a lock on that one row, held inside your transaction and released only when you commit or roll back. While you hold it, another transaction that wants to lock, update or delete the same row **blocks**.\n\n```mermaid\nsequenceDiagram\n  participant A as Tx A\n  participant Row as Row 100\n  participant B as Tx B\n  A->>Row: locking read (lock acquired)\n  B->>Row: locking read\n  Note over B: blocked, waiting for A\n  A->>Row: UPDATE + COMMIT (lock released)\n  Row-->>B: lock granted, sees committed value\n```\n\nBecause the winner is decided before any work is done, the update *will* apply to fresh data and no retry is ever needed. In exchange, access to that row is serialized.",
+            "ru": "Пессимистичная блокировка берётся **в момент чтения**, до того как конфликт вообще может случиться. В JPA её запрашивают явно, передавая `LockModeType`:\n\n```java\nProduct p = em.find(Product.class, 100L, LockModeType.PESSIMISTIC_WRITE);\n```\n\nЭто берёт **блокировку уровня строки**: блокировку на одну эту строку, удерживаемую внутри вашей транзакции и снимаемую только при коммите или откате. Пока вы её держите, другая транзакция, желающая заблокировать, обновить или удалить ту же строку, **блокируется**.\n\n```mermaid\nsequenceDiagram\n  participant A as Tx A\n  participant Row as Строка 100\n  participant B as Tx B\n  A->>Row: блокирующее чтение (блокировка взята)\n  B->>Row: блокирующее чтение\n  Note over B: заблокирована, ждёт A\n  A->>Row: UPDATE + COMMIT (блокировка снята)\n  Row-->>B: блокировка выдана, видит закоммиченное значение\n```\n\nПоскольку победитель определён до всякой работы, обновление *точно* применится к свежим данным и повтор никогда не нужен. Взамен доступ к этой строке сериализуется."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The lock is held until A finishes; B queues behind it.",
+              "ru": "Блокировка держится до завершения A; B встаёт в очередь за ней."
+            },
+            "incorrect": {
+              "en": "B waits: the row lock is held inside A's transaction until A commits or rolls back.",
+              "ru": "B ждёт: блокировка строки держится внутри транзакции A до её коммита или отката."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "B waits until A commits or rolls back",
+                "ru": "B ждёт, пока A не закоммитится или не откатится"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "B gets the row at its current value and continues",
+                "ru": "B получает строку с текущим значением и продолжает"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A locking read never hands out a copy that is about to change; B waits and then sees A's committed value.",
+                "ru": "Блокирующее чтение никогда не выдаёт копию, которая вот-вот изменится; B ждёт и затем видит закоммиченное значение A."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "B throws an exception immediately",
+                "ru": "B сразу бросает исключение"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "By default a blocked transaction queues and waits; failing instantly has to be requested explicitly.",
+                "ru": "По умолчанию заблокированная транзакция встаёт в очередь и ждёт; мгновенное падение нужно запрашивать явно."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "pess-p1-when-checks",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "When does pessimistic locking check for a conflict?",
+            "ru": "Когда пессимистичная блокировка проверяет конфликт?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The lock is taken before the work, so no clash is possible afterwards.",
+              "ru": "Блокировка берётся до работы, поэтому конфликт потом уже невозможен."
+            },
+            "incorrect": {
+              "en": "At read time — the lock excludes everyone else before the work begins.",
+              "ru": "В момент чтения — блокировка исключает всех остальных ещё до начала работы."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "At read time — it takes the lock before any clash can happen",
+                "ru": "В момент чтения — блокировка берётся до того, как конфликт может случиться"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "At commit time, by comparing a version column",
+                "ru": "При коммите, сравнивая версионный столбец"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is optimistic locking; a pessimistic lock has already excluded the other writer.",
+                "ru": "Это оптимистичная блокировка; пессимистичная уже исключила другого писателя."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It never checks; it simply retries on failure",
+                "ru": "Она не проверяет вовсе, а просто повторяет при неудаче"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Retrying is optimistic locking's recovery path; a pessimistic lock removes the conflict up front.",
+                "ru": "Повтор — это путь восстановления оптимистичной блокировки; пессимистичная убирает конфликт заранее."
+              }
+            }
+          ]
+        },
+        {
+          "id": "pess-p2-release-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A pessimistic row lock is released when the transaction commits or rolls back.",
+            "ru": "Пессимистичная блокировка строки снимается, когда транзакция коммитится или откатывается."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The lock lives exactly as long as the transaction does.",
+              "ru": "Блокировка живёт ровно столько, сколько живёт транзакция."
+            },
+            "incorrect": {
+              "en": "It is — the lock exists only inside the transaction and ends with it.",
+              "ru": "Снимается — блокировка существует только внутри транзакции и заканчивается вместе с ней."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "pess-p3-sort-flow",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Put the steps of a pessimistically locked update in order.",
+            "ru": "Расставь шаги обновления с пессимистичной блокировкой по порядку."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Lock first, work second, release at commit.",
+              "ru": "Сначала блокировка, затем работа, освобождение при коммите."
+            },
+            "incorrect": {
+              "en": "Begin, take the lock with a locking read, modify, then commit to release it.",
+              "ru": "Начать, взять блокировку блокирующим чтением, изменить, затем закоммитить и освободить её."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Begin the transaction",
+                "ru": "Начать транзакцию"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Read the row with a locking read — the lock is acquired",
+                "ru": "Прочитать строку блокирующим чтением — блокировка взята"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Modify the row while other transactions on it wait",
+                "ru": "Изменить строку, пока другие транзакции по ней ждут"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Commit — the lock is released and the waiters proceed",
+                "ru": "Закоммитить — блокировка снята, ожидающие продолжают"
+              }
+            }
+          ]
+        },
+        {
+          "id": "pess-p4-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble what pessimistic locking does.",
+            "ru": "Собери, что делает пессимистичная блокировка."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The lock is taken before the modification, not after it.",
+              "ru": "Блокировка берётся до изменения, а не после."
+            },
+            "incorrect": {
+              "en": "Pessimistic locking locks the row at read time.",
+              "ru": "Пессимистичная блокировка блокирует строку в момент чтения."
+            }
+          },
+          "tokens": {
+            "en": [
+              "pessimistic",
+              "locking",
+              "locks",
+              "the",
+              "row",
+              "at",
+              "read",
+              "time"
+            ],
+            "ru": [
+              "пессимистичная",
+              "блокировка",
+              "блокирует",
+              "строку",
+              "в",
+              "момент",
+              "чтения"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "version",
+              "commit"
+            ],
+            "ru": [
+              "версию",
+              "коммита"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "for-update-sql",
+      "title": {
+        "en": "SELECT ... FOR UPDATE",
+        "ru": "SELECT ... FOR UPDATE"
+      },
+      "summary": {
+        "en": "Hibernate turns a pessimistic lock into a locking SELECT — SELECT * FROM product WHERE id = 100 FOR UPDATE — which takes a row-level lock.",
+        "ru": "Hibernate превращает пессимистичную блокировку в блокирующий SELECT — SELECT * FROM product WHERE id = 100 FOR UPDATE, — который берёт блокировку уровня строки."
+      },
+      "discovery": [
+        {
+          "id": "for-update-d1-which-sql",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which SQL does Hibernate send to PostgreSQL for this call?",
+            "ru": "Какой SQL Hibernate отправит в PostgreSQL для этого вызова?"
+          },
+          "code": "em.find(Product.class, 100L, LockModeType.PESSIMISTIC_WRITE);",
+          "codeLang": "java",
+          "reveal": {
+            "en": "A pessimistic lock becomes a **locking `SELECT`** — an ordinary query with a locking clause appended:\n\n```sql\nSELECT * FROM product WHERE id = 100 FOR UPDATE;\n```\n\n`FOR UPDATE` takes a **row-level** lock on every row the query matched, inside the current transaction. It is not a table lock: rows the query did not match stay completely free. Another transaction that runs `SELECT ... FOR UPDATE`, `UPDATE` or `DELETE` on a locked row blocks until you commit or roll back.\n\nOne practical warning: it is the *matched* rows that are locked. An unindexed predicate that forces a scan can end up locking far more rows than you intended, so index the column you filter on.",
+            "ru": "Пессимистичная блокировка превращается в **блокирующий `SELECT`** — обычный запрос с добавленной блокирующей конструкцией:\n\n```sql\nSELECT * FROM product WHERE id = 100 FOR UPDATE;\n```\n\n`FOR UPDATE` берёт блокировку **уровня строки** на каждую строку, которую нашёл запрос, внутри текущей транзакции. Это не блокировка таблицы: строки, не попавшие в выборку, остаются полностью свободными. Другая транзакция, выполняющая `SELECT ... FOR UPDATE`, `UPDATE` или `DELETE` по заблокированной строке, ждёт вашего коммита или отката.\n\nПрактическое предупреждение: блокируются именно *совпавшие* строки. Непроиндексированный предикат, вынуждающий сканирование, может заблокировать куда больше строк, чем вы рассчитывали, — индексируйте столбец, по которому фильтруете."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The lock rides along with a normal SELECT.",
+              "ru": "Блокировка едет вместе с обычным SELECT."
+            },
+            "incorrect": {
+              "en": "It is SELECT * FROM product WHERE id = 100 FOR UPDATE — a locking SELECT.",
+              "ru": "Это SELECT * FROM product WHERE id = 100 FOR UPDATE — блокирующий SELECT."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "SELECT * FROM product WHERE id = 100 FOR UPDATE",
+                "ru": "SELECT * FROM product WHERE id = 100 FOR UPDATE"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "LOCK TABLE product IN EXCLUSIVE MODE",
+                "ru": "LOCK TABLE product IN EXCLUSIVE MODE"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "PostgreSQL row locks are appended to a SELECT; the whole table is never locked for this.",
+                "ru": "Блокировки строк в PostgreSQL добавляются к SELECT; вся таблица для этого не блокируется."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "UPDATE product SET version = version + 1 WHERE id = 100",
+                "ru": "UPDATE product SET version = version + 1 WHERE id = 100"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is a versioned write; a pessimistic lock is taken by a locking SELECT before anything is written.",
+                "ru": "Это запись с версией; пессимистичная блокировка берётся блокирующим SELECT до всякой записи."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "for-update-p1-table-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In PostgreSQL, SELECT ... FOR UPDATE locks the entire table.",
+            "ru": "В PostgreSQL SELECT ... FOR UPDATE блокирует всю таблицу."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It is a row-level lock: only the matched rows are locked.",
+              "ru": "Это блокировка уровня строки: блокируются только совпавшие строки."
+            },
+            "incorrect": {
+              "en": "No — it locks only the rows the query matched, not the table.",
+              "ru": "Нет — блокируются только строки, попавшие в выборку, а не таблица."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "for-update-p2-what-blocks",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A row is locked by SELECT ... FOR UPDATE. Which statements from another transaction block on it?",
+            "ru": "Строка заблокирована через SELECT ... FOR UPDATE. Какие операторы другой транзакции на ней заблокируются?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Locking reads and writers contend; everything else is untouched.",
+              "ru": "Конкурируют блокирующие чтения и писатели; остального это не касается."
+            },
+            "incorrect": {
+              "en": "Another SELECT ... FOR UPDATE, an UPDATE or a DELETE of that row block on it.",
+              "ru": "Заблокируются другой SELECT ... FOR UPDATE, UPDATE или DELETE по этой строке."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "SELECT ... FOR UPDATE, UPDATE and DELETE of that row",
+                "ru": "SELECT ... FOR UPDATE, UPDATE и DELETE по этой строке"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Every statement that touches the table",
+                "ru": "Любой оператор, обращающийся к таблице"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The lock is per row, so other rows and the rest of the table are unaffected.",
+                "ru": "Блокировка берётся по строке, поэтому другие строки и остальная таблица не затронуты."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "None — FOR UPDATE only marks intent",
+                "ru": "Никакие — FOR UPDATE лишь обозначает намерение"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "FOR UPDATE takes a real exclusive row lock, and conflicting statements wait for it.",
+                "ru": "FOR UPDATE берёт настоящую эксклюзивную блокировку строки, и конфликтующие операторы её ждут."
+              }
+            }
+          ]
+        },
+        {
+          "id": "for-update-p3-fill-clause",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing SQL clause.",
+            "ru": "Впиши пропущенную конструкцию SQL."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The clause turns an ordinary query into a locking read.",
+              "ru": "Эта конструкция превращает обычный запрос в блокирующее чтение."
+            },
+            "incorrect": {
+              "en": "It is FOR UPDATE — appended to a SELECT to take an exclusive row lock.",
+              "ru": "Это FOR UPDATE — добавляется к SELECT, чтобы взять эксклюзивную блокировку строки."
+            }
+          },
+          "text": {
+            "en": "In PostgreSQL, pessimistic locking appends ___ ___ to a SELECT to take an exclusive row lock.",
+            "ru": "В PostgreSQL пессимистичная блокировка добавляет к SELECT конструкцию ___ ___, чтобы взять эксклюзивную блокировку строки."
+          },
+          "blanks": [
+            {
+              "en": [
+                "FOR",
+                "for"
+              ],
+              "ru": [
+                "FOR",
+                "for"
+              ]
+            },
+            {
+              "en": [
+                "UPDATE",
+                "update"
+              ],
+              "ru": [
+                "UPDATE",
+                "update"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "lock-mode-types",
+      "title": {
+        "en": "PESSIMISTIC_WRITE vs PESSIMISTIC_READ",
+        "ru": "PESSIMISTIC_WRITE и PESSIMISTIC_READ"
+      },
+      "summary": {
+        "en": "PESSIMISTIC_WRITE maps to FOR UPDATE (exclusive), PESSIMISTIC_READ to FOR SHARE (shared), and PESSIMISTIC_FORCE_INCREMENT locks and bumps the version.",
+        "ru": "PESSIMISTIC_WRITE отображается в FOR UPDATE (эксклюзивная), PESSIMISTIC_READ — в FOR SHARE (разделяемая), а PESSIMISTIC_FORCE_INCREMENT блокирует и поднимает версию."
+      },
+      "discovery": [
+        {
+          "id": "lock-modes-d1-two-share",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Transaction A is still open and holds this lock. What happens to transaction B?",
+            "ru": "Транзакция A ещё открыта и держит эту блокировку. Что произойдёт с транзакцией B?"
+          },
+          "code": "-- Tx A:\nSELECT * FROM product WHERE id = 100 FOR SHARE;\n\n-- Tx B, while A is still open:\nSELECT * FROM product WHERE id = 100 FOR SHARE;",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "PostgreSQL has two row-lock strengths, and JPA's `LockModeType` maps straight onto them:\n\n| JPA `LockModeType` | SQL | Meaning |\n|---|---|---|\n| `PESSIMISTIC_WRITE` | `SELECT ... FOR UPDATE` | **Exclusive** — one holder at a time; blocks other `FOR UPDATE` / `FOR SHARE` / `UPDATE` / `DELETE` on the row. |\n| `PESSIMISTIC_READ` | `SELECT ... FOR SHARE` | **Shared** — many holders together; writers block until all of them release. |\n| `PESSIMISTIC_FORCE_INCREMENT` | `FOR UPDATE` plus a `@Version` bump | Locks *and* raises the version, even if you only read. |\n\n**Exclusive** means at most one transaction may hold the lock. **Shared** means several may hold it at once; it guarantees only that the row will not change under them, because nobody may write while any shared holder is still there.\n\nSo `FOR SHARE` is the right choice when you must read a row and be sure it stays as it is, but you are not going to change it yourself.",
+            "ru": "В PostgreSQL есть две силы блокировки строки, и `LockModeType` из JPA ложится прямо на них:\n\n| JPA `LockModeType` | SQL | Смысл |\n|---|---|---|\n| `PESSIMISTIC_WRITE` | `SELECT ... FOR UPDATE` | **Эксклюзивная** — один держатель за раз; блокирует другие `FOR UPDATE` / `FOR SHARE` / `UPDATE` / `DELETE` по строке. |\n| `PESSIMISTIC_READ` | `SELECT ... FOR SHARE` | **Разделяемая** — много держателей одновременно; писатели ждут, пока все не отпустят. |\n| `PESSIMISTIC_FORCE_INCREMENT` | `FOR UPDATE` плюс инкремент `@Version` | Блокирует *и* поднимает версию, даже если вы только читали. |\n\n**Эксклюзивная** означает, что держать её может не больше одной транзакции. **Разделяемая** означает, что держателей может быть несколько; она гарантирует лишь, что строка под ними не изменится, потому что писать нельзя, пока остаётся хоть один разделяемый держатель.\n\nПоэтому `FOR SHARE` — правильный выбор, когда нужно прочитать строку и быть уверенным, что она не поменяется, но менять её самому вы не собираетесь."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Shared locks are compatible with each other.",
+              "ru": "Разделяемые блокировки совместимы друг с другом."
+            },
+            "incorrect": {
+              "en": "FOR SHARE is shared: B gets the lock immediately and both hold it together.",
+              "ru": "FOR SHARE разделяемая: B получает блокировку сразу, и обе держат её вместе."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "B gets the lock immediately; both hold it at the same time",
+                "ru": "B получает блокировку сразу; обе держат её одновременно"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "B waits until A commits",
+                "ru": "B ждёт коммита A"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Waiting is what FOR UPDATE causes; FOR SHARE is a shared lock and allows several holders.",
+                "ru": "Ожидание вызывает FOR UPDATE; FOR SHARE — разделяемая блокировка, она допускает нескольких держателей."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "B fails with a lock error",
+                "ru": "B падает с ошибкой блокировки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Shared locks are compatible with each other, so nothing fails here.",
+                "ru": "Разделяемые блокировки совместимы между собой, поэтому здесь ничего не падает."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "lock-modes-p1-match-sql",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each JPA LockModeType to the SQL it generates.",
+            "ru": "Соотнеси каждый LockModeType из JPA с SQL, который он порождает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Write means exclusive, read means shared, force increment adds a version bump.",
+              "ru": "Write — эксклюзивная, read — разделяемая, force increment добавляет инкремент версии."
+            },
+            "incorrect": {
+              "en": "PESSIMISTIC_WRITE is FOR UPDATE, PESSIMISTIC_READ is FOR SHARE, FORCE_INCREMENT adds a @Version bump.",
+              "ru": "PESSIMISTIC_WRITE — это FOR UPDATE, PESSIMISTIC_READ — FOR SHARE, FORCE_INCREMENT добавляет инкремент @Version."
+            }
+          },
+          "pairs": [
+            {
+              "id": "write",
+              "left": {
+                "en": "PESSIMISTIC_WRITE",
+                "ru": "PESSIMISTIC_WRITE"
+              },
+              "right": {
+                "en": "SELECT ... FOR UPDATE — exclusive row lock",
+                "ru": "SELECT ... FOR UPDATE — эксклюзивная блокировка строки"
+              }
+            },
+            {
+              "id": "read",
+              "left": {
+                "en": "PESSIMISTIC_READ",
+                "ru": "PESSIMISTIC_READ"
+              },
+              "right": {
+                "en": "SELECT ... FOR SHARE — shared row lock",
+                "ru": "SELECT ... FOR SHARE — разделяемая блокировка строки"
+              }
+            },
+            {
+              "id": "force",
+              "left": {
+                "en": "PESSIMISTIC_FORCE_INCREMENT",
+                "ru": "PESSIMISTIC_FORCE_INCREMENT"
+              },
+              "right": {
+                "en": "FOR UPDATE plus a @Version bump",
+                "ru": "FOR UPDATE плюс инкремент @Version"
+              }
+            }
+          ]
+        },
+        {
+          "id": "lock-modes-p2-share-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In PostgreSQL, several transactions can hold FOR SHARE on the same row at the same time.",
+            "ru": "В PostgreSQL несколько транзакций могут одновременно держать FOR SHARE на одной строке."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That is what 'shared' means; only writers are excluded.",
+              "ru": "Именно это и значит «разделяемая»; исключаются только писатели."
+            },
+            "incorrect": {
+              "en": "They can — FOR SHARE is a shared lock; only FOR UPDATE is exclusive.",
+              "ru": "Могут — FOR SHARE разделяемая; эксклюзивна только FOR UPDATE."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "lock-modes-p3-writer-blocks",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "One transaction holds SELECT ... FOR SHARE on a row. Another transaction runs UPDATE on that row. What happens?",
+            "ru": "Одна транзакция держит SELECT ... FOR SHARE на строке. Другая выполняет UPDATE по этой же строке. Что произойдёт?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Shared holders coexist, but writers wait for all of them.",
+              "ru": "Разделяемые держатели сосуществуют, но писатели ждут их всех."
+            },
+            "incorrect": {
+              "en": "The UPDATE blocks: a shared lock guarantees the row will not change while it is held.",
+              "ru": "UPDATE блокируется: разделяемая блокировка гарантирует, что строка не изменится, пока её держат."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The UPDATE blocks until the shared lock is released",
+                "ru": "UPDATE блокируется, пока разделяемая блокировка не снята"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The UPDATE succeeds — FOR SHARE only blocks other FOR SHARE",
+                "ru": "UPDATE проходит — FOR SHARE блокирует только другие FOR SHARE"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It is the opposite: shared holders coexist, and writers are exactly who blocks.",
+                "ru": "Всё наоборот: разделяемые держатели сосуществуют, а блокируются как раз писатели."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The UPDATE fails with a lock error",
+                "ru": "UPDATE падает с ошибкой блокировки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "By default a conflicting statement waits rather than failing.",
+                "ru": "По умолчанию конфликтующий оператор ждёт, а не падает."
+              }
+            }
+          ]
+        },
+        {
+          "id": "lock-modes-p4-fill-sql",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the mapping from JPA lock modes to SQL.",
+            "ru": "Дополни соответствие режимов блокировки JPA и SQL."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Exclusive for writing, shared for reading.",
+              "ru": "Эксклюзивная — для записи, разделяемая — для чтения."
+            },
+            "incorrect": {
+              "en": "PESSIMISTIC_WRITE emits FOR UPDATE; PESSIMISTIC_READ emits FOR SHARE.",
+              "ru": "PESSIMISTIC_WRITE порождает FOR UPDATE; PESSIMISTIC_READ порождает FOR SHARE."
+            }
+          },
+          "text": {
+            "en": "JPA PESSIMISTIC_WRITE emits SELECT ... FOR ___, and PESSIMISTIC_READ emits SELECT ... FOR ___.",
+            "ru": "JPA PESSIMISTIC_WRITE порождает SELECT ... FOR ___, а PESSIMISTIC_READ — SELECT ... FOR ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "UPDATE",
+                "update"
+              ],
+              "ru": [
+                "UPDATE",
+                "update"
+              ]
+            },
+            {
+              "en": [
+                "SHARE",
+                "share"
+              ],
+              "ru": [
+                "SHARE",
+                "share"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "nowait-skip-locked",
+      "title": {
+        "en": "NOWAIT and SKIP LOCKED",
+        "ru": "NOWAIT и SKIP LOCKED"
+      },
+      "summary": {
+        "en": "NOWAIT fails instantly instead of queuing; SKIP LOCKED steps over rows others hold — the classic job-queue pattern.",
+        "ru": "NOWAIT падает сразу вместо ожидания в очереди; SKIP LOCKED перешагивает занятые строки — классический приём для очереди задач."
+      },
+      "discovery": [
+        {
+          "id": "modifiers-d1-workers",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Ten worker transactions run this statement at the same moment. What does each one get?",
+            "ru": "Десять транзакций-воркеров одновременно выполняют этот оператор. Что получит каждая?"
+          },
+          "code": "SELECT * FROM job WHERE status = 'NEW'\nFOR UPDATE SKIP LOCKED\nLIMIT 1;",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "By default a locking `SELECT` **waits** for a row someone else holds. Two modifiers change that:\n\n```sql\nSELECT * FROM product WHERE id = 100 FOR UPDATE NOWAIT;\nSELECT * FROM job WHERE status = 'NEW' FOR UPDATE SKIP LOCKED LIMIT 1;\n```\n\n- **`NOWAIT`** fails immediately instead of queuing (in JPA: the hint `javax.persistence.lock.timeout = 0`). Use it when stalling is worse than failing — you would rather return an error fast than tie up a connection behind someone else's transaction.\n- **`SKIP LOCKED`** steps over rows another transaction already holds and takes the next free one. This is the classic **job queue** pattern: N workers all run the same query, and each one walks away with a different row instead of fighting over the first.\n\n```mermaid\nflowchart TD\n  S[\"locking SELECT hits a locked row\"] --> D[\"default: wait in the queue\"]\n  S --> N[\"NOWAIT: fail immediately\"]\n  S --> K[\"SKIP LOCKED: skip it, take the next free row\"]\n```",
+            "ru": "По умолчанию блокирующий `SELECT` **ждёт** строку, которую держит кто-то другой. Два модификатора это меняют:\n\n```sql\nSELECT * FROM product WHERE id = 100 FOR UPDATE NOWAIT;\nSELECT * FROM job WHERE status = 'NEW' FOR UPDATE SKIP LOCKED LIMIT 1;\n```\n\n- **`NOWAIT`** падает немедленно вместо ожидания в очереди (в JPA — подсказка `javax.persistence.lock.timeout = 0`). Применяйте, когда простой хуже ошибки: лучше быстро вернуть ошибку, чем держать соединение в ожидании чужой транзакции.\n- **`SKIP LOCKED`** перешагивает строки, уже занятые другой транзакцией, и берёт следующую свободную. Это классический приём для **очереди задач**: N воркеров выполняют один и тот же запрос, и каждый уходит со своей строкой, а не дерётся за первую.\n\n```mermaid\nflowchart TD\n  S[\"блокирующий SELECT наткнулся на занятую строку\"] --> D[\"по умолчанию: ждать в очереди\"]\n  S --> N[\"NOWAIT: упасть немедленно\"]\n  S --> K[\"SKIP LOCKED: пропустить её и взять следующую свободную\"]\n```"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Locked rows are skipped, so every worker gets its own job.",
+              "ru": "Занятые строки пропускаются, поэтому каждый воркер получает свою задачу."
+            },
+            "incorrect": {
+              "en": "SKIP LOCKED skips rows others hold, so each worker takes a different free row.",
+              "ru": "SKIP LOCKED пропускает занятые строки, поэтому каждый воркер берёт свою свободную."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Each worker gets a different job row that nobody else holds",
+                "ru": "Каждый воркер получает свою строку задачи, которую никто больше не держит"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nine workers wait for the first one to commit",
+                "ru": "Девять воркеров ждут коммита первого"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the behaviour without SKIP LOCKED; the modifier exists precisely to avoid that queue.",
+                "ru": "Так ведёт себя запрос без SKIP LOCKED; модификатор как раз и нужен, чтобы этой очереди не было."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "All ten lock the same row and nine of them fail",
+                "ru": "Все десять блокируют одну строку, и девять падают"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A row already locked is skipped, not contended, so nobody fails.",
+                "ru": "Уже заблокированная строка пропускается, а не оспаривается, поэтому никто не падает."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "modifiers-p1-nowait",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does NOWAIT do on a locking SELECT in PostgreSQL?",
+            "ru": "Что делает NOWAIT в блокирующем SELECT в PostgreSQL?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Fail fast instead of stalling behind another transaction.",
+              "ru": "Быстро упасть, а не простаивать за чужой транзакцией."
+            },
+            "incorrect": {
+              "en": "It raises an error at once if the row is already locked.",
+              "ru": "Оно сразу выдаёт ошибку, если строка уже заблокирована."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It fails immediately if the row is already locked",
+                "ru": "Сразу падает с ошибкой, если строка уже заблокирована"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It skips the locked row and returns the next free one",
+                "ru": "Пропускает заблокированную строку и возвращает следующую свободную"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is SKIP LOCKED; NOWAIT does not look for another row.",
+                "ru": "Это SKIP LOCKED; NOWAIT другую строку не ищет."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It waits, but only until the statement timeout",
+                "ru": "Ждёт, но только до таймаута оператора"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "NOWAIT does not wait at all — the error comes back at once.",
+                "ru": "NOWAIT не ждёт вообще — ошибка возвращается сразу."
+              }
+            }
+          ]
+        },
+        {
+          "id": "modifiers-p2-skip-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "SKIP LOCKED returns rows that another transaction currently holds locked.",
+            "ru": "SKIP LOCKED возвращает строки, которые сейчас заблокированы другой транзакцией."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It does the opposite: locked rows are skipped entirely.",
+              "ru": "Наоборот: заблокированные строки полностью пропускаются."
+            },
+            "incorrect": {
+              "en": "No — it skips them and returns the next free row instead.",
+              "ru": "Нет — оно их пропускает и возвращает следующую свободную строку."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "modifiers-p3-match-behaviour",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each form of a locking SELECT to what it does when the row is already locked.",
+            "ru": "Соотнеси каждую форму блокирующего SELECT с тем, что она делает, если строка уже заблокирована."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Wait, fail, or move on — three different answers to the same situation.",
+              "ru": "Ждать, упасть или пойти дальше — три разных ответа на одну ситуацию."
+            },
+            "incorrect": {
+              "en": "Plain FOR UPDATE waits, NOWAIT fails at once, SKIP LOCKED takes the next free row.",
+              "ru": "Обычный FOR UPDATE ждёт, NOWAIT сразу падает, SKIP LOCKED берёт следующую свободную строку."
+            }
+          },
+          "pairs": [
+            {
+              "id": "plain",
+              "left": {
+                "en": "FOR UPDATE",
+                "ru": "FOR UPDATE"
+              },
+              "right": {
+                "en": "Waits in the queue until the lock is released",
+                "ru": "Ждёт в очереди, пока блокировку не снимут"
+              }
+            },
+            {
+              "id": "nowait",
+              "left": {
+                "en": "FOR UPDATE NOWAIT",
+                "ru": "FOR UPDATE NOWAIT"
+              },
+              "right": {
+                "en": "Raises an error immediately",
+                "ru": "Немедленно выдаёт ошибку"
+              }
+            },
+            {
+              "id": "skip",
+              "left": {
+                "en": "FOR UPDATE SKIP LOCKED",
+                "ru": "FOR UPDATE SKIP LOCKED"
+              },
+              "right": {
+                "en": "Ignores that row and takes the next free one",
+                "ru": "Игнорирует эту строку и берёт следующую свободную"
+              }
+            }
+          ]
+        },
+        {
+          "id": "modifiers-p4-fill-skip",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the job-queue pattern.",
+            "ru": "Дополни приём для очереди задач."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Each worker walks away with a different row.",
+              "ru": "Каждый воркер уходит со своей строкой."
+            },
+            "incorrect": {
+              "en": "It is SKIP LOCKED — locked rows are stepped over so workers never fight over one row.",
+              "ru": "Это SKIP LOCKED — занятые строки перешагиваются, и воркеры не дерутся за одну строку."
+            }
+          },
+          "text": {
+            "en": "To let many workers pull different rows from a queue table, write SELECT ... FOR UPDATE ___ ___.",
+            "ru": "Чтобы много воркеров тянули разные строки из таблицы-очереди, пишут SELECT ... FOR UPDATE ___ ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "SKIP",
+                "skip"
+              ],
+              "ru": [
+                "SKIP",
+                "skip"
+              ]
+            },
+            {
+              "en": [
+                "LOCKED",
+                "locked"
+              ],
+              "ru": [
+                "LOCKED",
+                "locked"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pessimistic-tradeoffs",
+      "title": {
+        "en": "What pessimistic locking costs",
+        "ru": "Чего стоит пессимистичная блокировка"
+      },
+      "summary": {
+        "en": "It serializes access, cuts throughput and risks deadlocks and lock waits, so it belongs on contended rows inside tiny transactions.",
+        "ru": "Она сериализует доступ, режет пропускную способность и рискует дедлоками и ожиданиями, поэтому уместна на конкурентных строках внутри крошечных транзакций."
+      },
+      "discovery": [
+        {
+          "id": "costs-d1-lock-everything",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A rarely-updated reference table is read constantly. A developer adds PESSIMISTIC_WRITE to every read 'to be safe'. What is the effect?",
+            "ru": "Редко обновляемый справочник читают постоянно. Разработчик добавляет PESSIMISTIC_WRITE к каждому чтению «на всякий случай». К чему это приведёт?"
+          },
+          "reveal": {
+            "en": "Pessimistic locking trades **throughput for certainty**. While you hold the lock, every other transaction that needs that row stops. On low-contention data that is pure overhead: you pay the serialization and gain nothing, because there was no clash to prevent.\n\nTwo failure modes come with it:\n\n- **Lock waits** — transactions pile up behind a slow one and eventually hit a lock timeout.\n- **Deadlock** — two transactions each hold a row the other one needs, so neither can move; the database detects it and kills one of them.\n\n```mermaid\nflowchart LR\n  A[\"Tx A holds row 1\"] -->|\"wants row 2\"| B[\"Tx B holds row 2\"]\n  B -->|\"wants row 1\"| A\n```\n\nSo use it where a conflict is likely and a retry would be expensive or unacceptable — decrementing stock on a hot product, debiting an account balance, dispatching jobs from a queue — and keep the transaction **tiny**. Never wait for a user, a remote call or a slow computation while holding a row lock.",
+            "ru": "Пессимистичная блокировка меняет **пропускную способность на определённость**. Пока вы держите блокировку, любая другая транзакция, которой нужна эта строка, останавливается. На данных с низкой конкуренцией это чистые накладные расходы: вы платите сериализацией и не получаете ничего, потому что предотвращать было нечего.\n\nВместе с ней приходят два способа всё сломать:\n\n- **Ожидания блокировок** — транзакции копятся за медленной и в итоге упираются в таймаут.\n- **Дедлок** — две транзакции держат каждая ту строку, которая нужна другой, и ни одна не может двинуться; база обнаруживает это и убивает одну из них.\n\n```mermaid\nflowchart LR\n  A[\"Tx A держит строку 1\"] -->|\"нужна строка 2\"| B[\"Tx B держит строку 2\"]\n  B -->|\"нужна строка 1\"| A\n```\n\nПоэтому применяйте её там, где конфликт вероятен, а повтор дорог или недопустим — списание остатка популярного товара, дебет баланса счёта, раздача задач из очереди, — и держите транзакцию **крошечной**. Никогда не ждите пользователя, удалённый вызов или медленное вычисление, удерживая блокировку строки."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Serialization is paid for even when there is nothing to prevent.",
+              "ru": "За сериализацию платят даже тогда, когда предотвращать нечего."
+            },
+            "incorrect": {
+              "en": "Throughput drops: every read now serializes the row and holds it until commit, for no benefit.",
+              "ru": "Пропускная способность падает: каждое чтение теперь сериализует строку и держит её до коммита — без всякой пользы."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Throughput drops — access to each row is serialized for no benefit",
+                "ru": "Пропускная способность падает — доступ к каждой строке сериализуется без пользы"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing changes; locks are free when there is no contention",
+                "ru": "Ничего не меняется; без конкуренции блокировки бесплатны"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Every locking read still serializes the row and holds it until commit, so readers now queue behind each other.",
+                "ru": "Каждое блокирующее чтение всё равно сериализует строку и держит её до коммита, поэтому читатели встают в очередь друг за другом."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Reads get faster because the rows cannot change",
+                "ru": "Чтения ускоряются, потому что строки не могут меняться"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A lock adds work and waiting; it never speeds a read up.",
+                "ru": "Блокировка добавляет работу и ожидание; она никогда не ускоряет чтение."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "costs-p1-specific-risk",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which risk comes specifically with pessimistic locking?",
+            "ru": "Какой риск характерен именно для пессимистичной блокировки?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Held locks can form a cycle no transaction can escape.",
+              "ru": "Удерживаемые блокировки могут образовать цикл, из которого не выйти."
+            },
+            "incorrect": {
+              "en": "Deadlocks: two transactions each hold a row the other needs, so neither can proceed.",
+              "ru": "Дедлоки: две транзакции держат каждая строку, нужную другой, и ни одна не может продолжить."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Deadlocks between transactions that hold each other's rows",
+                "ru": "Дедлоки между транзакциями, держащими нужные друг другу строки"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "OptimisticLockException on flush",
+                "ru": "OptimisticLockException при flush"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is optimistic locking's conflict signal; a pessimistic lock has already excluded the other writer.",
+                "ru": "Это сигнал конфликта оптимистичной блокировки; пессимистичная уже исключила другого писателя."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Silently losing an update",
+                "ru": "Молча потерять обновление"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the anomaly pessimistic locking prevents, not a risk it introduces.",
+                "ru": "Это аномалия, которую пессимистичная блокировка предотвращает, а не риск, который она приносит."
+              }
+            }
+          ]
+        },
+        {
+          "id": "costs-p2-good-fit",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which case is the best fit for pessimistic locking?",
+            "ru": "Какой случай лучше всего подходит для пессимистичной блокировки?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "High contention plus an expensive retry is exactly its niche.",
+              "ru": "Высокая конкуренция плюс дорогой повтор — ровно её ниша."
+            },
+            "incorrect": {
+              "en": "A hot row updated inside a short transaction, where a retry would be too costly.",
+              "ru": "Горячая строка, обновляемая внутри короткой транзакции, где повтор слишком дорог."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Decrementing stock on a hot product row in a short transaction",
+                "ru": "Списание остатка популярного товара в короткой транзакции"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Saving a form the user has been editing for a minute",
+                "ru": "Сохранение формы, которую пользователь редактировал минуту"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A lock must not span the user's think time; that case calls for optimistic locking.",
+                "ru": "Блокировка не должна перекрывать время раздумий пользователя; этот случай — для оптимистичной блокировки."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A reporting query that reads thousands of rows",
+                "ru": "Отчётный запрос, читающий тысячи строк"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Plain reads need no lock at all; locking them would only serialize the report.",
+                "ru": "Обычным чтениям блокировка не нужна вовсе; она лишь сериализовала бы отчёт."
+              }
+            }
+          ]
+        },
+        {
+          "id": "costs-p3-always-safer-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Pessimistic locking is the safer default, so it should be used on every row.",
+            "ru": "Пессимистичная блокировка — более безопасный вариант по умолчанию, поэтому её стоит применять к каждой строке."
+          },
+          "feedback": {
+            "correct": {
+              "en": "On low-contention data it is pure overhead and invites deadlocks.",
+              "ru": "На данных с низкой конкуренцией это чистые накладные расходы и приглашение к дедлокам."
+            },
+            "incorrect": {
+              "en": "No — it serializes access, cuts throughput and invites deadlocks where there was no conflict to prevent.",
+              "ru": "Нет — она сериализует доступ, режет пропускную способность и провоцирует дедлоки там, где конфликта не было."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "costs-p4-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the rule for a transaction that holds a pessimistic lock.",
+            "ru": "Собери правило для транзакции, которая держит пессимистичную блокировку."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Every extra millisecond is a millisecond someone else waits.",
+              "ru": "Каждая лишняя миллисекунда — это миллисекунда чужого ожидания."
+            },
+            "incorrect": {
+              "en": "Keep the transaction short, because other transactions are blocked.",
+              "ru": "Держите транзакцию короткой, потому что другие транзакции заблокированы."
+            }
+          },
+          "tokens": {
+            "en": [
+              "keep",
+              "the",
+              "transaction",
+              "short",
+              "because",
+              "other",
+              "transactions",
+              "are",
+              "blocked"
+            ],
+            "ru": [
+              "держите",
+              "транзакцию",
+              "короткой,",
+              "потому",
+              "что",
+              "другие",
+              "транзакции",
+              "заблокированы"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "retry",
+              "version"
+            ],
+            "ru": [
+              "повтор",
+              "версия"
+            ]
+          }
+        },
+        {
+          "id": "costs-p5-fill-deadlock",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the situation.",
+            "ru": "Назови ситуацию."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The database detects it and kills one of the two transactions.",
+              "ru": "База обнаруживает её и убивает одну из двух транзакций."
+            },
+            "incorrect": {
+              "en": "It is a deadlock — a risk that comes with holding row locks.",
+              "ru": "Это дедлок — риск, который приходит вместе с удержанием блокировок строк."
+            }
+          },
+          "text": {
+            "en": "Two transactions, each holding a row the other one needs, are in a ___.",
+            "ru": "Две транзакции, каждая из которых держит строку, нужную другой, попали в ___."
+          },
+          "answers": {
+            "en": [
+              "deadlock"
+            ],
+            "ru": [
+              "дедлок",
+              "deadlock",
+              "взаимоблокировку",
+              "взаимоблокировка"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "mvcc-plain-reads",
+      "title": {
+        "en": "Plain reads do not contend",
+        "ru": "Обычные чтения не конкурируют"
+      },
+      "summary": {
+        "en": "Under MVCC a plain SELECT takes no row lock and never blocks; only locking reads and writers contend, and a locking read sees the latest committed row.",
+        "ru": "При MVCC обычный SELECT не берёт блокировок строк и никогда не ждёт; конкурируют только блокирующие чтения и писатели, а блокирующее чтение видит последнюю закоммиченную строку."
+      },
+      "discovery": [
+        {
+          "id": "mvcc-d1-plain-select",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Transaction A holds the row lock and has not committed. What does transaction B's plain SELECT do?",
+            "ru": "Транзакция A держит блокировку строки и ещё не закоммитилась. Что сделает обычный SELECT транзакции B?"
+          },
+          "code": "-- Tx A, still open:\nSELECT * FROM product WHERE id = 100 FOR UPDATE;\n\n-- Tx B:\nSELECT * FROM product WHERE id = 100;",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "PostgreSQL uses **MVCC** (multi-version concurrency control): every transaction reads from a consistent **snapshot** of the data, so an ordinary `SELECT` takes no row locks at all. Readers never block writers and writers never block readers.\n\nThat is why only **explicit locking reads** (`FOR UPDATE`, `FOR SHARE`) and **writers** (`UPDATE`, `DELETE`) actually contend for a row — a plain `SELECT` is simply invisible to them.\n\n```mermaid\nflowchart LR\n  P[\"plain SELECT\"] --> S[\"reads its own snapshot, never blocks\"]\n  L[\"SELECT ... FOR UPDATE / UPDATE / DELETE\"] --> C[\"contends for the row lock\"]\n```\n\nThere is a second consequence. A locking `SELECT` deliberately steps outside the snapshot and reads the **latest committed** version of the row. That is what makes pessimistic locking safe even under `REPEATABLE READ`, where a plain read could otherwise hand you a stale snapshot value and let you compute an update from it.",
+            "ru": "PostgreSQL использует **MVCC** (multiversion concurrency control, многоверсионное управление конкурентным доступом): каждая транзакция читает из согласованного **снимка** данных, поэтому обычный `SELECT` вообще не берёт блокировок строк. Читатели никогда не блокируют писателей, а писатели — читателей.\n\nИменно поэтому за строку реально конкурируют только **явные блокирующие чтения** (`FOR UPDATE`, `FOR SHARE`) и **писатели** (`UPDATE`, `DELETE`) — обычный `SELECT` для них попросту невидим.\n\n```mermaid\nflowchart LR\n  P[\"обычный SELECT\"] --> S[\"читает свой снимок, никогда не ждёт\"]\n  L[\"SELECT ... FOR UPDATE / UPDATE / DELETE\"] --> C[\"конкурирует за блокировку строки\"]\n```\n\nЕсть и второе следствие. Блокирующий `SELECT` намеренно выходит за пределы снимка и читает **последнюю закоммиченную** версию строки. Именно это делает пессимистичную блокировку безопасной даже при `REPEATABLE READ`, где обычное чтение могло бы отдать устаревшее значение из снимка и позволить посчитать обновление по нему."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Ordinary reads work from a snapshot and take no row locks.",
+              "ru": "Обычные чтения работают со снимком и не берут блокировок строк."
+            },
+            "incorrect": {
+              "en": "It returns immediately from B's own snapshot — plain reads take no row locks under MVCC.",
+              "ru": "Он сразу вернёт данные из собственного снимка B — при MVCC обычные чтения не берут блокировок строк."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It returns immediately, reading from B's own snapshot",
+                "ru": "Сразу вернёт данные, прочитав их из собственного снимка B"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It blocks until A commits",
+                "ru": "Заблокируется до коммита A"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Ordinary reads take no row lock under MVCC; only locking reads and writers contend.",
+                "ru": "При MVCC обычные чтения не берут блокировку строки; конкурируют только блокирующие чтения и писатели."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It returns an error about the locked row",
+                "ru": "Вернёт ошибку про заблокированную строку"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A plain SELECT never touches the row lock, so there is nothing to report.",
+                "ru": "Обычный SELECT вообще не касается блокировки строки, сообщать не о чем."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "mvcc-p1-plain-blocks-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A plain SELECT blocks another transaction that wants SELECT ... FOR UPDATE on the same row.",
+            "ru": "Обычный SELECT блокирует другую транзакцию, которой нужен SELECT ... FOR UPDATE по той же строке."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Plain reads hold no row lock, so there is nothing to block on.",
+              "ru": "Обычные чтения не держат блокировку строки, поэтому блокироваться не на чем."
+            },
+            "incorrect": {
+              "en": "No — under MVCC a plain SELECT takes no row lock and blocks nobody.",
+              "ru": "Нет — при MVCC обычный SELECT не берёт блокировку строки и никого не блокирует."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "mvcc-p2-who-contends",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Under PostgreSQL MVCC, which statements actually contend for a row lock?",
+            "ru": "Какие операторы при MVCC в PostgreSQL реально конкурируют за блокировку строки?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Everything else works from its own snapshot.",
+              "ru": "Всё остальное работает со своим снимком."
+            },
+            "incorrect": {
+              "en": "Locking reads (FOR UPDATE / FOR SHARE) and writers (UPDATE / DELETE) contend; plain reads do not.",
+              "ru": "Конкурируют блокирующие чтения (FOR UPDATE / FOR SHARE) и писатели (UPDATE / DELETE); обычные чтения — нет."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Locking reads (FOR UPDATE / FOR SHARE) and writers (UPDATE / DELETE)",
+                "ru": "Блокирующие чтения (FOR UPDATE / FOR SHARE) и писатели (UPDATE / DELETE)"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Every statement that reads or writes the row",
+                "ru": "Любой оператор, читающий или пишущий строку"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Plain reads work from a snapshot and take no row lock.",
+                "ru": "Обычные чтения работают со снимком и не берут блокировку строки."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Only two concurrent UPDATE statements",
+                "ru": "Только два параллельных оператора UPDATE"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Locking reads contend too — that is exactly what FOR UPDATE is for.",
+                "ru": "Блокирующие чтения тоже конкурируют — ровно для этого и нужен FOR UPDATE."
+              }
+            }
+          ]
+        },
+        {
+          "id": "mvcc-p3-fill-latest",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing word.",
+            "ru": "Впиши пропущенное слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That is why a locking read cannot compute an update from stale data.",
+              "ru": "Поэтому блокирующее чтение не может посчитать обновление по устаревшим данным."
+            },
+            "incorrect": {
+              "en": "It reads the latest committed version, stepping outside the transaction's snapshot.",
+              "ru": "Оно читает последнюю закоммиченную версию, выходя за пределы снимка транзакции."
+            }
+          },
+          "text": {
+            "en": "Unlike a plain SELECT, a locking SELECT reads the ___ committed version of the row rather than the transaction's snapshot.",
+            "ru": "В отличие от обычного SELECT, блокирующий SELECT читает ___ закоммиченную версию строки, а не снимок транзакции."
+          },
+          "answers": {
+            "en": [
+              "latest",
+              "last"
+            ],
+            "ru": [
+              "последнюю",
+              "последней",
+              "latest"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "choosing-a-strategy",
+      "title": {
+        "en": "Choosing a strategy",
+        "ru": "Выбор стратегии"
+      },
+      "summary": {
+        "en": "Pick the strategy from the row's contention and the gap between read and write, and know exactly what each one does at commit.",
+        "ru": "Стратегию выбирают по конкуренции за строку и по разрыву между чтением и записью, точно понимая, что каждая делает при коммите."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "cap-d1-versioned-race",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Both transactions loaded the row at version 5 before either of them committed. Predict what transaction B's commit does.",
+            "ru": "Обе транзакции загрузили строку с версией 5 до того, как хоть одна закоммитилась. Предскажи, что произойдёт при коммите транзакции B."
+          },
+          "code": "// product 100 has a @Version column; the row is at version 5, stock = 10\n\n// Tx A: Product a = em.find(Product.class, 100L);  a.setStock(9);  commit;\n// Tx B: Product b = em.find(Product.class, 100L);  b.setStock(9);  commit;",
+          "codeLang": "java",
+          "reveal": {
+            "en": "The whole picture in one place. Both strategies stop the lost update; they differ in when they act and in what you have to handle.\n\n```mermaid\nflowchart TD\n  Q{\"Is the row contended, and is a retry cheap?\"}\n  Q -->|\"low contention or long think time\"| O[\"Optimistic: no lock, UPDATE ... WHERE version = v\"]\n  O --> Z{\"rows matched\"}\n  Z -->|\"1\"| OK[\"committed, version bumped\"]\n  Z -->|\"0\"| E[\"OptimisticLockException: reload and retry\"]\n  Q -->|\"hot row, retry too costly\"| P[\"Pessimistic: SELECT ... FOR UPDATE at read time\"]\n  P --> W[\"others block until commit; update applies to fresh data\"]\n```\n\nHere A commits first and moves the row to version 6. B still holds version 5, so its `UPDATE ... WHERE id = 100 AND version = 5` matches zero rows and throws. B must reload (stock is now 9) and redo the decrement to reach 8.\n\nThe heuristic: a **hot row with a short transaction and an expensive retry** — stock, balances, queues — calls for pessimistic locking, with `NOWAIT` or `SKIP LOCKED` where they fit. **Low contention, or a long gap between read and write** — an edited form, a detached entity, several application nodes — calls for optimistic locking, with a retry path wrapped around the read-modify-write.",
+            "ru": "Вся картина в одном месте. Обе стратегии предотвращают потерянное обновление; отличаются они моментом действия и тем, что вам придётся обрабатывать.\n\n```mermaid\nflowchart TD\n  Q{\"Строка конкурентная, и дёшев ли повтор?\"}\n  Q -->|\"низкая конкуренция или долгие раздумья\"| O[\"Оптимистичная: без блокировки, UPDATE ... WHERE version = v\"]\n  O --> Z{\"сколько строк совпало\"}\n  Z -->|\"1\"| OK[\"закоммичено, версия поднята\"]\n  Z -->|\"0\"| E[\"OptimisticLockException: перечитать и повторить\"]\n  Q -->|\"горячая строка, повтор слишком дорог\"| P[\"Пессимистичная: SELECT ... FOR UPDATE при чтении\"]\n  P --> W[\"остальные ждут коммита; обновление идёт по свежим данным\"]\n```\n\nЗдесь A коммитится первой и уводит строку на версию 6. B всё ещё держит версию 5, поэтому её `UPDATE ... WHERE id = 100 AND version = 5` совпадает с нулём строк и бросает исключение. B должна перечитать данные (stock уже 9) и повторить уменьшение, чтобы получить 8.\n\nЭвристика: **горячая строка с короткой транзакцией и дорогим повтором** — остатки, балансы, очереди — требует пессимистичной блокировки, при необходимости с `NOWAIT` или `SKIP LOCKED`. **Низкая конкуренция или большой разрыв между чтением и записью** — редактируемая форма, detached-сущность, несколько узлов приложения — требует оптимистичной блокировки с обёрткой-повтором вокруг read-modify-write."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A wins the race, so B's stale version predicate matches nothing.",
+              "ru": "A выигрывает гонку, поэтому предикат B с устаревшей версией ни с чем не совпадает."
+            },
+            "incorrect": {
+              "en": "B's UPDATE ... WHERE version = 5 matches zero rows, so B fails with OptimisticLockException.",
+              "ru": "UPDATE ... WHERE version = 5 транзакции B совпадает с нулём строк, поэтому B падает с OptimisticLockException."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "B's UPDATE matches zero rows and B fails with OptimisticLockException",
+                "ru": "UPDATE транзакции B совпадает с нулём строк, и B падает с OptimisticLockException"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "B writes stock = 9 and one decrement is lost",
+                "ru": "B записывает stock = 9, и одно уменьшение теряется"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the outcome WITHOUT a version column; the version predicate is exactly what catches this.",
+                "ru": "Так было бы БЕЗ версионного столбца; предикат с версией как раз это и ловит."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "B blocks until A commits, then writes stock = 8",
+                "ru": "B ждёт коммита A, а затем записывает stock = 8"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Optimistic locking never blocks, and B would still write 9; reaching 8 requires reloading and redoing the work.",
+                "ru": "Оптимистичная блокировка никогда не ждёт, и B всё равно записала бы 9; чтобы получить 8, нужно перечитать данные и переделать работу."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cap-p1-lock-across-think-time",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This method uses pessimistic locking. What is the defect?",
+            "ru": "Этот метод использует пессимистичную блокировку. В чём здесь дефект?"
+          },
+          "code": "@Transactional\npublic void renameProduct(long id) {\n    Product p = em.find(Product.class, id, LockModeType.PESSIMISTIC_WRITE);\n    String reviewed = askUserToConfirm(p.getName());  // waits for a human\n    p.setName(reviewed);\n}",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "A row lock must never span human think time.",
+              "ru": "Блокировка строки не должна перекрывать время раздумий человека."
+            },
+            "incorrect": {
+              "en": "The row lock is held while waiting for a human, blocking every other transaction on that row.",
+              "ru": "Блокировка строки удерживается всё время ожидания человека и блокирует все остальные транзакции по этой строке."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The row lock is held while waiting for a human, blocking everyone else on that row",
+                "ru": "Блокировка строки держится всё ожидание человека и блокирует всех остальных по этой строке"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "em.find cannot take a LockModeType",
+                "ru": "em.find не принимает LockModeType"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It can — passing a LockModeType to em.find is the standard way to request the lock.",
+                "ru": "Принимает — передать LockModeType в em.find это и есть стандартный способ запросить блокировку."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The change is never saved without an explicit merge call",
+                "ru": "Изменение не сохранится без явного вызова merge"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A managed entity is flushed at commit; the real problem is how long the lock is held.",
+                "ru": "Управляемая сущность записывается при коммите; настоящая проблема — как долго держится блокировка."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p2-share-then-write",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Transaction A is still open and still holds its shared lock. Predict what statements (1) and (2) of transaction B do.",
+            "ru": "Транзакция A ещё открыта и всё ещё держит разделяемую блокировку. Предскажи, что сделают операторы (1) и (2) транзакции B."
+          },
+          "code": "-- Tx A, still open:\nSELECT * FROM account WHERE id = 7 FOR SHARE;\n\n-- Tx B:\nSELECT * FROM account WHERE id = 7 FOR SHARE;   -- (1)\nUPDATE account SET balance = 0 WHERE id = 7;    -- (2)",
+          "codeLang": "sql",
+          "feedback": {
+            "correct": {
+              "en": "Shared holders coexist; the writer waits for all of them.",
+              "ru": "Разделяемые держатели сосуществуют; писатель ждёт их всех."
+            },
+            "incorrect": {
+              "en": "(1) succeeds at once because FOR SHARE is shared; (2) blocks because writers wait for shared holders.",
+              "ru": "(1) проходит сразу, потому что FOR SHARE разделяемая; (2) блокируется, потому что писатели ждут разделяемых держателей."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "(1) succeeds immediately; (2) blocks until A releases",
+                "ru": "(1) проходит сразу; (2) блокируется, пока A не отпустит"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Both succeed — FOR SHARE blocks nothing",
+                "ru": "Оба проходят — FOR SHARE ничего не блокирует"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Shared holders coexist, but a writer must wait until every shared holder releases.",
+                "ru": "Разделяемые держатели сосуществуют, но писатель обязан дождаться, пока отпустят все."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "(1) blocks because A already holds the row",
+                "ru": "(1) блокируется, потому что A уже держит строку"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "FOR SHARE is shared: several transactions may hold it on the same row at once.",
+                "ru": "FOR SHARE разделяемая: несколько транзакций могут держать её на одной строке одновременно."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p3-sort-conflict-path",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Put the full optimistic-locking flow, including the conflict path, in order.",
+            "ru": "Расставь по порядку полный цикл оптимистичной блокировки, включая ветку с конфликтом."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Detection at write time, then a retry on fresh data.",
+              "ru": "Обнаружение при записи, затем повтор по свежим данным."
+            },
+            "incorrect": {
+              "en": "Read with version v, modify, flush the versioned UPDATE, get zero rows and the exception, then reload and redo.",
+              "ru": "Прочитать с версией v, изменить, отправить UPDATE с версией, получить ноль строк и исключение, затем перечитать и переделать."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Read the row; the entity carries version v",
+                "ru": "Прочитать строку; сущность несёт версию v"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Modify the entity in memory",
+                "ru": "Изменить сущность в памяти"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Flush UPDATE ... SET version = v + 1 WHERE id = ? AND version = v",
+                "ru": "Отправить UPDATE ... SET version = v + 1 WHERE id = ? AND version = v"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Zero rows matched, so OptimisticLockException is thrown",
+                "ru": "Совпало ноль строк, поэтому бросается OptimisticLockException"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "Reload the row at its new version and redo the change",
+                "ru": "Перечитать строку с новой версией и переделать изменение"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p4-match-mechanisms",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each locking mechanism to its role.",
+            "ru": "Соотнеси каждый механизм блокировки с его ролью."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One family detects conflicts, the other prevents them.",
+              "ru": "Одно семейство обнаруживает конфликты, другое их предотвращает."
+            },
+            "incorrect": {
+              "en": "@Version detects, FOR UPDATE excludes, FOR SHARE freezes, SKIP LOCKED distributes, the exception asks for a retry.",
+              "ru": "@Version обнаруживает, FOR UPDATE исключает, FOR SHARE фиксирует, SKIP LOCKED распределяет, исключение просит повторить."
+            }
+          },
+          "pairs": [
+            {
+              "id": "version",
+              "left": {
+                "en": "@Version column",
+                "ru": "Столбец @Version"
+              },
+              "right": {
+                "en": "Lets the UPDATE detect a concurrent change",
+                "ru": "Позволяет UPDATE обнаружить параллельное изменение"
+              }
+            },
+            {
+              "id": "for-update",
+              "left": {
+                "en": "SELECT ... FOR UPDATE",
+                "ru": "SELECT ... FOR UPDATE"
+              },
+              "right": {
+                "en": "Exclusive row lock taken at read time",
+                "ru": "Эксклюзивная блокировка строки, взятая при чтении"
+              }
+            },
+            {
+              "id": "for-share",
+              "left": {
+                "en": "SELECT ... FOR SHARE",
+                "ru": "SELECT ... FOR SHARE"
+              },
+              "right": {
+                "en": "Shared lock: readers coexist, writers block",
+                "ru": "Разделяемая блокировка: читатели сосуществуют, писатели ждут"
+              }
+            },
+            {
+              "id": "skip-locked",
+              "left": {
+                "en": "SKIP LOCKED",
+                "ru": "SKIP LOCKED"
+              },
+              "right": {
+                "en": "Steps over rows other workers already hold",
+                "ru": "Перешагивает строки, уже занятые другими воркерами"
+              }
+            },
+            {
+              "id": "exception",
+              "left": {
+                "en": "OptimisticLockException",
+                "ru": "OptimisticLockException"
+              },
+              "right": {
+                "en": "Signal to reload the row and retry",
+                "ru": "Сигнал перечитать строку и повторить"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p5-fill-summary",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill the key parts of the answer.",
+            "ru": "Впиши ключевые части ответа."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That is both strategies and the queue trick in one line.",
+              "ru": "Это обе стратегии и приём для очереди в одну строку."
+            },
+            "incorrect": {
+              "en": "The predicate compares version, PESSIMISTIC_WRITE emits FOR UPDATE, and SKIP LOCKED steps over held rows.",
+              "ru": "Предикат сравнивает version, PESSIMISTIC_WRITE порождает FOR UPDATE, а SKIP LOCKED перешагивает занятые строки."
+            }
+          },
+          "text": {
+            "en": "Optimistic locking flushes UPDATE ... WHERE id = ? AND ___ = ?; PESSIMISTIC_WRITE emits SELECT ... FOR ___; to step over rows other workers hold, add ___ LOCKED.",
+            "ru": "Оптимистичная блокировка выполняет UPDATE ... WHERE id = ? AND ___ = ?; PESSIMISTIC_WRITE порождает SELECT ... FOR ___; чтобы перешагнуть строки, занятые другими воркерами, добавляют ___ LOCKED."
+          },
+          "blanks": [
+            {
+              "en": [
+                "version"
+              ],
+              "ru": [
+                "version"
+              ]
+            },
+            {
+              "en": [
+                "UPDATE",
+                "update"
+              ],
+              "ru": [
+                "UPDATE",
+                "update"
+              ]
+            },
+            {
+              "en": [
+                "SKIP",
+                "skip"
+              ],
+              "ru": [
+                "SKIP",
+                "skip"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

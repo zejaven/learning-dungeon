@@ -1,0 +1,3213 @@
+{
+  "schemaVersion": 1,
+  "topicId": "transaction-propagation",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "logical-vs-physical",
+      "title": {
+        "en": "Logical vs physical transaction",
+        "ru": "Логическая и физическая транзакция"
+      },
+      "summary": {
+        "en": "A @Transactional method is a logical boundary; the real database transaction on a connection is the physical one, and several boundaries can share one.",
+        "ru": "@Transactional-метод — это логическая граница; настоящая транзакция БД на соединении — физическая, и несколько границ могут делить одну."
+      },
+      "discovery": [
+        {
+          "id": "lp-d1-count-tx",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Both methods carry a bare `@Transactional` and live in different beans. How many real database transactions are open while `inner()` runs?",
+            "ru": "Оба метода помечены простым `@Transactional` и живут в разных бинах. Сколько настоящих транзакций БД открыто, пока выполняется `inner()`?"
+          },
+          "code": "// OuterService\n@Transactional\npublic void outer() {\n    other.inner();   // 'other' is a different bean\n}\n\n// OtherService\n@Transactional\npublic void inner() {\n    repo.save(row);\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Two different things hide behind the word \"transaction\":\n\n- A **logical transaction** is a `@Transactional` boundary — a method Spring wraps with begin/commit logic.\n- A **physical transaction** is the real database transaction running on a connection.\n\nSeveral logical boundaries can ride on **one** physical transaction:\n\n```mermaid\nflowchart LR\n  O[\"outer() logical boundary\"] --> I[\"inner() logical boundary\"]\n  O --> P[\"one physical transaction on one connection\"]\n  I --> P\n```\n\nSo counting `@Transactional` annotations tells you nothing about how many database transactions exist. The setting that decides whether a logical boundary joins the running physical transaction or opens its own is called **propagation**.",
+            "ru": "За словом «транзакция» прячутся две разные вещи:\n\n- **Логическая транзакция** — это граница `@Transactional`: метод, который Spring оборачивает логикой begin/commit.\n- **Физическая транзакция** — это настоящая транзакция БД, выполняющаяся на соединении.\n\nНесколько логических границ могут ехать на **одной** физической транзакции:\n\n```mermaid\nflowchart LR\n  O[\"логическая граница outer()\"] --> I[\"логическая граница inner()\"]\n  O --> P[\"одна физическая транзакция на одном соединении\"]\n  I --> P\n```\n\nПоэтому количество аннотаций `@Transactional` ничего не говорит о количестве транзакций БД. Настройка, которая решает, присоединится ли логическая граница к идущей физической транзакции или откроет свою, называется **propagation** (распространение)."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One physical transaction can carry several logical @Transactional boundaries.",
+              "ru": "Одна физическая транзакция может нести несколько логических границ @Transactional."
+            },
+            "incorrect": {
+              "en": "One — the inner boundary joins the transaction the outer already opened.",
+              "ru": "Одна — внутренняя граница присоединяется к транзакции, уже открытой внешней."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "One — the inner boundary joins the transaction the outer opened",
+                "ru": "Одна — внутренняя граница присоединяется к транзакции, открытой внешней"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Two — every @Transactional method opens its own",
+                "ru": "Две — каждый @Transactional-метод открывает свою"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The default setting joins an existing transaction instead of opening a second one.",
+                "ru": "Настройка по умолчанию присоединяется к существующей транзакции, а не открывает вторую."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "None — an annotation on an inner method is ignored",
+                "ru": "Ни одной — аннотация на внутреннем методе игнорируется"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The inner boundary is real; it simply does not have to open a new transaction.",
+                "ru": "Внутренняя граница реальна; просто ей не обязательно открывать новую транзакцию."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "lp-p1-each-own-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In Spring, every @Transactional method always runs in its own separate database transaction.",
+            "ru": "В Spring каждый @Transactional-метод всегда выполняется в своей отдельной транзакции БД."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Boundaries are logical; several of them can share one physical transaction.",
+              "ru": "Границы логические; несколько из них могут делить одну физическую транзакцию."
+            },
+            "incorrect": {
+              "en": "No — a @Transactional method is a logical boundary and may join a transaction that is already running.",
+              "ru": "Нет — @Transactional-метод это логическая граница, и он может присоединиться к уже идущей транзакции."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "lp-p2-physical-mc",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In Spring transaction management, what is a *physical* transaction?",
+            "ru": "Что такое *физическая* транзакция в управлении транзакциями Spring?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Physical = the real database transaction on a connection.",
+              "ru": "Физическая = настоящая транзакция БД на соединении."
+            },
+            "incorrect": {
+              "en": "It is the real database transaction on a connection; a @Transactional method is only a logical boundary.",
+              "ru": "Это настоящая транзакция БД на соединении; @Transactional-метод — лишь логическая граница."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The real database transaction running on a connection",
+                "ru": "Настоящая транзакция БД, выполняющаяся на соединении"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Any method annotated with @Transactional",
+                "ru": "Любой метод, помеченный @Transactional"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is a logical boundary; several of them can share one physical transaction.",
+                "ru": "Это логическая граница; несколько из них могут делить одну физическую транзакцию."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The pool that hands out database connections",
+                "ru": "Пул, который выдаёт соединения с БД"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The pool supplies connections; the transaction is what runs on one of them.",
+                "ru": "Пул поставляет соединения; транзакция — это то, что выполняется на одном из них."
+              }
+            }
+          ]
+        },
+        {
+          "id": "lp-p3-match-terms",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each transaction term to its meaning in Spring.",
+            "ru": "Соотнеси каждый термин с его значением в Spring."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Logical boundaries are annotations; the physical transaction is the database one.",
+              "ru": "Логические границы — это аннотации; физическая транзакция — это транзакция БД."
+            },
+            "incorrect": {
+              "en": "Logical = a @Transactional boundary, physical = the database transaction, propagation = the join-or-open rule.",
+              "ru": "Логическая — граница @Transactional, физическая — транзакция БД, propagation — правило «присоединиться или открыть»."
+            }
+          },
+          "pairs": [
+            {
+              "id": "logical",
+              "left": {
+                "en": "logical transaction",
+                "ru": "логическая транзакция"
+              },
+              "right": {
+                "en": "A @Transactional method boundary",
+                "ru": "Граница метода с @Transactional"
+              }
+            },
+            {
+              "id": "physical",
+              "left": {
+                "en": "physical transaction",
+                "ru": "физическая транзакция"
+              },
+              "right": {
+                "en": "The real database transaction on a connection",
+                "ru": "Настоящая транзакция БД на соединении"
+              }
+            },
+            {
+              "id": "propagation",
+              "left": {
+                "en": "propagation",
+                "ru": "propagation"
+              },
+              "right": {
+                "en": "The rule deciding join it or open a new one",
+                "ru": "Правило: присоединиться или открыть новую"
+              }
+            }
+          ]
+        },
+        {
+          "id": "lp-p4-fill-terms",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing words.",
+            "ru": "Впиши два пропущенных слова."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Many logical boundaries, one physical transaction — that is the whole idea.",
+              "ru": "Много логических границ, одна физическая транзакция — в этом вся суть."
+            },
+            "incorrect": {
+              "en": "A logical transaction is the @Transactional boundary; the physical one is the database transaction.",
+              "ru": "Логическая транзакция — граница @Transactional; физическая — транзакция БД."
+            }
+          },
+          "text": {
+            "en": "A ___ transaction is a @Transactional boundary; a ___ transaction is the real database transaction on a connection.",
+            "ru": "___ транзакция — это граница @Transactional; ___ транзакция — это настоящая транзакция БД на соединении."
+          },
+          "blanks": [
+            {
+              "en": [
+                "logical"
+              ],
+              "ru": [
+                "логическая"
+              ]
+            },
+            {
+              "en": [
+                "physical"
+              ],
+              "ru": [
+                "физическая"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "propagation-setting",
+      "title": {
+        "en": "What propagation decides",
+        "ru": "Что решает propagation"
+      },
+      "summary": {
+        "en": "Propagation is read from the method being called and decides what happens when it is entered while a transaction may already be active.",
+        "ru": "Propagation читается с вызываемого метода и решает, что произойдёт при входе в него, когда транзакция уже может быть активна."
+      },
+      "discovery": [
+        {
+          "id": "ps-d1-which-annotation",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Two @Transactional methods in different beans, one calling the other. Which propagation setting decides whether they share one database transaction?",
+            "ru": "Два @Transactional-метода в разных бинах, один вызывает другой. Какая настройка propagation решает, будут ли они делить одну транзакцию БД?"
+          },
+          "reveal": {
+            "en": "**Propagation** is the setting on a `@Transactional` method that answers one question: *when this method is entered, and a physical transaction may already be running, what should happen?*\n\nSpring reads it from the method it is about to invoke and combines it with one piece of runtime state — whether a physical transaction is currently active:\n\n```mermaid\nflowchart TD\n  A[\"enter a @Transactional method with propagation P\"] --> B{\"is a physical transaction active?\"}\n  B -->|no| C[\"P decides: start one, run without one, or fail\"]\n  B -->|yes| D[\"P decides: join it, suspend it, or fail\"]\n```\n\nSo the same method can behave differently depending on who called it: propagation is a rule, not a fixed outcome. There are seven propagation values; the one used when you write a bare `@Transactional` is `REQUIRED`.",
+            "ru": "**Propagation** — это настройка `@Transactional`-метода, отвечающая на один вопрос: *когда в этот метод входят, а физическая транзакция, возможно, уже идёт, что должно произойти?*\n\nSpring читает её с того метода, который собирается вызвать, и сочетает с одним фактом времени выполнения — активна ли сейчас физическая транзакция:\n\n```mermaid\nflowchart TD\n  A[\"вход в @Transactional-метод с propagation P\"] --> B{\"физическая транзакция активна?\"}\n  B -->|нет| C[\"P решает: открыть её, работать без неё или упасть\"]\n  B -->|да| D[\"P решает: присоединиться, приостановить или упасть\"]\n```\n\nПоэтому один и тот же метод ведёт себя по-разному в зависимости от того, кто его вызвал: propagation — это правило, а не фиксированный результат. Значений propagation семь; то, что используется при простом `@Transactional`, — `REQUIRED`."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Propagation is read from the method being invoked.",
+              "ru": "Propagation читается с вызываемого метода."
+            },
+            "incorrect": {
+              "en": "It is the inner (called) method's setting: it decides whether to join or get its own transaction.",
+              "ru": "Это настройка внутреннего (вызываемого) метода: он решает, присоединиться или получить свою транзакцию."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The propagation on the inner (called) method",
+                "ru": "Propagation на внутреннем (вызываемом) методе"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The propagation on the outer (calling) method",
+                "ru": "Propagation на внешнем (вызывающем) методе"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The outer method decides its own boundary; the inner one decides whether it joins.",
+                "ru": "Внешний метод определяет свою границу; присоединяться или нет — решает внутренний."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Whichever annotation is declared first in the class",
+                "ru": "Та аннотация, что объявлена в классе первой"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Declaration order plays no role; propagation is read per invoked method.",
+                "ru": "Порядок объявления не играет роли; propagation читается для каждого вызываемого метода."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "ps-p1-called-method-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In Spring, the propagation that applies to a call is read from the method being called, not from the caller.",
+            "ru": "В Spring propagation для вызова читается с вызываемого метода, а не с вызывающего."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Each boundary brings its own rule for how to enter it.",
+              "ru": "Каждая граница приносит своё правило входа в неё."
+            },
+            "incorrect": {
+              "en": "It is true — Spring reads propagation from the method it is about to invoke.",
+              "ru": "Это верно — Spring читает propagation с того метода, который собирается вызвать."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "ps-p2-controls-mc",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does a transaction propagation setting control in Spring?",
+            "ru": "Чем управляет настройка propagation транзакции в Spring?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Join an active transaction, or run in one of its own — that is the whole question.",
+              "ru": "Присоединиться к активной транзакции или работать в своей — весь вопрос в этом."
+            },
+            "incorrect": {
+              "en": "It controls whether the method joins an active transaction or runs in a transaction of its own.",
+              "ru": "Она управляет тем, присоединится ли метод к активной транзакции или будет работать в своей."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Whether the method joins an active transaction or runs in its own",
+                "ru": "Присоединится ли метод к активной транзакции или будет работать в своей"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Which isolation level the database uses",
+                "ru": "Какой уровень изоляции использует БД"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Isolation is a separate setting; propagation is only about join vs. own transaction.",
+                "ru": "Изоляция — отдельная настройка; propagation только про «присоединиться или своя транзакция»."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Which exceptions trigger a rollback",
+                "ru": "Какие исключения вызывают откат"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Rollback rules are a separate setting; propagation decides the transaction boundary only.",
+                "ru": "Правила отката — отдельная настройка; propagation определяет только границу транзакции."
+              }
+            }
+          ]
+        },
+        {
+          "id": "ps-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble where a propagation setting is read from.",
+            "ru": "Собери фразу о том, откуда читается настройка propagation."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The callee brings the rule; the caller only supplies the context.",
+              "ru": "Правило приносит вызываемый метод; вызывающий даёт лишь контекст."
+            },
+            "incorrect": {
+              "en": "Propagation is set on the called method — the caller only supplies the context.",
+              "ru": "Propagation задаётся на вызываемом методе — вызывающий даёт лишь контекст."
+            }
+          },
+          "tokens": {
+            "en": [
+              "propagation",
+              "is",
+              "set",
+              "on",
+              "the",
+              "called",
+              "method"
+            ],
+            "ru": [
+              "propagation",
+              "задаётся",
+              "на",
+              "вызываемом",
+              "методе"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "calling"
+            ],
+            "ru": [
+              "вызывающем"
+            ]
+          }
+        },
+        {
+          "id": "ps-p4-fill-default",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing propagation name.",
+            "ru": "Впиши пропущенное имя propagation."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A bare @Transactional means REQUIRED.",
+              "ru": "Простой @Transactional означает REQUIRED."
+            },
+            "incorrect": {
+              "en": "It is REQUIRED — the propagation used when none is specified.",
+              "ru": "Это REQUIRED — propagation, применяемый, когда ничего не указано."
+            }
+          },
+          "text": {
+            "en": "The default propagation of a bare @Transactional is ___.",
+            "ru": "Propagation по умолчанию для простого @Transactional — это ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "REQUIRED"
+              ],
+              "ru": [
+                "REQUIRED"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "required-default",
+      "title": {
+        "en": "REQUIRED — join or start",
+        "ru": "REQUIRED — присоединиться или открыть"
+      },
+      "summary": {
+        "en": "REQUIRED joins the current transaction if one exists and starts one otherwise, so a chain of REQUIRED methods shares one physical transaction committed at the outermost boundary.",
+        "ru": "REQUIRED присоединяется к текущей транзакции, если она есть, иначе открывает новую, поэтому цепочка REQUIRED-методов делит одну физическую транзакцию, коммит которой происходит на самой внешней границе."
+      },
+      "discovery": [
+        {
+          "id": "req-d1-predict-chain",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Both methods use the default propagation and sit in different beans. How many physical transactions run, and when is the commit?",
+            "ru": "Оба метода используют propagation по умолчанию и лежат в разных бинах. Сколько физических транзакций выполняется и когда происходит коммит?"
+          },
+          "code": "// OrderService\n@Transactional                    // REQUIRED (default)\npublic void placeOrder(Order order) {\n    orderRepo.save(order);\n    stock.reserve(order);         // StockService bean\n}\n\n// StockService\n@Transactional                    // REQUIRED (default)\npublic void reserve(Order order) {\n    stockRepo.decrease(order);\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "`REQUIRED` is the default, and the rule is short: **join the current physical transaction if one exists, otherwise start a new one.**\n\n```mermaid\nsequenceDiagram\n  participant O as placeOrder() REQUIRED\n  participant TM as TransactionManager\n  participant I as reserve() REQUIRED\n  O->>TM: nothing active, begin T1\n  O->>I: call reserve()\n  I->>TM: T1 is active, join it\n  I-->>O: return without committing\n  O->>TM: commit T1\n```\n\nSo a chain of `REQUIRED` methods is **one** physical transaction on **one** connection, committed once at the **outermost** boundary. The inner boundary is logical only: it begins nothing and commits nothing.\n\nThat is what makes the whole chain all-or-nothing — and, as a later atom shows, it is also why an inner failure can take the outer commit down with it.",
+            "ru": "`REQUIRED` — значение по умолчанию, и правило короткое: **присоединиться к текущей физической транзакции, если она есть, иначе открыть новую.**\n\n```mermaid\nsequenceDiagram\n  participant O as placeOrder() REQUIRED\n  participant TM as TransactionManager\n  participant I as reserve() REQUIRED\n  O->>TM: ничего не активно, begin T1\n  O->>I: вызов reserve()\n  I->>TM: T1 активна, присоединиться\n  I-->>O: возврат без коммита\n  O->>TM: commit T1\n```\n\nЗначит, цепочка `REQUIRED`-методов — это **одна** физическая транзакция на **одном** соединении, коммит которой происходит один раз на **самой внешней** границе. Внутренняя граница чисто логическая: она ничего не открывает и ничего не коммитит.\n\nИменно это делает всю цепочку «всё или ничего» — и, как покажет следующий атом, именно поэтому внутренний сбой может утащить за собой внешний коммит."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One transaction, committed once at the outermost boundary.",
+              "ru": "Одна транзакция, коммит один раз на самой внешней границе."
+            },
+            "incorrect": {
+              "en": "One transaction: reserve() joins it and the commit happens when placeOrder() returns.",
+              "ru": "Одна транзакция: reserve() присоединяется к ней, а коммит происходит при возврате из placeOrder()."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "One transaction; it commits when placeOrder() returns",
+                "ru": "Одна транзакция; коммит при возврате из placeOrder()"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Two transactions; reserve() commits before placeOrder() finishes",
+                "ru": "Две транзакции; reserve() коммитится до завершения placeOrder()"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "REQUIRED never opens a second transaction while one is already active.",
+                "ru": "REQUIRED никогда не открывает вторую транзакцию, пока одна уже активна."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "One transaction; it commits when reserve() returns",
+                "ru": "Одна транзакция; коммит при возврате из reserve()"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A joined inner boundary does not commit; only the outermost one does.",
+                "ru": "Присоединившаяся внутренняя граница не коммитит; коммитит только самая внешняя."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "req-p1-inner-commits-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "With REQUIRED propagation, an inner @Transactional method commits its own work as soon as it returns.",
+            "ru": "При propagation REQUIRED внутренний @Transactional-метод коммитит свою работу сразу при возврате."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It joined the caller's transaction, so the commit belongs to the outermost boundary.",
+              "ru": "Он присоединился к транзакции вызывающего, поэтому коммит принадлежит самой внешней границе."
+            },
+            "incorrect": {
+              "en": "No — a joined boundary commits nothing; the outermost boundary commits the shared transaction.",
+              "ru": "Нет — присоединившаяся граница ничего не коммитит; общую транзакцию коммитит самая внешняя граница."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "req-p2-no-tx-mc",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A REQUIRED method is called while no transaction is active. What happens?",
+            "ru": "REQUIRED-метод вызван, когда никакая транзакция не активна. Что произойдёт?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "REQUIRED guarantees a transaction: it joins one or opens one.",
+              "ru": "REQUIRED гарантирует транзакцию: он либо присоединяется, либо открывает свою."
+            },
+            "incorrect": {
+              "en": "It starts a new physical transaction — REQUIRED always makes sure one exists.",
+              "ru": "Он открывает новую физическую транзакцию — REQUIRED всегда обеспечивает её наличие."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It starts a new physical transaction",
+                "ru": "Он открывает новую физическую транзакцию"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It runs without any transaction",
+                "ru": "Он выполняется без транзакции"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "REQUIRED never runs non-transactionally; with none active it opens one.",
+                "ru": "REQUIRED никогда не работает без транзакции; если её нет, он её открывает."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Spring throws, because there is nothing to join",
+                "ru": "Spring бросит исключение, потому что не к чему присоединяться"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "REQUIRED does not demand an existing transaction; it simply opens one.",
+                "ru": "REQUIRED не требует существующей транзакции; он просто открывает новую."
+              }
+            }
+          ]
+        },
+        {
+          "id": "req-p3-sort-chain",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order what happens when a REQUIRED method calls another REQUIRED method in a different bean, with nothing active beforehand.",
+            "ru": "Расставь по порядку, что происходит, когда REQUIRED-метод вызывает другой REQUIRED-метод в другом бине, а до этого ничего не активно."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Begin once, join in the middle, commit once at the end.",
+              "ru": "Открыть один раз, присоединиться в середине, закоммитить один раз в конце."
+            },
+            "incorrect": {
+              "en": "The outer boundary begins and commits; the inner one only joins and returns.",
+              "ru": "Внешняя граница открывает и коммитит; внутренняя лишь присоединяется и возвращает управление."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "The outer boundary finds nothing active and begins a transaction",
+                "ru": "Внешняя граница не находит активной транзакции и открывает её"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "The inner boundary is entered and joins the active transaction",
+                "ru": "Происходит вход во внутреннюю границу, и она присоединяется к активной транзакции"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "The inner method returns without committing anything",
+                "ru": "Внутренний метод возвращает управление, ничего не закоммитив"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "The outer method returns and the single transaction commits",
+                "ru": "Внешний метод возвращает управление, и единственная транзакция коммитится"
+              }
+            }
+          ]
+        },
+        {
+          "id": "req-p4-fill-rule",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the REQUIRED rule.",
+            "ru": "Дополни правило REQUIRED."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Join if possible, open if necessary — that is REQUIRED in one line.",
+              "ru": "Присоединиться, если можно, открыть, если нужно — вот REQUIRED в одну строку."
+            },
+            "incorrect": {
+              "en": "REQUIRED joins the current transaction if one exists, otherwise it starts a new one.",
+              "ru": "REQUIRED присоединяется к текущей транзакции, если она есть, иначе открывает новую."
+            }
+          },
+          "text": {
+            "en": "REQUIRED ___ the current transaction if one exists, otherwise it ___ a new one.",
+            "ru": "REQUIRED ___ к текущей транзакции, если она есть, иначе ___ новую."
+          },
+          "blanks": [
+            {
+              "en": [
+                "joins",
+                "join"
+              ],
+              "ru": [
+                "присоединяется"
+              ]
+            },
+            {
+              "en": [
+                "starts",
+                "opens",
+                "begins"
+              ],
+              "ru": [
+                "открывает",
+                "начинает",
+                "создаёт"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "requires-new",
+      "title": {
+        "en": "REQUIRES_NEW — suspend and start a second one",
+        "ru": "REQUIRES_NEW — приостановить и открыть вторую"
+      },
+      "summary": {
+        "en": "REQUIRES_NEW always runs in a brand-new physical transaction: Spring suspends the active one, works on a second connection, commits independently, then resumes the outer one.",
+        "ru": "REQUIRES_NEW всегда работает в совершенно новой физической транзакции: Spring приостанавливает активную, работает на втором соединении, коммитит независимо, затем возобновляет внешнюю."
+      },
+      "discovery": [
+        {
+          "id": "rn-d1-predict-audit",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The audit method is REQUIRES_NEW and succeeds; the outer transaction then fails and rolls back. What happens to the audit row?",
+            "ru": "Метод аудита помечен REQUIRES_NEW и отрабатывает успешно; затем внешняя транзакция падает и откатывается. Что произойдёт со строкой аудита?"
+          },
+          "code": "// PaymentService\n@Transactional                                  // REQUIRED\npublic void pay(Order order) {\n    audit.log(\"payment started\");                // AuditService bean\n    charge(order);                               // throws -> outer rolls back\n}\n\n// AuditService\n@Transactional(propagation = Propagation.REQUIRES_NEW)\npublic void log(String message) {\n    auditRepo.insert(message);\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "`REQUIRES_NEW` always runs in a **brand-new physical transaction**. If one is already active, Spring **suspends** it — parks it untouched, without committing or rolling it back — runs the inner work on a **second connection**, commits or rolls that back independently, then **resumes** the outer one.\n\n```mermaid\nsequenceDiagram\n  participant O as outer REQUIRED\n  participant TM as TransactionManager\n  participant I as inner REQUIRES_NEW\n  O->>TM: begin T1\n  O->>I: call inner()\n  I->>TM: suspend T1, begin T2\n  I->>TM: commit T2\n  TM-->>O: resume T1\n  O->>TM: commit T1\n```\n\nBecause T2 is a real, separate transaction, its commit is durable: whatever happens to T1 afterwards, the inner work stays. That is exactly why audit and event rows are typically written with `REQUIRES_NEW`.\n\nThe cost: while T1 is suspended, **two connections are held at once**. The application borrows connections from a fixed-size **connection pool**, so nesting `REQUIRES_NEW` calls can drain that pool and even deadlock.",
+            "ru": "`REQUIRES_NEW` всегда работает в **совершенно новой физической транзакции**. Если одна уже активна, Spring её **приостанавливает** — откладывает нетронутой, не коммитя и не откатывая, — выполняет внутреннюю работу на **втором соединении**, независимо коммитит или откатывает её, затем **возобновляет** внешнюю.\n\n```mermaid\nsequenceDiagram\n  participant O as внешняя REQUIRED\n  participant TM as TransactionManager\n  participant I as внутренняя REQUIRES_NEW\n  O->>TM: begin T1\n  O->>I: вызов inner()\n  I->>TM: приостановить T1, begin T2\n  I->>TM: commit T2\n  TM-->>O: возобновить T1\n  O->>TM: commit T1\n```\n\nПоскольку T2 — настоящая отдельная транзакция, её коммит устойчив: что бы дальше ни случилось с T1, внутренняя работа сохранится. Именно поэтому строки аудита и событий обычно пишут через `REQUIRES_NEW`.\n\nЦена: пока T1 приостановлена, **удерживаются сразу два соединения**. Приложение берёт соединения из **пула соединений** фиксированного размера, поэтому вложенные вызовы `REQUIRES_NEW` могут осушить пул и даже привести к дедлоку."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A committed separate transaction cannot be undone by someone else's rollback.",
+              "ru": "Закоммиченную отдельную транзакцию нельзя отменить чужим откатом."
+            },
+            "incorrect": {
+              "en": "The audit row stays: REQUIRES_NEW committed its own transaction before the outer one failed.",
+              "ru": "Строка аудита остаётся: REQUIRES_NEW закоммитил свою транзакцию до падения внешней."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It stays in the database — the inner transaction already committed on its own",
+                "ru": "Она останется в БД — внутренняя транзакция уже закоммитилась сама"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It is rolled back together with the outer transaction",
+                "ru": "Она откатится вместе с внешней транзакцией"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "REQUIRES_NEW commits independently; an outer rollback cannot undo a committed transaction.",
+                "ru": "REQUIRES_NEW коммитится независимо; внешний откат не может отменить закоммиченную транзакцию."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It stays pending until the outer transaction decides",
+                "ru": "Она останется незавершённой, пока внешняя транзакция не решит"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The inner transaction ends at the inner boundary, before the outer method continues.",
+                "ru": "Внутренняя транзакция завершается на внутренней границе, до того как внешний метод продолжится."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "rn-p1-suspend-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "REQUIRES_NEW suspends the caller's transaction and runs its own work on a second connection.",
+            "ru": "REQUIRES_NEW приостанавливает транзакцию вызывающего и выполняет свою работу на втором соединении."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Suspend, run on a second connection, then resume the outer one.",
+              "ru": "Приостановить, выполнить на втором соединении, затем возобновить внешнюю."
+            },
+            "incorrect": {
+              "en": "It is true — the outer transaction is parked untouched while a second one runs.",
+              "ru": "Это верно — внешняя транзакция откладывается нетронутой, пока работает вторая."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "rn-p2-pool-mc",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why can heavy use of REQUIRES_NEW exhaust the database connection pool?",
+            "ru": "Почему активное использование REQUIRES_NEW может исчерпать пул соединений с БД?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "A suspended transaction keeps its connection, so the inner one borrows another.",
+              "ru": "Приостановленная транзакция сохраняет своё соединение, поэтому внутренняя берёт ещё одно."
+            },
+            "incorrect": {
+              "en": "Each REQUIRES_NEW holds an extra connection while the suspended transaction still holds its own.",
+              "ru": "Каждый REQUIRES_NEW удерживает лишнее соединение, пока приостановленная транзакция держит своё."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Each one holds an extra connection while the suspended transaction keeps its own",
+                "ru": "Каждый удерживает лишнее соединение, пока приостановленная транзакция держит своё"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Because suspended transactions are rolled back and retried",
+                "ru": "Потому что приостановленные транзакции откатываются и повторяются"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Suspending rolls nothing back and retries nothing; the outer transaction simply waits.",
+                "ru": "Приостановка ничего не откатывает и не повторяет; внешняя транзакция просто ждёт."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Because a new transaction creates a new connection pool",
+                "ru": "Потому что новая транзакция создаёт новый пул соединений"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The pool is shared; REQUIRES_NEW just borrows one more connection from it.",
+                "ru": "Пул общий; REQUIRES_NEW просто берёт из него ещё одно соединение."
+              }
+            }
+          ]
+        },
+        {
+          "id": "rn-p3-sort-suspend",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order what Spring does when a REQUIRES_NEW method is entered while transaction T1 is active.",
+            "ru": "Расставь по порядку действия Spring при входе в REQUIRES_NEW-метод, когда активна транзакция T1."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Suspend, begin, finish independently, resume.",
+              "ru": "Приостановить, открыть, независимо завершить, возобновить."
+            },
+            "incorrect": {
+              "en": "T1 is suspended, T2 runs and ends on its own, then T1 is resumed and commits later.",
+              "ru": "T1 приостанавливается, T2 работает и завершается сама, затем T1 возобновляется и коммитится позже."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Spring suspends T1, leaving it neither committed nor rolled back",
+                "ru": "Spring приостанавливает T1, не коммитя и не откатывая её"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "T2 begins on a second connection and the inner work runs",
+                "ru": "На втором соединении открывается T2, и выполняется внутренняя работа"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "T2 commits or rolls back on its own",
+                "ru": "T2 самостоятельно коммитится или откатывается"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Spring resumes T1, which continues and commits later",
+                "ru": "Spring возобновляет T1, которая продолжается и коммитится позже"
+              }
+            }
+          ]
+        },
+        {
+          "id": "rn-p4-fill-suspend-resume",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing verbs.",
+            "ru": "Впиши два пропущенных глагола."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Suspend and resume are what make the outer transaction survive untouched.",
+              "ru": "Приостановка и возобновление — то, что оставляет внешнюю транзакцию нетронутой."
+            },
+            "incorrect": {
+              "en": "Spring suspends the active transaction and resumes it after the new one finishes.",
+              "ru": "Spring приостанавливает активную транзакцию и возобновляет её после завершения новой."
+            }
+          },
+          "text": {
+            "en": "Entering a REQUIRES_NEW method while a transaction is active makes Spring ___ it, run the work in a second transaction, and then ___ it.",
+            "ru": "Вход в REQUIRES_NEW-метод при активной транзакции заставляет Spring ___ её, выполнить работу во второй транзакции, а затем ___ её."
+          },
+          "blanks": [
+            {
+              "en": [
+                "suspend"
+              ],
+              "ru": [
+                "приостановить"
+              ]
+            },
+            {
+              "en": [
+                "resume"
+              ],
+              "ru": [
+                "возобновить"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "nested-savepoint",
+      "title": {
+        "en": "NESTED — one transaction with a savepoint",
+        "ru": "NESTED — одна транзакция с savepoint"
+      },
+      "summary": {
+        "en": "NESTED reuses the same physical transaction but sets a savepoint first, so an inner failure undoes only the work done after that point.",
+        "ru": "NESTED использует ту же физическую транзакцию, но сначала ставит savepoint, поэтому внутренний сбой отменяет только работу после этой точки."
+      },
+      "discovery": [
+        {
+          "id": "nst-d1-outer-keeps",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The inner NESTED call fails and the caller handles it. What does the outer transaction still hold?",
+            "ru": "Внутренний NESTED-вызов падает, и вызывающий обрабатывает сбой. Что при этом сохраняет внешняя транзакция?"
+          },
+          "code": "// ImportService\n@Transactional                       // REQUIRED\npublic void importBatch() {\n    repo.insert(rowA);\n    try {\n        importer.importRow(rowB);    // NESTED, fails\n    } catch (RuntimeException e) {\n        // handled\n    }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "`NESTED` reuses the **same** physical transaction on the **same** connection, but before running the inner method it sets a **savepoint** — a marker inside a transaction that you can later roll back *to*, discarding everything written after it while keeping everything written before it.\n\n```mermaid\nflowchart LR\n  B[\"begin T1\"] --> W1[\"write rowA\"]\n  W1 --> S[\"savepoint\"]\n  S --> W2[\"write rowB in the NESTED block\"]\n  W2 --> R[\"inner fails: roll back to the savepoint\"]\n  R --> C[\"T1 still holds rowA and can commit\"]\n```\n\nThere is only ever **one** transaction and **one** connection here, so nothing is suspended and nothing is resumed.\n\nThe catch: savepoints are a JDBC feature, so `NESTED` needs a transaction manager that can use them — in practice `DataSourceTransactionManager` (plain JDBC). The JPA transaction manager does not support it, which is why `NESTED` is far rarer in real code than the other values.",
+            "ru": "`NESTED` использует **ту же** физическую транзакцию на **том же** соединении, но перед запуском внутреннего метода ставит **savepoint** — метку внутри транзакции, к которой можно позже откатиться, отбросив всё записанное после неё и сохранив всё записанное до.\n\n```mermaid\nflowchart LR\n  B[\"begin T1\"] --> W1[\"запись rowA\"]\n  W1 --> S[\"savepoint\"]\n  S --> W2[\"запись rowB в NESTED-блоке\"]\n  W2 --> R[\"внутренний сбой: откат к savepoint\"]\n  R --> C[\"T1 сохраняет rowA и может закоммититься\"]\n```\n\nЗдесь всегда только **одна** транзакция и **одно** соединение, поэтому ничего не приостанавливается и не возобновляется.\n\nПодвох: savepoint — это возможность JDBC, поэтому `NESTED` нужен менеджер транзакций, умеющий их использовать: на практике `DataSourceTransactionManager` (чистый JDBC). Менеджер транзакций JPA его не поддерживает — поэтому `NESTED` встречается в реальном коде куда реже остальных значений."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A savepoint rollback rewinds only the inner work.",
+              "ru": "Откат к savepoint отматывает только внутреннюю работу."
+            },
+            "incorrect": {
+              "en": "Everything written before the savepoint survives, so the outer transaction can still commit.",
+              "ru": "Всё записанное до savepoint сохраняется, поэтому внешняя транзакция всё ещё может закоммититься."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Everything written before the savepoint; it can still commit",
+                "ru": "Всё записанное до savepoint; она всё ещё может закоммититься"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing — the whole transaction is rolled back",
+                "ru": "Ничего — откатывается вся транзакция"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A savepoint rollback undoes only the work done after the savepoint.",
+                "ru": "Откат к savepoint отменяет только работу, сделанную после него."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Everything, including the failed inner work, since it is one transaction",
+                "ru": "Всё, включая упавшую внутреннюю работу, ведь транзакция одна"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The savepoint exists precisely so the inner work can be discarded separately.",
+                "ru": "Savepoint и существует ровно для того, чтобы внутреннюю работу можно было отбросить отдельно."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "nst-p1-second-conn-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "NESTED propagation runs the inner method on a second database connection.",
+            "ru": "Propagation NESTED выполняет внутренний метод на втором соединении с БД."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One transaction, one connection, plus a savepoint.",
+              "ru": "Одна транзакция, одно соединение плюс savepoint."
+            },
+            "incorrect": {
+              "en": "No — NESTED stays on the same connection inside the same transaction; only a savepoint is added.",
+              "ru": "Нет — NESTED остаётся на том же соединении внутри той же транзакции; добавляется лишь savepoint."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "nst-p2-relies-mc",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does NESTED propagation use to undo only the inner method's work?",
+            "ru": "Что использует propagation NESTED, чтобы отменить только работу внутреннего метода?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "A savepoint inside the existing transaction — no second transaction is involved.",
+              "ru": "Savepoint внутри существующей транзакции — никакой второй транзакции не появляется."
+            },
+            "incorrect": {
+              "en": "It sets a JDBC savepoint inside the existing transaction and rolls back to it.",
+              "ru": "Он ставит JDBC savepoint внутри существующей транзакции и откатывается к нему."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A JDBC savepoint inside the existing transaction",
+                "ru": "JDBC savepoint внутри существующей транзакции"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A second physical transaction that commits separately",
+                "ru": "Вторую физическую транзакцию, которая коммитится отдельно"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is REQUIRES_NEW; NESTED stays inside the one transaction.",
+                "ru": "Это REQUIRES_NEW; NESTED остаётся внутри одной транзакции."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "An automatic retry of the failed statement",
+                "ru": "Автоматический повтор упавшего запроса"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing is retried; the transaction is simply rewound to the savepoint.",
+                "ru": "Ничего не повторяется; транзакция просто отматывается к savepoint."
+              }
+            }
+          ]
+        },
+        {
+          "id": "nst-p3-manager-mc",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "With which Spring transaction manager does NESTED propagation typically work?",
+            "ru": "С каким менеджером транзакций Spring обычно работает propagation NESTED?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "NESTED needs JDBC savepoint support, which plain JDBC provides.",
+              "ru": "NESTED нужна поддержка JDBC savepoint, которую даёт чистый JDBC."
+            },
+            "incorrect": {
+              "en": "It is DataSourceTransactionManager (plain JDBC); the JPA transaction manager does not support savepoints.",
+              "ru": "Это DataSourceTransactionManager (чистый JDBC); менеджер транзакций JPA savepoint не поддерживает."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "DataSourceTransactionManager (plain JDBC)",
+                "ru": "DataSourceTransactionManager (чистый JDBC)"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The JPA transaction manager",
+                "ru": "Менеджер транзакций JPA"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The JPA transaction manager does not support JDBC savepoints, so NESTED is unavailable there.",
+                "ru": "Менеджер транзакций JPA не поддерживает JDBC savepoint, поэтому NESTED там недоступен."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Any of them — NESTED is manager-independent",
+                "ru": "С любым — NESTED не зависит от менеджера"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "NESTED relies on JDBC savepoint support, so it is not available everywhere.",
+                "ru": "NESTED опирается на поддержку JDBC savepoint, поэтому доступен не везде."
+              }
+            }
+          ]
+        },
+        {
+          "id": "nst-p4-fill-savepoint",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing term.",
+            "ru": "Впиши пропущенный термин."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One transaction, one connection, and a marker to rewind to.",
+              "ru": "Одна транзакция, одно соединение и метка, к которой можно отмотать."
+            },
+            "incorrect": {
+              "en": "It is a savepoint — the marker NESTED rolls back to instead of undoing the whole transaction.",
+              "ru": "Это savepoint — метка, к которой откатывается NESTED вместо отмены всей транзакции."
+            }
+          },
+          "text": {
+            "en": "NESTED stays inside one physical transaction and sets a ___ before the inner work.",
+            "ru": "NESTED остаётся внутри одной физической транзакции и ставит ___ перед внутренней работой."
+          },
+          "blanks": [
+            {
+              "en": [
+                "savepoint"
+              ],
+              "ru": [
+                "savepoint",
+                "точку сохранения"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "requires-new-vs-nested",
+      "title": {
+        "en": "REQUIRES_NEW vs NESTED",
+        "ru": "REQUIRES_NEW против NESTED"
+      },
+      "summary": {
+        "en": "REQUIRES_NEW is a second independent transaction on a second connection; NESTED is one connection with a savepoint, and its work dies with the outer transaction.",
+        "ru": "REQUIRES_NEW — вторая независимая транзакция на втором соединении; NESTED — одно соединение с savepoint, и его работа умирает вместе с внешней транзакцией."
+      },
+      "discovery": [
+        {
+          "id": "rnn-d1-which-survives",
+          "type": "predict_output",
+          "prompt": {
+            "en": "In both versions the inner method succeeds, and afterwards the OUTER transaction rolls back. Whose row survives?",
+            "ru": "В обоих вариантах внутренний метод отрабатывает успешно, а затем ВНЕШНЯЯ транзакция откатывается. Чья строка сохранится?"
+          },
+          "code": "// version A\n@Transactional(propagation = Propagation.REQUIRES_NEW)\npublic void innerA() { repo.insert(row); }\n\n// version B\n@Transactional(propagation = Propagation.NESTED)\npublic void innerB() { repo.insert(row); }",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Both settings can isolate an inner failure, but they are different mechanisms:\n\n```mermaid\nflowchart TD\n  RN[\"REQUIRES_NEW\"] --> RN1[\"second physical transaction\"]\n  RN --> RN2[\"second connection, outer suspended\"]\n  RN --> RN3[\"inner commit survives an outer rollback\"]\n  NE[\"NESTED\"] --> NE1[\"same physical transaction\"]\n  NE --> NE2[\"one connection, savepoint\"]\n  NE --> NE3[\"discarded if the outer rolls back\"]\n```\n\nThe decisive difference is **durability of the inner work**. `REQUIRES_NEW` commits a genuinely separate transaction, so an outer rollback cannot undo it — that is why audit rows use it. A `NESTED` block never commits by itself; it only protects the outer transaction from the inner failure, and if the outer transaction later rolls back, the nested work goes with it.\n\nSo: `REQUIRES_NEW` when the inner work must persist independently, `NESTED` when you only want a partial undo inside one transaction — and can use plain JDBC.",
+            "ru": "Оба значения умеют изолировать внутренний сбой, но механизмы у них разные:\n\n```mermaid\nflowchart TD\n  RN[\"REQUIRES_NEW\"] --> RN1[\"вторая физическая транзакция\"]\n  RN --> RN2[\"второе соединение, внешняя приостановлена\"]\n  RN --> RN3[\"внутренний коммит переживает внешний откат\"]\n  NE[\"NESTED\"] --> NE1[\"та же физическая транзакция\"]\n  NE --> NE2[\"одно соединение, savepoint\"]\n  NE --> NE3[\"отбрасывается, если внешняя откатится\"]\n```\n\nРешающее различие — **устойчивость внутренней работы**. `REQUIRES_NEW` коммитит по-настоящему отдельную транзакцию, и внешний откат её не отменит — поэтому его используют для строк аудита. Блок `NESTED` сам по себе никогда не коммитится; он лишь защищает внешнюю транзакцию от внутреннего сбоя, а если внешняя потом откатится, вложенная работа уйдёт вместе с ней.\n\nИтого: `REQUIRES_NEW` — когда внутренняя работа должна сохраниться независимо, `NESTED` — когда нужен лишь частичный откат внутри одной транзакции и доступен чистый JDBC."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Only a separately committed transaction survives someone else's rollback.",
+              "ru": "Переживает чужой откат только отдельно закоммиченная транзакция."
+            },
+            "incorrect": {
+              "en": "Only version A: REQUIRES_NEW committed its own transaction, while the NESTED work is part of the outer one.",
+              "ru": "Только вариант A: REQUIRES_NEW закоммитил свою транзакцию, а работа NESTED — часть внешней."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Only version A's row survives",
+                "ru": "Сохранится только строка варианта A"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Both rows survive — the inner work committed in both cases",
+                "ru": "Сохранятся обе строки — внутренняя работа закоммитилась в обоих случаях"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A NESTED block has no transaction of its own to commit; it is part of the outer one.",
+                "ru": "У NESTED-блока нет своей транзакции для коммита; он часть внешней."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Neither survives — an outer rollback always wins",
+                "ru": "Не сохранится ни одна — внешний откат всегда побеждает"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "REQUIRES_NEW commits a separate transaction that an outer rollback cannot touch.",
+                "ru": "REQUIRES_NEW коммитит отдельную транзакцию, которую внешний откат не трогает."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "rnn-p1-same-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "REQUIRES_NEW and NESTED are two names for the same behaviour.",
+            "ru": "REQUIRES_NEW и NESTED — два названия одного и того же поведения."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two transactions on two connections vs. one transaction with a savepoint.",
+              "ru": "Две транзакции на двух соединениях против одной транзакции с savepoint."
+            },
+            "incorrect": {
+              "en": "No — REQUIRES_NEW is a separate transaction on a second connection; NESTED is a savepoint in the same one.",
+              "ru": "Нет — REQUIRES_NEW это отдельная транзакция на втором соединении; NESTED — savepoint в той же."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "rnn-p2-count-mc",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A REQUIRED method calls a REQUIRES_NEW method. During the inner call, how many physical transactions and connections are involved?",
+            "ru": "REQUIRED-метод вызывает REQUIRES_NEW-метод. Сколько физических транзакций и соединений задействовано во время внутреннего вызова?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The suspended transaction keeps its connection while the new one borrows another.",
+              "ru": "Приостановленная транзакция сохраняет своё соединение, пока новая берёт ещё одно."
+            },
+            "incorrect": {
+              "en": "Two transactions and two connections: the suspended one keeps its connection.",
+              "ru": "Две транзакции и два соединения: приостановленная сохраняет своё соединение."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Two transactions, two connections",
+                "ru": "Две транзакции, два соединения"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Two transactions, one connection",
+                "ru": "Две транзакции, одно соединение"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The suspended transaction holds on to its connection, so a second one is borrowed.",
+                "ru": "Приостановленная транзакция удерживает своё соединение, поэтому берётся второе."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "One transaction, one connection",
+                "ru": "Одна транзакция, одно соединение"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That describes NESTED; REQUIRES_NEW always begins a separate transaction.",
+                "ru": "Это описание NESTED; REQUIRES_NEW всегда открывает отдельную транзакцию."
+              }
+            }
+          ]
+        },
+        {
+          "id": "rnn-p3-match-mechanisms",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each Spring propagation to the mechanism it uses.",
+            "ru": "Соотнеси каждый propagation в Spring с механизмом, который он использует."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Join, second transaction, or savepoint — three different mechanisms.",
+              "ru": "Присоединение, вторая транзакция или savepoint — три разных механизма."
+            },
+            "incorrect": {
+              "en": "REQUIRED joins, REQUIRES_NEW opens a second transaction, NESTED sets a savepoint.",
+              "ru": "REQUIRED присоединяется, REQUIRES_NEW открывает вторую транзакцию, NESTED ставит savepoint."
+            }
+          },
+          "pairs": [
+            {
+              "id": "required",
+              "left": {
+                "en": "REQUIRED",
+                "ru": "REQUIRED"
+              },
+              "right": {
+                "en": "Joins the existing transaction, or starts one",
+                "ru": "Присоединяется к существующей транзакции или открывает новую"
+              }
+            },
+            {
+              "id": "requires-new",
+              "left": {
+                "en": "REQUIRES_NEW",
+                "ru": "REQUIRES_NEW"
+              },
+              "right": {
+                "en": "Second transaction on a second connection",
+                "ru": "Вторая транзакция на втором соединении"
+              }
+            },
+            {
+              "id": "nested",
+              "left": {
+                "en": "NESTED",
+                "ru": "NESTED"
+              },
+              "right": {
+                "en": "Savepoint inside the existing transaction",
+                "ru": "Savepoint внутри существующей транзакции"
+              }
+            },
+            {
+              "id": "durable",
+              "left": {
+                "en": "Inner commit survives an outer rollback",
+                "ru": "Внутренний коммит переживает внешний откат"
+              },
+              "right": {
+                "en": "True only for REQUIRES_NEW",
+                "ru": "Верно только для REQUIRES_NEW"
+              }
+            }
+          ]
+        },
+        {
+          "id": "rnn-p4-fill-connections",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing numbers.",
+            "ru": "Впиши два пропущенных числа."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That connection count is the whole practical difference between the two.",
+              "ru": "Это число соединений и есть главная практическая разница между ними."
+            },
+            "incorrect": {
+              "en": "REQUIRES_NEW holds two connections during the inner call; NESTED holds one.",
+              "ru": "REQUIRES_NEW удерживает два соединения во время внутреннего вызова; NESTED — одно."
+            }
+          },
+          "text": {
+            "en": "During the inner call, REQUIRES_NEW holds ___ connections, while NESTED holds ___.",
+            "ru": "Во время внутреннего вызова REQUIRES_NEW удерживает ___ соединения, а NESTED — ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "two",
+                "2"
+              ],
+              "ru": [
+                "два",
+                "2"
+              ]
+            },
+            {
+              "en": [
+                "one",
+                "1"
+              ],
+              "ru": [
+                "одно",
+                "1"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "supports-not-supported",
+      "title": {
+        "en": "SUPPORTS and NOT_SUPPORTED",
+        "ru": "SUPPORTS и NOT_SUPPORTED"
+      },
+      "summary": {
+        "en": "SUPPORTS joins a transaction if one is active and runs without one otherwise; NOT_SUPPORTED suspends any active transaction and runs non-transactionally.",
+        "ru": "SUPPORTS присоединяется к транзакции, если она активна, иначе работает без неё; NOT_SUPPORTED приостанавливает любую активную транзакцию и работает нетранзакционно."
+      },
+      "discovery": [
+        {
+          "id": "sup-d1-not-supported",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A method marked NOT_SUPPORTED is called from inside an active transaction. In what context does its body run?",
+            "ru": "Метод, помеченный NOT_SUPPORTED, вызван изнутри активной транзакции. В каком контексте выполнится его тело?"
+          },
+          "reveal": {
+            "en": "These two are the \"transaction optional\" and \"transaction off\" settings.\n\n**SUPPORTS** — join the current transaction if one is active, and run happily **without** one if not. It never begins a transaction of its own.\n\n**NOT_SUPPORTED** — **suspend** any active transaction and run the method non-transactionally; the suspended transaction is resumed afterwards.\n\n```mermaid\nflowchart TD\n  A[\"is a transaction active?\"] -->|yes| S[\"SUPPORTS: join it\"]\n  A -->|no| S2[\"SUPPORTS: run without one\"]\n  A -->|yes| N[\"NOT_SUPPORTED: suspend it, run without one\"]\n  A -->|no| N2[\"NOT_SUPPORTED: run without one\"]\n```\n\nWhy deliberately run without a transaction? An open transaction holds a connection and its **locks** for as long as it lives. A long read-only job — a report, an export — that runs inside the caller's write transaction keeps those locks open the whole time it churns. `NOT_SUPPORTED` takes such work off the transaction entirely.",
+            "ru": "Это настройки «транзакция необязательна» и «транзакция выключена».\n\n**SUPPORTS** — присоединиться к текущей транзакции, если она активна, и спокойно работать **без неё**, если её нет. Свою транзакцию он не открывает никогда.\n\n**NOT_SUPPORTED** — **приостановить** любую активную транзакцию и выполнить метод нетранзакционно; после этого приостановленная транзакция возобновляется.\n\n```mermaid\nflowchart TD\n  A[\"транзакция активна?\"] -->|да| S[\"SUPPORTS: присоединиться\"]\n  A -->|нет| S2[\"SUPPORTS: работать без неё\"]\n  A -->|да| N[\"NOT_SUPPORTED: приостановить, работать без неё\"]\n  A -->|нет| N2[\"NOT_SUPPORTED: работать без неё\"]\n```\n\nЗачем намеренно работать без транзакции? Открытая транзакция удерживает соединение и свои **блокировки** всё время своей жизни. Долгая работа только на чтение — отчёт, выгрузка, — выполняясь внутри транзакции записи вызывающего, держит эти блокировки открытыми всё время. `NOT_SUPPORTED` полностью снимает такую работу с транзакции."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Suspend, then run with no transaction at all.",
+              "ru": "Приостановить, затем работать вообще без транзакции."
+            },
+            "incorrect": {
+              "en": "The active transaction is suspended and the method runs non-transactionally.",
+              "ru": "Активная транзакция приостанавливается, и метод выполняется нетранзакционно."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The active transaction is suspended and the method runs with no transaction",
+                "ru": "Активная транзакция приостанавливается, и метод выполняется без транзакции"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It joins the active transaction, like the default would",
+                "ru": "Он присоединяется к активной транзакции, как сделал бы вариант по умолчанию"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "NOT_SUPPORTED explicitly avoids running inside a transaction.",
+                "ru": "NOT_SUPPORTED намеренно избегает выполнения внутри транзакции."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Spring throws, because a transaction is active",
+                "ru": "Spring бросит исключение, потому что транзакция активна"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "NOT_SUPPORTED does not treat an active transaction as an error; it just sets it aside.",
+                "ru": "NOT_SUPPORTED не считает активную транзакцию ошибкой; он просто откладывает её в сторону."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "sup-p1-supports-no-tx-mc",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does SUPPORTS propagation do when NO transaction is active?",
+            "ru": "Что делает propagation SUPPORTS, когда никакая транзакция НЕ активна?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "SUPPORTS is the tolerant setting: with or without a transaction, it runs.",
+              "ru": "SUPPORTS — терпимая настройка: с транзакцией или без неё он просто работает."
+            },
+            "incorrect": {
+              "en": "It runs the method without a transaction; SUPPORTS never begins one.",
+              "ru": "Он выполняет метод без транзакции; SUPPORTS никогда её не открывает."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Runs the method without a transaction",
+                "ru": "Выполняет метод без транзакции"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Starts a new transaction",
+                "ru": "Открывает новую транзакцию"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "SUPPORTS never begins a transaction; that is REQUIRED's job.",
+                "ru": "SUPPORTS никогда не открывает транзакцию; это работа REQUIRED."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Throws an exception",
+                "ru": "Бросает исключение"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "SUPPORTS accepts both situations; only MANDATORY demands an existing transaction.",
+                "ru": "SUPPORTS принимает обе ситуации; существующей транзакции требует только MANDATORY."
+              }
+            }
+          ]
+        },
+        {
+          "id": "sup-p2-suspend-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "NOT_SUPPORTED suspends an active transaction and runs the method without one.",
+            "ru": "NOT_SUPPORTED приостанавливает активную транзакцию и выполняет метод без неё."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That is how long read-only work avoids holding a write transaction and its locks.",
+              "ru": "Именно так долгая работа на чтение не удерживает транзакцию записи и её блокировки."
+            },
+            "incorrect": {
+              "en": "It is true — the transaction is parked, the method runs non-transactionally, then it is resumed.",
+              "ru": "Это верно — транзакция откладывается, метод выполняется нетранзакционно, затем она возобновляется."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "sup-p3-match-cases",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each situation to what Spring does.",
+            "ru": "Соотнеси каждую ситуацию с тем, что делает Spring."
+          },
+          "feedback": {
+            "correct": {
+              "en": "SUPPORTS adapts to the context; NOT_SUPPORTED removes it.",
+              "ru": "SUPPORTS подстраивается под контекст; NOT_SUPPORTED его убирает."
+            },
+            "incorrect": {
+              "en": "SUPPORTS joins or runs without one; NOT_SUPPORTED suspends an active transaction first.",
+              "ru": "SUPPORTS присоединяется или работает без транзакции; NOT_SUPPORTED сначала приостанавливает активную."
+            }
+          },
+          "pairs": [
+            {
+              "id": "sup-active",
+              "left": {
+                "en": "SUPPORTS with a transaction active",
+                "ru": "SUPPORTS при активной транзакции"
+              },
+              "right": {
+                "en": "Joins it",
+                "ru": "Присоединяется к ней"
+              }
+            },
+            {
+              "id": "sup-none",
+              "left": {
+                "en": "SUPPORTS with no transaction",
+                "ru": "SUPPORTS без транзакции"
+              },
+              "right": {
+                "en": "Runs without one, opening nothing",
+                "ru": "Работает без неё, ничего не открывая"
+              }
+            },
+            {
+              "id": "ns-active",
+              "left": {
+                "en": "NOT_SUPPORTED with a transaction active",
+                "ru": "NOT_SUPPORTED при активной транзакции"
+              },
+              "right": {
+                "en": "Suspends it, then runs without one",
+                "ru": "Приостанавливает её, затем работает без неё"
+              }
+            }
+          ]
+        },
+        {
+          "id": "sup-p4-fill-two-names",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing propagation names.",
+            "ru": "Впиши два пропущенных имени propagation."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One takes a transaction if offered; the other refuses to use one.",
+              "ru": "Один берёт транзакцию, если её предложили; другой отказывается её использовать."
+            },
+            "incorrect": {
+              "en": "SUPPORTS joins only an existing transaction; NOT_SUPPORTED suspends any active one.",
+              "ru": "SUPPORTS присоединяется только к существующей транзакции; NOT_SUPPORTED приостанавливает любую активную."
+            }
+          },
+          "text": {
+            "en": "___ joins a transaction only if one is already active, while ___ suspends any active transaction and runs without one.",
+            "ru": "___ присоединяется к транзакции, только если она уже активна, а ___ приостанавливает любую активную транзакцию и работает без неё."
+          },
+          "blanks": [
+            {
+              "en": [
+                "SUPPORTS"
+              ],
+              "ru": [
+                "SUPPORTS"
+              ]
+            },
+            {
+              "en": [
+                "NOT_SUPPORTED"
+              ],
+              "ru": [
+                "NOT_SUPPORTED"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mandatory-never",
+      "title": {
+        "en": "MANDATORY and NEVER",
+        "ru": "MANDATORY и NEVER"
+      },
+      "summary": {
+        "en": "MANDATORY throws when no transaction is active; NEVER throws when one is — both are assertions about the caller's context.",
+        "ru": "MANDATORY бросает исключение, когда транзакция не активна; NEVER — когда активна: оба это проверки контекста вызывающего."
+      },
+      "discovery": [
+        {
+          "id": "mn-d1-mandatory-alone",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A MANDATORY method is called straight from a controller, with no transaction open anywhere. What happens?",
+            "ru": "MANDATORY-метод вызывают прямо из контроллера, когда нигде не открыта транзакция. Что произойдёт?"
+          },
+          "reveal": {
+            "en": "`MANDATORY` and `NEVER` are the two **assertions** among the propagation values: they never change what runs, they only refuse to run in the wrong context.\n\n**MANDATORY** — there *must* already be an active transaction to join. With none, Spring throws immediately and the method body never executes. Put it on a method that only makes sense as part of a larger unit of work, so calling it standalone fails loudly instead of quietly committing statement by statement.\n\n**NEVER** — there must be *no* active transaction. If one is active, Spring throws. Use it to guarantee that a method is never dragged into someone else's transaction.\n\n```mermaid\nflowchart TD\n  A[\"is a transaction active?\"] -->|yes| M[\"MANDATORY: join it\"]\n  A -->|no| ME[\"MANDATORY: throw\"]\n  A -->|yes| NE[\"NEVER: throw\"]\n  A -->|no| N[\"NEVER: run without one\"]\n```\n\nNote the contrast with `NOT_SUPPORTED`: it quietly suspends an active transaction, whereas `NEVER` treats the very same situation as an error.",
+            "ru": "`MANDATORY` и `NEVER` — две **проверки** среди значений propagation: они не меняют то, что выполняется, а лишь отказываются работать в неподходящем контексте.\n\n**MANDATORY** — активная транзакция *обязана* уже существовать, чтобы к ней присоединиться. Если её нет, Spring сразу бросает исключение, и тело метода не выполняется. Ставьте его на метод, который имеет смысл только как часть большей единицы работы: тогда одиночный вызов упадёт громко, а не закоммитит всё по одному запросу.\n\n**NEVER** — активной транзакции быть *не должно*. Если она активна, Spring бросает исключение. Используйте, чтобы гарантировать: метод никогда не будет затянут в чужую транзакцию.\n\n```mermaid\nflowchart TD\n  A[\"транзакция активна?\"] -->|да| M[\"MANDATORY: присоединиться\"]\n  A -->|нет| ME[\"MANDATORY: исключение\"]\n  A -->|да| NE[\"NEVER: исключение\"]\n  A -->|нет| N[\"NEVER: работать без неё\"]\n```\n\nОбратите внимание на контраст с `NOT_SUPPORTED`: он тихо приостанавливает активную транзакцию, тогда как `NEVER` считает ровно ту же ситуацию ошибкой."
+          },
+          "feedback": {
+            "correct": {
+              "en": "MANDATORY fails fast instead of opening a transaction.",
+              "ru": "MANDATORY падает сразу, вместо того чтобы открыть транзакцию."
+            },
+            "incorrect": {
+              "en": "Spring throws immediately: MANDATORY demands an existing transaction and never opens one.",
+              "ru": "Spring сразу бросает исключение: MANDATORY требует существующую транзакцию и никогда не открывает свою."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Spring throws immediately; the method body never runs",
+                "ru": "Spring сразу бросает исключение; тело метода не выполняется"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Spring starts a transaction for it",
+                "ru": "Spring откроет для него транзакцию"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "MANDATORY refuses to open one — that is the entire point of the setting.",
+                "ru": "MANDATORY отказывается её открывать — в этом весь смысл настройки."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The method runs without a transaction",
+                "ru": "Метод выполнится без транзакции"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is SUPPORTS behaviour; MANDATORY fails fast instead.",
+                "ru": "Так ведёт себя SUPPORTS; MANDATORY вместо этого сразу падает."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "mn-p1-starts-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "MANDATORY propagation starts a new transaction when none is active.",
+            "ru": "Propagation MANDATORY открывает новую транзакцию, когда ни одна не активна."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It throws instead — it only ever joins.",
+              "ru": "Вместо этого он бросает исключение — он умеет только присоединяться."
+            },
+            "incorrect": {
+              "en": "No — with nothing active MANDATORY throws; it never opens a transaction itself.",
+              "ru": "Нет — если ничего не активно, MANDATORY бросает исключение; он никогда не открывает транзакцию сам."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "mn-p2-throws-active-mc",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which propagation throws an exception when a transaction IS already active?",
+            "ru": "Какой propagation бросает исключение, когда транзакция УЖЕ активна?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "NEVER guarantees the method is not dragged into someone else's transaction.",
+              "ru": "NEVER гарантирует, что метод не затянут в чужую транзакцию."
+            },
+            "incorrect": {
+              "en": "It is NEVER; MANDATORY throws in the opposite case, when there is nothing to join.",
+              "ru": "Это NEVER; MANDATORY бросает исключение в обратном случае — когда присоединяться не к чему."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "NEVER",
+                "ru": "NEVER"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "MANDATORY",
+                "ru": "MANDATORY"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "MANDATORY throws in the opposite case — when there is no transaction to join.",
+                "ru": "MANDATORY бросает исключение в обратном случае — когда присоединяться не к чему."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "NOT_SUPPORTED",
+                "ru": "NOT_SUPPORTED"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "NOT_SUPPORTED suspends the active transaction instead of failing.",
+                "ru": "NOT_SUPPORTED приостанавливает активную транзакцию, а не падает."
+              }
+            }
+          ]
+        },
+        {
+          "id": "mn-p3-match-guards",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each Spring propagation to the rule it enforces.",
+            "ru": "Соотнеси каждый propagation в Spring с правилом, которое он обеспечивает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two of them assert a context; two of them adapt to it.",
+              "ru": "Два из них проверяют контекст, два подстраиваются под него."
+            },
+            "incorrect": {
+              "en": "MANDATORY demands a transaction, NEVER forbids one, SUPPORTS tolerates both, REQUIRED guarantees one.",
+              "ru": "MANDATORY требует транзакцию, NEVER её запрещает, SUPPORTS терпит оба случая, REQUIRED гарантирует наличие."
+            }
+          },
+          "pairs": [
+            {
+              "id": "mandatory",
+              "left": {
+                "en": "MANDATORY",
+                "ru": "MANDATORY"
+              },
+              "right": {
+                "en": "Requires an existing transaction, otherwise throws",
+                "ru": "Требует существующую транзакцию, иначе бросает исключение"
+              }
+            },
+            {
+              "id": "never",
+              "left": {
+                "en": "NEVER",
+                "ru": "NEVER"
+              },
+              "right": {
+                "en": "Requires that none is active, otherwise throws",
+                "ru": "Требует, чтобы ни одна не была активна, иначе бросает исключение"
+              }
+            },
+            {
+              "id": "supports",
+              "left": {
+                "en": "SUPPORTS",
+                "ru": "SUPPORTS"
+              },
+              "right": {
+                "en": "Works with or without an active transaction",
+                "ru": "Работает как с активной транзакцией, так и без неё"
+              }
+            },
+            {
+              "id": "required",
+              "left": {
+                "en": "REQUIRED",
+                "ru": "REQUIRED"
+              },
+              "right": {
+                "en": "Guarantees a transaction: joins one or opens one",
+                "ru": "Гарантирует транзакцию: присоединяется или открывает"
+              }
+            }
+          ]
+        },
+        {
+          "id": "mn-p4-fill-assertions",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing propagation names.",
+            "ru": "Впиши два пропущенных имени propagation."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Mirror images: one demands a transaction, the other forbids it.",
+              "ru": "Зеркальная пара: один требует транзакцию, другой её запрещает."
+            },
+            "incorrect": {
+              "en": "MANDATORY throws with no transaction active; NEVER throws when one is active.",
+              "ru": "MANDATORY бросает исключение, когда транзакция не активна; NEVER — когда активна."
+            }
+          },
+          "text": {
+            "en": "___ throws when no transaction is active; ___ throws when one is.",
+            "ru": "___ бросает исключение, когда транзакция не активна; ___ — когда активна."
+          },
+          "blanks": [
+            {
+              "en": [
+                "MANDATORY"
+              ],
+              "ru": [
+                "MANDATORY"
+              ]
+            },
+            {
+              "en": [
+                "NEVER"
+              ],
+              "ru": [
+                "NEVER"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "no-active-transaction",
+      "title": {
+        "en": "When nothing is active yet",
+        "ru": "Когда ничего ещё не активно"
+      },
+      "summary": {
+        "en": "With no transaction active, REQUIRED, REQUIRES_NEW and NESTED start one; SUPPORTS, NOT_SUPPORTED and NEVER run without one; MANDATORY throws.",
+        "ru": "Когда транзакция не активна, REQUIRED, REQUIRES_NEW и NESTED открывают её; SUPPORTS, NOT_SUPPORTED и NEVER работают без неё; MANDATORY бросает исключение."
+      },
+      "discovery": [
+        {
+          "id": "nat-d1-nested-alone",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A scheduled job calls a NESTED method directly, with no transaction active anywhere. What happens?",
+            "ru": "Планировщик вызывает NESTED-метод напрямую, когда нигде не активна транзакция. Что произойдёт?"
+          },
+          "reveal": {
+            "en": "With no physical transaction active, the seven values collapse into three groups:\n\n```mermaid\nflowchart TD\n  A[\"no physical transaction is active\"] --> B[\"REQUIRED / REQUIRES_NEW / NESTED: start a new one\"]\n  A --> C[\"SUPPORTS / NOT_SUPPORTED / NEVER: run without one\"]\n  A --> D[\"MANDATORY: throw\"]\n```\n\nWhen a transaction **is** active they split differently: `REQUIRED`, `SUPPORTS` and `MANDATORY` join it; `REQUIRES_NEW` suspends it and starts a new one; `NESTED` sets a savepoint inside it; `NOT_SUPPORTED` suspends it and runs without one; `NEVER` throws.\n\nWorth noticing: `REQUIRED`, `REQUIRES_NEW` and `NESTED` are **indistinguishable** when nothing is running — all three simply begin a plain new transaction. That is why a propagation bug in this area can stay invisible until the method is first called from inside another transaction.",
+            "ru": "Когда физическая транзакция не активна, семь значений сводятся к трём группам:\n\n```mermaid\nflowchart TD\n  A[\"физическая транзакция не активна\"] --> B[\"REQUIRED / REQUIRES_NEW / NESTED: открыть новую\"]\n  A --> C[\"SUPPORTS / NOT_SUPPORTED / NEVER: работать без неё\"]\n  A --> D[\"MANDATORY: исключение\"]\n```\n\nКогда транзакция **активна**, они разделяются иначе: `REQUIRED`, `SUPPORTS` и `MANDATORY` присоединяются к ней; `REQUIRES_NEW` приостанавливает её и открывает новую; `NESTED` ставит внутри неё savepoint; `NOT_SUPPORTED` приостанавливает её и работает без неё; `NEVER` бросает исключение.\n\nСтоит заметить: `REQUIRED`, `REQUIRES_NEW` и `NESTED` **неразличимы**, когда ничего не идёт, — все трое просто открывают обычную новую транзакцию. Поэтому ошибка в propagation может оставаться незаметной, пока метод впервые не вызовут изнутри другой транзакции."
+          },
+          "feedback": {
+            "correct": {
+              "en": "With nothing to nest inside, NESTED just begins a transaction.",
+              "ru": "Когда вкладываться не во что, NESTED просто открывает транзакцию."
+            },
+            "incorrect": {
+              "en": "It starts a new physical transaction — with nothing active there is nothing to put a savepoint in.",
+              "ru": "Он открывает новую физическую транзакцию — если ничего не активно, savepoint ставить не во что."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It starts a new physical transaction, just as REQUIRED would",
+                "ru": "Он открывает новую физическую транзакцию, как сделал бы REQUIRED"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It throws, because there is no transaction to put a savepoint in",
+                "ru": "Он бросит исключение, потому что savepoint не во что поставить"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Only MANDATORY throws on a missing transaction; NESTED simply begins one.",
+                "ru": "Из-за отсутствия транзакции бросает исключение только MANDATORY; NESTED просто её открывает."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It runs without a transaction",
+                "ru": "Он выполнится без транзакции"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "NESTED guarantees a transaction; with none active it opens one.",
+                "ru": "NESTED гарантирует транзакцию; если её нет, он её открывает."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "nat-p1-throws-mc",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "With NO transaction active, which Spring propagation throws instead of running the method?",
+            "ru": "Когда транзакция НЕ активна, какой propagation в Spring бросает исключение вместо выполнения метода?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "MANDATORY is the only value that insists on an existing transaction.",
+              "ru": "MANDATORY — единственное значение, которое настаивает на существующей транзакции."
+            },
+            "incorrect": {
+              "en": "It is MANDATORY; NEVER and NOT_SUPPORTED are both perfectly happy without a transaction.",
+              "ru": "Это MANDATORY; NEVER и NOT_SUPPORTED прекрасно обходятся без транзакции."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "MANDATORY",
+                "ru": "MANDATORY"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "NEVER",
+                "ru": "NEVER"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "NEVER is happy without a transaction; it throws only when one IS active.",
+                "ru": "NEVER доволен отсутствием транзакции; он бросает исключение, только когда она активна."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "NOT_SUPPORTED",
+                "ru": "NOT_SUPPORTED"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Running without a transaction is exactly NOT_SUPPORTED's normal case.",
+                "ru": "Работа без транзакции — это как раз нормальный случай для NOT_SUPPORTED."
+              }
+            }
+          ]
+        },
+        {
+          "id": "nat-p2-same-as-required-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Called with no transaction active, REQUIRES_NEW and REQUIRED behave the same way: both start a new transaction.",
+            "ru": "При вызове без активной транзакции REQUIRES_NEW и REQUIRED ведут себя одинаково: оба открывают новую транзакцию."
+          },
+          "feedback": {
+            "correct": {
+              "en": "They differ only when a transaction is already active — which is how such bugs stay hidden.",
+              "ru": "Они различаются, только когда транзакция уже активна, — поэтому такие ошибки и остаются незаметными."
+            },
+            "incorrect": {
+              "en": "It is true — with nothing to suspend, REQUIRES_NEW just begins a transaction like REQUIRED.",
+              "ru": "Это верно — приостанавливать нечего, и REQUIRES_NEW просто открывает транзакцию, как REQUIRED."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "nat-p3-match-no-tx",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "No transaction is active. Match each Spring propagation to what happens.",
+            "ru": "Транзакция не активна. Соотнеси каждый propagation в Spring с тем, что произойдёт."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Three groups: open one, run without one, or refuse.",
+              "ru": "Три группы: открыть, работать без неё или отказаться."
+            },
+            "incorrect": {
+              "en": "REQUIRED and NESTED open a transaction, SUPPORTS runs without one, MANDATORY throws.",
+              "ru": "REQUIRED и NESTED открывают транзакцию, SUPPORTS работает без неё, MANDATORY бросает исключение."
+            }
+          },
+          "pairs": [
+            {
+              "id": "req",
+              "left": {
+                "en": "REQUIRED",
+                "ru": "REQUIRED"
+              },
+              "right": {
+                "en": "Starts a new physical transaction",
+                "ru": "Открывает новую физическую транзакцию"
+              }
+            },
+            {
+              "id": "nst",
+              "left": {
+                "en": "NESTED",
+                "ru": "NESTED"
+              },
+              "right": {
+                "en": "Starts a new one too, with no savepoint to set",
+                "ru": "Тоже открывает новую, savepoint ставить некуда"
+              }
+            },
+            {
+              "id": "sup",
+              "left": {
+                "en": "SUPPORTS",
+                "ru": "SUPPORTS"
+              },
+              "right": {
+                "en": "Runs the method without a transaction",
+                "ru": "Выполняет метод без транзакции"
+              }
+            },
+            {
+              "id": "man",
+              "left": {
+                "en": "MANDATORY",
+                "ru": "MANDATORY"
+              },
+              "right": {
+                "en": "Throws immediately",
+                "ru": "Сразу бросает исключение"
+              }
+            }
+          ]
+        },
+        {
+          "id": "nat-p4-fill-groups",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing verbs.",
+            "ru": "Впиши два пропущенных глагола."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Three start one, three go without, and MANDATORY refuses.",
+              "ru": "Трое открывают, трое обходятся без неё, а MANDATORY отказывается."
+            },
+            "incorrect": {
+              "en": "REQUIRED, REQUIRES_NEW and NESTED start a transaction; SUPPORTS, NOT_SUPPORTED and NEVER run without one.",
+              "ru": "REQUIRED, REQUIRES_NEW и NESTED открывают транзакцию; SUPPORTS, NOT_SUPPORTED и NEVER работают без неё."
+            }
+          },
+          "text": {
+            "en": "With nothing active, REQUIRED, REQUIRES_NEW and NESTED all ___ a transaction, while SUPPORTS, NOT_SUPPORTED and NEVER ___ without one.",
+            "ru": "Когда ничего не активно, REQUIRED, REQUIRES_NEW и NESTED ___ транзакцию, а SUPPORTS, NOT_SUPPORTED и NEVER ___ без неё."
+          },
+          "blanks": [
+            {
+              "en": [
+                "start",
+                "open",
+                "begin"
+              ],
+              "ru": [
+                "открывают",
+                "начинают"
+              ]
+            },
+            {
+              "en": [
+                "run",
+                "execute"
+              ],
+              "ru": [
+                "работают",
+                "выполняются"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rollback-only-trap",
+      "title": {
+        "en": "The rollback-only trap",
+        "ru": "Ловушка rollback-only"
+      },
+      "summary": {
+        "en": "An inner REQUIRED method that throws marks the shared transaction rollback-only, so the outer commit fails with UnexpectedRollbackException even if the exception was caught.",
+        "ru": "Внутренний REQUIRED-метод, бросивший исключение, помечает общую транзакцию как rollback-only, поэтому внешний коммит падает с UnexpectedRollbackException, даже если исключение поймали."
+      },
+      "discovery": [
+        {
+          "id": "rbo-d1-predict-catch",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Both boundaries are REQUIRED and sit in different beans. The caller swallows the inner exception and returns normally. What happens at its commit?",
+            "ru": "Обе границы помечены REQUIRED и лежат в разных бинах. Вызывающий проглатывает внутреннее исключение и штатно возвращает управление. Что произойдёт при его коммите?"
+          },
+          "code": "// ProcessService\n@Transactional                     // REQUIRED\npublic void process() {\n    try {\n        inner.save(row);           // another bean, REQUIRED, throws\n    } catch (RuntimeException e) {\n        log.warn(\"ignored\", e);    // swallowed on purpose\n    }\n    // method returns normally\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Both methods are `REQUIRED`, so there is exactly **one** physical transaction. When the inner boundary saw the exception it could not roll back on its own — it does not own the transaction — so it did the only thing it can: it marked the shared transaction **rollback-only**, a flag meaning \"this transaction may no longer be committed\".\n\n```mermaid\nflowchart LR\n  A[\"inner REQUIRED throws\"] --> B[\"transaction marked rollback-only\"]\n  B --> C[\"caller catches the exception\"]\n  C --> D[\"outer boundary tries to commit\"]\n  D --> E[\"UnexpectedRollbackException\"]\n```\n\nCatching the Java exception has no effect on that flag — they live in different worlds. When the outer boundary reaches its commit, the transaction manager sees the flag, refuses, and throws `UnexpectedRollbackException`. A transaction can only end one way, and that way was already decided.\n\nThe name is exact: the caller *expected* a commit and got a rollback instead. Everything written in that transaction, including the caller's own work, is gone.",
+            "ru": "Оба метода помечены `REQUIRED`, значит физическая транзакция ровно **одна**. Когда внутренняя граница увидела исключение, откатиться сама она не могла — транзакция ей не принадлежит, — поэтому она сделала единственное доступное: пометила общую транзакцию как **rollback-only**, то есть флагом «эту транзакцию больше нельзя коммитить».\n\n```mermaid\nflowchart LR\n  A[\"внутренний REQUIRED бросает исключение\"] --> B[\"транзакция помечена rollback-only\"]\n  B --> C[\"вызывающий ловит исключение\"]\n  C --> D[\"внешняя граница пытается закоммитить\"]\n  D --> E[\"UnexpectedRollbackException\"]\n```\n\nПерехват Java-исключения на этот флаг никак не влияет — они живут в разных мирах. Когда внешняя граница доходит до коммита, менеджер транзакций видит флаг, отказывается и бросает `UnexpectedRollbackException`. Транзакция может закончиться только одним способом, и этот способ уже выбран.\n\nНазвание точное: вызывающий *ожидал* коммит, а получил откат. Всё записанное в этой транзакции, включая работу самого вызывающего, потеряно."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The flag outlives the catch block.",
+              "ru": "Флаг переживает блок catch."
+            },
+            "incorrect": {
+              "en": "The commit fails with UnexpectedRollbackException: the shared transaction was already marked rollback-only.",
+              "ru": "Коммит падает с UnexpectedRollbackException: общая транзакция уже помечена как rollback-only."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The commit fails with UnexpectedRollbackException",
+                "ru": "Коммит падает с UnexpectedRollbackException"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing — the exception was caught, so the transaction commits",
+                "ru": "Ничего — исключение поймано, поэтому транзакция коммитится"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Catching the Java exception does not clear the flag Spring set on the transaction.",
+                "ru": "Перехват Java-исключения не снимает флаг, который Spring поставил на транзакцию."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Only the inner method's writes are rolled back; the rest commits",
+                "ru": "Откатываются только записи внутреннего метода; остальное коммитится"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is a single physical transaction here, and it cannot half-commit.",
+                "ru": "Здесь одна физическая транзакция, и наполовину закоммититься она не может."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "rbo-p1-catch-saves-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Catching the exception thrown by an inner REQUIRED method lets the outer transaction commit normally.",
+            "ru": "Перехват исключения из внутреннего REQUIRED-метода позволяет внешней транзакции штатно закоммититься."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The rollback-only flag lives on the transaction, not in Java control flow.",
+              "ru": "Флаг rollback-only живёт на транзакции, а не в потоке управления Java."
+            },
+            "incorrect": {
+              "en": "No — the shared transaction is already marked rollback-only, so the outer commit still fails.",
+              "ru": "Нет — общая транзакция уже помечена как rollback-only, поэтому внешний коммит всё равно падает."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "rbo-p2-exception-mc",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does Spring throw when a boundary tries to commit a transaction that is marked rollback-only?",
+            "ru": "Что бросает Spring, когда граница пытается закоммитить транзакцию, помеченную как rollback-only?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The caller expected a commit and got a rollback — hence the name.",
+              "ru": "Вызывающий ожидал коммит, а получил откат — отсюда и название."
+            },
+            "incorrect": {
+              "en": "It is UnexpectedRollbackException — Spring's dedicated signal for exactly this situation.",
+              "ru": "Это UnexpectedRollbackException — специальный сигнал Spring ровно для этой ситуации."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "UnexpectedRollbackException",
+                "ru": "UnexpectedRollbackException"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "IllegalStateException",
+                "ru": "IllegalStateException"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Spring reports this specific situation with its own dedicated exception type.",
+                "ru": "Spring сообщает об этой конкретной ситуации собственным специальным типом исключения."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — the commit silently becomes a rollback",
+                "ru": "Ничего — коммит молча превращается в откат"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The caller is told: getting a rollback where a commit was expected is an error.",
+                "ru": "Вызывающему сообщают: получить откат там, где ожидался коммит, — это ошибка."
+              }
+            }
+          ]
+        },
+        {
+          "id": "rbo-p3-sort-poison",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order what happens when an inner REQUIRED method throws and the caller catches the exception.",
+            "ru": "Расставь по порядку, что происходит, когда внутренний REQUIRED-метод бросает исключение, а вызывающий его ловит."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The flag is set long before the commit is attempted.",
+              "ru": "Флаг ставится задолго до попытки коммита."
+            },
+            "incorrect": {
+              "en": "The failure flags the shared transaction first; the catch changes nothing and the commit is refused.",
+              "ru": "Сбой сначала помечает общую транзакцию; catch ничего не меняет, и коммит отклоняется."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "The outer REQUIRED boundary begins the only physical transaction",
+                "ru": "Внешняя REQUIRED-граница открывает единственную физическую транзакцию"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "The inner REQUIRED boundary joins it and throws",
+                "ru": "Внутренняя REQUIRED-граница присоединяется к ней и бросает исключение"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "The shared transaction is marked rollback-only",
+                "ru": "Общая транзакция помечается как rollback-only"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "The caller catches the exception and keeps going",
+                "ru": "Вызывающий ловит исключение и продолжает работу"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "The outer boundary tries to commit and gets UnexpectedRollbackException",
+                "ru": "Внешняя граница пытается закоммитить и получает UnexpectedRollbackException"
+              }
+            }
+          ]
+        },
+        {
+          "id": "rbo-p4-fill-flag",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing flag name and exception.",
+            "ru": "Впиши пропущенное имя флага и исключение."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Flag first, refused commit second — that is the whole trap.",
+              "ru": "Сначала флаг, потом отклонённый коммит — в этом вся ловушка."
+            },
+            "incorrect": {
+              "en": "The transaction is marked rollback-only, and the outer commit throws UnexpectedRollbackException.",
+              "ru": "Транзакция помечается как rollback-only, а внешний коммит бросает UnexpectedRollbackException."
+            }
+          },
+          "text": {
+            "en": "A failing inner REQUIRED method marks the shared transaction ___, so the outer commit throws ___.",
+            "ru": "Упавший внутренний REQUIRED-метод помечает общую транзакцию как ___, поэтому внешний коммит бросает ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "rollback-only",
+                "rollback only"
+              ],
+              "ru": [
+                "rollback-only",
+                "rollback only"
+              ]
+            },
+            {
+              "en": [
+                "UnexpectedRollbackException"
+              ],
+              "ru": [
+                "UnexpectedRollbackException"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "isolating-inner-failure",
+      "title": {
+        "en": "Isolating an inner failure",
+        "ru": "Изоляция внутреннего сбоя"
+      },
+      "summary": {
+        "en": "To let a caller survive an inner failure, the inner method must stop sharing the caller's transaction: use REQUIRES_NEW or NESTED.",
+        "ru": "Чтобы вызывающий пережил внутренний сбой, внутренний метод должен перестать делить его транзакцию: нужен REQUIRES_NEW или NESTED."
+      },
+      "discovery": [
+        {
+          "id": "iso-d1-which-fix",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "An inner @Transactional method may fail, and the caller must continue and still commit its own writes. Which change actually achieves that?",
+            "ru": "Внутренний @Transactional-метод может упасть, а вызывающий должен продолжить и всё же закоммитить свои записи. Какое изменение действительно этого добьётся?"
+          },
+          "reveal": {
+            "en": "The rollback-only flag exists because the two boundaries **share one physical transaction**. The fix is therefore structural, not defensive: stop sharing.\n\n```mermaid\nflowchart TD\n  A[\"inner method may fail, caller must survive\"] --> B{\"must the inner work persist even if the caller rolls back?\"}\n  B -->|yes| C[\"REQUIRES_NEW: separate transaction, its own commit\"]\n  B -->|no| D[\"NESTED: savepoint, discarded with the outer if the outer fails\"]\n```\n\nWith `REQUIRES_NEW` the inner failure rolls back only T2; T1 was suspended and is untouched, so the caller can catch the exception and commit. With `NESTED` the rollback rewinds to the savepoint inside the one transaction, and the caller keeps everything written before it.\n\nWhat does **not** work is `try/catch` alone around a `REQUIRED` call: by the time you catch, the flag is already set. Choose by durability — `REQUIRES_NEW` if the inner work must survive an outer rollback, `NESTED` if it may die with it.",
+            "ru": "Флаг rollback-only появляется потому, что две границы **делят одну физическую транзакцию**. Значит, и решение структурное, а не защитное: перестать делить.\n\n```mermaid\nflowchart TD\n  A[\"внутренний метод может упасть, вызывающий должен выжить\"] --> B{\"должна ли внутренняя работа сохраниться, даже если вызывающий откатится?\"}\n  B -->|да| C[\"REQUIRES_NEW: отдельная транзакция со своим коммитом\"]\n  B -->|нет| D[\"NESTED: savepoint, отбрасывается вместе с внешней при её сбое\"]\n```\n\nПри `REQUIRES_NEW` внутренний сбой откатывает только T2; T1 была приостановлена и осталась нетронутой, поэтому вызывающий может поймать исключение и закоммититься. При `NESTED` откат отматывает к savepoint внутри одной транзакции, и вызывающий сохраняет всё записанное до неё.\n\nЧто **не** работает — это один лишь `try/catch` вокруг `REQUIRED`-вызова: к моменту перехвата флаг уже стоит. Выбирайте по устойчивости: `REQUIRES_NEW`, если внутренняя работа должна пережить внешний откат, `NESTED` — если может уйти вместе с ним."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Stop sharing the transaction — that is the only real fix.",
+              "ru": "Перестать делить транзакцию — единственное настоящее решение."
+            },
+            "incorrect": {
+              "en": "The inner method needs its own boundary: REQUIRES_NEW or NESTED, not just a try/catch.",
+              "ru": "Внутреннему методу нужна своя граница: REQUIRES_NEW или NESTED, а не просто try/catch."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Change the inner method's propagation to REQUIRES_NEW or NESTED",
+                "ru": "Сменить propagation внутреннего метода на REQUIRES_NEW или NESTED"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Wrap the inner call in try/catch in the caller",
+                "ru": "Обернуть внутренний вызов в try/catch у вызывающего"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Catching leaves the shared transaction marked rollback-only, so the outer commit still fails.",
+                "ru": "Перехват оставляет общую транзакцию помеченной rollback-only, и внешний коммит всё равно падает."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Move the inner call to the end of the outer method",
+                "ru": "Перенести внутренний вызов в конец внешнего метода"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Position changes nothing; the failure still marks the shared transaction rollback-only.",
+                "ru": "Расположение ничего не меняет; сбой всё равно помечает общую транзакцию как rollback-only."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "iso-p1-requires-new-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Changing an inner method from REQUIRED to REQUIRES_NEW lets the caller catch its failure and still commit.",
+            "ru": "Смена propagation внутреннего метода с REQUIRED на REQUIRES_NEW позволяет вызывающему поймать его сбой и всё же закоммититься."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The failure now rolls back a different transaction; the caller's was only suspended.",
+              "ru": "Теперь сбой откатывает другую транзакцию; транзакция вызывающего была лишь приостановлена."
+            },
+            "incorrect": {
+              "en": "It is true — the inner work runs in its own transaction, so nothing flags the caller's one.",
+              "ru": "Это верно — внутренняя работа идёт в своей транзакции, поэтому транзакцию вызывающего никто не помечает."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "iso-p2-audit-mc",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "An audit row must be stored even when the business transaction rolls back. Which propagation on the audit method achieves that?",
+            "ru": "Строка аудита должна сохраниться, даже когда бизнес-транзакция откатывается. Какой propagation на методе аудита это обеспечит?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Its own committed transaction is beyond the reach of the outer rollback.",
+              "ru": "Собственная закоммиченная транзакция недосягаема для внешнего отката."
+            },
+            "incorrect": {
+              "en": "REQUIRES_NEW: only a separately committed transaction survives the outer rollback.",
+              "ru": "REQUIRES_NEW: внешний откат переживает только отдельно закоммиченная транзакция."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "REQUIRES_NEW",
+                "ru": "REQUIRES_NEW"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "NESTED",
+                "ru": "NESTED"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A NESTED block is discarded together with the outer transaction when the outer rolls back.",
+                "ru": "NESTED-блок отбрасывается вместе с внешней транзакцией, когда та откатывается."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "REQUIRED",
+                "ru": "REQUIRED"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "REQUIRED shares the business transaction, so the audit row rolls back with it.",
+                "ru": "REQUIRED делит бизнес-транзакцию, поэтому строка аудита откатится вместе с ней."
+              }
+            }
+          ]
+        },
+        {
+          "id": "iso-p3-match-goals",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each goal to the Spring propagation that achieves it.",
+            "ru": "Соотнеси каждую цель с propagation в Spring, который её достигает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Durability of the inner work is what decides between the three.",
+              "ru": "Между тремя вариантами выбирает устойчивость внутренней работы."
+            },
+            "incorrect": {
+              "en": "REQUIRES_NEW for independent persistence, NESTED for a partial undo, REQUIRED for all-or-nothing.",
+              "ru": "REQUIRES_NEW — независимое сохранение, NESTED — частичный откат, REQUIRED — «всё или ничего»."
+            }
+          },
+          "pairs": [
+            {
+              "id": "goal-durable",
+              "left": {
+                "en": "The inner work must persist even if the caller rolls back",
+                "ru": "Внутренняя работа должна сохраниться, даже если вызывающий откатится"
+              },
+              "right": {
+                "en": "REQUIRES_NEW",
+                "ru": "REQUIRES_NEW"
+              }
+            },
+            {
+              "id": "goal-partial",
+              "left": {
+                "en": "Undo only the inner work, inside one transaction",
+                "ru": "Отменить только внутреннюю работу, внутри одной транзакции"
+              },
+              "right": {
+                "en": "NESTED",
+                "ru": "NESTED"
+              }
+            },
+            {
+              "id": "goal-atomic",
+              "left": {
+                "en": "Caller and callee must succeed or fail together",
+                "ru": "Вызывающий и вызываемый должны выжить или упасть вместе"
+              },
+              "right": {
+                "en": "REQUIRED",
+                "ru": "REQUIRED"
+              }
+            }
+          ]
+        },
+        {
+          "id": "iso-p4-fill-choose",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing propagation names.",
+            "ru": "Впиши два пропущенных имени propagation."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Separate transaction, or savepoint inside the same one.",
+              "ru": "Отдельная транзакция либо savepoint внутри той же."
+            },
+            "incorrect": {
+              "en": "REQUIRES_NEW keeps the inner work independently; NESTED only rewinds it inside one transaction.",
+              "ru": "REQUIRES_NEW сохраняет внутреннюю работу независимо; NESTED лишь отматывает её внутри одной транзакции."
+            }
+          },
+          "text": {
+            "en": "To keep the inner work even if the caller rolls back, use ___; to undo only the inner work inside one transaction, use ___.",
+            "ru": "Чтобы сохранить внутреннюю работу, даже если вызывающий откатится, используйте ___; чтобы отменить только её внутри одной транзакции, используйте ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "REQUIRES_NEW"
+              ],
+              "ru": [
+                "REQUIRES_NEW"
+              ]
+            },
+            {
+              "en": [
+                "NESTED"
+              ],
+              "ru": [
+                "NESTED"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "self-invocation",
+      "title": {
+        "en": "Why propagation can be silently ignored",
+        "ru": "Почему propagation может молча игнорироваться"
+      },
+      "summary": {
+        "en": "Propagation is applied by the proxy around the bean, so a call to another method of the same bean bypasses it entirely.",
+        "ru": "Propagation применяет прокси вокруг бина, поэтому вызов другого метода того же бина полностью его обходит."
+      },
+      "discovery": [
+        {
+          "id": "si-d1-spot-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "The audit row is supposed to be written in a separate transaction, but it disappears whenever pay() rolls back. What is the defect?",
+            "ru": "Строка аудита должна писаться в отдельной транзакции, но исчезает всякий раз, когда pay() откатывается. В чём дефект?"
+          },
+          "code": "@Service\npublic class PaymentService {\n\n    @Transactional                                          // REQUIRED\n    public void pay(Order order) {\n        logAudit(\"payment started\");\n        charge(order);                                      // may throw\n    }\n\n    @Transactional(propagation = Propagation.REQUIRES_NEW)\n    public void logAudit(String message) {\n        auditRepo.insert(message);\n    }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "`@Transactional` — propagation included — is applied by a **proxy**: Spring wraps the bean in an object that runs the begin/join/suspend logic and then delegates to your method. Everything arriving at the bean **from outside** passes through that wrapper.\n\n```mermaid\nflowchart LR\n  C[\"caller\"] --> P[\"proxy: applies propagation\"]\n  P --> B[\"PaymentService.pay()\"]\n  B -->|\"this.logAudit() bypasses the proxy\"| L[\"PaymentService.logAudit()\"]\n```\n\nA call from one method of a bean to another method of the **same** bean — `this.logAudit(...)`, which is what the unqualified `logAudit(...)` means — is a plain Java call. It never leaves the object, so the proxy is not involved and the annotation on the target method is **silently ignored**: no error, no warning. This is the **self-invocation** problem.\n\nHere the effect is that `logAudit` quietly runs inside `pay`'s transaction, no second transaction is ever opened, and the audit row rolls back with the payment. Moving `logAudit` into a separate bean restores the proxy hop, and with it the propagation.",
+            "ru": "`@Transactional` — вместе с propagation — применяется **прокси**: Spring оборачивает бин в объект, который выполняет логику begin/join/suspend и затем делегирует вашему методу. Всё, что приходит к бину **снаружи**, проходит через эту обёртку.\n\n```mermaid\nflowchart LR\n  C[\"вызывающий\"] --> P[\"прокси: применяет propagation\"]\n  P --> B[\"PaymentService.pay()\"]\n  B -->|\"this.logAudit() обходит прокси\"| L[\"PaymentService.logAudit()\"]\n```\n\nВызов из одного метода бина в другой метод **того же** бина — `this.logAudit(...)`, а именно это и означает `logAudit(...)` без квалификатора — это обычный Java-вызов. Он не покидает объект, поэтому прокси не участвует, и аннотация на целевом методе **молча игнорируется**: ни ошибки, ни предупреждения. Это проблема **self-invocation** (самовызова).\n\nЗдесь эффект такой: `logAudit` тихо выполняется внутри транзакции `pay`, вторая транзакция не открывается никогда, и строка аудита откатывается вместе с платежом. Перенос `logAudit` в отдельный бин возвращает переход через прокси, а вместе с ним и propagation."
+          },
+          "feedback": {
+            "correct": {
+              "en": "No proxy hop, no propagation.",
+              "ru": "Нет перехода через прокси — нет и propagation."
+            },
+            "incorrect": {
+              "en": "logAudit() is called on this, so the proxy is bypassed and REQUIRES_NEW is silently ignored.",
+              "ru": "logAudit() вызывается на this, поэтому прокси обходится, и REQUIRES_NEW молча игнорируется."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "logAudit() is called on this, so the call skips the proxy and REQUIRES_NEW is ignored",
+                "ru": "logAudit() вызывается на this, поэтому вызов минует прокси и REQUIRES_NEW игнорируется"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "REQUIRES_NEW cannot be combined with REQUIRED in one class",
+                "ru": "REQUIRES_NEW нельзя сочетать с REQUIRED в одном классе"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Mixing propagation values in one class is fine; the call route is the problem.",
+                "ru": "Смешивать значения propagation в одном классе можно; проблема в маршруте вызова."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The audit insert needs its own repository to get its own transaction",
+                "ru": "Вставке аудита нужен свой репозиторий, чтобы получить свою транзакцию"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Repositories do not decide propagation; the transaction boundary does.",
+                "ru": "Propagation определяют не репозитории, а граница транзакции."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "si-p1-same-bean-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "When a @Transactional method calls another @Transactional method of the same bean, the inner method's propagation is applied.",
+            "ru": "Когда @Transactional-метод вызывает другой @Transactional-метод того же бина, propagation внутреннего метода применяется."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The self-call never reaches the proxy, so the annotation is ignored.",
+              "ru": "Самовызов не доходит до прокси, поэтому аннотация игнорируется."
+            },
+            "incorrect": {
+              "en": "No — a same-bean call skips the proxy, so the inner propagation is silently ignored.",
+              "ru": "Нет — вызов внутри одного бина минует прокси, поэтому внутренний propagation молча игнорируется."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "si-p2-why-mc",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In Spring, why is propagation ignored on a same-bean self-call?",
+            "ru": "Почему в Spring propagation игнорируется при самовызове внутри одного бина?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The transaction logic lives in the proxy, and the call never reaches it.",
+              "ru": "Логика транзакций живёт в прокси, а вызов до него не доходит."
+            },
+            "incorrect": {
+              "en": "Because the call does not pass through the proxy that applies @Transactional.",
+              "ru": "Потому что вызов не проходит через прокси, который применяет @Transactional."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The call does not go through the proxy that applies @Transactional",
+                "ru": "Вызов не проходит через прокси, который применяет @Transactional"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Spring caches the settings of the first transactional method entered",
+                "ru": "Spring кэширует настройки первого транзакционного метода, в который вошли"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no such cache; the second annotation is simply never consulted.",
+                "ru": "Никакого кэша нет; вторая аннотация просто никогда не читается."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Because both methods are declared in the same class file",
+                "ru": "Потому что оба метода объявлены в одном файле класса"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The file is irrelevant; the missing proxy hop is what matters.",
+                "ru": "Файл ни при чём; важен отсутствующий переход через прокси."
+              }
+            }
+          ]
+        },
+        {
+          "id": "si-p3-match-routes",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each call route to whether Spring applies the target method's propagation.",
+            "ru": "Соотнеси маршрут вызова с тем, применяет ли Spring propagation целевого метода."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Propagation applies exactly when the call crosses the proxy.",
+              "ru": "Propagation применяется ровно тогда, когда вызов проходит через прокси."
+            },
+            "incorrect": {
+              "en": "External calls cross the proxy; this.inner() does not, so its propagation is ignored.",
+              "ru": "Внешние вызовы проходят через прокси; this.inner() — нет, поэтому его propagation игнорируется."
+            }
+          },
+          "pairs": [
+            {
+              "id": "external",
+              "left": {
+                "en": "An external call into a bean method",
+                "ru": "Внешний вызов метода бина"
+              },
+              "right": {
+                "en": "Goes through the proxy, propagation applies",
+                "ru": "Проходит через прокси, propagation применяется"
+              }
+            },
+            {
+              "id": "self",
+              "left": {
+                "en": "this.inner() inside the same bean",
+                "ru": "this.inner() внутри того же бина"
+              },
+              "right": {
+                "en": "A plain Java call, propagation ignored",
+                "ru": "Обычный Java-вызов, propagation игнорируется"
+              }
+            },
+            {
+              "id": "moved",
+              "left": {
+                "en": "inner() moved into a separate bean",
+                "ru": "inner() вынесен в отдельный бин"
+              },
+              "right": {
+                "en": "Restores the proxy hop and the propagation",
+                "ru": "Возвращает переход через прокси и propagation"
+              }
+            }
+          ]
+        },
+        {
+          "id": "si-p4-fill-proxy",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing mechanism and problem name.",
+            "ru": "Впиши пропущенный механизм и название проблемы."
+          },
+          "feedback": {
+            "correct": {
+              "en": "No error is reported — the setting is simply never read.",
+              "ru": "Никакой ошибки не сообщается — настройка просто никогда не читается."
+            },
+            "incorrect": {
+              "en": "The proxy applies propagation, and a same-bean call skips it: the self-invocation problem.",
+              "ru": "Propagation применяет прокси, а вызов внутри одного бина его минует: проблема self-invocation."
+            }
+          },
+          "text": {
+            "en": "Propagation is applied by the ___, so a call to another method of the same bean skips it — the ___ problem.",
+            "ru": "Propagation применяет ___, поэтому вызов другого метода того же бина его минует — проблема ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "proxy"
+              ],
+              "ru": [
+                "прокси",
+                "proxy"
+              ]
+            },
+            {
+              "en": [
+                "self-invocation",
+                "self invocation"
+              ],
+              "ru": [
+                "self-invocation",
+                "самовызова"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "propagation-capstone",
+      "title": {
+        "en": "Reading a whole call chain",
+        "ru": "Читаем всю цепочку вызовов"
+      },
+      "summary": {
+        "en": "One chain end to end: which boundary opens what, which failures are contained, what survives a rollback, and when a setting is applied at all.",
+        "ru": "Одна цепочка целиком: какая граница что открывает, какие сбои изолированы, что переживает откат и когда настройка вообще применяется."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "cap-d1-predict-checkout",
+          "type": "predict_output",
+          "prompt": {
+            "en": "All three services are separate beans, so every call passes the proxy. What is in the database after checkout() returns?",
+            "ru": "Все три сервиса — отдельные бины, поэтому каждый вызов проходит через прокси. Что окажется в БД после возврата из checkout()?"
+          },
+          "code": "// OrderService\n@Transactional                        // REQUIRED\npublic void checkout(Order order) {\n    orderRepo.save(order);            // write 1\n    audit.log(\"checkout\");            // AuditService, REQUIRES_NEW\n    try {\n        stock.reserve(order);         // StockService, REQUIRED, throws\n    } catch (RuntimeException e) {\n        // swallowed\n    }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Read the chain boundary by boundary:\n\n```mermaid\nflowchart TD\n  A[\"checkout() REQUIRED: nothing active, begin T1\"] --> B[\"orderRepo.save(): written inside T1\"]\n  B --> C[\"audit.log() REQUIRES_NEW: suspend T1, begin T2, commit T2, resume T1\"]\n  C --> D[\"stock.reserve() REQUIRED: joins T1, throws\"]\n  D --> E[\"T1 marked rollback-only\"]\n  E --> F[\"catch swallows the exception, checkout() returns\"]\n  F --> G[\"outer commit refused: UnexpectedRollbackException, T1 rolled back\"]\n```\n\nThree independent rules produce the outcome. `REQUIRES_NEW` gave the audit row its own transaction, which committed and is now durable. `REQUIRED` made `reserve()` share T1, so its failure flagged T1. And catching the exception changed nothing about that flag. Everything that lived in T1 — including the order — is gone; only the audit row remains.\n\nTo save the order too, `reserve()` would need `REQUIRES_NEW` or `NESTED`. And none of this would apply at all if `checkout()` had called `this.log(...)` on its own bean: the proxy would have been bypassed and every propagation setting ignored.",
+            "ru": "Читаем цепочку граница за границей:\n\n```mermaid\nflowchart TD\n  A[\"checkout() REQUIRED: ничего не активно, begin T1\"] --> B[\"orderRepo.save(): запись внутри T1\"]\n  B --> C[\"audit.log() REQUIRES_NEW: приостановить T1, begin T2, commit T2, возобновить T1\"]\n  C --> D[\"stock.reserve() REQUIRED: присоединяется к T1 и бросает исключение\"]\n  D --> E[\"T1 помечена rollback-only\"]\n  E --> F[\"catch проглатывает исключение, checkout() возвращает управление\"]\n  F --> G[\"внешний коммит отклонён: UnexpectedRollbackException, T1 откачена\"]\n```\n\nРезультат складывается из трёх независимых правил. `REQUIRES_NEW` дал строке аудита свою транзакцию, которая закоммитилась и теперь устойчива. `REQUIRED` заставил `reserve()` делить T1, поэтому его сбой пометил T1. А перехват исключения на этот флаг никак не повлиял. Всё, что жило в T1, включая заказ, потеряно; осталась только строка аудита.\n\nЧтобы сохранить и заказ, `reserve()` понадобился бы `REQUIRES_NEW` или `NESTED`. И ничего из этого не сработало бы вовсе, если бы `checkout()` вызвал `this.log(...)` на своём же бине: прокси был бы обойдён, а все настройки propagation проигнорированы."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One committed side transaction, one poisoned main transaction.",
+              "ru": "Одна закоммиченная побочная транзакция и одна отравленная основная."
+            },
+            "incorrect": {
+              "en": "Only the audit row: reserve() flagged T1 rollback-only, so the order was rolled back too.",
+              "ru": "Только строка аудита: reserve() пометил T1 как rollback-only, поэтому заказ тоже откатился."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Only the audit row; the commit fails with UnexpectedRollbackException and the order is rolled back",
+                "ru": "Только строка аудита; коммит падает с UnexpectedRollbackException, и заказ откатывается"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The order and the audit row; only the reservation is lost",
+                "ru": "Заказ и строка аудита; теряется только резервирование"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "reserve() is REQUIRED, so its failure marked the shared transaction rollback-only.",
+                "ru": "reserve() помечен REQUIRED, поэтому его сбой пометил общую транзакцию как rollback-only."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — the rollback undoes the audit row as well",
+                "ru": "Ничего — откат отменяет и строку аудита"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The audit row was committed by its own REQUIRES_NEW transaction, which the outer rollback cannot touch.",
+                "ru": "Строку аудита закоммитила её собственная REQUIRES_NEW-транзакция, которую внешний откат не трогает."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cap-p1-nested-outcome",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Separate beans, plain JDBC, so NESTED is supported. What is committed after run() returns?",
+            "ru": "Отдельные бины, чистый JDBC, поэтому NESTED поддерживается. Что будет закоммичено после возврата из run()?"
+          },
+          "code": "// ReportService\n@Transactional                        // REQUIRED\npublic void run() {\n    repo.insert(rowA);\n    try {\n        nested.write(rowB);           // another bean, NESTED, throws\n    } catch (RuntimeException e) {\n        // swallowed\n    }\n    repo.insert(rowC);\n}",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "A NESTED failure rewinds to its savepoint instead of flagging the whole transaction.",
+              "ru": "Сбой NESTED отматывает к своему savepoint, а не помечает всю транзакцию."
+            },
+            "incorrect": {
+              "en": "rowA and rowC commit; only rowB is undone, because NESTED rolls back to its savepoint.",
+              "ru": "rowA и rowC коммитятся; отменяется только rowB, потому что NESTED откатывается к своему savepoint."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "rowA and rowC are committed; rowB is not",
+                "ru": "rowA и rowC закоммичены; rowB — нет"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing is committed: run() fails with UnexpectedRollbackException",
+                "ru": "Ничего не закоммичено: run() падает с UnexpectedRollbackException"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the REQUIRED case; NESTED rolls back to its savepoint instead of flagging the transaction.",
+                "ru": "Это случай REQUIRED; NESTED откатывается к savepoint, а не помечает транзакцию."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "All three rows are committed",
+                "ru": "Закоммичены все три строки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The NESTED block failed, so its write was rewound to the savepoint.",
+                "ru": "NESTED-блок упал, поэтому его запись отмотана к savepoint."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p2-spot-required",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "The intent is that a failed notification never breaks an order. Every class is a separate bean. What is the defect?",
+            "ru": "Замысел: неудачное уведомление никогда не ломает заказ. Каждый класс — отдельный бин. В чём дефект?"
+          },
+          "code": "@Service\npublic class OrderService {\n    @Transactional                     // REQUIRED\n    public void placeOrder(Order order) {\n        orderRepo.save(order);\n        try {\n            notifier.send(order);\n        } catch (RuntimeException e) {\n            // ignored on purpose\n        }\n    }\n}\n\n@Service\npublic class NotificationService {\n    @Transactional                     // REQUIRED\n    public void send(Order order) {\n        notificationRepo.insert(order);\n    }\n}",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "Catching does not undo the flag a shared REQUIRED failure sets.",
+              "ru": "Перехват не снимает флаг, который ставит сбой в общей REQUIRED-транзакции."
+            },
+            "incorrect": {
+              "en": "send() is REQUIRED, so its failure marks the shared transaction rollback-only and placeOrder()'s commit fails.",
+              "ru": "send() помечен REQUIRED, поэтому его сбой помечает общую транзакцию rollback-only, и коммит placeOrder() падает."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "send() is REQUIRED, so its failure marks the shared transaction rollback-only and the outer commit fails",
+                "ru": "send() помечен REQUIRED, поэтому его сбой помечает общую транзакцию rollback-only и внешний коммит падает"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The catch should be for Exception rather than RuntimeException",
+                "ru": "Ловить нужно Exception, а не RuntimeException"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Widening the catch changes nothing: the transaction is already flagged by then.",
+                "ru": "Расширение catch ничего не меняет: к этому моменту транзакция уже помечена."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "placeOrder() should save the order after sending the notification",
+                "ru": "placeOrder() должен сохранять заказ после отправки уведомления"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Reordering the statements does not clear the rollback-only flag on the shared transaction.",
+                "ru": "Перестановка операций не снимает флаг rollback-only с общей транзакции."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p3-sort-requires-new",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the complete flow when a REQUIRED method calls a REQUIRES_NEW method in another bean and the inner one commits.",
+            "ru": "Расставь по порядку полный ход событий, когда REQUIRED-метод вызывает REQUIRES_NEW-метод в другом бине и внутренний коммитится."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Begin, suspend, second transaction, resume, commit — five steps, two transactions.",
+              "ru": "Открыть, приостановить, вторая транзакция, возобновить, закоммитить — пять шагов, две транзакции."
+            },
+            "incorrect": {
+              "en": "T1 begins and is suspended, T2 runs and commits on its own, then T1 resumes and commits.",
+              "ru": "T1 открывается и приостанавливается, T2 работает и коммитится сама, затем T1 возобновляется и коммитится."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "The outer boundary finds nothing active and begins T1",
+                "ru": "Внешняя граница не находит активной транзакции и открывает T1"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "The inner REQUIRES_NEW boundary suspends T1",
+                "ru": "Внутренняя REQUIRES_NEW-граница приостанавливает T1"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "T2 begins on a second connection and the inner work runs",
+                "ru": "На втором соединении открывается T2, и выполняется внутренняя работа"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "T2 commits and T1 is resumed",
+                "ru": "T2 коммитится, и T1 возобновляется"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "The outer boundary commits T1",
+                "ru": "Внешняя граница коммитит T1"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p4-match-mechanisms",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each Spring transaction mechanism to its role in a call chain.",
+            "ru": "Соотнеси каждый механизм транзакций Spring с его ролью в цепочке вызовов."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Three propagation values and the proxy that decides whether any of them applies.",
+              "ru": "Три значения propagation и прокси, который решает, применится ли хоть одно из них."
+            },
+            "incorrect": {
+              "en": "REQUIRED shares, REQUIRES_NEW separates, NESTED adds a savepoint, and the proxy is what applies them.",
+              "ru": "REQUIRED делит, REQUIRES_NEW отделяет, NESTED добавляет savepoint, а применяет их прокси."
+            }
+          },
+          "pairs": [
+            {
+              "id": "cap-required",
+              "left": {
+                "en": "REQUIRED",
+                "ru": "REQUIRED"
+              },
+              "right": {
+                "en": "Makes caller and callee share one physical transaction",
+                "ru": "Заставляет вызывающего и вызываемого делить одну физическую транзакцию"
+              }
+            },
+            {
+              "id": "cap-requires-new",
+              "left": {
+                "en": "REQUIRES_NEW",
+                "ru": "REQUIRES_NEW"
+              },
+              "right": {
+                "en": "Gives the callee its own transaction on a second connection",
+                "ru": "Даёт вызываемому свою транзакцию на втором соединении"
+              }
+            },
+            {
+              "id": "cap-nested",
+              "left": {
+                "en": "NESTED",
+                "ru": "NESTED"
+              },
+              "right": {
+                "en": "Adds a savepoint so only the callee's work can be undone",
+                "ru": "Добавляет savepoint, чтобы отменить можно было только работу вызываемого"
+              }
+            },
+            {
+              "id": "cap-proxy",
+              "left": {
+                "en": "The proxy around the bean",
+                "ru": "Прокси вокруг бина"
+              },
+              "right": {
+                "en": "Applies propagation — and is skipped by a same-bean call",
+                "ru": "Применяет propagation — и обходится при вызове внутри одного бина"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p5-fill-answer",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill in the key parts of the interview answer.",
+            "ru": "Впиши ключевые части ответа для собеседования."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Default, flag, exception — the three tokens the follow-up question is really after.",
+              "ru": "Значение по умолчанию, флаг, исключение — три вещи, ради которых и задают уточняющий вопрос."
+            },
+            "incorrect": {
+              "en": "REQUIRED is the default; an inner failure marks the transaction rollback-only, so the outer commit throws UnexpectedRollbackException.",
+              "ru": "По умолчанию REQUIRED; внутренний сбой помечает транзакцию как rollback-only, поэтому внешний коммит бросает UnexpectedRollbackException."
+            }
+          },
+          "text": {
+            "en": "The default propagation is ___; an inner failure under it marks the shared transaction ___, so the outer commit throws ___.",
+            "ru": "Propagation по умолчанию — ___; внутренний сбой при нём помечает общую транзакцию как ___, поэтому внешний коммит бросает ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "REQUIRED"
+              ],
+              "ru": [
+                "REQUIRED"
+              ]
+            },
+            {
+              "en": [
+                "rollback-only",
+                "rollback only"
+              ],
+              "ru": [
+                "rollback-only",
+                "rollback only"
+              ]
+            },
+            {
+              "en": [
+                "UnexpectedRollbackException"
+              ],
+              "ru": [
+                "UnexpectedRollbackException"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

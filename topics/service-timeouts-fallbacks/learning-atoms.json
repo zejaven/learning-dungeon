@@ -1,0 +1,3248 @@
+{
+  "schemaVersion": 1,
+  "topicId": "service-timeouts-fallbacks",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "cascading-latency",
+      "title": {
+        "en": "The real risk is the wait",
+        "ru": "Главный риск — это ожидание"
+      },
+      "summary": {
+        "en": "An unbounded call holds request threads and connections, turning one dependency outage into slow responses everywhere.",
+        "ru": "Неограниченный вызов держит request threads и соединения, превращая отказ одной зависимости в медленные ответы везде."
+      },
+      "discovery": [
+        {
+          "id": "cascade-d1-no-timeout",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A downstream service stops answering but keeps the connection open. Your service calls it with no timeout. What is the worst consequence?",
+            "ru": "Downstream service перестал отвечать, но держит соединение открытым. Ваш сервис вызывает его без timeout. Каково худшее последствие?"
+          },
+          "reveal": {
+            "en": "A dependency that is **down** usually fails fast. A dependency that is **slow** does not — and that is the dangerous case. A call with no bound holds a request thread and a connection until someone gives up.\n\n```mermaid\nflowchart LR\n  D[\"slow dependency\"] --> T[\"request threads parked\"]\n  T --> P[\"connection pool full\"]\n  P --> U[\"upstream callers time out too\"]\n```\n\nThis is **cascading latency**: one unavailable dependency fills connection pools, blocks request threads, and pushes the callers above it into their own timeouts. Requests that never touch the broken service still queue behind the parked threads. It shows up first in **p95/p99 latency** — the slowest 5% and 1% of requests — while the average can still look acceptable. Everything else in this topic exists to make each wait bounded, so one outage stays local instead of spreading.",
+            "ru": "Зависимость, которая **упала**, обычно быстро отвечает ошибкой. Зависимость, которая **тормозит**, — нет, и это опасный случай. Вызов без ограничения держит request thread и соединение, пока кто-нибудь не сдастся.\n\n```mermaid\nflowchart LR\n  D[\"медленная зависимость\"] --> T[\"request threads заняты ожиданием\"]\n  T --> P[\"connection pool заполнен\"]\n  P --> U[\"вызывающие сервисы тоже уходят в timeout\"]\n```\n\nЭто **каскадная задержка**: одна недоступная зависимость заполняет connection pools, блокирует request threads и загоняет вызывающие сервисы в их собственные timeouts. Запросы, которые вообще не обращаются к сломанному сервису, все равно встают в очередь за занятыми потоками. Первым это видно в **p95/p99 latency** — самых медленных 5% и 1% запросов, — тогда как average еще выглядит нормально. Все остальное в этой теме нужно, чтобы каждое ожидание было ограниченным и отказ оставался локальным."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the waiting threads are shared, so the damage is not limited to that one call.",
+              "ru": "Верно — ожидающие потоки общие, поэтому ущерб не ограничен одним вызовом."
+            },
+            "incorrect": {
+              "en": "The wait itself is the damage: parked threads and connections slow down unrelated requests.",
+              "ru": "Ущерб — само ожидание: занятые потоки и соединения замедляют посторонние запросы."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Request threads stay parked, so unrelated requests slow down too",
+                "ru": "Request threads остаются занятыми, поэтому посторонние запросы тоже замедляются"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Only the calls to that one service fail",
+                "ru": "Ошибку получают только вызовы к этому одному сервису"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Without a bound those calls do not fail — they wait, and the waiting is shared with every other request.",
+                "ru": "Без ограничения эти вызовы не падают — они ждут, а ожидание разделяется со всеми остальными запросами."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The runtime cancels the call automatically after a while",
+                "ru": "Через некоторое время runtime сам отменит вызов"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing cancels it for you; without an explicit timeout the caller can wait indefinitely.",
+                "ru": "Никто не отменит его за вас; без явного timeout вызывающая сторона может ждать бесконечно."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cascade-p1-slow-vs-down",
+          "type": "true_false",
+          "prompt": {
+            "en": "For the caller, a downstream service that answers very slowly is less dangerous than one that fails immediately.",
+            "ru": "Для вызывающей стороны downstream service, который отвечает очень медленно, менее опасен, чем тот, который сразу падает с ошибкой."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A fast failure frees the thread; a slow answer holds it and spreads the delay.",
+              "ru": "Быстрая ошибка освобождает поток; медленный ответ держит его и распространяет задержку."
+            },
+            "incorrect": {
+              "en": "It is the other way round — a slow service holds threads and connections, so the delay spreads.",
+              "ru": "Наоборот — медленный сервис держит потоки и соединения, поэтому задержка распространяется."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "cascade-p2-metric",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which latency signal shows the damage from one slow dependency first?",
+            "ru": "Какой показатель latency первым покажет ущерб от одной медленной зависимости?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The tail moves first: p95 and p99 react while the average still looks fine.",
+              "ru": "Хвост распределения сдвигается первым: p95 и p99 реагируют, пока average еще выглядит нормально."
+            },
+            "incorrect": {
+              "en": "It is p95/p99 — the slow tail moves long before the average does.",
+              "ru": "Это p95/p99 — медленный хвост сдвигается задолго до average."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "p95 and p99 latency",
+                "ru": "p95 и p99 latency"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Average latency",
+                "ru": "Average latency"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Averaging hides a slow tail: a few very slow requests barely move the mean.",
+                "ru": "Среднее прячет медленный хвост: несколько очень долгих запросов почти не двигают его."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Requests per second",
+                "ru": "Количество запросов в секунду"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Traffic volume says nothing about how long anyone waited.",
+                "ru": "Объем трафика ничего не говорит о том, сколько кто-то ждал."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cascade-p3-sort-spread",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order how one unresponsive dependency degrades a whole service.",
+            "ru": "Расставь по порядку, как одна неотвечающая зависимость деградирует весь сервис."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One stuck dependency becomes a shared resource shortage, then an upstream outage.",
+              "ru": "Одна зависшая зависимость превращается в нехватку общих ресурсов, а затем в отказ выше по цепочке."
+            },
+            "incorrect": {
+              "en": "The chain is: no answer, parked threads, saturated pools, then upstream timeouts.",
+              "ru": "Цепочка такая: нет ответа, занятые потоки, переполненные пулы, затем timeouts выше по цепочке."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "A dependency stops answering but keeps connections open",
+                "ru": "Зависимость перестает отвечать, но держит соединения открытыми"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Request threads stay parked waiting for it",
+                "ru": "Request threads остаются занятыми в ожидании ее ответа"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "The thread and connection pools saturate",
+                "ru": "Пулы потоков и соединений заполняются"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Unrelated requests queue and upstream callers time out",
+                "ru": "Посторонние запросы встают в очередь, а вызывающие сервисы уходят в timeout"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cascade-p4-fill-resources",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the two shared resources an unbounded call consumes.",
+            "ru": "Назови два общих ресурса, которые забирает неограниченный вызов."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Both are shared across all requests, which is why one dependency can slow everything.",
+              "ru": "Оба ресурса общие для всех запросов — поэтому одна зависимость может замедлить все."
+            },
+            "incorrect": {
+              "en": "A call with no timeout keeps request threads parked and fills connection pools.",
+              "ru": "Вызов без timeout держит request threads занятыми и заполняет connection pools."
+            }
+          },
+          "text": {
+            "en": "A call with no timeout keeps request ___ parked and fills connection ___.",
+            "ru": "Вызов без timeout держит занятыми request ___ и заполняет connection ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "threads",
+                "thread"
+              ],
+              "ru": [
+                "threads",
+                "потоки",
+                "потоков"
+              ]
+            },
+            {
+              "en": [
+                "pools",
+                "pool"
+              ],
+              "ru": [
+                "pools",
+                "пулы",
+                "пулов"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "request-deadline",
+      "title": {
+        "en": "The end-to-end deadline",
+        "ru": "End-to-end deadline"
+      },
+      "summary": {
+        "en": "The whole request gets one maximum time, and each downstream call receives only a slice of the remaining budget.",
+        "ru": "У всего запроса одно максимальное время, и каждый downstream-вызов получает лишь часть оставшегося бюджета."
+      },
+      "discovery": [
+        {
+          "id": "deadline-d1-sum",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The page must answer within 300 ms. Each client picked its own 200 ms timeout and the calls run one after another. What happens to the page budget?",
+            "ru": "Страница должна ответить за 300 ms. Каждый клиент выбрал свой timeout 200 ms, и вызовы идут один за другим. Что будет с бюджетом страницы?"
+          },
+          "code": "// The page must answer within 300 ms.\ncatalog.get(Duration.ofMillis(200));\nprice.get(Duration.ofMillis(200));\nreviews.get(Duration.ofMillis(200));",
+          "codeLang": "java",
+          "reveal": {
+            "en": "An **end-to-end deadline** is one maximum time for the whole operation — say 300 ms for the page. The **budget** is what is left of that deadline at any moment, and every downstream client should be given a slice of it instead of choosing an unrelated timeout of its own.\n\n```mermaid\nflowchart LR\n  R[\"request deadline 300 ms\"] --> C[\"catalog: 120 ms\"]\n  R --> P[\"price: 100 ms\"]\n  R --> V[\"reviews: 80 ms\"]\n```\n\nIndependent per-call timeouts bound each call and say nothing about their sum. Three sequential 200 ms timeouts can legally spend 600 ms while every individual timeout is respected. Passing the remaining budget down keeps the arithmetic honest: inside a 300 ms page, a non-critical service can never be allowed to spend 5 seconds.",
+            "ru": "**End-to-end deadline** — это одно максимальное время для всей операции, например 300 ms на страницу. **Бюджет** — это то, что осталось от deadline в данный момент, и каждому downstream-клиенту нужно отдавать его часть, а не позволять выбирать свой несвязанный timeout.\n\n```mermaid\nflowchart LR\n  R[\"deadline запроса 300 ms\"] --> C[\"catalog: 120 ms\"]\n  R --> P[\"price: 100 ms\"]\n  R --> V[\"reviews: 80 ms\"]\n```\n\nОтдельные timeouts ограничивают каждый вызов и ничего не говорят про их сумму. Три последовательных timeout по 200 ms вполне законно потратят 600 ms, при этом каждый timeout соблюден. Передача оставшегося бюджета вниз делает арифметику честной: внутри 300 ms на страницу некритичный сервис не может забрать 5 seconds."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Sequential timeouts add up: 3 x 200 ms is 600 ms, double the deadline.",
+              "ru": "Последовательные timeouts складываются: 3 x 200 ms — это 600 ms, вдвое больше deadline."
+            },
+            "incorrect": {
+              "en": "A per-call timeout bounds one call, not the sum: these three can spend 600 ms.",
+              "ru": "Timeout ограничивает один вызов, а не сумму: эти три могут потратить 600 ms."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It can be blown: sequentially the timeouts add up to 600 ms",
+                "ru": "Он может быть превышен: последовательно timeouts складываются в 600 ms"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It holds, because no single call may exceed 300 ms",
+                "ru": "Он соблюден, потому что ни один вызов не превышает 300 ms"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Each call is bounded on its own; nothing bounds three of them in a row.",
+                "ru": "Каждый вызов ограничен сам по себе; три подряд не ограничивает ничто."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The clients shrink their timeouts automatically to fit",
+                "ru": "Клиенты сами уменьшат свои timeouts, чтобы уложиться"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing shares the budget unless you explicitly pass the remaining time down.",
+                "ru": "Бюджет не делится сам — нужно явно передавать оставшееся время вниз."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "deadline-p1-per-call-enough",
+          "type": "true_false",
+          "prompt": {
+            "en": "Giving every downstream client its own timeout is enough to bound the total time of a request.",
+            "ru": "Достаточно дать каждому downstream-клиенту свой timeout, чтобы ограничить общее время запроса."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Per-call timeouts bound calls; only an end-to-end deadline bounds the request.",
+              "ru": "Timeouts ограничивают вызовы; запрос ограничивает только end-to-end deadline."
+            },
+            "incorrect": {
+              "en": "No — sequential calls add up; the total needs its own end-to-end deadline.",
+              "ru": "Нет — последовательные вызовы складываются; общему времени нужен свой end-to-end deadline."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "deadline-p2-what-to-pass",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What should a caller pass into a downstream client as that call's timeout?",
+            "ru": "Что вызывающая сторона должна передавать downstream-клиенту в качестве timeout этого вызова?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The budget shrinks as the request progresses, so later calls get less time.",
+              "ru": "Бюджет уменьшается по ходу запроса, поэтому поздним вызовам достается меньше времени."
+            },
+            "incorrect": {
+              "en": "Pass a slice of the time remaining until the request deadline, not an unrelated default.",
+              "ru": "Передавай часть времени, оставшегося до deadline запроса, а не несвязанное значение по умолчанию."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A slice of the time remaining until the request deadline",
+                "ru": "Часть времени, оставшегося до deadline запроса"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The client library's own default, which is usually much larger",
+                "ru": "Значение по умолчанию из клиентской библиотеки, обычно намного большее"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "An unrelated default lets one dependency eat the whole page budget.",
+                "ru": "Несвязанное значение по умолчанию позволяет одной зависимости съесть весь бюджет страницы."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "No timeout, and cancel the call later if it takes too long",
+                "ru": "Никакого timeout, а если затянется — отменить вызов позже"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "\"Cancel later\" is exactly the unbounded wait a deadline is meant to remove.",
+                "ru": "«Отменим позже» — это ровно то неограниченное ожидание, которое убирает deadline."
+              }
+            }
+          ]
+        },
+        {
+          "id": "deadline-p3-sort-budget",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the steps of running a request under an end-to-end deadline.",
+            "ru": "Расставь по порядку шаги обработки запроса с end-to-end deadline."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The deadline is set once, and every call is measured against what is left of it.",
+              "ru": "Deadline задается один раз, и каждый вызов сверяется с тем, что от него осталось."
+            },
+            "incorrect": {
+              "en": "Set the total deadline first, then derive each call's timeout from the remaining budget.",
+              "ru": "Сначала задай общий deadline, затем выводи timeout каждого вызова из оставшегося бюджета."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Set one maximum time for the whole operation, e.g. 300 ms",
+                "ru": "Задать одно максимальное время на всю операцию, например 300 ms"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Before each downstream call, compute the remaining budget",
+                "ru": "Перед каждым downstream-вызовом вычислить оставшийся бюджет"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Pass that budget into the client as the call's timeout",
+                "ru": "Передать этот бюджет клиенту как timeout вызова"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Return a normal, degraded, or error response before the deadline",
+                "ru": "Вернуть нормальный, деградированный или ошибочный ответ до deadline"
+              }
+            }
+          ]
+        },
+        {
+          "id": "deadline-p4-fill-terms",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing terms.",
+            "ru": "Впиши два пропущенных термина."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One deadline for the request, a shrinking budget shared out among the calls.",
+              "ru": "Один deadline на запрос и убывающий бюджет, который делится между вызовами."
+            },
+            "incorrect": {
+              "en": "A request has one end-to-end deadline; each call gets a slice of the remaining budget.",
+              "ru": "У запроса один end-to-end deadline; каждый вызов получает часть оставшегося бюджета."
+            }
+          },
+          "text": {
+            "en": "A request has one end-to-end ___, and each downstream call gets a slice of the remaining ___.",
+            "ru": "У запроса один end-to-end ___, и каждый downstream-вызов получает часть оставшегося ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "deadline"
+              ],
+              "ru": [
+                "deadline",
+                "дедлайн"
+              ]
+            },
+            {
+              "en": [
+                "budget"
+              ],
+              "ru": [
+                "budget",
+                "бюджета",
+                "бюджет"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "per-call-timeout",
+      "title": {
+        "en": "Short, explicit timeouts",
+        "ru": "Короткие явные timeouts"
+      },
+      "summary": {
+        "en": "A per-dependency timeout turns \"maybe it will answer\" into a bounded decision and is sized from measured latency percentiles.",
+        "ru": "Timeout на зависимость превращает «может быть, ответит» в ограниченное решение и подбирается по измеренным latency percentiles."
+      },
+      "discovery": [
+        {
+          "id": "timeout-d1-raise-it",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Calls to one dependency keep timing out. A teammate proposes raising the timeout from 200 ms to 10 s. What is the main effect?",
+            "ru": "Вызовы к одной зависимости постоянно уходят в timeout. Коллега предлагает поднять timeout с 200 ms до 10 s. Каков главный эффект?"
+          },
+          "reveal": {
+            "en": "A **timeout** is the maximum time one call may wait. Its job is to turn \"maybe it will answer\" into a bounded decision: after the limit you stop waiting and take another path.\n\nSize it from measured **latency percentiles** (how long calls actually take — p95, p99) plus the business value of the data, not from a round number someone liked. Both directions are wrong in their own way:\n\n```mermaid\nflowchart LR\n  S[\"timeout far below p99\"] --> F[\"healthy calls cancelled: false failures\"]\n  L[\"timeout far above p99\"] --> H[\"failure hidden, threads held, capacity wasted\"]\n  G[\"timeout from p99 + business value\"] --> B[\"bounded decision\"]\n```\n\nThat is why \"just increase the timeout\" is not a fix: the dependency is unchanged, and you have only made users wait longer while more threads stay parked during the outage.",
+            "ru": "**Timeout** — это максимальное время ожидания одного вызова. Его задача — превратить «может быть, ответит» в ограниченное решение: после лимита ты перестаешь ждать и идешь другим путем.\n\nПодбирай его по измеренным **latency percentiles** (сколько вызовы реально занимают — p95, p99) и по бизнес-ценности данных, а не по круглому числу, которое кому-то понравилось. Обе крайности плохи по-своему:\n\n```mermaid\nflowchart LR\n  S[\"timeout сильно ниже p99\"] --> F[\"здоровые вызовы обрываются: ложные failures\"]\n  L[\"timeout сильно выше p99\"] --> H[\"отказ скрыт, потоки заняты, capacity тратится впустую\"]\n  G[\"timeout по p99 + бизнес-ценность\"] --> B[\"ограниченное решение\"]\n```\n\nПоэтому «просто увеличим timeout» — не решение: зависимость не изменилась, а пользователи стали ждать дольше, и во время отказа больше потоков стоит занятыми."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the dependency is unchanged; only the user's wait and the resource pressure grow.",
+              "ru": "Верно — зависимость не изменилась; выросли только ожидание пользователя и нагрузка на ресурсы."
+            },
+            "incorrect": {
+              "en": "A longer timeout only makes the wait longer and holds threads for longer during the outage.",
+              "ru": "Больший timeout лишь удлиняет ожидание и дольше держит потоки занятыми во время отказа."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Users wait much longer and more threads stay busy during the outage",
+                "ru": "Пользователи ждут намного дольше, и во время отказа больше потоков заняты"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The dependency becomes more reliable because it gets more time",
+                "ru": "Зависимость становится надежнее, потому что получает больше времени"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The timeout changes nothing on the dependency's side — only how long you wait for it.",
+                "ru": "Timeout ничего не меняет на стороне зависимости — только то, сколько вы ее ждете."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Fewer resources are used, because fewer calls have to be repeated",
+                "ru": "Ресурсов тратится меньше, потому что меньше вызовов приходится повторять"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Longer waits hold threads and connections longer, so resource pressure grows, not shrinks.",
+                "ru": "Долгие ожидания дольше держат потоки и соединения, поэтому нагрузка на ресурсы растет, а не падает."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "timeout-p1-increase-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Increasing a timeout is a good first fix when a dependency is unavailable.",
+            "ru": "Увеличить timeout — хорошее первое решение, когда зависимость недоступна."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It only lengthens the queue: the same failure now costs more waiting and more held resources.",
+              "ru": "Это лишь удлиняет очередь: тот же отказ теперь стоит дольше ожидания и больше занятых ресурсов."
+            },
+            "incorrect": {
+              "en": "No — it makes user latency and resource pressure worse without changing the dependency.",
+              "ru": "Нет — это ухудшает user latency и нагрузку на ресурсы, ничего не меняя в зависимости."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "timeout-p2-basis",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What should a per-dependency timeout be based on?",
+            "ru": "На чем должен основываться timeout для конкретной зависимости?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Measured behaviour plus how much the data is worth to the response.",
+              "ru": "Измеренное поведение плюс то, насколько эти данные важны для ответа."
+            },
+            "incorrect": {
+              "en": "Base it on measured latency percentiles and the business value of the data.",
+              "ru": "Основывай его на измеренных latency percentiles и бизнес-ценности данных."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Measured latency percentiles and the business value of the data",
+                "ru": "Измеренные latency percentiles и бизнес-ценность данных"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The slowest response ever observed, plus a safety margin",
+                "ru": "Самый медленный ответ за всю историю плюс запас"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Sizing from the worst case turns a rare outlier into everybody's wait.",
+                "ru": "Подбор по худшему случаю превращает редкий выброс в ожидание для всех."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "One round number reused for every dependency",
+                "ru": "Одно круглое число, одинаковое для всех зависимостей"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Dependencies differ in latency profile and in how much their data is worth.",
+                "ru": "Зависимости различаются и по профилю latency, и по ценности своих данных."
+              }
+            }
+          ]
+        },
+        {
+          "id": "timeout-p3-match-tradeoff",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each timeout setting to what it causes.",
+            "ru": "Соотнеси каждую настройку timeout с ее последствием."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A timeout is a configuration decision with a cost on both sides.",
+              "ru": "Timeout — это настройка, у которой есть цена с обеих сторон."
+            },
+            "incorrect": {
+              "en": "Too long hides failure and wastes capacity; too short cancels healthy calls.",
+              "ru": "Слишком длинный скрывает отказ и тратит capacity; слишком короткий обрывает здоровые вызовы."
+            }
+          },
+          "pairs": [
+            {
+              "id": "too-long",
+              "left": {
+                "en": "Timeout far above the real p99",
+                "ru": "Timeout сильно выше реального p99"
+              },
+              "right": {
+                "en": "Failure stays hidden and capacity is wasted on waiting",
+                "ru": "Отказ остается незаметным, а capacity тратится на ожидание"
+              }
+            },
+            {
+              "id": "too-short",
+              "left": {
+                "en": "Timeout below normal response times",
+                "ru": "Timeout ниже обычного времени ответа"
+              },
+              "right": {
+                "en": "Healthy calls are cancelled as false failures",
+                "ru": "Здоровые вызовы обрываются как ложные failures"
+              }
+            },
+            {
+              "id": "sized",
+              "left": {
+                "en": "Timeout sized from p99 and business value",
+                "ru": "Timeout по p99 и бизнес-ценности"
+              },
+              "right": {
+                "en": "A slow call becomes a bounded decision",
+                "ru": "Медленный вызов становится ограниченным решением"
+              }
+            }
+          ]
+        },
+        {
+          "id": "timeout-p4-fill-percentiles",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing word.",
+            "ru": "Впиши пропущенное слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Percentiles describe how the dependency actually behaves under load.",
+              "ru": "Перцентили описывают, как зависимость реально ведет себя под нагрузкой."
+            },
+            "incorrect": {
+              "en": "It is percentiles — measured p95/p99 latency, not a guessed number.",
+              "ru": "Это percentiles — измеренные p95/p99, а не выдуманное число."
+            }
+          },
+          "text": {
+            "en": "A per-dependency timeout should be sized from real latency ___, not from a random large number.",
+            "ru": "Timeout для зависимости нужно подбирать по реальным latency ___, а не по случайному большому числу."
+          },
+          "blanks": [
+            {
+              "en": [
+                "percentiles",
+                "percentile"
+              ],
+              "ru": [
+                "percentiles",
+                "перцентилям",
+                "перцентили"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "critical-vs-optional",
+      "title": {
+        "en": "Critical vs optional data",
+        "ru": "Критичные и опциональные данные"
+      },
+      "summary": {
+        "en": "Classifying downstream data as critical or optional decides whether a failure fails the request or only degrades the response.",
+        "ru": "Деление downstream-данных на критичные и опциональные решает, провалит ли сбой весь запрос или только деградирует ответ."
+      },
+      "discovery": [
+        {
+          "id": "classify-d1-reviews-down",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A product page shows the price and a reviews block. The reviews service is unavailable. What should the page return?",
+            "ru": "Страница товара показывает цену и блок отзывов. Reviews service недоступен. Что должна вернуть страница?"
+          },
+          "reveal": {
+            "en": "Before an incident, every piece of downstream data should already be labelled:\n\n- **critical** — the response is wrong or unusable without it, so a failure must fail the request fast, or take an alternate path;\n- **optional** — the response is still useful without it, so a failure only produces a **degraded response**: the same page with a block missing, cached, or defaulted.\n\n```mermaid\nflowchart TD\n  N[\"downstream data needed\"] --> Q{\"critical for the response?\"}\n  Q -- \"yes\" --> C[\"strict timeout + fail fast or alternate path\"]\n  Q -- \"no\" --> O[\"strict timeout + fallback or cache\"]\n```\n\nNote that both branches keep a strict timeout — the classification does not decide *whether* to bound the call, only what to do when the bound is hit. Failing a whole page because an optional block is missing throws away a response the user could have used; silently degrading something critical ships a wrong answer. Deciding this up front is what makes the behaviour predictable during an outage.",
+            "ru": "Еще до инцидента у каждого куска downstream-данных должна быть метка:\n\n- **критичные** — без них ответ неверен или бесполезен, поэтому сбой должен быстро провалить запрос или увести на alternate path;\n- **опциональные** — без них ответ все еще полезен, поэтому сбой дает лишь **деградированный ответ**: та же страница без блока, с кэшем или значением по умолчанию.\n\n```mermaid\nflowchart TD\n  N[\"нужны downstream-данные\"] --> Q{\"критично для ответа?\"}\n  Q -- \"да\" --> C[\"строгий timeout + fail fast или alternate path\"]\n  Q -- \"нет\" --> O[\"строгий timeout + fallback или cache\"]\n```\n\nОбрати внимание: строгий timeout остается в обеих ветках — классификация решает не *ограничивать ли* вызов, а что делать, когда лимит достигнут. Провалить всю страницу из-за отсутствующего опционального блока — значит выбросить ответ, который пользователю пригодился бы; молча деградировать критичное — значит отдать неверный ответ. Решение, принятое заранее, и делает поведение предсказуемым во время отказа."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Optional data degrades the response; only critical data may fail it.",
+              "ru": "Опциональные данные деградируют ответ; провалить его могут только критичные."
+            },
+            "incorrect": {
+              "en": "Reviews are optional, so the page should render without them rather than fail entirely.",
+              "ru": "Отзывы опциональны, поэтому страницу нужно отдать без них, а не проваливать целиком."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The page without the reviews block",
+                "ru": "Страницу без блока отзывов"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "An error for the whole page",
+                "ru": "Ошибку на всю страницу"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Failing the whole page for optional data throws away a response the user could still use.",
+                "ru": "Провал всей страницы из-за опциональных данных выбрасывает ответ, которым пользователь мог бы воспользоваться."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing, until the reviews service recovers",
+                "ru": "Ничего, пока reviews service не восстановится"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Waiting for an optional dependency is exactly the unbounded wait to avoid.",
+                "ru": "Ждать опциональную зависимость — ровно то неограниченное ожидание, которого нужно избегать."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "classify-p1-must-fail-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Every unavailable downstream service must fail the whole request.",
+            "ru": "Любой недоступный downstream service должен проваливать весь запрос."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Only critical data forces a failure; optional data is degraded instead.",
+              "ru": "Провал вынуждают только критичные данные; опциональные просто деградируют."
+            },
+            "incorrect": {
+              "en": "No — only critical data forces a failure; optional data can be replaced or omitted.",
+              "ru": "Нет — провал вынуждают только критичные данные; опциональные можно заменить или пропустить."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "classify-p2-what-makes-critical",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which is the clearest sign that a piece of downstream data is CRITICAL?",
+            "ru": "Что вернее всего указывает, что кусок downstream-данных КРИТИЧЕН?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Criticality is about correctness and usefulness of the response, nothing else.",
+              "ru": "Критичность — это про корректность и полезность ответа, и ни про что больше."
+            },
+            "incorrect": {
+              "en": "Data is critical when the response would be wrong or unusable without it.",
+              "ru": "Данные критичны, когда без них ответ был бы неверным или бесполезным."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The response would be wrong or unusable without it",
+                "ru": "Без них ответ был бы неверным или бесполезным"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The call that fetches it is the slowest one",
+                "ru": "Вызов, который их получает, самый медленный"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Latency describes what the data costs, not how much the response needs it.",
+                "ru": "Latency описывает, сколько данные стоят, а не насколько они нужны ответу."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It is fetched first in the code",
+                "ru": "Они запрашиваются первыми в коде"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Call order is an implementation detail and says nothing about importance.",
+                "ru": "Порядок вызовов — деталь реализации и ничего не говорит о важности."
+              }
+            }
+          ]
+        },
+        {
+          "id": "classify-p3-match-data",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each piece of downstream data to how its failure should be handled.",
+            "ru": "Соотнеси каждый вид downstream-данных с тем, как обрабатывать его сбой."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The label comes from the business decision the data supports.",
+              "ru": "Метка вытекает из бизнес-решения, которое эти данные обслуживают."
+            },
+            "incorrect": {
+              "en": "Data a decision's correctness depends on is critical; display-only blocks are optional.",
+              "ru": "Данные, от которых зависит корректность решения, критичны; чисто отображаемые блоки опциональны."
+            }
+          },
+          "pairs": [
+            {
+              "id": "price",
+              "left": {
+                "en": "Price on a checkout page",
+                "ru": "Цена на странице оформления заказа"
+              },
+              "right": {
+                "en": "Critical: fail fast or take an alternate path",
+                "ru": "Критично: fail fast или alternate path"
+              }
+            },
+            {
+              "id": "reviews",
+              "left": {
+                "en": "Reviews block on a product page",
+                "ru": "Блок отзывов на странице товара"
+              },
+              "right": {
+                "en": "Optional: render the page without it",
+                "ru": "Опционально: отдать страницу без него"
+              }
+            },
+            {
+              "id": "reservation",
+              "left": {
+                "en": "Stock reservation before payment",
+                "ru": "Резервирование товара перед оплатой"
+              },
+              "right": {
+                "en": "Critical: correctness depends on fresh data",
+                "ru": "Критично: корректность зависит от свежих данных"
+              }
+            },
+            {
+              "id": "recommendations",
+              "left": {
+                "en": "Recommendations block",
+                "ru": "Блок рекомендаций"
+              },
+              "right": {
+                "en": "Optional: cached or default content is acceptable",
+                "ru": "Опционально: подойдут кэш или контент по умолчанию"
+              }
+            }
+          ]
+        },
+        {
+          "id": "classify-p4-fill-labels",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two classification labels.",
+            "ru": "Впиши две метки классификации."
+          },
+          "feedback": {
+            "correct": {
+              "en": "These two labels decide fail-the-request versus degrade-the-response.",
+              "ru": "Эти две метки решают: провалить запрос или деградировать ответ."
+            },
+            "incorrect": {
+              "en": "Data the response cannot be correct without is critical; the rest is optional.",
+              "ru": "Данные, без которых ответ не может быть корректным, — критичные; остальные — опциональные."
+            }
+          },
+          "text": {
+            "en": "Data the response cannot be correct without is ___; data that can be replaced or omitted is ___.",
+            "ru": "Данные, без которых ответ не может быть корректным, — ___; данные, которые можно заменить или пропустить, — ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "critical"
+              ],
+              "ru": [
+                "критичные",
+                "критичными",
+                "critical"
+              ]
+            },
+            {
+              "en": [
+                "optional"
+              ],
+              "ru": [
+                "опциональные",
+                "опциональными",
+                "optional"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "parallel-fanout",
+      "title": {
+        "en": "Parallel fan-out",
+        "ru": "Параллельный fan-out"
+      },
+      "summary": {
+        "en": "Independent calls started together make the user wait for the slowest bounded call instead of the sum of all waits.",
+        "ru": "Независимые вызовы, запущенные вместе, заставляют пользователя ждать самый медленный ограниченный вызов, а не сумму всех ожиданий."
+      },
+      "discovery": [
+        {
+          "id": "parallel-d1-sequential-cost",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The three services do not depend on each other and each call is bounded at 150 ms. Roughly how long does this code wait?",
+            "ru": "Три сервиса не зависят друг от друга, и каждый вызов ограничен 150 ms. Сколько примерно ждет этот код?"
+          },
+          "code": "// Each call is bounded at 150 ms.\nvar catalog = call(catalogService);   // answers in ~120 ms\nvar price   = call(priceService);     // answers in ~90 ms\nvar reviews = call(reviewsService);   // answers in ~140 ms",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Written this way, each call starts only after the previous one returns, so the waits **add up**: 120 + 90 + 140 is about 350 ms. Since the three services are independent, they can be started together instead — a **parallel fan-out** — and joined within the request deadline:\n\n```mermaid\nflowchart LR\n  S[\"start together\"] --> A[\"catalog 120 ms\"]\n  S --> B[\"price 90 ms\"]\n  S --> C[\"reviews 140 ms\"]\n  A --> J[\"join: about 140 ms\"]\n  B --> J\n  C --> J\n```\n\nNow the user waits for the **slowest** bounded call, about 140 ms, not the sum.\n\nTwo limits on this. First, calls that are *not* independent must stay sequential: if the second call needs the first call's result, there is nothing to overlap. Second, parallelism does not make the work cheaper — it starts more calls at once, so it adds load, and the join must still respect the request deadline.",
+            "ru": "В таком виде каждый вызов стартует только после возврата предыдущего, поэтому ожидания **складываются**: 120 + 90 + 140 — это примерно 350 ms. Раз три сервиса независимы, их можно стартовать вместе — это **параллельный fan-out** — и собрать результат в пределах deadline запроса:\n\n```mermaid\nflowchart LR\n  S[\"стартуем вместе\"] --> A[\"catalog 120 ms\"]\n  S --> B[\"price 90 ms\"]\n  S --> C[\"reviews 140 ms\"]\n  A --> J[\"join: около 140 ms\"]\n  B --> J\n  C --> J\n```\n\nТеперь пользователь ждет **самый медленный** ограниченный вызов, около 140 ms, а не сумму.\n\nУ этого есть два ограничения. Во-первых, зависимые вызовы должны остаться последовательными: если второй вызов нуждается в результате первого, перекрывать нечего. Во-вторых, параллельность не делает работу дешевле — она запускает больше вызовов сразу, то есть добавляет нагрузку, и join все равно обязан уложиться в deadline запроса."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Sequential independent calls pay the sum: about 350 ms.",
+              "ru": "Последовательные независимые вызовы платят сумму: около 350 ms."
+            },
+            "incorrect": {
+              "en": "Each call starts after the previous returns, so the waits add up to about 350 ms.",
+              "ru": "Каждый вызов стартует после возврата предыдущего, поэтому ожидания складываются примерно в 350 ms."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "About 350 ms — the waits add up because the calls are sequential",
+                "ru": "Около 350 ms — ожидания складываются, потому что вызовы последовательны"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "About 140 ms — the slowest call",
+                "ru": "Около 140 ms — самый медленный вызов"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is what you get after starting them together; here each call waits for the previous one.",
+                "ru": "Так было бы, если стартовать их вместе; здесь каждый вызов ждет предыдущий."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "About 450 ms — the sum of the three timeouts",
+                "ru": "Около 450 ms — сумма трех timeouts"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A timeout bounds the wait, it is not the wait: each call returned before its limit.",
+                "ru": "Timeout ограничивает ожидание, но не равен ему: каждый вызов вернулся раньше лимита."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "parallel-p1-always-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Running downstream calls in parallel always improves latency.",
+            "ru": "Параллельный запуск downstream-вызовов всегда улучшает latency."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It helps independent calls only, and it adds load while still owing the deadline.",
+              "ru": "Это помогает только независимым вызовам, добавляет нагрузку и все равно обязано уложиться в deadline."
+            },
+            "incorrect": {
+              "en": "No — it helps only for independent calls, and it increases load on the dependencies.",
+              "ru": "Нет — это помогает только для независимых вызовов и увеличивает нагрузку на зависимости."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "parallel-p2-when-sequential",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "When must downstream calls stay sequential instead of running in parallel?",
+            "ru": "Когда downstream-вызовы должны остаться последовательными, а не идти параллельно?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "A data dependency is the one thing parallelism cannot remove.",
+              "ru": "Зависимость по данным — единственное, что параллельность не может убрать."
+            },
+            "incorrect": {
+              "en": "They stay sequential when a later call needs the result of an earlier one.",
+              "ru": "Они остаются последовательными, когда более поздний вызов нуждается в результате более раннего."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "When a later call needs the result of an earlier one",
+                "ru": "Когда более поздний вызов нуждается в результате более раннего"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "When the calls go to different services",
+                "ru": "Когда вызовы идут в разные сервисы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Different services are exactly the independent case that benefits from parallelism.",
+                "ru": "Разные сервисы — как раз тот независимый случай, которому параллельность помогает."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "When each call already has its own timeout",
+                "ru": "Когда у каждого вызова уже есть свой timeout"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Timeouts bound each call; they say nothing about the order calls must run in.",
+                "ru": "Timeouts ограничивают каждый вызов и ничего не говорят о порядке их выполнения."
+              }
+            }
+          ]
+        },
+        {
+          "id": "parallel-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the latency rule for independent calls started in parallel.",
+            "ru": "Собери правило latency для независимых вызовов, запущенных параллельно."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Overlapping the waits replaces addition with a maximum.",
+              "ru": "Перекрытие ожиданий заменяет сложение максимумом."
+            },
+            "incorrect": {
+              "en": "Parallel independent calls cost the slowest call, not the sum of all waits.",
+              "ru": "Параллельные независимые вызовы стоят самого медленного вызова, а не суммы всех ожиданий."
+            }
+          },
+          "tokens": {
+            "en": [
+              "parallel",
+              "calls",
+              "cost",
+              "the",
+              "slowest",
+              "call",
+              "not",
+              "the",
+              "sum"
+            ],
+            "ru": [
+              "параллельные",
+              "вызовы",
+              "стоят",
+              "самого",
+              "медленного",
+              "вызова",
+              "а",
+              "не",
+              "суммы"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "fastest"
+            ],
+            "ru": [
+              "быстрого"
+            ]
+          }
+        },
+        {
+          "id": "parallel-p4-fill-slowest",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing words.",
+            "ru": "Впиши два пропущенных слова."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The join finishes when the last bounded call finishes.",
+              "ru": "Join завершается, когда завершается последний ограниченный вызов."
+            },
+            "incorrect": {
+              "en": "The user waits for the slowest bounded call instead of the sum of all waits.",
+              "ru": "Пользователь ждет самый медленный ограниченный вызов вместо суммы всех ожиданий."
+            }
+          },
+          "text": {
+            "en": "With independent calls started in parallel, the user waits for the ___ bounded call instead of the ___ of all waits.",
+            "ru": "Если независимые вызовы стартуют параллельно, пользователь ждет ___ ограниченный вызов вместо ___ всех ожиданий."
+          },
+          "blanks": [
+            {
+              "en": [
+                "slowest"
+              ],
+              "ru": [
+                "самый медленный",
+                "самый долгий"
+              ]
+            },
+            {
+              "en": [
+                "sum",
+                "total"
+              ],
+              "ru": [
+                "суммы",
+                "сумму"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "safe-fallback",
+      "title": {
+        "en": "Safe fallbacks",
+        "ru": "Безопасные fallbacks"
+      },
+      "summary": {
+        "en": "A fallback replaces optional data with cached, default, empty or simpler content — only where stale data cannot make the decision wrong.",
+        "ru": "Fallback заменяет опциональные данные кэшем, значением по умолчанию, пустым блоком или упрощенным ответом — только там, где устаревшие данные не сделают решение неверным."
+      },
+      "discovery": [
+        {
+          "id": "fallback-d1-which-may-cache",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Two calls time out: the recommendations block and a stock reservation before payment. Which one may be answered from cached data?",
+            "ru": "Два вызова ушли в timeout: блок рекомендаций и резервирование товара перед оплатой. Какой из них можно ответить из кэша?"
+          },
+          "reveal": {
+            "en": "A **fallback** is the answer you use when the real call did not deliver. It can be cached data, a default value, an empty block, or a simpler version of the response.\n\nThe rule is that a fallback must be **safe for the decision it feeds**:\n\n```mermaid\nflowchart TD\n  T[\"optional call failed or timed out\"] --> S{\"can stale data change the outcome?\"}\n  S -- \"no\" --> F[\"cached, default, empty or simpler response\"]\n  S -- \"yes\" --> E[\"fail fast with a clear error\"]\n```\n\nShowing recommendations that are a few minutes old changes nothing important — the user sees a slightly older block. Reserving stock or approving a payment from stale data can oversell an item or approve something that should have been refused, because the correctness of those decisions depends on freshness.\n\nA fallback should also be honest: a degraded response is fine, a response that silently pretends to be complete is not. Fallbacks that are too broad are dangerous precisely because they hide real correctness problems behind a normal-looking answer.",
+            "ru": "**Fallback** — это ответ, который используется, когда настоящий вызов ничего не дал. Это может быть кэш, значение по умолчанию, пустой блок или упрощенная версия ответа.\n\nПравило: fallback должен быть **безопасен для решения, которое он питает**:\n\n```mermaid\nflowchart TD\n  T[\"опциональный вызов упал или ушел в timeout\"] --> S{\"могут ли устаревшие данные изменить исход?\"}\n  S -- \"нет\" --> F[\"кэш, значение по умолчанию, пустой блок или упрощенный ответ\"]\n  S -- \"да\" --> E[\"fail fast с понятной ошибкой\"]\n```\n\nПоказать рекомендации несколькоминутной давности — ничего важного не меняет, пользователь видит чуть более старый блок. А зарезервировать товар или одобрить платеж по устаревшим данным можно так, что товар будет продан дважды или одобрено то, что следовало отклонить: корректность этих решений зависит от свежести.\n\nЕще fallback должен быть честным: деградированный ответ — нормально, ответ, который молча притворяется полным, — нет. Слишком широкие fallbacks опасны именно тем, что прячут реальные проблемы корректности за нормально выглядящим ответом."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A display-only block tolerates staleness; a reservation does not.",
+              "ru": "Блок, который только отображается, терпит устаревание; резервирование — нет."
+            },
+            "incorrect": {
+              "en": "Only the recommendations: a stock reservation's correctness depends on fresh data.",
+              "ru": "Только рекомендации: корректность резервирования зависит от свежих данных."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The recommendations block",
+                "ru": "Блок рекомендаций"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Both, because cached data always beats an error",
+                "ru": "Оба, потому что кэш всегда лучше ошибки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A reservation made from stale stock can oversell the item — cached data is not always safe.",
+                "ru": "Резервирование по устаревшим остаткам может продать товар дважды — кэш безопасен не всегда."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Neither — cached data is never an acceptable answer",
+                "ru": "Ни один — кэш никогда не является допустимым ответом"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Cached data is a normal fallback when freshness does not change the outcome.",
+                "ru": "Кэш — нормальный fallback, когда свежесть не меняет исход."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "fallback-p1-payment-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Approving a payment from stale cached data is an acceptable fallback.",
+            "ru": "Одобрить платеж по устаревшим кэшированным данным — допустимый fallback."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Payment approval is exactly the decision whose correctness depends on freshness.",
+              "ru": "Одобрение платежа — как раз то решение, корректность которого зависит от свежести."
+            },
+            "incorrect": {
+              "en": "No — when correctness depends on fresh data, there is no safe fallback; fail fast instead.",
+              "ru": "Нет — когда корректность зависит от свежих данных, безопасного fallback нет; лучше fail fast."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "fallback-p2-what-makes-safe",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What makes a fallback SAFE?",
+            "ru": "Что делает fallback БЕЗОПАСНЫМ?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Safety is about the decision, not about having any answer at all.",
+              "ru": "Безопасность — про решение, а не про наличие хоть какого-то ответа."
+            },
+            "incorrect": {
+              "en": "It is safe when the stale or default value cannot change the correctness of the decision.",
+              "ru": "Он безопасен, когда устаревшее значение или значение по умолчанию не могут изменить корректность решения."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Stale or default data cannot change the correctness of the decision",
+                "ru": "Устаревшие данные или значения по умолчанию не могут изменить корректность решения"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It returns something instead of an error",
+                "ru": "Он возвращает хоть что-то вместо ошибки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Returning something is the goal, but not at the price of a wrong business decision.",
+                "ru": "Вернуть что-то — цель, но не ценой неверного бизнес-решения."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It is faster than the real call",
+                "ru": "Он быстрее настоящего вызова"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Speed is why a fallback helps, not what makes it safe to use.",
+                "ru": "Скорость — причина пользы fallback, а не то, что делает его безопасным."
+              }
+            }
+          ]
+        },
+        {
+          "id": "fallback-p3-match-cases",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each timed-out call to the correct fallback decision.",
+            "ru": "Соотнеси каждый ушедший в timeout вызов с правильным решением по fallback."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Display-only data tolerates staleness; money and inventory do not.",
+              "ru": "Данные для отображения терпят устаревание; деньги и остатки — нет."
+            },
+            "incorrect": {
+              "en": "Cache what is only displayed; fail fast where correctness depends on freshness.",
+              "ru": "Кэшируй то, что только отображается; делай fail fast там, где корректность зависит от свежести."
+            }
+          },
+          "pairs": [
+            {
+              "id": "recommendations",
+              "left": {
+                "en": "Recommendations block",
+                "ru": "Блок рекомендаций"
+              },
+              "right": {
+                "en": "Serve cached recommendations",
+                "ru": "Отдать кэшированные рекомендации"
+              }
+            },
+            {
+              "id": "reviews",
+              "left": {
+                "en": "Reviews block",
+                "ru": "Блок отзывов"
+              },
+              "right": {
+                "en": "Render an empty block and continue",
+                "ru": "Отрисовать пустой блок и продолжить"
+              }
+            },
+            {
+              "id": "payment",
+              "left": {
+                "en": "Payment approval",
+                "ru": "Одобрение платежа"
+              },
+              "right": {
+                "en": "Never decide from stale data; return a clear error",
+                "ru": "Никогда не решать по устаревшим данным; вернуть понятную ошибку"
+              }
+            },
+            {
+              "id": "stock",
+              "left": {
+                "en": "Stock reservation",
+                "ru": "Резервирование остатков"
+              },
+              "right": {
+                "en": "Correctness depends on freshness, so no cached answer",
+                "ru": "Корректность зависит от свежести, поэтому ответ из кэша не годится"
+              }
+            }
+          ]
+        },
+        {
+          "id": "fallback-p4-fill-cached",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing word.",
+            "ru": "Впиши пропущенное слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Cache, defaults, an empty block or a simpler response are the usual fallback shapes.",
+              "ru": "Кэш, значения по умолчанию, пустой блок или упрощенный ответ — обычные формы fallback."
+            },
+            "incorrect": {
+              "en": "It is cached data — one of the standard fallbacks for optional content.",
+              "ru": "Это кэшированные данные — один из стандартных fallbacks для опционального контента."
+            }
+          },
+          "text": {
+            "en": "A fallback for optional data may be ___ data, defaults, an empty block, or a simpler response.",
+            "ru": "Fallback для опциональных данных может быть ___ данными, значениями по умолчанию, пустым блоком или упрощенным ответом."
+          },
+          "blanks": [
+            {
+              "en": [
+                "cached",
+                "cache"
+              ],
+              "ru": [
+                "cached",
+                "кэшированными",
+                "кэшированные"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "circuit-breaker",
+      "title": {
+        "en": "The circuit breaker",
+        "ru": "Circuit breaker"
+      },
+      "summary": {
+        "en": "After repeated failures the circuit opens and later calls to that dependency are skipped for a cooling period.",
+        "ru": "После повторных сбоев circuit открывается, и последующие вызовы к этой зависимости пропускаются на время cooling period."
+      },
+      "discovery": [
+        {
+          "id": "breaker-d1-51st-call",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A dependency has timed out on the last 50 calls. The 51st request arrives. With a circuit breaker in place, what happens?",
+            "ru": "Зависимость ушла в timeout на последних 50 вызовах. Приходит 51-й запрос. Что произойдет, если есть circuit breaker?"
+          },
+          "reveal": {
+            "en": "A **circuit breaker** is a caller-side switch that remembers recent failures. When enough calls to a dependency fail, the circuit **opens**: for a while, later calls are not sent at all — they are skipped immediately, and the fallback or error path runs instead. This is called **failing fast**.\n\n```mermaid\nstateDiagram-v2\n  [*] --> Closed\n  Closed --> Open: repeated failures\n  Open --> Closed: after the cooling period, calls succeed again\n```\n\nWhile the circuit is open, the timeout is never paid, so nothing is spent waiting. The waiting period before the dependency is tried again is the **cooling period**.\n\nOpening the circuit helps two parties at once. The caller stops burning its budget on a dependency that is known to be down, and the failing dependency stops receiving traffic it cannot serve — which is often what it needs to recover.",
+            "ru": "**Circuit breaker** — это переключатель на стороне вызывающего, который помнит недавние сбои. Когда достаточно вызовов к зависимости завершилось неудачей, circuit **открывается**: некоторое время последующие вызовы вообще не отправляются — они сразу пропускаются, и вместо них работает fallback или путь ошибки. Это называется **fail fast**.\n\n```mermaid\nstateDiagram-v2\n  [*] --> Closed\n  Closed --> Open: повторные сбои\n  Open --> Closed: после cooling period вызовы снова успешны\n```\n\nПока circuit открыт, timeout не оплачивается вообще, то есть на ожидание не тратится ничего. Время до следующей попытки обратиться к зависимости — это **cooling period**.\n\nОткрытый circuit помогает сразу двоим. Вызывающий перестает жечь свой бюджет на зависимость, про которую и так известно, что она лежит, а падающая зависимость перестает получать трафик, который не может обслужить, — часто именно это и нужно ей для восстановления."
+          },
+          "feedback": {
+            "correct": {
+              "en": "An open circuit skips the call entirely — no wait, no extra load.",
+              "ru": "Открытый circuit полностью пропускает вызов — без ожидания и без лишней нагрузки."
+            },
+            "incorrect": {
+              "en": "The call is skipped immediately; the fallback or error path runs without paying the timeout.",
+              "ru": "Вызов сразу пропускается; отрабатывает fallback или путь ошибки, не оплачивая timeout."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The call is skipped immediately and the fallback or error path runs",
+                "ru": "Вызов сразу пропускается, и отрабатывает fallback или путь ошибки"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The call is made again with the same timeout",
+                "ru": "Вызов снова выполняется с тем же timeout"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That pays the full timeout again for a dependency already known to be failing.",
+                "ru": "Так снова оплачивается полный timeout для зависимости, про которую уже известно, что она падает."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The call is made with a longer timeout, to give the service a chance",
+                "ru": "Вызов выполняется с увеличенным timeout, чтобы дать сервису шанс"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Waiting longer for a failing service adds latency and load, not recovery.",
+                "ru": "Дольше ждать падающий сервис — это добавить latency и нагрузку, а не ускорить восстановление."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "breaker-p1-open-skip-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "While a circuit breaker is open, calls to that dependency are skipped without waiting for a timeout.",
+            "ru": "Пока circuit breaker открыт, вызовы к этой зависимости пропускаются без ожидания timeout."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That is the whole point: the timeout is not paid at all while the circuit is open.",
+              "ru": "В этом и смысл: пока circuit открыт, timeout не оплачивается вовсе."
+            },
+            "incorrect": {
+              "en": "It is true — an open circuit skips the call, so no time is spent waiting.",
+              "ru": "Это верно — открытый circuit пропускает вызов, поэтому время на ожидание не тратится."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "breaker-p2-second-benefit",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Besides saving the caller's time, what does an open circuit achieve?",
+            "ru": "Что, кроме экономии времени вызывающей стороны, дает открытый circuit?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Removing traffic is often what lets an overloaded dependency recover.",
+              "ru": "Снятие трафика часто и есть то, что позволяет перегруженной зависимости восстановиться."
+            },
+            "incorrect": {
+              "en": "It takes load off the failing dependency, giving it room to recover.",
+              "ru": "Он снимает нагрузку с падающей зависимости, давая ей возможность восстановиться."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It takes load off the failing dependency so it can recover",
+                "ru": "Он снимает нагрузку с падающей зависимости, чтобы она могла восстановиться"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It restarts the failing dependency",
+                "ru": "Он перезапускает падающую зависимость"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A breaker is a caller-side decision; it cannot restart anything downstream.",
+                "ru": "Breaker — решение на стороне вызывающего; он не может ничего перезапустить ниже по цепочке."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It retries the call in the background until it succeeds",
+                "ru": "Он повторяет вызов в фоне, пока тот не удастся"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is exactly the extra load on a broken service that an open circuit is meant to stop.",
+                "ru": "Это ровно та лишняя нагрузка на сломанный сервис, которую открытый circuit и должен остановить."
+              }
+            }
+          ]
+        },
+        {
+          "id": "breaker-p3-sort-lifecycle",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order what a circuit breaker does during an outage.",
+            "ru": "Расставь по порядку, что делает circuit breaker во время отказа."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Failures accumulate, the circuit opens, calls are skipped, then the dependency is probed again.",
+              "ru": "Сбои накапливаются, circuit открывается, вызовы пропускаются, затем зависимость пробуют снова."
+            },
+            "incorrect": {
+              "en": "A breaker needs failures first: it opens on a threshold, skips calls, then retries after cooling.",
+              "ru": "Breaker сначала нужны сбои: он открывается по порогу, пропускает вызовы, затем пробует снова после cooling period."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Calls to the dependency keep failing or timing out",
+                "ru": "Вызовы к зависимости продолжают падать или уходить в timeout"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "The failure count passes the breaker's threshold",
+                "ru": "Число сбоев превышает порог breaker"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "The circuit opens and later calls are skipped without waiting",
+                "ru": "Circuit открывается, и последующие вызовы пропускаются без ожидания"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "After the cooling period the dependency is tried again",
+                "ru": "После cooling period зависимость пробуют снова"
+              }
+            }
+          ]
+        },
+        {
+          "id": "breaker-p4-fill-open-fast",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing words.",
+            "ru": "Впиши два пропущенных слова."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Open circuit, no call, no timeout paid.",
+              "ru": "Circuit открыт — вызова нет, timeout не оплачивается."
+            },
+            "incorrect": {
+              "en": "After enough failures the circuit opens, and later calls fail fast without being sent.",
+              "ru": "После достаточного числа сбоев circuit открывается, и последующие вызовы завершаются быстро, не отправляясь."
+            }
+          },
+          "text": {
+            "en": "After enough failures the circuit ___, and later calls fail ___.",
+            "ru": "После достаточного числа сбоев circuit ___, а последующие вызовы завершаются ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "opens",
+                "open"
+              ],
+              "ru": [
+                "открывается",
+                "opens"
+              ]
+            },
+            {
+              "en": [
+                "fast"
+              ],
+              "ru": [
+                "быстро",
+                "fast"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "breaker-vs-timeout",
+      "title": {
+        "en": "Breaker does not replace timeout",
+        "ru": "Breaker не заменяет timeout"
+      },
+      "summary": {
+        "en": "A timeout bounds one slow call; a circuit breaker uses the history of failures to skip future calls — neither replaces the other.",
+        "ru": "Timeout ограничивает один медленный вызов; circuit breaker по истории сбоев пропускает будущие вызовы — одно не заменяет другое."
+      },
+      "discovery": [
+        {
+          "id": "vs-d1-timeout-only",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A service has per-call timeouts of 200 ms but no circuit breaker. A dependency is down for 10 minutes. What does each user request pay?",
+            "ru": "У сервиса есть timeouts по 200 ms на вызов, но нет circuit breaker. Зависимость лежит 10 минут. Что платит каждый пользовательский запрос?"
+          },
+          "reveal": {
+            "en": "The two mechanisms answer different questions, and one cannot do the other's job:\n\n```mermaid\nflowchart LR\n  T[\"timeout: bounds ONE call\"] --> D[\"detects that this call is slow or dead\"]\n  D --> B[\"circuit breaker: remembers repeated failures\"]\n  B --> S[\"skips FUTURE calls for a cooling period\"]\n```\n\nA **timeout has no memory**. It bounds each call in isolation, so during a ten-minute outage every single request still pays the full 200 ms of waiting — bounded, but repeated thousands of times, and each wait still occupies a thread.\n\nA **breaker has memory but no clock for a single call**. It only knows a call failed because something told it so — usually the timeout. Without timeouts, a hanging call never reports a failure, and the breaker never gets the signal to open.\n\nSo they compose: the timeout detects, the breaker remembers and skips. A stopwatch plus a sign that says the road is closed.",
+            "ru": "Эти два механизма отвечают на разные вопросы, и один не может выполнять работу другого:\n\n```mermaid\nflowchart LR\n  T[\"timeout: ограничивает ОДИН вызов\"] --> D[\"обнаруживает, что вызов медленный или мертвый\"]\n  D --> B[\"circuit breaker: помнит повторные сбои\"]\n  B --> S[\"пропускает БУДУЩИЕ вызовы на время cooling period\"]\n```\n\nУ **timeout нет памяти**. Он ограничивает каждый вызов по отдельности, поэтому за десять минут отказа каждый запрос все равно платит свои полные 200 ms ожидания — ограниченно, но тысячи раз подряд, и каждое ожидание по-прежнему занимает поток.\n\nУ **breaker есть память, но нет секундомера для отдельного вызова**. Он узнает о неудаче вызова только потому, что ему об этом сообщили — обычно как раз timeout. Без timeouts зависший вызов не сообщит о сбое, и breaker никогда не получит сигнал открыться.\n\nПоэтому они дополняют друг друга: timeout обнаруживает, breaker запоминает и пропускает. Секундомер плюс знак «дорога закрыта»."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A timeout has no memory, so the same bounded wait is paid on every request.",
+              "ru": "У timeout нет памяти, поэтому одно и то же ограниченное ожидание оплачивается в каждом запросе."
+            },
+            "incorrect": {
+              "en": "Every request pays the full 200 ms wait — a timeout bounds a call but never remembers the outage.",
+              "ru": "Каждый запрос платит полные 200 ms ожидания — timeout ограничивает вызов, но не помнит про отказ."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "200 ms of pure waiting, on every request, for the whole outage",
+                "ru": "200 ms чистого ожидания в каждом запросе на протяжении всего отказа"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing — the timeout makes the failure free",
+                "ru": "Ничего — timeout делает сбой бесплатным"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A timeout bounds the wait; it does not remove it.",
+                "ru": "Timeout ограничивает ожидание, но не убирает его."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "200 ms for the first request only; later calls are skipped automatically",
+                "ru": "200 ms только для первого запроса; последующие вызовы пропускаются автоматически"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Skipping later calls is the circuit breaker's job, and this service does not have one.",
+                "ru": "Пропускать последующие вызовы — работа circuit breaker, а его у этого сервиса нет."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "vs-p1-replaces-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A circuit breaker makes per-call timeouts unnecessary.",
+            "ru": "Circuit breaker делает timeouts на каждый вызов ненужными."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The breaker needs the timeout's verdict to count a failure in the first place.",
+              "ru": "Breaker нужен вердикт timeout, чтобы вообще засчитать сбой."
+            },
+            "incorrect": {
+              "en": "No — the timeout detects a slow call; the breaker only reacts to repeated failures.",
+              "ru": "Нет — timeout обнаруживает медленный вызов; breaker лишь реагирует на повторные сбои."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "vs-p2-what-breaker-adds",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does a circuit breaker add that a timeout alone cannot provide?",
+            "ru": "Что дает circuit breaker такого, чего не может дать один только timeout?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Memory across calls is the breaker's whole contribution.",
+              "ru": "Память между вызовами — весь вклад breaker."
+            },
+            "incorrect": {
+              "en": "It adds memory of repeated failures, so future calls are skipped instead of waited on.",
+              "ru": "Он добавляет память о повторных сбоях, поэтому будущие вызовы пропускаются, а не ожидаются."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Memory of repeated failures, so future calls are skipped",
+                "ru": "Память о повторных сбоях, благодаря которой будущие вызовы пропускаются"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A shorter wait for the very first failing call",
+                "ru": "Более короткое ожидание для самого первого упавшего вызова"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The first call is still bounded by the timeout — a breaker needs failures before it can open.",
+                "ru": "Первый вызов по-прежнему ограничен timeout — breaker нужны сбои, прежде чем он откроется."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A guarantee that the dependency comes back",
+                "ru": "Гарантию, что зависимость вернется в строй"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing on the caller's side repairs a downstream service.",
+                "ru": "Ничто на стороне вызывающего не чинит downstream service."
+              }
+            }
+          ]
+        },
+        {
+          "id": "vs-p3-match-mechanisms",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each resilience mechanism to what it bounds or supplies.",
+            "ru": "Соотнеси каждый механизм устойчивости с тем, что он ограничивает или дает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Four different scopes: the request, one call, a sequence of failures, and the answer itself.",
+              "ru": "Четыре разных масштаба: запрос, один вызов, серия сбоев и сам ответ."
+            },
+            "incorrect": {
+              "en": "Deadline bounds the request, timeout one call, the breaker future calls, the fallback supplies the answer.",
+              "ru": "Deadline ограничивает запрос, timeout — один вызов, breaker — будущие вызовы, fallback дает ответ."
+            }
+          },
+          "pairs": [
+            {
+              "id": "deadline",
+              "left": {
+                "en": "End-to-end deadline",
+                "ru": "End-to-end deadline"
+              },
+              "right": {
+                "en": "The total time of the whole request",
+                "ru": "Общее время всего запроса"
+              }
+            },
+            {
+              "id": "timeout",
+              "left": {
+                "en": "Per-call timeout",
+                "ru": "Timeout на вызов"
+              },
+              "right": {
+                "en": "How long one call may wait before giving up",
+                "ru": "Сколько один вызов может ждать до отказа"
+              }
+            },
+            {
+              "id": "breaker",
+              "left": {
+                "en": "Circuit breaker",
+                "ru": "Circuit breaker"
+              },
+              "right": {
+                "en": "Skips future calls after repeated failures",
+                "ru": "Пропускает будущие вызовы после повторных сбоев"
+              }
+            },
+            {
+              "id": "fallback",
+              "left": {
+                "en": "Fallback",
+                "ru": "Fallback"
+              },
+              "right": {
+                "en": "Supplies an answer when the call is skipped or fails",
+                "ru": "Дает ответ, когда вызов пропущен или упал"
+              }
+            }
+          ]
+        },
+        {
+          "id": "vs-p4-fill-roles",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing terms.",
+            "ru": "Впиши два пропущенных термина."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One detects, the other remembers — a stopwatch plus a closed-road sign.",
+              "ru": "Один обнаруживает, другой помнит — секундомер плюс знак «дорога закрыта»."
+            },
+            "incorrect": {
+              "en": "A timeout bounds one slow call; a circuit breaker uses repeated failures to skip later calls.",
+              "ru": "Timeout ограничивает один медленный вызов; circuit breaker по повторным сбоям пропускает последующие вызовы."
+            }
+          },
+          "text": {
+            "en": "A ___ bounds one slow call; a circuit ___ uses repeated failures to skip later calls.",
+            "ru": "___ ограничивает один медленный вызов; circuit ___ по повторным сбоям пропускает последующие вызовы."
+          },
+          "blanks": [
+            {
+              "en": [
+                "timeout"
+              ],
+              "ru": [
+                "timeout",
+                "таймаут"
+              ]
+            },
+            {
+              "en": [
+                "breaker"
+              ],
+              "ru": [
+                "breaker"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "retry-budget",
+      "title": {
+        "en": "Bounded retries",
+        "ru": "Ограниченные retries"
+      },
+      "summary": {
+        "en": "Retries need a budget: a small attempt limit, exponential backoff, jitter, and no retry after the caller's deadline has expired.",
+        "ru": "Retries нужен бюджет: небольшой лимит попыток, exponential backoff, jitter и никаких повторов после истечения deadline вызывающей стороны."
+      },
+      "discovery": [
+        {
+          "id": "retry-d1-infinite-loop",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This retry loop runs on every user request. What is wrong with it?",
+            "ru": "Этот цикл повторов выполняется на каждый пользовательский запрос. Что с ним не так?"
+          },
+          "code": "while (true) {\n    try {\n        return inventory.get(Duration.ofMillis(200));\n    } catch (TimeoutException e) {\n        // try again\n    }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Retries are useful for a short network blip — one extra attempt often succeeds. They are harmful when unbounded, because during a real outage every attempt is extra load on a system that is already failing, and the user never gets an answer.\n\nA bounded retry policy has four parts:\n\n```\nattempt 1 -> wait ~20 ms + jitter\nattempt 2 -> wait ~40 ms + jitter\nattempt 3 -> give up, use the fallback or error path\nabort immediately if the request deadline has passed\n```\n\n- a **retry budget** — a small, fixed number of attempts (and often a cap on what share of all traffic may be retries);\n- **exponential backoff** — each wait is longer than the last, so a struggling service gets progressively more room;\n- **jitter** — a small random offset added to each wait, so that retries from many callers do not all arrive at the same instant and hit the recovering service as one synchronized wave;\n- the **deadline rule** — never start a retry once the caller's deadline has expired: nobody is waiting for that answer anymore.",
+            "ru": "Retries полезны при коротком сетевом сбое — одна дополнительная попытка часто проходит. Они вредны, когда не ограничены: во время настоящего отказа каждая попытка — это лишняя нагрузка на и без того падающую систему, а пользователь так и не получает ответ.\n\nУ ограниченной политики повторов четыре части:\n\n```\nпопытка 1 -> ждем ~20 ms + jitter\nпопытка 2 -> ждем ~40 ms + jitter\nпопытка 3 -> сдаемся, идем в fallback или путь ошибки\nпрерываем сразу, если deadline запроса уже истек\n```\n\n- **retry budget** — небольшое фиксированное число попыток (а часто и ограничение на долю повторов во всем трафике);\n- **exponential backoff** — каждое ожидание длиннее предыдущего, чтобы у тяжело работающего сервиса было все больше пространства;\n- **jitter** — небольшой случайный сдвиг каждого ожидания, чтобы повторы от многих вызывающих не приходили в один и тот же момент и не били по восстанавливающемуся сервису одной синхронной волной;\n- **правило deadline** — не начинать повтор, если deadline вызывающей стороны уже истек: этого ответа уже никто не ждет."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Unlimited attempts turn an outage into a self-inflicted load test.",
+              "ru": "Неограниченные попытки превращают отказ в самому себе устроенный нагрузочный тест."
+            },
+            "incorrect": {
+              "en": "The loop never stops: it multiplies load on a broken dependency and never returns to the user.",
+              "ru": "Цикл никогда не останавливается: он умножает нагрузку на сломанную зависимость и не возвращает ответ пользователю."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It retries forever: load on a broken dependency multiplies and the user gets no answer",
+                "ru": "Он повторяет бесконечно: нагрузка на сломанную зависимость умножается, а пользователь не получает ответа"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The 200 ms timeout is too short for a retry loop",
+                "ru": "Timeout 200 ms слишком мал для цикла повторов"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The timeout is the one bounded thing here; the unbounded part is the number of attempts.",
+                "ru": "Timeout здесь — единственное, что ограничено; неограничено число попыток."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — retries eventually succeed",
+                "ru": "Ничего — повторы рано или поздно сработают"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "During an outage they do not, and every attempt adds load to the failing service.",
+                "ru": "Во время отказа не сработают, а каждая попытка добавляет нагрузку падающему сервису."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "retry-p1-until-works-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Retrying a downstream call until it finally succeeds is a reasonable strategy during an outage.",
+            "ru": "Повторять downstream-вызов, пока он наконец не сработает, — разумная стратегия во время отказа."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Unlimited retries are extra load on an already broken system.",
+              "ru": "Бесконечные повторы — это лишняя нагрузка на уже сломанную систему."
+            },
+            "incorrect": {
+              "en": "No — retries need a budget; unlimited ones make the outage worse.",
+              "ru": "Нет — у повторов должен быть бюджет; бесконечные только усугубляют отказ."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "retry-p2-why-jitter",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why is jitter added to retry backoff?",
+            "ru": "Зачем к retry backoff добавляют jitter?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Without jitter, many callers retry in lockstep and hit the recovering service together.",
+              "ru": "Без jitter множество вызывающих повторяют синхронно и бьют по восстанавливающемуся сервису разом."
+            },
+            "incorrect": {
+              "en": "Jitter spreads retries in time so they do not arrive as one synchronized wave.",
+              "ru": "Jitter разносит повторы во времени, чтобы они не приходили одной синхронной волной."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "So retries from many callers do not all arrive at the same moment",
+                "ru": "Чтобы повторы от многих вызывающих не приходили в один и тот же момент"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "To make each retry wait longer than the previous one",
+                "ru": "Чтобы каждое ожидание было длиннее предыдущего"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is exponential backoff; jitter is the random offset that spreads attempts apart.",
+                "ru": "Это exponential backoff; jitter — случайный сдвиг, который разносит попытки."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "To guarantee that the retry succeeds",
+                "ru": "Чтобы гарантировать успех повтора"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "No timing trick guarantees the dependency is healthy again.",
+                "ru": "Никакая игра со временем не гарантирует, что зависимость снова здорова."
+              }
+            }
+          ]
+        },
+        {
+          "id": "retry-p3-sort-policy",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order a bounded retry policy for one downstream call.",
+            "ru": "Расставь по порядку шаги ограниченной политики повторов для одного downstream-вызова."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The deadline check comes before the wait — there is no point sleeping past it.",
+              "ru": "Проверка deadline идет до ожидания — нет смысла спать дольше него."
+            },
+            "incorrect": {
+              "en": "Call, check the deadline, back off with jitter, retry a few times, then fall back.",
+              "ru": "Вызвать, проверить deadline, подождать с backoff и jitter, повторить пару раз, затем уйти в fallback."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Call the dependency with its per-call timeout",
+                "ru": "Вызвать зависимость с ее timeout"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "On failure, check that the request deadline has not expired",
+                "ru": "При сбое проверить, что deadline запроса еще не истек"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Wait an exponentially growing delay plus jitter",
+                "ru": "Подождать экспоненциально растущую паузу плюс jitter"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Retry, up to a small fixed attempt limit",
+                "ru": "Повторить, но не больше небольшого фиксированного лимита попыток"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "Give up and take the fallback or error path",
+                "ru": "Сдаться и уйти в fallback или путь ошибки"
+              }
+            }
+          ]
+        },
+        {
+          "id": "retry-p4-fill-backoff-jitter",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing terms.",
+            "ru": "Впиши два пропущенных термина."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Backoff grows the gaps; jitter makes them uneven across callers.",
+              "ru": "Backoff увеличивает паузы; jitter делает их разными у разных вызывающих."
+            },
+            "incorrect": {
+              "en": "They are exponential backoff and jitter — growing waits, randomly offset.",
+              "ru": "Это exponential backoff и jitter — растущие паузы со случайным сдвигом."
+            }
+          },
+          "text": {
+            "en": "Bounded retries use exponential ___ plus ___, so attempts from many callers do not arrive together.",
+            "ru": "Ограниченные повторы используют exponential ___ плюс ___, чтобы попытки многих вызывающих не приходили одновременно."
+          },
+          "blanks": [
+            {
+              "en": [
+                "backoff"
+              ],
+              "ru": [
+                "backoff"
+              ]
+            },
+            {
+              "en": [
+                "jitter"
+              ],
+              "ru": [
+                "jitter"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bulkheads",
+      "title": {
+        "en": "Bulkheads and resource isolation",
+        "ru": "Bulkheads и изоляция ресурсов"
+      },
+      "summary": {
+        "en": "Separate pools and per-dependency concurrency limits stop one slow dependency from consuming every thread and connection.",
+        "ru": "Отдельные пулы и лимиты параллельности на зависимость не дают одной медленной зависимости забрать все потоки и соединения."
+      },
+      "discovery": [
+        {
+          "id": "bulkhead-d1-shared-pool",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Every downstream call in a service shares one thread pool. One dependency becomes slow. What happens to calls to the other, healthy dependencies?",
+            "ru": "Все downstream-вызовы сервиса используют один общий пул потоков. Одна зависимость стала медленной. Что произойдет с вызовами к другим, здоровым зависимостям?"
+          },
+          "reveal": {
+            "en": "A **bulkhead** is an isolation boundary: instead of one shared pool for everything, each dependency gets its own limited slice of resources — a separate connection pool, a small executor pool, or simply a concurrency limit on how many calls to that dependency may be in flight at once.\n\n```mermaid\nflowchart TD\n  R[\"incoming requests\"] --> A[\"pool A: catalog, limit 8\"]\n  R --> B[\"pool B: reviews, limit 4\"]\n  B --> X[\"reviews slow: only pool B saturates\"]\n  A --> Y[\"catalog keeps serving\"]\n```\n\nWithout a bulkhead, the shared pool is the coupling: once every thread is parked on the slow dependency, calls to perfectly healthy services simply wait for a free thread. The target service does not matter anymore.\n\nWith a bulkhead, the slow dependency can only exhaust *its own* limit. Calls to it start failing fast once that limit is reached — which is itself a useful signal — while everything else keeps running.",
+            "ru": "**Bulkhead** — это граница изоляции: вместо одного общего пула на все каждая зависимость получает свою ограниченную долю ресурсов — отдельный connection pool, небольшой executor pool или просто лимит на число одновременных вызовов к этой зависимости.\n\n```mermaid\nflowchart TD\n  R[\"входящие запросы\"] --> A[\"пул A: catalog, лимит 8\"]\n  R --> B[\"пул B: reviews, лимит 4\"]\n  B --> X[\"reviews тормозит: заполняется только пул B\"]\n  A --> Y[\"catalog продолжает обслуживаться\"]\n```\n\nБез bulkhead связующим звеном становится общий пул: как только все потоки заняты медленной зависимостью, вызовы к совершенно здоровым сервисам просто ждут свободный поток. Целевой сервис уже не имеет значения.\n\nС bulkhead медленная зависимость может исчерпать только *свой* лимит. Вызовы к ней начинают быстро падать по достижении лимита — что само по себе полезный сигнал, — а все остальное продолжает работать."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The shared pool is the coupling: no free thread means everyone waits.",
+              "ru": "Связующее звено — общий пул: нет свободного потока — ждут все."
+            },
+            "incorrect": {
+              "en": "They queue too — the slow calls hold every thread, so healthy calls cannot get one.",
+              "ru": "Они тоже встают в очередь — медленные вызовы держат все потоки, и здоровым вызовам их не достается."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "They queue as well, because the slow calls hold all the threads",
+                "ru": "Они тоже встают в очередь, потому что медленные вызовы держат все потоки"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "They are unaffected, since they target different services",
+                "ru": "Они не пострадают, ведь они идут в другие сервисы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The target service stops mattering once there is no free thread in the shared pool.",
+                "ru": "Целевой сервис перестает иметь значение, как только в общем пуле не остается свободного потока."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "They fail immediately with a clear error",
+                "ru": "Они сразу падают с понятной ошибкой"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Without a per-dependency limit they wait for a thread instead of failing fast.",
+                "ru": "Без лимита на зависимость они ждут поток, а не падают быстро."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "bulkhead-p1-limit-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A concurrency limit per downstream dependency is a form of bulkhead.",
+            "ru": "Лимит параллельных вызовов на каждую downstream-зависимость — это форма bulkhead."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Separate pools and concurrency limits are two ways to draw the same boundary.",
+              "ru": "Отдельные пулы и лимиты параллельности — два способа провести одну и ту же границу."
+            },
+            "incorrect": {
+              "en": "It is — bulkheads are separate connection pools, small executor pools, or concurrency limits.",
+              "ru": "Да — bulkheads это отдельные connection pools, небольшие executor pools или лимиты параллельности."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "bulkhead-p2-what-it-protects",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does a bulkhead protect?",
+            "ru": "Что защищает bulkhead?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "It caps how much of the caller's shared capacity any one dependency can hold.",
+              "ru": "Он ограничивает, сколько общей емкости вызывающего может занять одна зависимость."
+            },
+            "incorrect": {
+              "en": "It protects the caller's shared threads and connections from being taken by one dependency.",
+              "ru": "Он защищает общие потоки и соединения вызывающего от захвата одной зависимостью."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The caller's shared threads and connections",
+                "ru": "Общие потоки и соединения вызывающего сервиса"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The downstream service from invalid input",
+                "ru": "Downstream service от некорректных входных данных"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Bulkheads are about resource isolation, not about validating requests.",
+                "ru": "Bulkheads — про изоляцию ресурсов, а не про валидацию запросов."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The freshness of cached fallback data",
+                "ru": "Свежесть кэшированных fallback-данных"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Freshness is a fallback-safety question, not a resource-isolation one.",
+                "ru": "Свежесть — вопрос безопасности fallback, а не изоляции ресурсов."
+              }
+            }
+          ]
+        },
+        {
+          "id": "bulkhead-p3-match-bounds",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each mechanism to the quantity it bounds.",
+            "ru": "Соотнеси каждый механизм с величиной, которую он ограничивает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Time, total time, resources, and repetition — four separate bounds.",
+              "ru": "Время, общее время, ресурсы и повторение — четыре разных ограничения."
+            },
+            "incorrect": {
+              "en": "A bulkhead bounds resources, not time; timeouts and deadlines bound time.",
+              "ru": "Bulkhead ограничивает ресурсы, а не время; время ограничивают timeouts и deadline."
+            }
+          },
+          "pairs": [
+            {
+              "id": "timeout",
+              "left": {
+                "en": "Per-call timeout",
+                "ru": "Timeout на вызов"
+              },
+              "right": {
+                "en": "How long one call may wait",
+                "ru": "Сколько может ждать один вызов"
+              }
+            },
+            {
+              "id": "deadline",
+              "left": {
+                "en": "End-to-end deadline",
+                "ru": "End-to-end deadline"
+              },
+              "right": {
+                "en": "How long the whole request may take",
+                "ru": "Сколько может занять весь запрос"
+              }
+            },
+            {
+              "id": "bulkhead",
+              "left": {
+                "en": "Bulkhead",
+                "ru": "Bulkhead"
+              },
+              "right": {
+                "en": "How many threads or connections one dependency may hold",
+                "ru": "Сколько потоков или соединений может занять одна зависимость"
+              }
+            },
+            {
+              "id": "retry-budget",
+              "left": {
+                "en": "Retry budget",
+                "ru": "Retry budget"
+              },
+              "right": {
+                "en": "How many times a failing call may be repeated",
+                "ru": "Сколько раз можно повторить неудачный вызов"
+              }
+            }
+          ]
+        },
+        {
+          "id": "bulkhead-p4-fill-pools-limits",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing words.",
+            "ru": "Впиши два пропущенных слова."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Separate resources per dependency keep one failure from becoming everyone's failure.",
+              "ru": "Раздельные ресурсы на зависимость не дают одному сбою стать сбоем для всех."
+            },
+            "incorrect": {
+              "en": "Separate connection pools and per-dependency concurrency limits are the bulkhead.",
+              "ru": "Отдельные connection pools и лимиты параллельности на зависимость — это и есть bulkhead."
+            }
+          },
+          "text": {
+            "en": "Separate connection ___ and per-dependency concurrency ___ keep one slow dependency from taking all the resources.",
+            "ru": "Отдельные connection ___ и лимиты ___ на каждую зависимость не дают одной медленной зависимости забрать все ресурсы."
+          },
+          "blanks": [
+            {
+              "en": [
+                "pools",
+                "pool"
+              ],
+              "ru": [
+                "pools",
+                "пулы",
+                "пулов"
+              ]
+            },
+            {
+              "en": [
+                "limits",
+                "limit"
+              ],
+              "ru": [
+                "параллельности",
+                "concurrency"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "offload-async",
+      "title": {
+        "en": "Work outside the request path",
+        "ru": "Работа вне request path"
+      },
+      "summary": {
+        "en": "Work whose result the user does not need in the response is published asynchronously so the request can return immediately.",
+        "ru": "Работа, результат которой не нужен пользователю в ответе, публикуется асинхронно, чтобы запрос мог вернуться сразу."
+      },
+      "discovery": [
+        {
+          "id": "offload-d1-order-side-effects",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Placing an order must also send a confirmation e-mail and update a search index. Neither result appears in the response. How should the request handle them?",
+            "ru": "При оформлении заказа нужно также отправить письмо-подтверждение и обновить поисковый индекс. Ни один результат не попадает в ответ. Как запрос должен с ними поступить?"
+          },
+          "reveal": {
+            "en": "Every downstream call inside the request path costs the user latency and adds one more thing that can fail while they wait. So the **request path** should contain only what the response actually needs.\n\n```mermaid\nflowchart LR\n  U[\"user request\"] --> S[\"store the order\"]\n  S --> P[\"publish follow-up work\"]\n  P --> R[\"respond now\"]\n  P -.-> W[\"e-mail and search index, processed later\"]\n```\n\nPublishing the follow-up work asynchronously and returning immediately shortens the critical path and removes those dependencies from the user's wait: if the e-mail service is slow, nobody is standing in front of it.\n\nThe work is not skipped, only moved — which raises its own questions, namely how to publish events reliably and how to make consumers safe against duplicates. Those are separate patterns (outbox and inbox); what matters here is the boundary decision: results the response needs stay synchronous and bounded, everything else leaves the request path.",
+            "ru": "Каждый downstream-вызов внутри request path стоит пользователю задержки и добавляет еще одну вещь, которая может сломаться, пока он ждет. Поэтому в **request path** должно оставаться только то, что действительно нужно ответу.\n\n```mermaid\nflowchart LR\n  U[\"запрос пользователя\"] --> S[\"сохранить заказ\"]\n  S --> P[\"опубликовать последующую работу\"]\n  P --> R[\"ответить сразу\"]\n  P -.-> W[\"письмо и поисковый индекс, обработаются позже\"]\n```\n\nАсинхронная публикация последующей работы и немедленный ответ укорачивают критический путь и убирают эти зависимости из ожидания пользователя: если почтовый сервис тормозит, перед ним никто не стоит.\n\nРабота не пропадает, а переезжает — и это поднимает свои вопросы: как надежно публиковать события и как защитить потребителей от дубликатов. Это отдельные паттерны (outbox и inbox); здесь важно само решение о границе: то, что нужно ответу, остается синхронным и ограниченным, все остальное уходит из request path."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Nothing the user reads depends on those two calls, so they leave the request path.",
+              "ru": "Ничто из того, что читает пользователь, не зависит от этих двух вызовов — значит, они уходят из request path."
+            },
+            "incorrect": {
+              "en": "Publish them asynchronously and return once the order is stored.",
+              "ru": "Опубликуй их асинхронно и верни ответ, как только заказ сохранен."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Publish them as asynchronous work and return as soon as the order is stored",
+                "ru": "Опубликовать их как асинхронную работу и ответить, как только заказ сохранен"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Call both inline, but with short timeouts",
+                "ru": "Вызвать оба синхронно, но с короткими timeouts"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Short timeouts help, but the user still pays for work whose result they never see.",
+                "ru": "Короткие timeouts помогают, но пользователь все равно платит за работу, результат которой не видит."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Call both inline and retry until they succeed",
+                "ru": "Вызвать оба синхронно и повторять, пока не удастся"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That puts unbounded work the user does not need directly into their wait.",
+                "ru": "Так неограниченная и ненужная пользователю работа попадает прямо в его ожидание."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "offload-p1-inline-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Work whose result does not appear in the response should still be done inside the request path.",
+            "ru": "Работу, результат которой не появляется в ответе, все равно нужно выполнять внутри request path."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It only adds latency and failure modes to a wait the user cannot benefit from.",
+              "ru": "Это лишь добавляет задержку и способы отказа в ожидание, от которого пользователю нет пользы."
+            },
+            "incorrect": {
+              "en": "No — publish it asynchronously and return quickly instead.",
+              "ru": "Нет — лучше опубликовать ее асинхронно и быстро вернуть ответ."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "offload-p2-what-it-buys",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does moving non-critical work out of the request path buy you?",
+            "ru": "Что дает вынос некритичной работы из request path?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "A shorter critical path means fewer things that can slow the user down.",
+              "ru": "Более короткий критический путь — меньше того, что может замедлить пользователя."
+            },
+            "incorrect": {
+              "en": "It removes those dependencies from the user's wait; it does not make them infallible.",
+              "ru": "Это убирает те зависимости из ожидания пользователя, но не делает их безотказными."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Fewer dependencies inside the user's wait",
+                "ru": "Меньше зависимостей внутри ожидания пользователя"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A guarantee that the work never fails",
+                "ru": "Гарантию, что эта работа никогда не упадет"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It can still fail — it just fails outside the user's wait.",
+                "ru": "Она все еще может упасть — просто уже вне ожидания пользователя."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The ability to drop timeouts entirely",
+                "ru": "Возможность полностью отказаться от timeouts"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Whatever stays in the request path still needs bounded timeouts.",
+                "ru": "Все, что осталось в request path, по-прежнему нуждается в ограниченных timeouts."
+              }
+            }
+          ]
+        },
+        {
+          "id": "offload-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the rule for non-critical work.",
+            "ru": "Собери правило для некритичной работы."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The response defines the boundary of the synchronous path.",
+              "ru": "Ответ и определяет границу синхронного пути."
+            },
+            "incorrect": {
+              "en": "Work not needed in the response leaves the request path.",
+              "ru": "Работа, не нужная в ответе, уходит из request path."
+            }
+          },
+          "tokens": {
+            "en": [
+              "work",
+              "not",
+              "needed",
+              "in",
+              "the",
+              "response",
+              "leaves",
+              "the",
+              "request",
+              "path"
+            ],
+            "ru": [
+              "работа",
+              "не",
+              "нужная",
+              "в",
+              "ответе",
+              "уходит",
+              "из",
+              "request",
+              "path"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "always"
+            ],
+            "ru": [
+              "всегда"
+            ]
+          }
+        },
+        {
+          "id": "offload-p4-fill-async",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing word.",
+            "ru": "Впиши пропущенное слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Publish and return: the work happens, just not while the user waits.",
+              "ru": "Опубликовать и вернуть: работа выполнится, просто не в ожидании пользователя."
+            },
+            "incorrect": {
+              "en": "It is published asynchronously, so the request can return immediately.",
+              "ru": "Она публикуется асинхронно, чтобы запрос мог вернуться сразу."
+            }
+          },
+          "text": {
+            "en": "Work the user does not need in the response is published ___ so the request can return immediately.",
+            "ru": "Работа, которая не нужна пользователю в ответе, публикуется ___, чтобы запрос мог вернуться сразу."
+          },
+          "blanks": [
+            {
+              "en": [
+                "asynchronously",
+                "async"
+              ],
+              "ru": [
+                "асинхронно",
+                "async"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "resilience-metrics",
+      "title": {
+        "en": "Seeing degradation",
+        "ru": "Как увидеть деградацию"
+      },
+      "summary": {
+        "en": "Timeout rate, fallback rate, circuit state, retry count and pool saturation show whether users get degraded responses or complete failures.",
+        "ru": "Timeout rate, fallback rate, circuit state, retry count и pool saturation показывают, получают пользователи деградированные ответы или полные отказы."
+      },
+      "discovery": [
+        {
+          "id": "metrics-d1-invisible-degradation",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The dashboard says average latency is normal, yet users report that the product page has no reviews block. Which signal would have shown this?",
+            "ru": "Дашборд показывает нормальную average latency, но пользователи жалуются, что на странице товара нет блока отзывов. Какой сигнал это показал бы?"
+          },
+          "reveal": {
+            "en": "Resilience is invisible unless it is measured — and a fallback is *fast*, so a service serving mostly degraded responses can look perfectly healthy in latency graphs. The signals worth exporting per dependency:\n\n- **timeout rate** — how often calls hit their time bound;\n- **fallback rate** — how often users received degraded data;\n- **circuit state** — open or closed right now;\n- **retry count** — whether retries are adding load;\n- **pool saturation** — whether a bulkhead is full;\n- **downstream latency** at p95/p99 — where the time actually goes.\n\nThe question an alert must answer is not \"is it slow?\" but *what are users getting*: a normal response, a degraded response, or a complete failure. Those three need different reactions, and only the second one is invisible in latency alone.",
+            "ru": "Устойчивость не видно, пока ее не измеряют, — а fallback *быстрый*, поэтому сервис, отдающий в основном деградированные ответы, на графиках latency может выглядеть совершенно здоровым. Сигналы, которые стоит экспортировать по каждой зависимости:\n\n- **timeout rate** — как часто вызовы упираются в свой лимит времени;\n- **fallback rate** — как часто пользователи получали деградированные данные;\n- **circuit state** — открыт circuit сейчас или закрыт;\n- **retry count** — не добавляют ли повторы нагрузку;\n- **pool saturation** — не заполнен ли bulkhead;\n- **downstream latency** на p95/p99 — куда реально уходит время.\n\nВопрос, на который должен отвечать alert, — не «медленно ли?», а *что получают пользователи*: нормальный ответ, деградированный ответ или полный отказ. На эти три случая нужны разные реакции, и невидим по одной только latency именно второй."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The fallback rate is the only one that says what users actually received.",
+              "ru": "Только fallback rate говорит, что пользователи реально получили."
+            },
+            "incorrect": {
+              "en": "The fallback rate: a fallback is fast, so degradation is invisible in latency graphs.",
+              "ru": "Fallback rate: fallback быстрый, поэтому деградация не видна на графиках latency."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The fallback rate for the reviews dependency",
+                "ru": "Fallback rate для зависимости reviews"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The average latency of the whole service",
+                "ru": "Average latency всего сервиса"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A fallback is fast, so degradation can look perfectly healthy in an average.",
+                "ru": "Fallback быстрый, поэтому деградация в среднем выглядит совершенно здорово."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The number of requests per second",
+                "ru": "Число запросов в секунду"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Traffic volume says nothing about what was actually served.",
+                "ru": "Объем трафика ничего не говорит о том, что именно было отдано."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "metrics-p1-average-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Average latency is enough to detect the impact of one degraded downstream dependency.",
+            "ru": "Average latency достаточно, чтобы заметить влияние одной деградировавшей downstream-зависимости."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Fallbacks are fast and the slow tail hides in the mean; watch p95/p99 and the fallback rate.",
+              "ru": "Fallbacks быстрые, а медленный хвост тонет в среднем; смотри p95/p99 и fallback rate."
+            },
+            "incorrect": {
+              "en": "No — degradation is fast and the slow tail hides in the average; use p95/p99 and fallback rate.",
+              "ru": "Нет — деградация быстрая, а медленный хвост прячется в среднем; используй p95/p99 и fallback rate."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "metrics-p2-alert-question",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What must a resilience alert make clear first?",
+            "ru": "Что alert об устойчивости должен прояснять в первую очередь?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Degraded and failed need different reactions, so the alert must tell them apart.",
+              "ru": "Деградация и полный отказ требуют разной реакции, поэтому alert должен их различать."
+            },
+            "incorrect": {
+              "en": "Whether users are getting degraded responses or complete failures.",
+              "ru": "Получают ли пользователи деградированные ответы или полные отказы."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Whether users get degraded responses or complete failures",
+                "ru": "Получают ли пользователи деградированные ответы или полные отказы"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Which timeout value is configured for the dependency",
+                "ru": "Какое значение timeout настроено для зависимости"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Configuration is static; an alert is about live user impact.",
+                "ru": "Конфигурация статична; alert — про текущее влияние на пользователей."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "How many instances of the service are running",
+                "ru": "Сколько инстансов сервиса запущено"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Useful capacity context, but it does not say what users received.",
+                "ru": "Полезный контекст по емкости, но он не говорит, что получили пользователи."
+              }
+            }
+          ]
+        },
+        {
+          "id": "metrics-p3-match-signals",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each resilience metric to the question it answers.",
+            "ru": "Соотнеси каждую метрику устойчивости с вопросом, на который она отвечает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Each mechanism from this topic has a matching signal to watch.",
+              "ru": "У каждого механизма из этой темы есть свой сигнал для наблюдения."
+            },
+            "incorrect": {
+              "en": "Timeout rate, fallback rate, circuit state and pool saturation each answer a different question.",
+              "ru": "Timeout rate, fallback rate, circuit state и pool saturation отвечают на разные вопросы."
+            }
+          },
+          "pairs": [
+            {
+              "id": "timeout-rate",
+              "left": {
+                "en": "Timeout rate",
+                "ru": "Timeout rate"
+              },
+              "right": {
+                "en": "How often calls hit their time bound",
+                "ru": "Как часто вызовы упираются в свой лимит времени"
+              }
+            },
+            {
+              "id": "fallback-rate",
+              "left": {
+                "en": "Fallback rate",
+                "ru": "Fallback rate"
+              },
+              "right": {
+                "en": "How often users received degraded data",
+                "ru": "Как часто пользователи получали деградированные данные"
+              }
+            },
+            {
+              "id": "circuit-state",
+              "left": {
+                "en": "Circuit state",
+                "ru": "Circuit state"
+              },
+              "right": {
+                "en": "Whether a dependency is currently being skipped",
+                "ru": "Пропускается ли зависимость прямо сейчас"
+              }
+            },
+            {
+              "id": "pool-saturation",
+              "left": {
+                "en": "Pool saturation",
+                "ru": "Pool saturation"
+              },
+              "right": {
+                "en": "Whether one dependency's resource slice is exhausted",
+                "ru": "Исчерпана ли доля ресурсов одной зависимости"
+              }
+            }
+          ]
+        },
+        {
+          "id": "metrics-p4-fill-signals",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing metric names.",
+            "ru": "Впиши два пропущенных названия метрик."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The fallback rate shows degradation; the circuit state shows what is being skipped.",
+              "ru": "Fallback rate показывает деградацию; circuit state — что пропускается."
+            },
+            "incorrect": {
+              "en": "They are the fallback rate and the circuit state.",
+              "ru": "Это fallback rate и circuit state."
+            }
+          },
+          "text": {
+            "en": "A resilience dashboard tracks timeout rate, ___ rate, circuit ___, retry count and pool saturation.",
+            "ru": "Дашборд устойчивости отслеживает timeout rate, ___ rate, circuit ___, retry count и pool saturation."
+          },
+          "blanks": [
+            {
+              "en": [
+                "fallback"
+              ],
+              "ru": [
+                "fallback"
+              ]
+            },
+            {
+              "en": [
+                "state"
+              ],
+              "ru": [
+                "state",
+                "состояние"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bounded-degradation",
+      "title": {
+        "en": "Controlled degradation end to end",
+        "ru": "Контролируемая деградация от начала до конца"
+      },
+      "summary": {
+        "en": "Deadline, timeout, breaker, classification and fallback compose into one rule: bounded wait, then a normal, degraded, or clearly failed answer.",
+        "ru": "Deadline, timeout, breaker, классификация и fallback складываются в одно правило: ограниченное ожидание, затем нормальный, деградированный или явно ошибочный ответ."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "capstone-d1-open-circuit-page",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The page deadline is 300 ms. Price is critical and answers in 90 ms; reviews are optional and their circuit has been open for two minutes. What does the user get, and roughly when?",
+            "ru": "Deadline страницы — 300 ms. Цена критична и отвечает за 90 ms; отзывы опциональны, и их circuit открыт уже две минуты. Что и примерно когда получит пользователь?"
+          },
+          "code": "// Page deadline: 300 ms.\n// price   -> critical\n// reviews -> optional, circuit is OPEN\nvar price   = call(priceService,   Duration.ofMillis(120)); // answers in 90 ms\nvar reviews = call(reviewsService, Duration.ofMillis(120)); // circuit is open\nrender(price, reviews);",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Each layer answers a different question, and together they turn an outage into a bounded, predictable response:\n\n```mermaid\nflowchart TD\n  R[\"request deadline\"] --> P[\"independent calls start in parallel\"]\n  P --> B{\"circuit open?\"}\n  B -- \"yes\" --> S[\"skip the call: fail fast\"]\n  B -- \"no\" --> T[\"call with a timeout from the remaining budget\"]\n  T --> F{\"failed or timed out?\"}\n  F -- \"no\" --> OK[\"use the real data\"]\n  F -- \"yes\" --> C{\"critical?\"}\n  S --> C\n  C -- \"yes\" --> E[\"clear error or alternate path\"]\n  C -- \"no\" --> D[\"safe fallback: degraded response\"]\n```\n\nIn this scenario the reviews call is never sent, because the circuit is open — so its 120 ms timeout is not paid at all. Price answers in 90 ms, and the page renders with a fallback reviews block in roughly 90 ms, well inside the deadline.\n\nRead the layers as a chain of bounds: the **deadline** bounds the request, the **timeout** bounds one call, the **circuit breaker** bounds how often that timeout is paid, the **retry budget** bounds repetition, the **bulkhead** bounds resources, and the **critical/optional** label decides between failing fast and degrading. That is controlled degradation instead of cascading latency.",
+            "ru": "Каждый слой отвечает на свой вопрос, а вместе они превращают отказ в ограниченный и предсказуемый ответ:\n\n```mermaid\nflowchart TD\n  R[\"deadline запроса\"] --> P[\"независимые вызовы стартуют параллельно\"]\n  P --> B{\"circuit открыт?\"}\n  B -- \"да\" --> S[\"пропустить вызов: fail fast\"]\n  B -- \"нет\" --> T[\"вызов с timeout из оставшегося бюджета\"]\n  T --> F{\"упал или ушел в timeout?\"}\n  F -- \"нет\" --> OK[\"использовать реальные данные\"]\n  F -- \"да\" --> C{\"критично?\"}\n  S --> C\n  C -- \"да\" --> E[\"понятная ошибка или alternate path\"]\n  C -- \"нет\" --> D[\"безопасный fallback: деградированный ответ\"]\n```\n\nВ этом сценарии вызов reviews вообще не отправляется, потому что circuit открыт, — значит, его timeout в 120 ms не оплачивается совсем. Цена отвечает за 90 ms, и страница отрисовывается с fallback-блоком отзывов примерно за 90 ms, уверенно внутри deadline.\n\nЧитай слои как цепочку ограничений: **deadline** ограничивает запрос, **timeout** — один вызов, **circuit breaker** — как часто этот timeout оплачивается, **retry budget** — повторение, **bulkhead** — ресурсы, а метка **критично/опционально** выбирает между быстрым отказом и деградацией. Это и есть контролируемая деградация вместо каскадной задержки."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Open circuit means the call is never sent, so only the critical call's 90 ms is spent.",
+              "ru": "Открытый circuit значит, что вызов не отправляется, поэтому тратятся только 90 ms критичного вызова."
+            },
+            "incorrect": {
+              "en": "The open circuit skips the reviews call entirely: the page renders with a fallback in about 90 ms.",
+              "ru": "Открытый circuit полностью пропускает вызов reviews: страница отрисуется с fallback примерно за 90 ms."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The page with the price and a fallback reviews block, in about 90 ms",
+                "ru": "Страницу с ценой и fallback-блоком отзывов примерно за 90 ms"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The page after about 210 ms, because the reviews call still waits out its timeout",
+                "ru": "Страницу примерно за 210 ms, потому что вызов reviews все равно ждет свой timeout"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "An open circuit skips the call, so its timeout is never paid.",
+                "ru": "Открытый circuit пропускает вызов, поэтому его timeout не оплачивается."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "An error for the whole page, because one dependency is unavailable",
+                "ru": "Ошибку на всю страницу, потому что одна зависимость недоступна"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Reviews are optional — an optional dependency degrades the response, it does not fail it.",
+                "ru": "Отзывы опциональны — опциональная зависимость деградирует ответ, а не проваливает его."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "capstone-p1-retry-past-deadline",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "The page must answer within 300 ms and the reviews block is optional. What is the defect in this code?",
+            "ru": "Страница должна ответить за 300 ms, блок отзывов опционален. В чем дефект этого кода?"
+          },
+          "code": "// Page deadline: 300 ms. Reviews are optional.\nfor (int attempt = 0; attempt < 5; attempt++) {\n    try {\n        return reviews.get(Duration.ofMillis(200));\n    } catch (TimeoutException e) {\n        Thread.sleep(100);\n    }\n}\nreturn cachedReviews();",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Every individual piece here looks defensible — a bounded 200 ms timeout, a fixed attempt limit, a cached fallback at the end — yet the combination spends up to 5 x (200 + 100) = **1500 ms** on data the page could live without, five times the whole page deadline.\n\nThe missing rule is the one that ties retries to the deadline: a retry may only start if the request deadline has not expired. Two other smells follow from the same blind spot: the delay is fixed rather than exponential with jitter, and an optional dependency is given five attempts at all.\n\nBounded pieces do not add up to a bounded whole unless something checks the total. That is exactly the job of the end-to-end deadline.",
+            "ru": "Каждый кусок по отдельности выглядит защитимо — ограниченный timeout 200 ms, фиксированный лимит попыток, кэшированный fallback в конце, — но вместе они тратят до 5 x (200 + 100) = **1500 ms** на данные, без которых страница вполне живет, то есть впятеро больше всего deadline страницы.\n\nНе хватает правила, связывающего повторы с deadline: повтор можно начинать, только если deadline запроса еще не истек. Из той же слепой зоны следуют еще два запаха: пауза фиксированная, а не экспоненциальная с jitter, и опциональной зависимости вообще выдано пять попыток.\n\nОграниченные части не складываются в ограниченное целое, пока кто-то не проверяет сумму. Это и есть работа end-to-end deadline."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Bounded parts, unbounded whole: nothing here checks the request deadline.",
+              "ru": "Части ограничены, целое — нет: deadline запроса здесь никто не проверяет."
+            },
+            "incorrect": {
+              "en": "The retries can spend about 1.5 s, far past a 300 ms deadline that the loop never checks.",
+              "ru": "Повторы могут потратить около 1.5 s, далеко за пределами deadline в 300 ms, который цикл не проверяет."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The retries can spend about 1.5 s and never check the request deadline",
+                "ru": "Повторы могут потратить около 1.5 s и ни разу не проверяют deadline запроса"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The fallback returns cached reviews instead of an error",
+                "ru": "Fallback возвращает кэшированные отзывы вместо ошибки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Cached reviews are a safe fallback for a display-only block; that part is correct.",
+                "ru": "Кэшированные отзывы — безопасный fallback для блока, который только отображается; эта часть верна."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The per-call timeout of 200 ms is too short",
+                "ru": "Timeout в 200 ms на вызов слишком мал"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The per-call bound is the healthy part; the unbounded part is the total time the loop may spend.",
+                "ru": "Ограничение на вызов здесь как раз здоровое; неограничено общее время, которое может потратить цикл."
+              }
+            }
+          ]
+        },
+        {
+          "id": "capstone-p2-sequential-budget",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Service A and service B are independent, each call is bounded at 250 ms, and the request deadline is 300 ms. What happens?",
+            "ru": "Сервисы A и B независимы, каждый вызов ограничен 250 ms, deadline запроса — 300 ms. Что произойдет?"
+          },
+          "code": "// Request deadline: 300 ms. A and B are independent.\nvar a = call(serviceA, Duration.ofMillis(250)); // times out\nvar b = call(serviceB, Duration.ofMillis(250)); // would answer in 60 ms",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "A's timeout alone eats 250 ms before B even starts.",
+              "ru": "Один только timeout A съедает 250 ms до того, как стартует B."
+            },
+            "incorrect": {
+              "en": "The deadline is blown: A spends its full 250 ms first, then B starts.",
+              "ru": "Deadline превышен: A сначала тратит свои полные 250 ms, и только потом стартует B."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The deadline is blown: A spends 250 ms sequentially before B even starts",
+                "ru": "Deadline превышен: A последовательно тратит 250 ms до старта B"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Both fit, because each call respects its own 250 ms timeout",
+                "ru": "Оба укладываются, ведь каждый вызов соблюдает свой timeout в 250 ms"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Per-call timeouts bound each call, never the sum of sequential calls.",
+                "ru": "Timeouts ограничивают каждый вызов, но никогда — сумму последовательных вызовов."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "B answers first because it is faster",
+                "ru": "B ответит первым, потому что он быстрее"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Written sequentially, B does not start until A has given up.",
+                "ru": "В последовательной записи B не стартует, пока A не сдастся."
+              }
+            }
+          ]
+        },
+        {
+          "id": "capstone-p3-sort-guarded-call",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order one guarded downstream call inside a request that has an end-to-end deadline.",
+            "ru": "Расставь по порядку один защищенный downstream-вызов внутри запроса с end-to-end deadline."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Budget, circuit, bounded call, then fail-or-degrade by classification, then metrics.",
+              "ru": "Бюджет, circuit, ограниченный вызов, затем провал или деградация по классификации, затем метрики."
+            },
+            "incorrect": {
+              "en": "Check the budget and the circuit BEFORE calling; the classification decides what a failure means.",
+              "ru": "Бюджет и circuit проверяются ДО вызова; классификация решает, что означает сбой."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Compute the time remaining until the request deadline",
+                "ru": "Вычислить время, оставшееся до deadline запроса"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Check the dependency's circuit: if it is open, skip the call",
+                "ru": "Проверить circuit зависимости: если он открыт, пропустить вызов"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Call with a timeout taken from the remaining budget",
+                "ru": "Вызвать с timeout, взятым из оставшегося бюджета"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "On failure, apply the classification: critical fails the request, optional takes a fallback",
+                "ru": "При сбое применить классификацию: критичное проваливает запрос, опциональное уходит в fallback"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "Record the timeout, fallback and circuit metrics for the call",
+                "ru": "Записать метрики timeout, fallback и circuit для этого вызова"
+              }
+            }
+          ]
+        },
+        {
+          "id": "capstone-p4-match-roles",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each resilience mechanism to its role in a bounded request.",
+            "ru": "Соотнеси каждый механизм устойчивости с его ролью в ограниченном запросе."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Five mechanisms, five distinct jobs — none of them substitutes for another.",
+              "ru": "Пять механизмов, пять разных задач — ни один не заменяет другой."
+            },
+            "incorrect": {
+              "en": "Deadline caps the request, timeout one call, the breaker repetition of that wait, classification the reaction, fallback the answer.",
+              "ru": "Deadline ограничивает запрос, timeout — вызов, breaker — повторение ожидания, классификация — реакцию, fallback — ответ."
+            }
+          },
+          "pairs": [
+            {
+              "id": "deadline",
+              "left": {
+                "en": "End-to-end deadline",
+                "ru": "End-to-end deadline"
+              },
+              "right": {
+                "en": "Caps the total time the user waits",
+                "ru": "Ограничивает общее время ожидания пользователя"
+              }
+            },
+            {
+              "id": "timeout",
+              "left": {
+                "en": "Per-call timeout",
+                "ru": "Timeout на вызов"
+              },
+              "right": {
+                "en": "Turns one slow call into a bounded decision",
+                "ru": "Превращает один медленный вызов в ограниченное решение"
+              }
+            },
+            {
+              "id": "breaker",
+              "left": {
+                "en": "Circuit breaker",
+                "ru": "Circuit breaker"
+              },
+              "right": {
+                "en": "Stops paying that timeout once failures repeat",
+                "ru": "Перестает оплачивать этот timeout, когда сбои повторяются"
+              }
+            },
+            {
+              "id": "classification",
+              "left": {
+                "en": "Critical or optional label",
+                "ru": "Метка критично или опционально"
+              },
+              "right": {
+                "en": "Decides fail fast versus degrade",
+                "ru": "Решает: fail fast или деградация"
+              }
+            },
+            {
+              "id": "fallback",
+              "left": {
+                "en": "Safe fallback",
+                "ru": "Безопасный fallback"
+              },
+              "right": {
+                "en": "Supplies the degraded answer",
+                "ru": "Дает деградированный ответ"
+              }
+            }
+          ]
+        },
+        {
+          "id": "capstone-p5-fill-optional-recipe",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the three missing terms of the recipe for an optional dependency.",
+            "ru": "Впиши три пропущенных термина в рецепте для опциональной зависимости."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Bound the call, skip it while it is known bad, and always have a safe answer ready.",
+              "ru": "Ограничить вызов, пропускать его, пока известно, что он плох, и всегда иметь наготове безопасный ответ."
+            },
+            "incorrect": {
+              "en": "Bound the call with a timeout, skip it while the circuit is open, answer from a safe fallback.",
+              "ru": "Ограничить вызов через timeout, пропускать, пока circuit открыт, отвечать безопасным fallback."
+            }
+          },
+          "text": {
+            "en": "For an optional dependency: bound the call with a ___, skip it while the circuit is ___, and answer from a safe ___.",
+            "ru": "Для опциональной зависимости: ограничить вызов через ___, пропускать его, пока circuit ___, и отвечать безопасным ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "timeout"
+              ],
+              "ru": [
+                "timeout",
+                "таймаут"
+              ]
+            },
+            {
+              "en": [
+                "open"
+              ],
+              "ru": [
+                "открыт",
+                "open"
+              ]
+            },
+            {
+              "en": [
+                "fallback"
+              ],
+              "ru": [
+                "fallback"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

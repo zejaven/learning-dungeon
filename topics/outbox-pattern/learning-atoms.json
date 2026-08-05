@@ -1,0 +1,3047 @@
+{
+  "schemaVersion": 1,
+  "topicId": "outbox-pattern",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "two-systems",
+      "title": {
+        "en": "Two systems, one change",
+        "ru": "Две системы, одно изменение"
+      },
+      "summary": {
+        "en": "A service must update its own database and publish an event to a broker — two separate systems with no shared transaction.",
+        "ru": "Сервис должен обновить свою базу данных и опубликовать событие в брокер — это две разные системы без общей транзакции."
+      },
+      "discovery": [
+        {
+          "id": "two-systems-d1-shared-tx",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "An order service saves an order to PostgreSQL and publishes an OrderPlaced event to Kafka. Can both be wrapped in one database transaction?",
+            "ru": "Сервис заказов сохраняет заказ в PostgreSQL и публикует событие OrderPlaced в Kafka. Можно ли обернуть оба действия в одну транзакцию базы данных?"
+          },
+          "reveal": {
+            "en": "A **message broker** (Kafka, RabbitMQ, SQS) is separate infrastructure that carries events to other services. Your database is a different system entirely. A transaction — the all-or-nothing **ACID** guarantee — belongs to one database; it cannot cover a send to a broker.\n\n```mermaid\nflowchart LR\n  C[\"one logical change\"] --> DB[(\"business DB: commit\")]\n  C --> B[\"broker: publish\"]\n```\n\nWhy does that matter? Because the commit and the publish then succeed or fail **independently**. There is a technology that tries to span both — distributed transactions, the **XA** standard — but it is heavyweight, poorly supported, and usually avoided. So the realistic starting point is: two systems, two separate outcomes.",
+            "ru": "**Брокер сообщений** (Kafka, RabbitMQ, SQS) — это отдельная инфраструктура, которая доставляет события другим сервисам. Ваша база данных — совсем другая система. Транзакция с её гарантией «всё или ничего» (**ACID**) принадлежит одной базе данных; отправку в брокер она охватить не может.\n\n```mermaid\nflowchart LR\n  C[\"одно логическое изменение\"] --> DB[(\"бизнес-БД: коммит\")]\n  C --> B[\"брокер: публикация\"]\n```\n\nПочему это важно? Потому что коммит и публикация после этого завершаются успешно или падают **независимо** друг от друга. Есть технология, которая пытается охватить оба, — распределённые транзакции, стандарт **XA**, — но она тяжеловесна, плохо поддерживается, и её обычно избегают. Поэтому реалистичная отправная точка такая: две системы, два независимых исхода."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — a transaction covers one database, never a database plus a broker.",
+              "ru": "Верно — транзакция охватывает одну базу данных, но не базу вместе с брокером."
+            },
+            "incorrect": {
+              "en": "No — a database and a broker are separate systems, so there is no shared transaction.",
+              "ru": "Нет — база данных и брокер это разные системы, общей транзакции у них нет."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "No — a database and a broker are separate systems with no shared transaction",
+                "ru": "Нет — база данных и брокер это разные системы без общей транзакции"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Yes — the broker joins the database transaction and rolls back with it",
+                "ru": "Да — брокер присоединяется к транзакции базы и откатывается вместе с ней"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A broker knows nothing about your transaction; a sent message cannot be un-sent by a rollback.",
+                "ru": "Брокер ничего не знает о вашей транзакции; отправленное сообщение откат не отменит."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Yes, as long as both run on the same machine",
+                "ru": "Да, если оба работают на одной машине"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Locality changes nothing — they are still two systems that commit independently.",
+                "ru": "Расположение ничего не меняет — это всё равно две системы с независимыми фиксациями."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "two-systems-p1-tx-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A single database transaction can include publishing a message to a broker, so both roll back together.",
+            "ru": "Одна транзакция базы данных может включать публикацию сообщения в брокер, поэтому оба действия откатятся вместе."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A transaction covers one database only; the broker is outside it.",
+              "ru": "Транзакция охватывает только одну базу данных; брокер находится вне её."
+            },
+            "incorrect": {
+              "en": "No — the broker is a separate system, so a rollback cannot recall a published message.",
+              "ru": "Нет — брокер это отдельная система, и откат не может отозвать опубликованное сообщение."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "two-systems-p2-xa-why",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why are distributed transactions (XA) spanning a database and a broker usually avoided in practice?",
+            "ru": "Почему распределённых транзакций (XA) между базой данных и брокером обычно избегают на практике?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "XA exists, but its weight and patchy support push teams to other solutions.",
+              "ru": "XA существует, но его тяжеловесность и слабая поддержка толкают команды к другим решениям."
+            },
+            "incorrect": {
+              "en": "They are avoided because they are heavyweight and poorly supported, not because they are impossible.",
+              "ru": "Их избегают потому, что они тяжеловесны и плохо поддерживаются, а не потому, что они невозможны."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "They are heavyweight and poorly supported",
+                "ru": "Они тяжеловесны и плохо поддерживаются"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "They only work between two databases of the same vendor",
+                "ru": "Они работают только между двумя базами одного производителя"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The objection is operational cost and support, not a same-vendor restriction.",
+                "ru": "Возражение — в стоимости эксплуатации и поддержке, а не в ограничении на одного производителя."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "They lose messages by design",
+                "ru": "Они теряют сообщения по своей природе"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "XA aims at correctness; the problem is its weight and poor support in practice.",
+                "ru": "XA нацелен на корректность; проблема — в его тяжеловесности и слабой поддержке на практике."
+              }
+            }
+          ]
+        },
+        {
+          "id": "two-systems-p3-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the reason a service cannot commit its change and its event together.",
+            "ru": "Собери причину, по которой сервис не может зафиксировать изменение и событие вместе."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two systems means two independent commits, with nothing tying them together.",
+              "ru": "Две системы означают две независимые фиксации, ничем не связанные между собой."
+            },
+            "incorrect": {
+              "en": "The database and the broker are two separate systems, so no transaction spans both.",
+              "ru": "База данных и брокер — две разные системы, поэтому ни одна транзакция не охватывает обе."
+            }
+          },
+          "tokens": {
+            "en": [
+              "database",
+              "and",
+              "broker",
+              "are",
+              "two",
+              "separate",
+              "systems"
+            ],
+            "ru": [
+              "база",
+              "данных",
+              "и",
+              "брокер",
+              "это",
+              "две",
+              "разные",
+              "системы"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "shared",
+              "transaction"
+            ],
+            "ru": [
+              "общая",
+              "транзакция"
+            ]
+          }
+        },
+        {
+          "id": "two-systems-p4-fill-xa",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the name of the standard.",
+            "ru": "Впиши название стандарта."
+          },
+          "feedback": {
+            "correct": {
+              "en": "XA is the distributed-transaction standard teams usually decide not to use here.",
+              "ru": "XA — стандарт распределённых транзакций, от которого команды здесь обычно отказываются."
+            },
+            "incorrect": {
+              "en": "It is XA — heavyweight, poorly supported, and usually avoided.",
+              "ru": "Это XA — тяжеловесный, плохо поддерживаемый и обычно избегаемый."
+            }
+          },
+          "text": {
+            "en": "The distributed-transaction standard that tries to span a database and a broker is called ___.",
+            "ru": "Стандарт распределённых транзакций, который пытается охватить базу данных и брокер, называется ___."
+          },
+          "answers": {
+            "en": [
+              "XA",
+              "xa"
+            ],
+            "ru": [
+              "XA",
+              "xa"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "dual-write",
+      "title": {
+        "en": "The dual write",
+        "ru": "Двойная запись"
+      },
+      "summary": {
+        "en": "Committing to the database and publishing to the broker as two independent steps is called a dual write.",
+        "ru": "Коммит в базу данных и публикация в брокер двумя независимыми шагами называются двойной записью."
+      },
+      "discovery": [
+        {
+          "id": "dual-write-d1-name",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A service runs these two steps one after another for a single logical change. What is this approach called?",
+            "ru": "Сервис выполняет эти два шага один за другим ради одного логического изменения. Как называется такой подход?"
+          },
+          "code": "// 1) commit the order to the DB\norderRepository.save(order);\n// 2) publish the event to the broker\nbroker.publish(new OrderPlaced(order.id()));",
+          "codeLang": "java",
+          "reveal": {
+            "en": "A **dual write** is writing one logical change into two systems as two independent steps. Nothing coordinates them: each can succeed or fail on its own, and between them there is an **inconsistency window** — a moment where one system knows about the change and the other does not.\n\n```mermaid\nflowchart LR\n  C[\"one logical change\"] --> W1[\"write 1: commit to DB\"]\n  W1 --> GAP[\"inconsistency window\"]\n  GAP --> W2[\"write 2: publish to broker\"]\n```\n\nThe window is short, but it is real: a crash, a network failure, a process kill or a deploy can land inside it. Under load, \"rare\" means many times a day. Note this is not the same as a distributed transaction — there is no coordinator here at all, just two ordinary calls in a row.",
+            "ru": "**Двойная запись** — это запись одного логического изменения в две системы двумя независимыми шагами. Их ничто не координирует: каждый может завершиться успешно или упасть сам по себе, а между ними есть **окно рассогласования** — момент, когда одна система знает об изменении, а другая нет.\n\n```mermaid\nflowchart LR\n  C[\"одно логическое изменение\"] --> W1[\"запись 1: коммит в БД\"]\n  W1 --> GAP[\"окно рассогласования\"]\n  GAP --> W2[\"запись 2: публикация в брокер\"]\n```\n\nОкно короткое, но реальное: сбой, отказ сети, убитый процесс или деплой могут попасть внутрь него. Под нагрузкой «редко» означает много раз в день. Заметьте: это не распределённая транзакция — здесь вообще нет координатора, просто два обычных вызова подряд."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two systems, two independent steps — that is a dual write.",
+              "ru": "Две системы, два независимых шага — это и есть двойная запись."
+            },
+            "incorrect": {
+              "en": "This is a dual write: one change written to two systems as two separate steps.",
+              "ru": "Это двойная запись: одно изменение пишется в две системы двумя отдельными шагами."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A dual write",
+                "ru": "Двойная запись"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A distributed transaction",
+                "ru": "Распределённая транзакция"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing coordinates these two calls — there is no transaction manager involved at all.",
+                "ru": "Эти два вызова ничто не координирует — здесь вообще нет менеджера транзакций."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "An atomic commit",
+                "ru": "Атомарная фиксация"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Atomic means all-or-nothing; here step 2 can fail after step 1 already succeeded.",
+                "ru": "Атомарность означает «всё или ничего»; здесь шаг 2 может упасть после успешного шага 1."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "dual-write-p1-order-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Swapping the order of a dual write — publishing to the broker first, then committing to the database — removes the problem.",
+            "ru": "Смена порядка двойной записи — сначала публикация в брокер, затем коммит в базу — устраняет проблему."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Reordering only changes which failure you get, never removes the window.",
+              "ru": "Смена порядка лишь меняет вид сбоя, но не убирает окно рассогласования."
+            },
+            "incorrect": {
+              "en": "No — either order still has a window between the two steps where only one has happened.",
+              "ru": "Нет — при любом порядке остаётся окно между шагами, где произошёл только один из них."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "dual-write-p2-why-unsafe",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What makes a dual write unsafe?",
+            "ru": "Что делает двойную запись небезопасной?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The gap between the steps is the whole problem — a crash there leaves the systems disagreeing.",
+              "ru": "Вся проблема — в промежутке между шагами: сбой в нём оставляет системы в разногласии."
+            },
+            "incorrect": {
+              "en": "The danger is the window between the two steps, where only one of them has happened.",
+              "ru": "Опасность — в окне между двумя шагами, где выполнен только один из них."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "There is a window between the steps where only one of them has happened",
+                "ru": "Между шагами есть окно, в котором выполнен только один из них"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The broker is slower than the database",
+                "ru": "Брокер медленнее базы данных"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Latency is not the issue; even two instant steps have a gap between them.",
+                "ru": "Дело не в задержке; даже у двух мгновенных шагов есть промежуток между ними."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The two writes use different data formats",
+                "ru": "Две записи используют разные форматы данных"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Serialization is a separate concern; the problem here is atomicity.",
+                "ru": "Сериализация — отдельный вопрос; проблема здесь в атомарности."
+              }
+            }
+          ]
+        },
+        {
+          "id": "dual-write-p3-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the definition of a dual write.",
+            "ru": "Собери определение двойной записи."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One change, two systems, two uncoordinated steps.",
+              "ru": "Одно изменение, две системы, два несогласованных шага."
+            },
+            "incorrect": {
+              "en": "A dual write sends one change to two systems separately, with no shared commit.",
+              "ru": "Двойная запись отправляет одно изменение в две системы по отдельности, без общей фиксации."
+            }
+          },
+          "tokens": {
+            "en": [
+              "dual",
+              "write",
+              "sends",
+              "one",
+              "change",
+              "to",
+              "two",
+              "systems",
+              "separately"
+            ],
+            "ru": [
+              "двойная",
+              "запись",
+              "отправляет",
+              "одно",
+              "изменение",
+              "в",
+              "две",
+              "системы",
+              "по",
+              "отдельности"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "atomically"
+            ],
+            "ru": [
+              "атомарно"
+            ]
+          }
+        },
+        {
+          "id": "dual-write-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing word.",
+            "ru": "Впиши пропущенное слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two independent writes for one change is the dual write, the problem the Outbox pattern removes.",
+              "ru": "Две независимые записи ради одного изменения — это двойная запись, проблема, которую убирает Outbox."
+            },
+            "incorrect": {
+              "en": "It is a dual write: one change, two systems, two uncoordinated steps.",
+              "ru": "Это двойная запись: одно изменение, две системы, два несогласованных шага."
+            }
+          },
+          "text": {
+            "en": "Writing one logical change to the database and to the broker in two independent steps is called a ___ write.",
+            "ru": "Запись одного логического изменения в базу и в брокер двумя независимыми шагами называется ___ записью."
+          },
+          "answers": {
+            "en": [
+              "dual"
+            ],
+            "ru": [
+              "двойной",
+              "dual"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "lost-and-phantom",
+      "title": {
+        "en": "Lost events and phantom events",
+        "ru": "Потерянные и фантомные события"
+      },
+      "summary": {
+        "en": "A crash between the two writes either loses the event or publishes an event for a change that never committed.",
+        "ru": "Сбой между двумя записями либо теряет событие, либо публикует событие об изменении, которое не зафиксировалось."
+      },
+      "discovery": [
+        {
+          "id": "lost-phantom-d1-crash-after-commit",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The service crashes at the marked line. What is the resulting state of the system?",
+            "ru": "Сервис падает на отмеченной строке. В каком состоянии окажется система?"
+          },
+          "code": "tx.begin();\norderRepository.save(order);\ntx.commit();                                    // succeeded\n// <-- the service crashes here\nbroker.publish(new OrderPlaced(order.id()));",
+          "codeLang": "java",
+          "reveal": {
+            "en": "A crash between the two writes breaks you in one of two ways, depending on the order you chose:\n\n- **Commit, then crash before publishing** → the order exists but nobody is told. This is a **lost event** (silent event loss): downstream services never learn about a change that really happened, and nothing in the system remembers that a publish was owed.\n- **Publish, then the database transaction rolls back** → the world is told about an order that never happened. This is a **phantom event**: consumers act on a change that does not exist.\n\n```mermaid\nflowchart TD\n  Change[\"one logical change\"] --> W1[\"write 1: commit to DB\"]\n  Change --> W2[\"write 2: publish to broker\"]\n  W1 -.crash before W2.-> Loss[\"order saved, event lost\"]\n  W2 -.DB rollback after publish.-> Phantom[\"event sent for a phantom order\"]\n```\n\nTogether this is the **dual-write problem**: two systems, no shared transaction, an inconsistency window between them. Reordering the steps only chooses which of the two failures you get.",
+            "ru": "Сбой между двумя записями ломает систему одним из двух способов — в зависимости от выбранного порядка:\n\n- **Коммит, затем сбой до публикации** → заказ есть, но никто об этом не узнал. Это **потерянное событие** (тихая потеря события): другие сервисы никогда не узнают об изменении, которое реально произошло, и ничто в системе не помнит, что публикация осталась должна.\n- **Публикация, затем откат транзакции базы** → миру сообщили о заказе, которого не было. Это **фантомное событие**: потребители действуют на основании изменения, которого не существует.\n\n```mermaid\nflowchart TD\n  Change[\"одно логическое изменение\"] --> W1[\"запись 1: коммит в БД\"]\n  Change --> W2[\"запись 2: публикация в брокер\"]\n  W1 -.сбой до W2.-> Loss[\"заказ сохранён, событие потеряно\"]\n  W2 -.откат БД после публикации.-> Phantom[\"событие отправлено для фантомного заказа\"]\n```\n\nВсё вместе это **проблема двойной записи**: две системы, нет общей транзакции, между ними окно рассогласования. Смена порядка шагов лишь выбирает, какой из двух сбоев вы получите."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A committed change with no event: the classic silent event loss.",
+              "ru": "Зафиксированное изменение без события: классическая тихая потеря события."
+            },
+            "incorrect": {
+              "en": "The commit already finished, so the order exists — but the event was never published.",
+              "ru": "Коммит уже завершился, поэтому заказ есть — но событие так и не опубликовано."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The order exists in the database, but no one is ever told about it",
+                "ru": "Заказ есть в базе данных, но никто о нём так и не узнал"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The order is rolled back because the publish never happened",
+                "ru": "Заказ откатывается, потому что публикация не состоялась"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The commit already finished; a later crash cannot undo it.",
+                "ru": "Коммит уже завершился; последующий сбой не может его отменить."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The event is published automatically when the service restarts",
+                "ru": "Событие будет опубликовано автоматически при перезапуске сервиса"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing recorded the pending publish, so a restart has nothing to resume from.",
+                "ru": "Незавершённая публикация нигде не записана, поэтому перезапуску нечего продолжать."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "lost-phantom-p1-publish-first",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A service publishes an event to the broker first, and then its database transaction rolls back. What has gone wrong?",
+            "ru": "Сервис сначала публикует событие в брокер, а затем его транзакция базы данных откатывается. Что пошло не так?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Consumers now act on a change that does not exist anywhere.",
+              "ru": "Потребители теперь действуют на основании изменения, которого нигде не существует."
+            },
+            "incorrect": {
+              "en": "This is a phantom event: the world was told about a change that never committed.",
+              "ru": "Это фантомное событие: миру сообщили об изменении, которое не зафиксировалось."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A phantom event — consumers were told about a change that never committed",
+                "ru": "Фантомное событие — потребителям сообщили об изменении, которое не зафиксировалось"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A lost event — the change happened but nobody was told",
+                "ru": "Потерянное событие — изменение произошло, но никому не сообщили"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the opposite order: loss happens when the commit succeeds and the publish does not.",
+                "ru": "Это обратный порядок: потеря происходит, когда коммит удался, а публикация нет."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — the broker discards the message when the transaction rolls back",
+                "ru": "Ничего — брокер отбросит сообщение, когда транзакция откатится"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A broker knows nothing about your transaction; a published message stays published.",
+                "ru": "Брокер ничего не знает о вашей транзакции; опубликованное сообщение остаётся опубликованным."
+              }
+            }
+          ]
+        },
+        {
+          "id": "lost-phantom-p2-reorder-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Choosing the right order for the two writes eliminates the dual-write problem.",
+            "ru": "Правильный порядок двух записей устраняет проблему двойной записи."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Order only picks the failure mode: lost event or phantom event.",
+              "ru": "Порядок лишь выбирает вид сбоя: потерянное событие или фантомное."
+            },
+            "incorrect": {
+              "en": "No — either order leaves a window; you just choose between a lost event and a phantom one.",
+              "ru": "Нет — при любом порядке остаётся окно; вы лишь выбираете между потерянным и фантомным событием."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "lost-phantom-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each dual-write failure to its outcome.",
+            "ru": "Соотнеси каждый сбой двойной записи с его исходом."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Both outcomes come from the same root cause: two systems with no shared transaction.",
+              "ru": "Оба исхода растут из одной причины: две системы без общей транзакции."
+            },
+            "incorrect": {
+              "en": "Commit-then-crash loses the event; publish-then-rollback creates a phantom one.",
+              "ru": "Коммит и сбой теряют событие; публикация и откат создают фантомное."
+            }
+          },
+          "pairs": [
+            {
+              "id": "loss",
+              "left": {
+                "en": "Commit to the database, crash before publishing",
+                "ru": "Коммит в базу, сбой до публикации"
+              },
+              "right": {
+                "en": "Lost event: the change happened, nobody was told",
+                "ru": "Потерянное событие: изменение произошло, никому не сообщили"
+              }
+            },
+            {
+              "id": "phantom",
+              "left": {
+                "en": "Publish, then the database transaction rolls back",
+                "ru": "Публикация, затем откат транзакции базы"
+              },
+              "right": {
+                "en": "Phantom event: consumers act on a change that never existed",
+                "ru": "Фантомное событие: потребители действуют на несуществующее изменение"
+              }
+            },
+            {
+              "id": "root",
+              "left": {
+                "en": "Two systems with no shared transaction",
+                "ru": "Две системы без общей транзакции"
+              },
+              "right": {
+                "en": "The root cause of the dual-write problem",
+                "ru": "Первопричина проблемы двойной записи"
+              }
+            }
+          ]
+        },
+        {
+          "id": "lost-phantom-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the two dual-write failures.",
+            "ru": "Назови два сбоя двойной записи."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Lost and phantom events are the two faces of the dual-write problem.",
+              "ru": "Потерянное и фантомное события — два лица проблемы двойной записи."
+            },
+            "incorrect": {
+              "en": "Commit-then-crash gives a lost event; publish-then-rollback gives a phantom event.",
+              "ru": "Коммит и сбой дают потерянное событие; публикация и откат дают фантомное."
+            }
+          },
+          "text": {
+            "en": "A crash after the commit but before the publish gives a ___ event; publishing before a rollback gives a ___ event.",
+            "ru": "Сбой после коммита, но до публикации даёт ___ событие; публикация до отката даёт ___ событие."
+          },
+          "blanks": [
+            {
+              "en": [
+                "lost"
+              ],
+              "ru": [
+                "потерянное",
+                "lost"
+              ]
+            },
+            {
+              "en": [
+                "phantom"
+              ],
+              "ru": [
+                "фантомное",
+                "phantom"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "outbox-table",
+      "title": {
+        "en": "The outbox table",
+        "ru": "Таблица outbox"
+      },
+      "summary": {
+        "en": "The outbox is an ordinary table in the SAME database as the business data, holding one row per event to publish.",
+        "ru": "Outbox — обычная таблица в ТОЙ ЖЕ базе данных, что и бизнес-данные, с одной строкой на каждое событие к публикации."
+      },
+      "discovery": [
+        {
+          "id": "outbox-table-d1-where",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The Outbox pattern stages each event as a row in an outbox table. Where must that table live?",
+            "ru": "Паттерн Outbox записывает каждое событие строкой в таблицу outbox. Где должна находиться эта таблица?"
+          },
+          "reveal": {
+            "en": "The **outbox table** is an ordinary table in the **same database** as your business data. Each row is one event waiting to go out:\n\n```\nCREATE TABLE outbox (\n  id         BIGSERIAL PRIMARY KEY,\n  event_type TEXT,      -- 'OrderPlaced'\n  payload    TEXT,      -- the event body\n  status     TEXT       -- 'PENDING' or 'PUBLISHED'\n);\n```\n\nA fresh row is inserted with status `PENDING` — staged but not yet sent. Once it has gone to the broker it becomes `PUBLISHED`.\n\n```mermaid\nflowchart LR\n  subgraph db[\"one database\"]\n    T1[\"orders table\"]\n    T2[\"outbox table\"]\n  end\n```\n\nWhy the *same* database and not a dedicated events database? Because only writes to one database can share one transaction. Put the outbox anywhere else and you are back to writing into two systems — a dual write with a different second system.",
+            "ru": "**Таблица outbox** — обычная таблица в **той же базе данных**, что и бизнес-данные. Каждая строка — одно событие, ожидающее отправки:\n\n```\nCREATE TABLE outbox (\n  id         BIGSERIAL PRIMARY KEY,\n  event_type TEXT,      -- 'OrderPlaced'\n  payload    TEXT,      -- тело события\n  status     TEXT       -- 'PENDING' или 'PUBLISHED'\n);\n```\n\nНовая строка вставляется со статусом `PENDING` — записана, но ещё не отправлена. После отправки в брокер она становится `PUBLISHED`.\n\n```mermaid\nflowchart LR\n  subgraph db[\"одна база данных\"]\n    T1[\"таблица orders\"]\n    T2[\"таблица outbox\"]\n  end\n```\n\nПочему именно *та же* база, а не отдельная база событий? Потому что общую транзакцию могут разделить только записи в одну базу данных. Поместите outbox куда-то ещё — и вы снова пишете в две системы, то есть делаете двойную запись, просто с другой второй системой."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Same database — that is what makes one shared transaction possible.",
+              "ru": "Та же база данных — именно это делает возможной одну общую транзакцию."
+            },
+            "incorrect": {
+              "en": "It must sit in the same database as the business data, or there is no shared transaction.",
+              "ru": "Она должна быть в той же базе, что и бизнес-данные, иначе общей транзакции не будет."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "In the same database as the business data",
+                "ru": "В той же базе данных, что и бизнес-данные"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "In a separate database dedicated to events",
+                "ru": "В отдельной базе данных, выделенной под события"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A second database is a second system — that is a dual write again.",
+                "ru": "Вторая база — это вторая система, то есть снова двойная запись."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Inside the broker",
+                "ru": "Внутри брокера"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The broker is exactly the system you cannot write to transactionally.",
+                "ru": "Брокер — как раз та система, в которую нельзя писать транзакционно."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "outbox-table-p1-same-db-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "The outbox table lives in the same database as the service's business tables.",
+            "ru": "Таблица outbox находится в той же базе данных, что и бизнес-таблицы сервиса."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Same database means both writes can share one transaction.",
+              "ru": "Та же база данных означает, что обе записи могут разделить одну транзакцию."
+            },
+            "incorrect": {
+              "en": "It does — a separate database would make the staging step a dual write again.",
+              "ru": "Находится — отдельная база превратила бы шаг записи события в двойную запись."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "outbox-table-p2-row-means",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does a single row in the outbox table represent?",
+            "ru": "Что представляет собой одна строка в таблице outbox?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "One staged event, waiting to be sent to the broker.",
+              "ru": "Одно записанное событие, ожидающее отправки в брокер."
+            },
+            "incorrect": {
+              "en": "It is one event the service still has to publish, staged inside its own database.",
+              "ru": "Это одно событие, которое сервис ещё должен опубликовать, записанное в его собственной базе."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "One event that still has to be published to the broker",
+                "ru": "Одно событие, которое ещё нужно опубликовать в брокер"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A message received from another service",
+                "ru": "Сообщение, полученное от другого сервиса"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Incoming messages are the consumer side; the outbox holds events the service itself must send.",
+                "ru": "Входящие сообщения — это сторона потребителя; outbox хранит события, которые сервис должен отправить сам."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A backup copy of the business row",
+                "ru": "Резервная копия бизнес-строки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It stages an event to publish, not a backup of the data.",
+                "ru": "Она записывает событие для публикации, а не резервную копию данных."
+              }
+            }
+          ]
+        },
+        {
+          "id": "outbox-table-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each part of an outbox setup to what it holds or means.",
+            "ru": "Соотнеси каждую часть схемы outbox с тем, что она содержит или означает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The status column is what tells a staged event from an already sent one.",
+              "ru": "Колонка status и отличает записанное событие от уже отправленного."
+            },
+            "incorrect": {
+              "en": "PENDING = not sent yet, PUBLISHED = already sent, payload = the event body.",
+              "ru": "PENDING — ещё не отправлено, PUBLISHED — уже отправлено, payload — тело события."
+            }
+          },
+          "pairs": [
+            {
+              "id": "pending",
+              "left": {
+                "en": "status = 'PENDING'",
+                "ru": "status = 'PENDING'"
+              },
+              "right": {
+                "en": "The event has not been sent to the broker yet",
+                "ru": "Событие ещё не отправлено в брокер"
+              }
+            },
+            {
+              "id": "published",
+              "left": {
+                "en": "status = 'PUBLISHED'",
+                "ru": "status = 'PUBLISHED'"
+              },
+              "right": {
+                "en": "The event has already gone to the broker",
+                "ru": "Событие уже ушло в брокер"
+              }
+            },
+            {
+              "id": "payload",
+              "left": {
+                "en": "payload",
+                "ru": "payload"
+              },
+              "right": {
+                "en": "The body of the event to publish",
+                "ru": "Тело события, которое надо опубликовать"
+              }
+            },
+            {
+              "id": "orders",
+              "left": {
+                "en": "the orders table",
+                "ru": "таблица orders"
+              },
+              "right": {
+                "en": "The business change itself",
+                "ru": "Само бизнес-изменение"
+              }
+            }
+          ]
+        },
+        {
+          "id": "outbox-table-p4-fill-pending",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the status value.",
+            "ru": "Впиши значение статуса."
+          },
+          "feedback": {
+            "correct": {
+              "en": "PENDING marks an event that is staged but not yet sent.",
+              "ru": "PENDING отмечает событие, которое записано, но ещё не отправлено."
+            },
+            "incorrect": {
+              "en": "A freshly inserted outbox row has status PENDING; it becomes PUBLISHED after it is sent.",
+              "ru": "Только что вставленная строка outbox имеет статус PENDING; после отправки она станет PUBLISHED."
+            }
+          },
+          "text": {
+            "en": "A freshly inserted outbox row has status ___.",
+            "ru": "Только что вставленная строка outbox имеет статус ___."
+          },
+          "answers": {
+            "en": [
+              "PENDING",
+              "pending"
+            ],
+            "ru": [
+              "PENDING",
+              "pending"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "one-local-transaction",
+      "title": {
+        "en": "One local transaction",
+        "ru": "Одна локальная транзакция"
+      },
+      "summary": {
+        "en": "The business change and the outbox row are written in the same local transaction, so they commit together or not at all.",
+        "ru": "Бизнес-изменение и строка outbox пишутся в одной локальной транзакции, поэтому фиксируются вместе либо не фиксируются вовсе."
+      },
+      "discovery": [
+        {
+          "id": "one-tx-d1-rollback",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The method throws before returning, so the transaction rolls back. What is left in the database?",
+            "ru": "Метод бросает исключение до возврата, поэтому транзакция откатывается. Что останется в базе данных?"
+          },
+          "code": "@Transactional\npublic void placeOrder(Order order) {\n    orderRepository.save(order);\n    outboxRepository.insert(\"OrderPlaced\", order.id());   // status = PENDING\n    throw new IllegalStateException(\"boom\");\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Both writes go into **one local transaction** — \"local\" meaning it belongs to this one database, with no coordinator and no second system involved. That gives the pattern its whole guarantee:\n\n```mermaid\nflowchart LR\n  subgraph tx[\"one local DB transaction\"]\n    O[\"write the order\"]\n    E[\"insert outbox row (PENDING)\"]\n  end\n  tx --> DB[(\"business DB + outbox\")]\n```\n\nEither both rows commit, or neither does. There is no state in which the order exists without its staged event, and none in which an event is staged for an order that rolled back. The inconsistency window is gone — not narrowed, gone — because there is only one commit.\n\nThe corollary matters just as much: staging the event in a **separate** transaction right after the business one puts you straight back into a dual write.",
+            "ru": "Обе записи попадают в **одну локальную транзакцию** — «локальную» в смысле «принадлежащую этой одной базе данных», без координатора и без второй системы. Именно это даёт паттерну всю его гарантию:\n\n```mermaid\nflowchart LR\n  subgraph tx[\"одна локальная транзакция БД\"]\n    O[\"записать заказ\"]\n    E[\"вставить строку outbox (PENDING)\"]\n  end\n  tx --> DB[(\"бизнес-БД + outbox\")]\n```\n\nЛибо фиксируются обе строки, либо ни одной. Нет состояния, в котором заказ есть, а его событие не записано, и нет состояния, в котором событие записано для откатившегося заказа. Окно рассогласования исчезло — не сузилось, а исчезло, — потому что коммит один.\n\nСледствие не менее важно: записать событие в **отдельной** транзакции сразу после бизнес-транзакции — значит вернуться ровно к двойной записи."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One transaction, one outcome: both rows disappear together.",
+              "ru": "Одна транзакция — один исход: обе строки исчезают вместе."
+            },
+            "incorrect": {
+              "en": "Both writes share one transaction, so a rollback discards both.",
+              "ru": "Обе записи в одной транзакции, поэтому откат отбрасывает обе."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Nothing — neither the order nor the outbox row",
+                "ru": "Ничего — ни заказа, ни строки outbox"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The order only",
+                "ru": "Только заказ"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The order row is inside the same transaction, so it rolls back too.",
+                "ru": "Строка заказа находится в той же транзакции, поэтому тоже откатывается."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The outbox row only, so the event is still published later",
+                "ru": "Только строка outbox, поэтому событие всё равно будет опубликовано позже"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The outbox row rolls back with everything else — no phantom event can escape.",
+                "ru": "Строка outbox откатывается вместе со всем остальным — фантомное событие не выскочит."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "one-tx-p1-separate-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "It is fine to insert the outbox row in its own transaction, right after the business transaction commits.",
+            "ru": "Можно вставлять строку outbox в отдельной транзакции сразу после фиксации бизнес-транзакции."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two transactions are two independent commits — a dual write with extra steps.",
+              "ru": "Две транзакции — это две независимые фиксации, та же двойная запись, только длиннее."
+            },
+            "incorrect": {
+              "en": "No — a crash between the two transactions loses the event, exactly like a dual write.",
+              "ru": "Нет — сбой между двумя транзакциями теряет событие, ровно как при двойной записи."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "one-tx-p2-why-same",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why must the business change and the outbox row be written in the SAME transaction?",
+            "ru": "Почему бизнес-изменение и строка outbox должны писаться в ОДНОЙ транзакции?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Atomicity is the point: no state where one exists without the other.",
+              "ru": "Смысл в атомарности: нет состояния, где есть одно без другого."
+            },
+            "incorrect": {
+              "en": "So they commit atomically — the change and its staged event can never disagree.",
+              "ru": "Чтобы они фиксировались атомарно — изменение и записанное событие никогда не разойдутся."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "So they commit atomically — there is no state where one exists without the other",
+                "ru": "Чтобы они фиксировались атомарно — нет состояния, где есть одно без другого"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "So the broker receives the events in the right order",
+                "ru": "Чтобы брокер получил события в правильном порядке"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The transaction never contacts the broker at all; ordering is a separate concern.",
+                "ru": "Транзакция вообще не обращается к брокеру; порядок — отдельный вопрос."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "To make the two inserts faster",
+                "ru": "Чтобы две вставки выполнялись быстрее"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The reason is correctness, not performance.",
+                "ru": "Причина в корректности, а не в производительности."
+              }
+            }
+          ]
+        },
+        {
+          "id": "one-tx-p3-sort",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the write side of the Outbox pattern.",
+            "ru": "Расставь по порядку шаги записи в паттерне Outbox."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One transaction wraps both writes, and a single commit ends it.",
+              "ru": "Одна транзакция охватывает обе записи, и завершает её один коммит."
+            },
+            "incorrect": {
+              "en": "Begin one transaction, write the change, insert the PENDING outbox row, then commit both together.",
+              "ru": "Открыть одну транзакцию, записать изменение, вставить строку outbox со статусом PENDING, затем зафиксировать обе."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Begin one local transaction in the service's own database",
+                "ru": "Открыть одну локальную транзакцию в собственной базе сервиса"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Write the business change (the order row)",
+                "ru": "Записать бизнес-изменение (строку заказа)"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Insert an outbox row with status PENDING",
+                "ru": "Вставить строку outbox со статусом PENDING"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Commit — both rows commit together or neither does",
+                "ru": "Зафиксировать — обе строки фиксируются вместе либо ни одна"
+              }
+            }
+          ]
+        },
+        {
+          "id": "one-tx-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the core rule of the Outbox pattern.",
+            "ru": "Дополни основное правило паттерна Outbox."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One local transaction, one atomic outcome — that is the whole guarantee.",
+              "ru": "Одна локальная транзакция, один атомарный исход — в этом вся гарантия."
+            },
+            "incorrect": {
+              "en": "They are written in one local transaction, so they commit atomically.",
+              "ru": "Они пишутся в одной локальной транзакции, поэтому фиксируются атомарно."
+            }
+          },
+          "text": {
+            "en": "The business change and the outbox row are written in one ___ transaction, so they commit ___.",
+            "ru": "Бизнес-изменение и строка outbox пишутся в одной ___ транзакции, поэтому фиксируются ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "local"
+              ],
+              "ru": [
+                "локальной",
+                "local"
+              ]
+            },
+            {
+              "en": [
+                "atomically",
+                "together"
+              ],
+              "ru": [
+                "атомарно",
+                "вместе"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stage-not-publish",
+      "title": {
+        "en": "The transaction only stages the event",
+        "ru": "Транзакция только записывает событие"
+      },
+      "summary": {
+        "en": "The business transaction never talks to the broker; it only stages the event, so a slow or down broker cannot block or fail commits.",
+        "ru": "Бизнес-транзакция никогда не обращается к брокеру; она только записывает событие, поэтому медленный или упавший брокер не блокирует и не ломает фиксации."
+      },
+      "discovery": [
+        {
+          "id": "stage-d1-spot-publish",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This service already uses an outbox table, yet the code still has a defect. What is it?",
+            "ru": "Этот сервис уже использует таблицу outbox, но в коде всё ещё есть дефект. В чём он?"
+          },
+          "code": "@Transactional\npublic void placeOrder(Order order) {\n    orderRepository.save(order);\n    outboxRepository.insert(\"OrderPlaced\", order.id());   // status = PENDING\n    broker.publish(new OrderPlaced(order.id()));          // <-- ?\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "The transaction's job is to **stage** the event: write down the intent and stop there. It must never call the broker itself. Something else — running outside the transaction — does the sending:\n\n```mermaid\nflowchart LR\n  TX[\"business transaction: stage only\"] --> DB[(\"business DB + outbox\")]\n  DB --> R[\"separate process publishes later\"]\n  R --> B[\"broker\"]\n```\n\nTwo things break when you publish inside the transaction:\n\n1. **Availability.** The commit now depends on the broker. If the broker is slow, your request is slow; if it is down, your order fails — even though the database was perfectly able to store it.\n2. **Correctness.** The publish can succeed and the transaction can still roll back afterwards, which is the phantom event all over again.\n\nStaging is what makes the event durable *and* the commit independent: the row is safely in the database, and delivery becomes somebody else's retryable problem.",
+            "ru": "Задача транзакции — **записать** событие: зафиксировать намерение и на этом остановиться. Она не должна сама обращаться к брокеру. Отправкой занимается что-то другое, работающее вне транзакции:\n\n```mermaid\nflowchart LR\n  TX[\"бизнес-транзакция: только запись\"] --> DB[(\"бизнес-БД + outbox\")]\n  DB --> R[\"отдельный процесс публикует позже\"]\n  R --> B[\"брокер\"]\n```\n\nПубликация внутри транзакции ломает сразу две вещи:\n\n1. **Доступность.** Коммит теперь зависит от брокера. Брокер медленный — запрос медленный; брокер упал — заказ не оформится, хотя база данных прекрасно могла его сохранить.\n2. **Корректность.** Публикация может пройти успешно, а транзакция всё равно откатится следом — и это снова фантомное событие.\n\nЗапись события делает его долговечным *и* оставляет коммит независимым: строка надёжно лежит в базе, а доставка становится чужой проблемой, которую можно повторять."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The broker call belongs outside the transaction, not inside it.",
+              "ru": "Вызов брокера должен быть вне транзакции, а не внутри неё."
+            },
+            "incorrect": {
+              "en": "Publishing inside the transaction couples the commit to the broker — the outbox row already made the event durable.",
+              "ru": "Публикация внутри транзакции связывает коммит с брокером — строка outbox уже сделала событие долговечным."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Publishing inside the transaction couples the commit to the broker, so a down broker fails the order",
+                "ru": "Публикация внутри транзакции связывает коммит с брокером, поэтому упавший брокер ломает оформление заказа"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The outbox row is redundant once the event is published directly",
+                "ru": "Строка outbox избыточна, раз событие публикуется напрямую"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The direct publish is the line to delete; the staged row is what makes the change reliable.",
+                "ru": "Удалять надо прямую публикацию; именно записанная строка делает изменение надёжным."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The outbox row should be inserted before the order row",
+                "ru": "Строку outbox надо вставлять до строки заказа"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Order inside a transaction does not matter — both rows commit together anyway.",
+                "ru": "Порядок внутри транзакции не важен — обе строки всё равно фиксируются вместе."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "stage-p1-publishes-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In the Outbox pattern, the business transaction publishes the event to the broker itself.",
+            "ru": "В паттерне Outbox бизнес-транзакция сама публикует событие в брокер."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It only stages the event; publishing happens outside the transaction.",
+              "ru": "Она только записывает событие; публикация происходит вне транзакции."
+            },
+            "incorrect": {
+              "en": "No — the transaction stages the event only, so the broker can never block a commit.",
+              "ru": "Нет — транзакция только записывает событие, поэтому брокер не может заблокировать коммит."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "stage-p2-broker-down",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The broker is unreachable for ten minutes. What happens to orders placed during that time in a service that uses the Outbox pattern?",
+            "ru": "Брокер недоступен десять минут. Что произойдёт с заказами, оформленными за это время в сервисе с паттерном Outbox?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Commits are independent of the broker; the events simply wait as PENDING rows.",
+              "ru": "Фиксации не зависят от брокера; события просто ждут строками со статусом PENDING."
+            },
+            "incorrect": {
+              "en": "They commit normally — the events stay staged in the database and go out when the broker returns.",
+              "ru": "Они фиксируются как обычно — события лежат в базе и уйдут, когда брокер вернётся."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "They commit normally; their events stay PENDING and are published later",
+                "ru": "Они фиксируются как обычно; их события остаются PENDING и публикуются позже"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Order placement fails until the broker is back",
+                "ru": "Оформление заказов падает, пока брокер не вернётся"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That coupling is exactly what the outbox removes — the commit never touches the broker.",
+                "ru": "Именно эту связанность и убирает outbox — коммит вообще не обращается к брокеру."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The orders commit but their events are lost",
+                "ru": "Заказы фиксируются, но их события теряются"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The events are durable rows in the database; nothing is lost while the broker is away.",
+                "ru": "События — долговечные строки в базе; пока брокер недоступен, ничего не теряется."
+              }
+            }
+          ]
+        },
+        {
+          "id": "stage-p3-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the rule about what the business transaction does with events.",
+            "ru": "Собери правило о том, что бизнес-транзакция делает с событиями."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Stage inside the transaction, publish outside it.",
+              "ru": "Записываем внутри транзакции, публикуем вне её."
+            },
+            "incorrect": {
+              "en": "The transaction only stages events; a separate process publishes them.",
+              "ru": "Транзакция только записывает события; публикует их отдельный процесс."
+            }
+          },
+          "tokens": {
+            "en": [
+              "the",
+              "transaction",
+              "only",
+              "stages",
+              "events",
+              "never",
+              "publishes",
+              "them"
+            ],
+            "ru": [
+              "транзакция",
+              "только",
+              "записывает",
+              "события",
+              "но",
+              "никогда",
+              "их",
+              "не",
+              "публикует"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "broker"
+            ],
+            "ru": [
+              "брокер"
+            ]
+          }
+        },
+        {
+          "id": "stage-p4-fill-stages",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing verb.",
+            "ru": "Впиши пропущенный глагол."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Staging keeps the commit independent of the broker's availability.",
+              "ru": "Запись события оставляет коммит независимым от доступности брокера."
+            },
+            "incorrect": {
+              "en": "The transaction stages the event; a separate process publishes it afterwards.",
+              "ru": "Транзакция записывает событие; отдельный процесс публикует его позже."
+            }
+          },
+          "text": {
+            "en": "The business transaction only ___ the event in the outbox table; a separate process publishes it.",
+            "ru": "Бизнес-транзакция только ___ событие в таблицу outbox; публикует его отдельный процесс."
+          },
+          "answers": {
+            "en": [
+              "stages",
+              "stage"
+            ],
+            "ru": [
+              "записывает",
+              "записывает событие",
+              "stages"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "relay",
+      "title": {
+        "en": "The relay",
+        "ru": "Релей"
+      },
+      "summary": {
+        "en": "A separate process — the relay — reads unpublished outbox rows, publishes them to the broker, and marks them published.",
+        "ru": "Отдельный процесс — релей — читает неопубликованные строки outbox, публикует их в брокер и помечает опубликованными."
+      },
+      "discovery": [
+        {
+          "id": "relay-d1-sort-cycle",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "A separate process moves staged events out of the outbox table. Order the steps it performs on each cycle.",
+            "ru": "Отдельный процесс выносит записанные события из таблицы outbox. Расставь по порядку шаги одного его цикла."
+          },
+          "reveal": {
+            "en": "That process is called the **relay**. Its only job is to move staged events from the outbox to the broker:\n\n```mermaid\nflowchart LR\n  DB[(\"business DB + outbox\")] --> R[\"relay\"]\n  R --> B[\"broker\"]\n  R --> M[\"mark the row PUBLISHED\"]\n  M --> DB\n```\n\nIt runs on its own — a background thread, a scheduled job, or a completely separate service — never on the request thread. That independence is what buys the decoupling: the relay can retry a failing broker for as long as it takes, and no user request is waiting on it. Meanwhile new events keep piling up as `PENDING` rows, safely durable in the database.\n\nThe relay is also where \"eventually\" enters the picture: events are guaranteed to be published, but not instantly. The Outbox pattern trades a little latency for never losing an event.",
+            "ru": "Этот процесс называется **релей** (relay). Его единственная задача — переносить записанные события из outbox в брокер:\n\n```mermaid\nflowchart LR\n  DB[(\"бизнес-БД + outbox\")] --> R[\"релей\"]\n  R --> B[\"брокер\"]\n  R --> M[\"пометить строку PUBLISHED\"]\n  M --> DB\n```\n\nОн работает сам по себе — фоновым потоком, по расписанию или вообще отдельным сервисом, — но никогда не в потоке запроса. Именно эта независимость и даёт развязку: релей может сколько угодно повторять попытки при недоступном брокере, и ни один пользовательский запрос его не ждёт. А новые события тем временем копятся строками `PENDING`, надёжно лежащими в базе.\n\nРелей же вносит и слово «в конце концов»: события гарантированно будут опубликованы, но не мгновенно. Паттерн Outbox меняет небольшую задержку на то, что событие никогда не теряется."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Read unpublished rows, publish, then mark them done.",
+              "ru": "Прочитать неопубликованные строки, опубликовать, затем пометить их сделанными."
+            },
+            "incorrect": {
+              "en": "The relay reads unpublished rows, publishes each to the broker, and only then marks them.",
+              "ru": "Релей читает неопубликованные строки, публикует каждую в брокер и только потом помечает их."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Read outbox rows that are not published yet",
+                "ru": "Прочитать строки outbox, которые ещё не опубликованы"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Publish each event to the broker",
+                "ru": "Опубликовать каждое событие в брокер"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Mark the row PUBLISHED (or delete it)",
+                "ru": "Пометить строку PUBLISHED (или удалить её)"
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "relay-p1-who-publishes",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In the Outbox pattern, which process actually publishes an event to the broker?",
+            "ru": "Кто в паттерне Outbox реально публикует событие в брокер?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The relay, running outside any business transaction.",
+              "ru": "Релей, работающий вне какой-либо бизнес-транзакции."
+            },
+            "incorrect": {
+              "en": "A separate relay process does it, after the transaction has already committed.",
+              "ru": "Это делает отдельный процесс-релей, уже после фиксации транзакции."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A separate relay process, after the transaction has committed",
+                "ru": "Отдельный процесс-релей, после фиксации транзакции"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The same request thread that wrote the order",
+                "ru": "Тот же поток запроса, который записал заказ"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That would put the broker back inside the request path, which the pattern exists to avoid.",
+                "ru": "Это вернуло бы брокер в путь запроса, чего паттерн и стремится избежать."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The broker, which reads the outbox table itself",
+                "ru": "Брокер, который сам читает таблицу outbox"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Brokers do not read your tables; something has to push the events to them.",
+                "ru": "Брокеры не читают ваши таблицы; события им должен кто-то отправлять."
+              }
+            }
+          ]
+        },
+        {
+          "id": "relay-p2-stopped-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "If the outbox relay is stopped for an hour, the service can still accept and commit business changes.",
+            "ru": "Если релей outbox остановлен на час, сервис всё равно может принимать и фиксировать бизнес-изменения."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The relay is decoupled; events just accumulate as PENDING rows.",
+              "ru": "Релей развязан с транзакцией; события просто копятся строками PENDING."
+            },
+            "incorrect": {
+              "en": "It can — commits only write two rows in one database; the relay catches up later.",
+              "ru": "Может — коммит лишь пишет две строки в одну базу; релей нагонит позже."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "relay-p3-match-roles",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each part of the Outbox pattern to its job.",
+            "ru": "Соотнеси каждую часть паттерна Outbox с её ролью."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Stage atomically, hold durably, publish separately, deliver onwards.",
+              "ru": "Атомарно записать, надёжно хранить, отдельно опубликовать, доставить дальше."
+            },
+            "incorrect": {
+              "en": "The transaction stages, the table holds, the relay publishes, the broker delivers.",
+              "ru": "Транзакция записывает, таблица хранит, релей публикует, брокер доставляет."
+            }
+          },
+          "pairs": [
+            {
+              "id": "tx",
+              "left": {
+                "en": "business transaction",
+                "ru": "бизнес-транзакция"
+              },
+              "right": {
+                "en": "Stages the event atomically with the change",
+                "ru": "Атомарно записывает событие вместе с изменением"
+              }
+            },
+            {
+              "id": "table",
+              "left": {
+                "en": "outbox table",
+                "ru": "таблица outbox"
+              },
+              "right": {
+                "en": "Durably holds events waiting to be published",
+                "ru": "Надёжно хранит события, ждущие публикации"
+              }
+            },
+            {
+              "id": "relay",
+              "left": {
+                "en": "relay",
+                "ru": "релей"
+              },
+              "right": {
+                "en": "Publishes staged events and marks them done",
+                "ru": "Публикует записанные события и помечает их сделанными"
+              }
+            },
+            {
+              "id": "broker",
+              "left": {
+                "en": "broker",
+                "ru": "брокер"
+              },
+              "right": {
+                "en": "Delivers the events to other services",
+                "ru": "Доставляет события другим сервисам"
+              }
+            }
+          ]
+        },
+        {
+          "id": "relay-p4-fill-published",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the process and the status it sets.",
+            "ru": "Назови процесс и статус, который он ставит."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The relay publishes the row and then marks it PUBLISHED.",
+              "ru": "Релей публикует строку, а затем помечает её PUBLISHED."
+            },
+            "incorrect": {
+              "en": "The relay is the separate publisher, and it marks a sent row PUBLISHED.",
+              "ru": "Отдельный публикатор — это релей, и отправленную строку он помечает PUBLISHED."
+            }
+          },
+          "text": {
+            "en": "The ___ reads unpublished outbox rows, sends them to the broker, and sets their status to ___.",
+            "ru": "___ читает неопубликованные строки outbox, отправляет их в брокер и ставит им статус ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "relay"
+              ],
+              "ru": [
+                "релей",
+                "relay"
+              ]
+            },
+            {
+              "en": [
+                "PUBLISHED",
+                "published"
+              ],
+              "ru": [
+                "PUBLISHED",
+                "published"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "polling-vs-cdc",
+      "title": {
+        "en": "Polling vs change-data-capture",
+        "ru": "Поллинг против change-data-capture"
+      },
+      "summary": {
+        "en": "A relay is either a polling publisher that queries PENDING rows or a CDC reader that tails the database transaction log.",
+        "ru": "Релей — это либо поллер-публикатор, который запрашивает строки PENDING, либо CDC-читатель, который читает лог транзакций базы."
+      },
+      "discovery": [
+        {
+          "id": "cdc-d1-which-style",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A relay runs this query every second, publishes what it finds, and marks the rows. Which relay style is this, and what does it cost?",
+            "ru": "Релей выполняет этот запрос каждую секунду, публикует найденное и помечает строки. Какой это тип релея и чего он стоит?"
+          },
+          "code": "SELECT * FROM outbox WHERE status = 'PENDING' ORDER BY id;",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "There are two standard ways to build a relay.\n\n**Polling publisher** — on a timer, run `SELECT ... WHERE status = 'PENDING'`, publish each row, then mark it `PUBLISHED` or delete it. It works on any database and is easy to reason about, but it queries the table over and over, and an event waits up to one poll interval before it goes out.\n\n**Change-data-capture (CDC)** — instead of querying the table, read the database's **transaction log**: the append-only log the database already writes for durability and replication. A tool such as **Debezium** tails that log and publishes the outbox inserts as it sees them. No polling, no extra query load, and much lower latency — paid for with CDC infrastructure to run and operate.\n\n```mermaid\nflowchart LR\n  OB[(\"outbox table\")] --> P[\"polling publisher: SELECT WHERE status = PENDING\"]\n  LOG[(\"transaction log\")] --> C[\"CDC, e.g. Debezium\"]\n  P --> B[\"broker\"]\n  C --> B\n```\n\nThe choice changes only the mechanism. Either relay is still a separate process, decoupled from the business transaction.",
+            "ru": "Есть два стандартных способа построить релей.\n\n**Поллер-публикатор** — по таймеру выполняет `SELECT ... WHERE status = 'PENDING'`, публикует каждую строку и помечает её `PUBLISHED` либо удаляет. Работает на любой базе и прост для понимания, но раз за разом опрашивает таблицу, и событие ждёт отправки до одного интервала опроса.\n\n**Change-data-capture (CDC)** — вместо запросов к таблице читает **лог транзакций** базы: журнал только на дозапись, который база и так ведёт ради надёжности и репликации. Инструмент вроде **Debezium** читает этот лог и публикует вставки в outbox по мере их появления. Ни опроса, ни лишней нагрузки запросами, задержка намного ниже — ценой того, что CDC-инфраструктуру надо разворачивать и обслуживать.\n\n```mermaid\nflowchart LR\n  OB[(\"таблица outbox\")] --> P[\"поллер: SELECT WHERE status = PENDING\"]\n  LOG[(\"лог транзакций\")] --> C[\"CDC, напр. Debezium\"]\n  P --> B[\"брокер\"]\n  C --> B\n```\n\nВыбор меняет только механизм. Любой релей всё равно остаётся отдельным процессом, развязанным с бизнес-транзакцией."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Querying the table on a timer is polling: query load plus up to one interval of delay.",
+              "ru": "Опрос таблицы по таймеру — это поллинг: нагрузка запросами плюс задержка до одного интервала."
+            },
+            "incorrect": {
+              "en": "This is a polling publisher; it costs repeated queries and up to one poll interval of latency.",
+              "ru": "Это поллер-публикатор; он стоит повторяющихся запросов и задержки до одного интервала опроса."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A polling publisher — it adds query load and latency between polls",
+                "ru": "Поллер-публикатор — он добавляет нагрузку запросами и задержку между опросами"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Change-data-capture — it reads the database transaction log",
+                "ru": "Change-data-capture — он читает лог транзакций базы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "CDC never queries the outbox table; it tails the transaction log instead.",
+                "ru": "CDC вообще не опрашивает таблицу outbox; вместо этого он читает лог транзакций."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Neither — this is how the broker fetches events from the database",
+                "ru": "Ни то ни другое — так брокер сам забирает события из базы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Brokers do not query your database; a relay does, and this query is a relay's poll.",
+                "ru": "Брокеры не опрашивают вашу базу; это делает релей, и данный запрос — его опрос."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cdc-p1-what-cdc-reads",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does a change-data-capture relay read to find new outbox events?",
+            "ru": "Что читает CDC-релей, чтобы найти новые события outbox?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "CDC tails the log the database already writes for durability and replication.",
+              "ru": "CDC читает лог, который база и так пишет ради надёжности и репликации."
+            },
+            "incorrect": {
+              "en": "It reads the database's transaction log — that is what makes it pollingless.",
+              "ru": "Он читает лог транзакций базы — именно поэтому опрос ему не нужен."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The database's transaction log",
+                "ru": "Лог транзакций базы данных"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The outbox table, on a timer",
+                "ru": "Таблицу outbox, по таймеру"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the polling publisher; CDC exists precisely to avoid querying the table.",
+                "ru": "Это поллер-публикатор; CDC как раз и существует, чтобы не опрашивать таблицу."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The broker's topic",
+                "ru": "Топик брокера"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The broker is the destination of the relay, not its source.",
+                "ru": "Брокер — это назначение релея, а не его источник."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cdc-p2-latency-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A polling relay can delay an event by up to one poll interval before it reaches the broker.",
+            "ru": "Поллер-релей может задержать событие до одного интервала опроса, прежде чем оно дойдёт до брокера."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The row waits until the next poll — which is why CDC has lower latency.",
+              "ru": "Строка ждёт следующего опроса — поэтому у CDC задержка ниже."
+            },
+            "incorrect": {
+              "en": "It can — a freshly staged row waits for the next poll; CDC avoids that wait.",
+              "ru": "Может — только что записанная строка ждёт следующего опроса; CDC этого ожидания избегает."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "cdc-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each relay concept to its description.",
+            "ru": "Соотнеси каждое понятие релея с его описанием."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Same job, two mechanisms: query the table or tail the log.",
+              "ru": "Одна задача, два механизма: опрашивать таблицу или читать лог."
+            },
+            "incorrect": {
+              "en": "Polling queries PENDING rows; CDC tails the transaction log, often with Debezium.",
+              "ru": "Поллинг опрашивает строки PENDING; CDC читает лог транзакций, часто через Debezium."
+            }
+          },
+          "pairs": [
+            {
+              "id": "poller",
+              "left": {
+                "en": "polling publisher",
+                "ru": "поллер-публикатор"
+              },
+              "right": {
+                "en": "Queries PENDING rows on a timer",
+                "ru": "Опрашивает строки PENDING по таймеру"
+              }
+            },
+            {
+              "id": "cdc",
+              "left": {
+                "en": "change-data-capture",
+                "ru": "change-data-capture"
+              },
+              "right": {
+                "en": "Tails the database transaction log",
+                "ru": "Читает лог транзакций базы данных"
+              }
+            },
+            {
+              "id": "debezium",
+              "left": {
+                "en": "Debezium",
+                "ru": "Debezium"
+              },
+              "right": {
+                "en": "A tool used to implement CDC",
+                "ru": "Инструмент для реализации CDC"
+              }
+            },
+            {
+              "id": "advantage",
+              "left": {
+                "en": "no polling, lower latency",
+                "ru": "без опроса, ниже задержка"
+              },
+              "right": {
+                "en": "The main advantage of CDC over polling",
+                "ru": "Главное преимущество CDC перед поллингом"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cdc-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete both relay mechanisms.",
+            "ru": "Дополни оба механизма релея."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One queries staged rows; the other reads the log the database already writes.",
+              "ru": "Один опрашивает записанные строки; другой читает лог, который база и так пишет."
+            },
+            "incorrect": {
+              "en": "A poller selects status = 'PENDING'; a CDC relay reads the transaction log.",
+              "ru": "Поллер выбирает status = 'PENDING'; CDC-релей читает лог транзакций."
+            }
+          },
+          "text": {
+            "en": "A polling relay runs SELECT ... WHERE status = '___'; a CDC relay reads the database ___ log instead.",
+            "ru": "Поллер-релей выполняет SELECT ... WHERE status = '___'; CDC-релей вместо этого читает ___ лог базы данных."
+          },
+          "blanks": [
+            {
+              "en": [
+                "PENDING",
+                "pending"
+              ],
+              "ru": [
+                "PENDING",
+                "pending"
+              ]
+            },
+            {
+              "en": [
+                "transaction"
+              ],
+              "ru": [
+                "транзакционный",
+                "транзакций",
+                "transaction"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "at-least-once",
+      "title": {
+        "en": "The relay is at-least-once",
+        "ru": "Релей работает at-least-once"
+      },
+      "summary": {
+        "en": "The relay publishes and then marks the row, so a crash in between resends the event: delivery is at-least-once, not exactly-once.",
+        "ru": "Релей публикует, а затем помечает строку, поэтому сбой между этими шагами переотправляет событие: доставка at-least-once, а не exactly-once."
+      },
+      "discovery": [
+        {
+          "id": "alo-d1-crash-before-mark",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The relay crashes at the marked line and later restarts. What does the broker end up seeing?",
+            "ru": "Релей падает на отмеченной строке и позже перезапускается. Что в итоге увидит брокер?"
+          },
+          "code": "for (OutboxRow row : outbox.findPending()) {\n    broker.publish(row);              // sent successfully\n    // <-- the relay crashes here\n    outbox.markPublished(row.id());\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Look closely at the relay: sending to the broker and marking the row are again **two writes to two systems**. The dual-write shape did not vanish — it moved to a place where it is survivable.\n\n```mermaid\nsequenceDiagram\n  participant R as Relay\n  participant DB as Outbox table\n  participant B as Broker\n  R->>DB: SELECT rows WHERE status = PENDING\n  R->>B: publish e1\n  Note over R: crash before marking published\n  R->>DB: next cycle: e1 is still PENDING\n  R->>B: publish e1 again (duplicate)\n```\n\nIf the relay dies after sending but before marking, the row is still `PENDING`, so the next cycle sends the event **again**. The broker sees a **duplicate**.\n\nThat is the guarantee the Outbox pattern actually gives: **at-least-once** delivery — every staged event is eventually published, possibly more than once. It is not **exactly-once**, and no relay can be. The trade is deliberate: resending is recoverable, while skipping a possibly-unsent event would lose it forever.",
+            "ru": "Присмотритесь к релею: отправка в брокер и пометка строки — это снова **две записи в две системы**. Форма двойной записи никуда не исчезла — она переехала туда, где её можно пережить.\n\n```mermaid\nsequenceDiagram\n  participant R as Релей\n  participant DB as Таблица outbox\n  participant B as Брокер\n  R->>DB: SELECT rows WHERE status = PENDING\n  R->>B: опубликовать e1\n  Note over R: сбой до пометки published\n  R->>DB: следующий цикл: e1 всё ещё PENDING\n  R->>B: опубликовать e1 снова (дубликат)\n```\n\nЕсли релей умирает после отправки, но до пометки, строка остаётся `PENDING`, и следующий цикл отправляет событие **снова**. Брокер видит **дубликат**.\n\nВот какую гарантию на самом деле даёт паттерн Outbox: доставку **at-least-once** — каждое записанное событие в конце концов будет опубликовано, возможно, не один раз. Это не **exactly-once**, и ни один релей этого не даст. Компромисс выбран сознательно: переотправку можно пережить, а пропуск возможно-неотправленного события потерял бы его навсегда."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The row was never marked, so the next cycle sends it again.",
+              "ru": "Строку не пометили, поэтому следующий цикл отправляет её снова."
+            },
+            "incorrect": {
+              "en": "The row is still PENDING after the crash, so the relay republishes it — a duplicate.",
+              "ru": "После сбоя строка всё ещё PENDING, поэтому релей публикует её повторно — это дубликат."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The same event a second time — the row was still PENDING",
+                "ru": "То же событие второй раз — строка осталась PENDING"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing more — the event was already sent once",
+                "ru": "Больше ничего — событие уже было отправлено один раз"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The relay has no memory of the send; only the row's status could have recorded it.",
+                "ru": "Релей не помнит об отправке; записать её мог только статус строки."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "An error, because the row is already published",
+                "ru": "Ошибку, потому что строка уже опубликована"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The row was never marked published — the crash happened first.",
+                "ru": "Строку так и не пометили опубликованной — сбой случился раньше."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "alo-p1-guarantee",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What delivery guarantee does the Outbox pattern give?",
+            "ru": "Какую гарантию доставки даёт паттерн Outbox?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Eventually published, possibly more than once.",
+              "ru": "В конце концов опубликовано, возможно, не один раз."
+            },
+            "incorrect": {
+              "en": "At-least-once: events are never lost, but they can arrive more than once.",
+              "ru": "At-least-once: события не теряются, но могут прийти более одного раза."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "At-least-once — every event is eventually published, possibly more than once",
+                "ru": "At-least-once — каждое событие в конце концов публикуется, возможно, не раз"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Exactly-once — the outbox removes duplicates",
+                "ru": "Exactly-once — outbox устраняет дубликаты"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A crash between sending and marking causes a resend; the outbox cannot prevent that.",
+                "ru": "Сбой между отправкой и пометкой вызывает переотправку; outbox этого не предотвращает."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "At-most-once — an event may be lost but never duplicated",
+                "ru": "At-most-once — событие может потеряться, но никогда не дублируется"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Loss is exactly what the outbox prevents; duplicates are what it accepts.",
+                "ru": "Потерю outbox как раз предотвращает; дубликаты — то, с чем он мирится."
+              }
+            }
+          ]
+        },
+        {
+          "id": "alo-p2-duplicate-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A duplicate published by an outbox relay always means the pattern was implemented incorrectly.",
+            "ru": "Дубликат, опубликованный релеем outbox, всегда означает, что паттерн реализован неправильно."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Duplicates are an expected consequence of at-least-once delivery.",
+              "ru": "Дубликаты — ожидаемое следствие доставки at-least-once."
+            },
+            "incorrect": {
+              "en": "No — a duplicate is normal after a relay crash; consumers are expected to handle it.",
+              "ru": "Нет — дубликат нормален после сбоя релея; предполагается, что потребители его обработают."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "alo-p3-spot-mark-first",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This relay marks each row published before sending it. What does that change?",
+            "ru": "Этот релей помечает каждую строку опубликованной до её отправки. Что это меняет?"
+          },
+          "code": "for (OutboxRow row : outbox.findPending()) {\n    outbox.markPublished(row.id());\n    broker.publish(row);\n}",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "Marking first trades duplicates for permanent loss — the worse of the two.",
+              "ru": "Пометка первой меняет дубликаты на безвозвратную потерю — худший из двух вариантов."
+            },
+            "incorrect": {
+              "en": "A crash between the lines leaves a row marked published that was never sent: the event is lost.",
+              "ru": "Сбой между строками оставляет помеченную опубликованной строку, которая не отправлялась: событие потеряно."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A crash between the two lines loses the event permanently — duplicates are traded for loss",
+                "ru": "Сбой между двумя строками теряет событие навсегда — дубликаты меняются на потерю"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing — the two orders are equivalent",
+                "ru": "Ничего — оба порядка равнозначны"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The order decides which failure you get: a resend or a silently dropped event.",
+                "ru": "Порядок решает, какой сбой вы получите: переотправку или молча потерянное событие."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It upgrades delivery to exactly-once",
+                "ru": "Это повышает доставку до exactly-once"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It downgrades delivery to at-most-once: events can now be dropped without a trace.",
+                "ru": "Это понижает доставку до at-most-once: события теперь могут пропадать бесследно."
+              }
+            }
+          ]
+        },
+        {
+          "id": "alo-p4-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the consequence of at-least-once delivery.",
+            "ru": "Собери следствие доставки at-least-once."
+          },
+          "feedback": {
+            "correct": {
+              "en": "At-least-once pushes duplicate handling onto the consumer.",
+              "ru": "At-least-once перекладывает обработку дубликатов на потребителя."
+            },
+            "incorrect": {
+              "en": "The relay is at-least-once, so consumers may see duplicates.",
+              "ru": "Релей работает at-least-once, поэтому потребители могут увидеть дубликаты."
+            }
+          },
+          "tokens": {
+            "en": [
+              "the",
+              "relay",
+              "is",
+              "at-least-once",
+              "so",
+              "consumers",
+              "may",
+              "see",
+              "duplicates"
+            ],
+            "ru": [
+              "релей",
+              "работает",
+              "at-least-once",
+              "поэтому",
+              "потребители",
+              "могут",
+              "увидеть",
+              "дубликаты"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "exactly-once"
+            ],
+            "ru": [
+              "exactly-once"
+            ]
+          }
+        },
+        {
+          "id": "alo-p5-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the guarantee the Outbox gives and the one it does not.",
+            "ru": "Назови гарантию, которую Outbox даёт, и ту, которую не даёт."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Never lost, sometimes repeated — that is at-least-once.",
+              "ru": "Никогда не теряется, иногда повторяется — это и есть at-least-once."
+            },
+            "incorrect": {
+              "en": "The outbox relay is at-least-once; exactly-once is what it cannot promise.",
+              "ru": "Релей outbox работает at-least-once; exactly-once он обещать не может."
+            }
+          },
+          "text": {
+            "en": "The outbox relay guarantees ___ delivery, not ___ delivery.",
+            "ru": "Релей outbox гарантирует доставку ___, а не доставку ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "at-least-once",
+                "at least once"
+              ],
+              "ru": [
+                "at-least-once",
+                "at least once"
+              ]
+            },
+            {
+              "en": [
+                "exactly-once",
+                "exactly once"
+              ],
+              "ru": [
+                "exactly-once",
+                "exactly once"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "inbox-pattern",
+      "title": {
+        "en": "The Inbox pattern on the consumer side",
+        "ru": "Паттерн Inbox на стороне потребителя"
+      },
+      "summary": {
+        "en": "Consumers dedup repeated deliveries by message id; that consumer-side half is the Inbox pattern, the idempotent consumer.",
+        "ru": "Потребители дедуплицируют повторные доставки по id сообщения; эта половина на стороне потребителя — паттерн Inbox, идемпотентный потребитель."
+      },
+      "discovery": [
+        {
+          "id": "inbox-d1-consumer-dedup",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A relay resent an event, so a consumer receives the same OrderPlaced message twice. What must the consumer do so the effect happens only once?",
+            "ru": "Релей переотправил событие, и потребитель получает одно и то же сообщение OrderPlaced дважды. Что должен сделать потребитель, чтобы эффект случился только один раз?"
+          },
+          "reveal": {
+            "en": "At-least-once means the producer has done all it can; the last mile belongs to the consumer. The consumer keeps its own table of message ids it has already handled — an **inbox** — and inside its own local transaction it checks whether the id is there, and if not, applies the effect and records the id. A repeat delivery finds the id and is skipped. This is **deduplication** (dedup), and a consumer built this way is **idempotent**: applying the same message twice has the same result as applying it once.\n\nThat is the **Inbox pattern**, the mirror image of the Outbox:\n\n```mermaid\nflowchart LR\n  P[\"producer: Outbox — stage + relay\"] --> B[\"broker\"]\n  B --> C[\"consumer: Inbox — dedup by message id\"]\n```\n\n- **Outbox** (producer side) — publish exactly when the database commits.\n- **Inbox** (consumer side) — apply each message's effect once.\n\nNotice they use the same trick on opposite ends: a table in the local database, written in the same transaction as the business work. Together they turn at-least-once transport into **effectively-once** processing.",
+            "ru": "At-least-once означает, что производитель сделал всё, что мог; последняя миля — за потребителем. Потребитель ведёт свою таблицу id уже обработанных сообщений — **inbox** — и внутри своей локальной транзакции проверяет, есть ли этот id, и если нет, применяет эффект и записывает id. Повторная доставка находит id и пропускается. Это **дедупликация**, а построенный так потребитель **идемпотентен**: применение одного и того же сообщения дважды даёт тот же результат, что и один раз.\n\nЭто и есть **паттерн Inbox**, зеркальное отражение Outbox:\n\n```mermaid\nflowchart LR\n  P[\"производитель: Outbox — запись + релей\"] --> B[\"брокер\"]\n  B --> C[\"потребитель: Inbox — дедуп по id сообщения\"]\n```\n\n- **Outbox** (сторона производителя) — публиковать ровно тогда, когда фиксируется база.\n- **Inbox** (сторона потребителя) — применить эффект каждого сообщения один раз.\n\nОбратите внимание: оба используют один и тот же приём с разных концов — таблицу в локальной базе, записываемую в той же транзакции, что и бизнес-работа. Вместе они превращают транспорт at-least-once в обработку **effectively-once**."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Remember what you have processed, then skip repeats.",
+              "ru": "Запоминать обработанное, а повторы пропускать."
+            },
+            "incorrect": {
+              "en": "The consumer must record handled message ids and skip ones it has seen before.",
+              "ru": "Потребитель должен записывать id обработанных сообщений и пропускать уже виденные."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Record which message ids it has already processed and skip repeats",
+                "ru": "Записывать id уже обработанных сообщений и пропускать повторы"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Ask the broker to deliver each message only once",
+                "ru": "Попросить брокер доставлять каждое сообщение только один раз"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The duplicate was created before the broker; it cannot know the two messages are one event.",
+                "ru": "Дубликат появился до брокера; он не может знать, что эти два сообщения — одно событие."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — processing the same event twice is harmless",
+                "ru": "Ничего — обработать одно событие дважды безвредно"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Only if the handler happens to be idempotent; charging or shipping twice is not harmless.",
+                "ru": "Только если обработчик и так идемпотентен; списать деньги или отгрузить дважды — не безвредно."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "inbox-p1-which-side",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which problem does the Inbox pattern solve?",
+            "ru": "Какую проблему решает паттерн Inbox?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Inbox is the consumer-side half: apply each message's effect once.",
+              "ru": "Inbox — половина на стороне потребителя: применить эффект каждого сообщения один раз."
+            },
+            "incorrect": {
+              "en": "It is the consumer side — deduplicating incoming messages so the effect applies once.",
+              "ru": "Это сторона потребителя — дедупликация входящих сообщений, чтобы эффект применился один раз."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The consumer side — applying each message's effect only once",
+                "ru": "Сторону потребителя — применение эффекта каждого сообщения только один раз"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The producer side — publishing exactly when the database commits",
+                "ru": "Сторону производителя — публикацию ровно тогда, когда фиксируется база"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the Outbox pattern; the Inbox is its consumer-side counterpart.",
+                "ru": "Это паттерн Outbox; Inbox — его аналог на стороне потребителя."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The broker side — storing messages durably",
+                "ru": "Сторону брокера — надёжное хранение сообщений"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Durable storage is the broker's own job; the Inbox is consumer-side deduplication.",
+                "ru": "Надёжное хранение — задача самого брокера; Inbox — это дедупликация у потребителя."
+              }
+            }
+          ]
+        },
+        {
+          "id": "inbox-p2-same-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Outbox and Inbox are two names for the same pattern.",
+            "ru": "Outbox и Inbox — два названия одного и того же паттерна."
+          },
+          "feedback": {
+            "correct": {
+              "en": "They are opposite ends of reliable messaging: producer side and consumer side.",
+              "ru": "Это противоположные концы надёжного обмена сообщениями: производитель и потребитель."
+            },
+            "incorrect": {
+              "en": "No — Outbox is producer-side reliable publishing; Inbox is consumer-side idempotent consumption.",
+              "ru": "Нет — Outbox это надёжная публикация у производителя; Inbox — идемпотентное потребление у потребителя."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "inbox-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each messaging term to what it describes.",
+            "ru": "Соотнеси каждый термин обмена сообщениями с тем, что он описывает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "At-least-once transport plus deduplication equals effectively-once processing.",
+              "ru": "Транспорт at-least-once плюс дедупликация дают обработку effectively-once."
+            },
+            "incorrect": {
+              "en": "Outbox is producer-side, Inbox is consumer-side, and together they give effectively-once.",
+              "ru": "Outbox — у производителя, Inbox — у потребителя, вместе они дают effectively-once."
+            }
+          },
+          "pairs": [
+            {
+              "id": "outbox",
+              "left": {
+                "en": "Outbox",
+                "ru": "Outbox"
+              },
+              "right": {
+                "en": "Producer side: stage the event with the business change",
+                "ru": "Сторона производителя: записать событие вместе с бизнес-изменением"
+              }
+            },
+            {
+              "id": "inbox",
+              "left": {
+                "en": "Inbox",
+                "ru": "Inbox"
+              },
+              "right": {
+                "en": "Consumer side: dedup incoming messages by id",
+                "ru": "Сторона потребителя: дедуплицировать входящие сообщения по id"
+              }
+            },
+            {
+              "id": "alo",
+              "left": {
+                "en": "at-least-once",
+                "ru": "at-least-once"
+              },
+              "right": {
+                "en": "What the transport actually guarantees",
+                "ru": "Что реально гарантирует транспорт"
+              }
+            },
+            {
+              "id": "eo",
+              "left": {
+                "en": "effectively-once",
+                "ru": "effectively-once"
+              },
+              "right": {
+                "en": "The result of combining at-least-once with deduplication",
+                "ru": "Результат сочетания at-least-once с дедупликацией"
+              }
+            }
+          ]
+        },
+        {
+          "id": "inbox-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the consumer-side pattern and the property it gives.",
+            "ru": "Назови паттерн на стороне потребителя и свойство, которое он даёт."
+          },
+          "feedback": {
+            "correct": {
+              "en": "An idempotent consumer can safely receive the same message twice.",
+              "ru": "Идемпотентный потребитель может спокойно получить одно и то же сообщение дважды."
+            },
+            "incorrect": {
+              "en": "It is the Inbox pattern, and it makes the consumer idempotent.",
+              "ru": "Это паттерн Inbox, и он делает потребителя идемпотентным."
+            }
+          },
+          "text": {
+            "en": "The consumer-side counterpart of the Outbox is the ___ pattern, which makes the consumer ___.",
+            "ru": "Аналог Outbox на стороне потребителя — паттерн ___, который делает потребителя ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "Inbox",
+                "inbox"
+              ],
+              "ru": [
+                "Inbox",
+                "inbox",
+                "Инбокс"
+              ]
+            },
+            {
+              "en": [
+                "idempotent"
+              ],
+              "ru": [
+                "идемпотентным",
+                "идемпотентный",
+                "idempotent"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "retention",
+      "title": {
+        "en": "Keeping the outbox from growing forever",
+        "ru": "Как не дать outbox расти бесконечно"
+      },
+      "summary": {
+        "en": "Published rows must be deleted on publish or swept by a retention job, or the outbox table grows without bound.",
+        "ru": "Опубликованные строки нужно удалять при публикации или чистить задачей ретенции, иначе таблица outbox растёт безгранично."
+      },
+      "discovery": [
+        {
+          "id": "retention-d1-growth",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A service has run the Outbox pattern for a year, marking every row PUBLISHED and never removing any. What is the consequence?",
+            "ru": "Сервис год работает с паттерном Outbox, помечая каждую строку PUBLISHED и никогда ничего не удаляя. К чему это приведёт?"
+          },
+          "reveal": {
+            "en": "The outbox is a **queue, not an archive**. Every business change adds a row, so unless something removes them the table only grows: the relay's scans get slower, indexes get larger, backups get heavier.\n\nTwo standard choices:\n\n- **Delete on publish** — the relay deletes the row instead of setting `status = 'PUBLISHED'`. The table then holds only the current backlog and stays naturally small.\n- **Retention sweep** — keep `PUBLISHED` rows for a while (handy for debugging and audits) and run a periodic job that deletes rows older than the retention window.\n\n```mermaid\nflowchart LR\n  R[\"relay publishes the row\"] --> D[\"delete the row\"]\n  R --> M[\"mark it PUBLISHED\"]\n  M --> S[\"retention job deletes old rows\"]\n```\n\nWith CDC there is often nothing to keep at all: the relay captures the **insert** from the transaction log, so the row can be deleted right after it is written — the log already carries the event.",
+            "ru": "Outbox — это **очередь, а не архив**. Каждое бизнес-изменение добавляет строку, поэтому, если их ничто не удаляет, таблица только растёт: сканы релея замедляются, индексы разбухают, бэкапы тяжелеют.\n\nДва стандартных варианта:\n\n- **Удаление при публикации** — релей удаляет строку вместо того, чтобы ставить `status = 'PUBLISHED'`. Тогда таблица хранит только текущий бэклог и естественно остаётся маленькой.\n- **Задача ретенции** — держать строки `PUBLISHED` какое-то время (удобно для отладки и аудита) и периодически удалять те, что старше окна хранения.\n\n```mermaid\nflowchart LR\n  R[\"релей публикует строку\"] --> D[\"удалить строку\"]\n  R --> M[\"пометить PUBLISHED\"]\n  M --> S[\"задача ретенции удаляет старые строки\"]\n```\n\nС CDC хранить часто нечего вовсе: релей ловит **вставку** из лога транзакций, поэтому строку можно удалить сразу после записи — событие уже несёт сам лог."
+          },
+          "feedback": {
+            "correct": {
+              "en": "An outbox that is never cleaned up becomes an ever-growing table.",
+              "ru": "Никогда не очищаемый outbox превращается в постоянно растущую таблицу."
+            },
+            "incorrect": {
+              "en": "The table grows without bound, which slows the relay's queries and bloats storage.",
+              "ru": "Таблица растёт безгранично, из-за чего запросы релея замедляются, а хранилище раздувается."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The outbox table grows without bound and slows the relay's queries",
+                "ru": "Таблица outbox растёт безгранично и замедляет запросы релея"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing — published rows are ignored by the relay",
+                "ru": "Ничего — релей игнорирует опубликованные строки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "They are ignored logically, but they still fill the table the relay has to scan.",
+                "ru": "Логически они игнорируются, но всё равно наполняют таблицу, которую релей сканирует."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The relay eventually republishes the old rows",
+                "ru": "Релей рано или поздно переопубликует старые строки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "PUBLISHED rows are not resent; the problem here is unbounded growth, not duplication.",
+                "ru": "Строки PUBLISHED не переотправляются; проблема здесь — неограниченный рост, а не дублирование."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "retention-p1-forever-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Rows in the outbox table can safely be kept forever at no cost.",
+            "ru": "Строки в таблице outbox можно спокойно хранить вечно и без последствий."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Unbounded growth costs query time, index size and backup weight.",
+              "ru": "Неограниченный рост стоит времени запросов, размера индексов и веса бэкапов."
+            },
+            "incorrect": {
+              "en": "No — published rows must be deleted or swept, or the table grows without bound.",
+              "ru": "Нет — опубликованные строки надо удалять или чистить, иначе таблица растёт безгранично."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "retention-p2-valid-way",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which is a valid way to keep the outbox table bounded?",
+            "ru": "Какой способ действительно ограничивает рост таблицы outbox?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Deleting on publish leaves only the current backlog in the table.",
+              "ru": "Удаление при публикации оставляет в таблице только текущий бэклог."
+            },
+            "incorrect": {
+              "en": "Delete the row when the relay publishes it, or sweep old PUBLISHED rows on a retention job.",
+              "ru": "Удаляйте строку при публикации релеем или чистите старые строки PUBLISHED задачей ретенции."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Delete each row when the relay publishes it",
+                "ru": "Удалять каждую строку, когда релей её публикует"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Cap the table size and reject new inserts when it is full",
+                "ru": "Ограничить размер таблицы и отклонять новые вставки при заполнении"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That would fail business transactions — staging must never block them.",
+                "ru": "Это ломало бы бизнес-транзакции — запись события не должна их блокировать."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Let the broker delete the rows once it has received them",
+                "ru": "Позволить брокеру удалять строки после получения"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The broker never touches your tables; the relay or a retention job removes rows.",
+                "ru": "Брокер не трогает ваши таблицы; строки удаляет релей или задача ретенции."
+              }
+            }
+          ]
+        },
+        {
+          "id": "retention-p3-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the rule for bounding the outbox table.",
+            "ru": "Собери правило ограничения роста таблицы outbox."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Either the relay removes rows immediately, or a retention job does it later.",
+              "ru": "Либо релей удаляет строки сразу, либо это позже делает задача ретенции."
+            },
+            "incorrect": {
+              "en": "Delete on publish, or sweep old published rows with a retention job.",
+              "ru": "Удаляй при публикации или чисти старые опубликованные строки задачей ретенции."
+            }
+          },
+          "tokens": {
+            "en": [
+              "delete",
+              "on",
+              "publish",
+              "or",
+              "sweep",
+              "old",
+              "published",
+              "rows"
+            ],
+            "ru": [
+              "удаляй",
+              "при",
+              "публикации",
+              "или",
+              "чисти",
+              "старые",
+              "опубликованные",
+              "строки"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "never"
+            ],
+            "ru": [
+              "никогда"
+            ]
+          }
+        },
+        {
+          "id": "retention-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete both ways of bounding the outbox.",
+            "ru": "Дополни оба способа ограничить рост outbox."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Either remove the row immediately or sweep it later; never keep everything.",
+              "ru": "Либо удалить строку сразу, либо вычистить позже; хранить всё нельзя."
+            },
+            "incorrect": {
+              "en": "Delete the row on publish, or run a retention job over old PUBLISHED rows.",
+              "ru": "Удаляйте строку при публикации или запускайте задачу ретенции по старым строкам PUBLISHED."
+            }
+          },
+          "text": {
+            "en": "To bound the outbox, either ___ the row on publish or run a ___ job that removes old PUBLISHED rows.",
+            "ru": "Чтобы ограничить outbox, либо ___ строку при публикации, либо запускайте задачу ___, удаляющую старые строки PUBLISHED."
+          },
+          "blanks": [
+            {
+              "en": [
+                "delete",
+                "remove"
+              ],
+              "ru": [
+                "удаляйте",
+                "удалять",
+                "удаляй",
+                "delete"
+              ]
+            },
+            {
+              "en": [
+                "retention",
+                "cleanup"
+              ],
+              "ru": [
+                "ретенции",
+                "очистки",
+                "retention"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "outbox-end-to-end",
+      "title": {
+        "en": "Putting it together",
+        "ru": "Собираем всё вместе"
+      },
+      "summary": {
+        "en": "The whole path: one local transaction stages the event with the change, a relay publishes it at-least-once, and an idempotent consumer dedups.",
+        "ru": "Весь путь: одна локальная транзакция записывает событие вместе с изменением, релей публикует его at-least-once, а идемпотентный потребитель дедуплицирует."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "cap-d1-full-trace",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Trace this end to end. What does the consumer receive, and what must it do about it?",
+            "ru": "Проследи всё от начала до конца. Что получит потребитель и что он должен с этим сделать?"
+          },
+          "code": "@Transactional\nvoid placeOrder(Order o) {\n    orders.save(o);\n    outbox.insert(\"OrderPlaced\", o.id());   // status = PENDING\n}\n\n// relay cycle:\n//   publish e1 -> OK\n//   crash before markPublished(e1)\n//   restart, next cycle runs",
+          "codeLang": "java",
+          "reveal": {
+            "en": "The complete path, and which guarantee each part supplies:\n\n```mermaid\nflowchart LR\n  TX[\"one local transaction: order + outbox row PENDING\"] --> DB[(\"business DB + outbox\")]\n  DB --> R[\"relay: poller or CDC\"]\n  R --> B[\"broker\"]\n  B --> C[\"consumer: Inbox dedup\"]\n  R --> M[\"mark PUBLISHED or delete\"]\n```\n\n- The **transaction** removes the dual write: the change and its event commit together or not at all, so there are no lost and no phantom events.\n- The **relay** removes the coupling: a slow or down broker delays events but never blocks or fails a commit.\n- **At-least-once** is what remains: a crash between publishing and marking resends the event, so duplicates reach the broker.\n- The **Inbox** absorbs that: the consumer dedups by message id, making the end-to-end effect **effectively-once**.\n\nThe pattern never makes the two-step problem disappear. It moves it to the one place where retrying is safe — after the data is already durable.",
+            "ru": "Полный путь и то, какую гарантию даёт каждая часть:\n\n```mermaid\nflowchart LR\n  TX[\"одна локальная транзакция: заказ + строка outbox PENDING\"] --> DB[(\"бизнес-БД + outbox\")]\n  DB --> R[\"релей: поллер или CDC\"]\n  R --> B[\"брокер\"]\n  B --> C[\"потребитель: дедуп через Inbox\"]\n  R --> M[\"пометить PUBLISHED или удалить\"]\n```\n\n- **Транзакция** убирает двойную запись: изменение и его событие фиксируются вместе либо никак, поэтому нет ни потерянных, ни фантомных событий.\n- **Релей** убирает связанность: медленный или упавший брокер задерживает события, но никогда не блокирует и не ломает коммит.\n- Остаётся **at-least-once**: сбой между публикацией и пометкой переотправляет событие, поэтому до брокера доходят дубликаты.\n- **Inbox** это поглощает: потребитель дедуплицирует по id сообщения, и сквозной эффект становится **effectively-once**.\n\nПаттерн не заставляет проблему двух шагов исчезнуть. Он переносит её в единственное место, где повтор безопасен, — туда, где данные уже надёжно сохранены."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A duplicate reaches the consumer, and the consumer is the one that must dedup.",
+              "ru": "До потребителя доходит дубликат, и именно потребитель должен его отсеять."
+            },
+            "incorrect": {
+              "en": "The row stayed PENDING, so the event is sent twice; the consumer dedups by message id.",
+              "ru": "Строка осталась PENDING, поэтому событие уйдёт дважды; потребитель дедуплицирует по id сообщения."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "OrderPlaced twice — the consumer must dedup by message id",
+                "ru": "OrderPlaced дважды — потребитель должен дедуплицировать по id сообщения"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "OrderPlaced once — the relay remembers it already sent it",
+                "ru": "OrderPlaced один раз — релей помнит, что уже отправил его"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The row was never marked PUBLISHED, so the next cycle sends it again.",
+                "ru": "Строку не пометили PUBLISHED, поэтому следующий цикл отправит её снова."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — the relay crash rolled the order back",
+                "ru": "Ничего — сбой релея откатил заказ"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The business transaction committed long before, in a different process entirely.",
+                "ru": "Бизнес-транзакция зафиксировалась задолго до этого и совсем в другом процессе."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cap-p1-spot-outside-tx",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This service stages events in an outbox table, yet the pattern is broken. Why?",
+            "ru": "Этот сервис записывает события в таблицу outbox, но паттерн сломан. Почему?"
+          },
+          "code": "@Transactional\nvoid placeOrder(Order o) {\n    orders.save(o);\n}\n\nvoid afterCommit(Order o) {\n    outbox.insert(\"OrderPlaced\", o.id());   // status = PENDING\n}",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "An outbox table outside the transaction is just a second system with extra steps.",
+              "ru": "Таблица outbox вне транзакции — это просто вторая система, только длиннее путь."
+            },
+            "incorrect": {
+              "en": "The outbox row is written after the commit, so a crash in between loses the event: a dual write.",
+              "ru": "Строка outbox пишется после коммита, поэтому сбой между ними теряет событие: это двойная запись."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The outbox row is written outside the business transaction, so it is still a dual write",
+                "ru": "Строка outbox пишется вне бизнес-транзакции, поэтому это всё ещё двойная запись"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The outbox row must be inserted before the order row",
+                "ru": "Строку outbox надо вставлять до строки заказа"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Order within one transaction does not matter; being in the same transaction does.",
+                "ru": "Порядок внутри одной транзакции не важен; важно быть в одной транзакции."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "afterCommit should publish to the broker directly instead",
+                "ru": "afterCommit должен вместо этого публиковать прямо в брокер"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Publishing from the service's own path is what the outbox exists to avoid.",
+                "ru": "Публикация из собственного пути сервиса — как раз то, чего outbox позволяет избежать."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p2-broker-down",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The broker has been unreachable for ten minutes and the relay keeps failing. What happens to calls to this method, and to the events?",
+            "ru": "Брокер недоступен уже десять минут, и релей продолжает падать. Что происходит с вызовами этого метода и с событиями?"
+          },
+          "code": "@Transactional\nvoid placeOrder(Order o) {\n    orders.save(o);\n    outbox.insert(\"OrderPlaced\", o.id());   // status = PENDING\n}",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "Commits are independent of the broker; the backlog drains once it is back.",
+              "ru": "Фиксации не зависят от брокера; накопленный бэклог уйдёт, когда он вернётся."
+            },
+            "incorrect": {
+              "en": "The calls commit normally — the transaction only writes two rows in one database.",
+              "ru": "Вызовы фиксируются как обычно — транзакция лишь пишет две строки в одну базу."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The calls commit normally; the events stay PENDING and are published when the broker returns",
+                "ru": "Вызовы фиксируются как обычно; события остаются PENDING и публикуются, когда брокер вернётся"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The calls fail until the broker is reachable again",
+                "ru": "Вызовы падают, пока брокер снова не станет доступен"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The transaction never contacts the broker, so its availability cannot fail a commit.",
+                "ru": "Транзакция не обращается к брокеру, поэтому его доступность не может сломать коммит."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The calls commit and the events are dropped",
+                "ru": "Вызовы фиксируются, а события отбрасываются"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The events are durable rows; the relay retries until they go out.",
+                "ru": "События — долговечные строки; релей повторяет попытки, пока они не уйдут."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p3-sort-full",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the complete Outbox flow, from the business change to the consumer.",
+            "ru": "Расставь по порядку полный поток Outbox — от бизнес-изменения до потребителя."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One commit, then a decoupled relay, then deduplication at the far end.",
+              "ru": "Один коммит, затем развязанный релей, затем дедупликация на дальнем конце."
+            },
+            "incorrect": {
+              "en": "Stage both rows in one transaction, commit, relay publishes, relay marks, consumer dedups.",
+              "ru": "Записать обе строки в одной транзакции, зафиксировать, релей публикует, помечает, потребитель дедуплицирует."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Begin one local transaction in the service's database",
+                "ru": "Открыть одну локальную транзакцию в базе сервиса"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Write the business change and insert an outbox row with status PENDING",
+                "ru": "Записать бизнес-изменение и вставить строку outbox со статусом PENDING"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Commit — both rows commit together or neither does",
+                "ru": "Зафиксировать — обе строки фиксируются вместе либо ни одна"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "A separate relay reads unpublished rows and publishes them to the broker",
+                "ru": "Отдельный релей читает неопубликованные строки и публикует их в брокер"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "The relay marks each sent row PUBLISHED or deletes it",
+                "ru": "Релей помечает каждую отправленную строку PUBLISHED или удаляет её"
+              }
+            },
+            {
+              "id": "s6",
+              "text": {
+                "en": "The consumer dedups repeated messages before applying the effect",
+                "ru": "Потребитель отсеивает повторные сообщения до применения эффекта"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p4-match-guarantees",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each mechanism of reliable messaging to the guarantee it buys.",
+            "ru": "Соотнеси каждый механизм надёжного обмена сообщениями с гарантией, которую он даёт."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Each piece buys exactly one guarantee; together they cover the whole path.",
+              "ru": "Каждая часть даёт ровно одну гарантию; вместе они покрывают весь путь."
+            },
+            "incorrect": {
+              "en": "Transaction -> atomicity, relay -> decoupling, publish-then-mark -> at-least-once, inbox -> effectively-once.",
+              "ru": "Транзакция — атомарность, релей — развязка, публикация до пометки — at-least-once, inbox — effectively-once."
+            }
+          },
+          "pairs": [
+            {
+              "id": "g1",
+              "left": {
+                "en": "one local transaction",
+                "ru": "одна локальная транзакция"
+              },
+              "right": {
+                "en": "No lost and no phantom events",
+                "ru": "Ни потерянных, ни фантомных событий"
+              }
+            },
+            {
+              "id": "g2",
+              "left": {
+                "en": "a separate relay",
+                "ru": "отдельный релей"
+              },
+              "right": {
+                "en": "A down broker never blocks a commit",
+                "ru": "Упавший брокер не блокирует коммит"
+              }
+            },
+            {
+              "id": "g3",
+              "left": {
+                "en": "publish, then mark published",
+                "ru": "опубликовать, затем пометить published"
+              },
+              "right": {
+                "en": "Delivery is at-least-once",
+                "ru": "Доставка работает at-least-once"
+              }
+            },
+            {
+              "id": "g4",
+              "left": {
+                "en": "consumer-side inbox",
+                "ru": "inbox на стороне потребителя"
+              },
+              "right": {
+                "en": "The effect is applied effectively-once",
+                "ru": "Эффект применяется effectively-once"
+              }
+            },
+            {
+              "id": "g5",
+              "left": {
+                "en": "delete on publish or retention sweep",
+                "ru": "удаление при публикации или задача ретенции"
+              },
+              "right": {
+                "en": "The outbox table stays bounded",
+                "ru": "Таблица outbox не растёт безгранично"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p5-fill-answer",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill the key parts of the Outbox answer.",
+            "ru": "Впиши ключевые части ответа про Outbox."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One local transaction, a relay, at-least-once delivery, Inbox on the far side.",
+              "ru": "Одна локальная транзакция, релей, доставка at-least-once, Inbox на дальней стороне."
+            },
+            "incorrect": {
+              "en": "Stage in one local transaction, let a relay publish, accept at-least-once, dedup with the Inbox.",
+              "ru": "Записать в одной локальной транзакции, публикует релей, доставка at-least-once, дедуп через Inbox."
+            }
+          },
+          "text": {
+            "en": "Outbox: write the change and the event row in one ___ transaction, let a ___ publish them, accept ___ delivery, and dedup with the ___ pattern.",
+            "ru": "Outbox: пишем изменение и строку события в одной ___ транзакции, публикует их ___, доставка ___, а дедупликацию делает паттерн ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "local"
+              ],
+              "ru": [
+                "локальной",
+                "local"
+              ]
+            },
+            {
+              "en": [
+                "relay"
+              ],
+              "ru": [
+                "релей",
+                "relay"
+              ]
+            },
+            {
+              "en": [
+                "at-least-once",
+                "at least once"
+              ],
+              "ru": [
+                "at-least-once",
+                "at least once"
+              ]
+            },
+            {
+              "en": [
+                "Inbox",
+                "inbox"
+              ],
+              "ru": [
+                "Inbox",
+                "inbox",
+                "Инбокс"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

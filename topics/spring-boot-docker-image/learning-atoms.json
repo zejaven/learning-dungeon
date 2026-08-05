@@ -1,0 +1,1467 @@
+{
+  "schemaVersion": 1,
+  "topicId": "spring-boot-docker-image",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "jar-then-image",
+      "title": { "en": "The jar first, then the image", "ru": "Сначала jar, потом образ" },
+      "summary": {
+        "en": "Maven or Gradle produces the jar; the Dockerfile compiles nothing — it only packages that jar with a JVM.",
+        "ru": "Jar собирает Maven или Gradle; Dockerfile ничего не компилирует — он лишь упаковывает этот jar вместе с JVM."
+      },
+      "discovery": [
+        {
+          "id": "jar-image-d1-stale-jar",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "You edit a controller and immediately run `docker build -t shop-api:1.0.0 .` with this Dockerfile, without running Maven. What ends up in the image?",
+            "ru": "Вы правите контроллер и сразу запускаете `docker build -t shop-api:1.0.0 .` с этим Dockerfile, не запуская Maven. Что попадёт в образ?"
+          },
+          "code": "FROM eclipse-temurin:21-jre\nWORKDIR /app\nCOPY target/app.jar app.jar\nEXPOSE 8080\nENTRYPOINT [\"java\", \"-jar\", \"/app/app.jar\"]",
+          "codeLang": "text",
+          "options": [
+            { "id": "a", "text": { "en": "The old jar that already lay in target/", "ru": "Старый jar, который уже лежал в target/" }, "correct": true },
+            { "id": "b", "text": { "en": "The recompiled code — docker build compiles the sources", "ru": "Перекомпилированный код — docker build компилирует исходники" }, "correct": false,
+              "feedback": { "en": "A Dockerfile never compiles; COPY takes whatever file is already there.", "ru": "Dockerfile ничего не компилирует; COPY берёт файл, который уже лежит на месте." } },
+            { "id": "c", "text": { "en": "Nothing — the build fails because the sources changed", "ru": "Ничего — сборка упадёт, потому что исходники изменились" }, "correct": false,
+              "feedback": { "en": "Docker does not look at src/ at all; it only reads the paths a COPY names.", "ru": "Docker вообще не смотрит в src/; он читает только пути, названные в COPY." } }
+          ],
+          "reveal": {
+            "en": "The Dockerfile does **not** compile anything. `mvn package` produces `target/app.jar`; Docker only packages that jar together with a Linux userland and a JVM, so the result runs identically on any machine with a container runtime.\n\nLine by line:\n\n- `FROM eclipse-temurin:21-jre` — the **base image**: a Linux userland plus a JRE.\n- `WORKDIR /app` — the directory the following instructions and the process work in.\n- `COPY target/app.jar app.jar` — copies the already-built jar into the image.\n- `EXPOSE 8080` — documents the port the app listens on.\n- `ENTRYPOINT [\"java\", \"-jar\", \"/app/app.jar\"]` — what the container runs on start.\n\n```mermaid\nflowchart LR\n  S[\"src plus pom.xml\"] --> M[\"mvn package\"]\n  M --> J[\"target/app.jar\"]\n  D[\"Dockerfile\"] --> B[\"docker build .\"]\n  J --> B\n  B --> I[\"image\"]\n  I --> R[\"registry\"]\n  R --> C[\"docker run -> container\"]\n```\n\nThat is why the order matters: build the jar first, then the image. On its own, `docker build` will happily ship a stale jar from last week.",
+            "ru": "Dockerfile **ничего** не компилирует. `target/app.jar` собрал `mvn package`; Docker лишь упаковывает этот jar вместе с окружением Linux и JVM, чтобы результат одинаково запускался на любой машине со средой выполнения контейнеров.\n\nПострочно:\n\n- `FROM eclipse-temurin:21-jre` — **базовый образ**: окружение Linux плюс JRE.\n- `WORKDIR /app` — каталог, в котором работают следующие инструкции и процесс.\n- `COPY target/app.jar app.jar` — копирует уже собранный jar в образ.\n- `EXPOSE 8080` — документирует порт, который слушает приложение.\n- `ENTRYPOINT [\"java\", \"-jar\", \"/app/app.jar\"]` — что запускает контейнер при старте.\n\n```mermaid\nflowchart LR\n  S[\"src плюс pom.xml\"] --> M[\"mvn package\"]\n  M --> J[\"target/app.jar\"]\n  D[\"Dockerfile\"] --> B[\"docker build .\"]\n  J --> B\n  B --> I[\"образ\"]\n  I --> R[\"реестр\"]\n  R --> C[\"docker run -> контейнер\"]\n```\n\nПоэтому важен порядок: сначала jar, потом образ. Сам по себе `docker build` спокойно увезёт протухший jar недельной давности."
+          },
+          "feedback": {
+            "correct": { "en": "COPY ships whatever is in target/ — building the jar is Maven's job.", "ru": "COPY увозит то, что лежит в target/, — сборка jar это работа Maven." },
+            "incorrect": { "en": "The Dockerfile only packages; without mvn package the old jar is copied in.", "ru": "Dockerfile только упаковывает; без mvn package скопируется старый jar." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "jar-image-p1-which-command",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which command produces the jar that a Spring Boot Dockerfile then COPYs into the image?",
+            "ru": "Какая команда создаёт jar, который затем COPY кладёт в образ Spring Boot?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "mvn -B package -DskipTests", "ru": "mvn -B package -DskipTests" }, "correct": true },
+            { "id": "b", "text": { "en": "docker build -t shop-api:1.0.0 .", "ru": "docker build -t shop-api:1.0.0 ." }, "correct": false,
+              "feedback": { "en": "That builds the image from an existing jar; it does not create one.", "ru": "Она собирает образ из уже существующего jar, но не создаёт его." } },
+            { "id": "c", "text": { "en": "docker run -p 8080:8080 shop-api:1.0.0", "ru": "docker run -p 8080:8080 shop-api:1.0.0" }, "correct": false,
+              "feedback": { "en": "That starts a container from a finished image.", "ru": "Она запускает контейнер из уже готового образа." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Maven builds the artefact; Docker only packages it.", "ru": "Maven собирает артефакт; Docker его только упаковывает." },
+            "incorrect": { "en": "It is mvn package — Docker commands never compile Java sources.", "ru": "Это mvn package — команды Docker не компилируют исходники Java." }
+          }
+        },
+        {
+          "id": "jar-image-p2-compiles-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A Dockerfile whose only COPY is `COPY target/app.jar app.jar` compiles the application's source code.",
+            "ru": "Dockerfile, в котором единственный COPY — это `COPY target/app.jar app.jar`, компилирует исходный код приложения."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": { "en": "It packages a jar that some other tool already built.", "ru": "Он упаковывает jar, который уже собрал другой инструмент." },
+            "incorrect": { "en": "No — COPY only moves an existing file; compilation happens before the build.", "ru": "Нет — COPY лишь переносит существующий файл; компиляция происходит до сборки." }
+          }
+        },
+        {
+          "id": "jar-image-p3-sort-pipeline",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the steps that take a Spring Boot service from source to a running container.",
+            "ru": "Расставь по порядку шаги, которые превращают сервис на Spring Boot из исходников в работающий контейнер."
+          },
+          "steps": [
+            { "id": "s1", "text": { "en": "Package the application: mvn -B package", "ru": "Собрать приложение: mvn -B package" } },
+            { "id": "s2", "text": { "en": "Build the image: docker build -t shop-api:1.0.0 .", "ru": "Собрать образ: docker build -t shop-api:1.0.0 ." } },
+            { "id": "s3", "text": { "en": "Push the tagged image to a registry", "ru": "Залить помеченный образ в реестр" } },
+            { "id": "s4", "text": { "en": "Start a container: docker run -p 8080:8080 shop-api:1.0.0", "ru": "Запустить контейнер: docker run -p 8080:8080 shop-api:1.0.0" } }
+          ],
+          "feedback": {
+            "correct": { "en": "Jar, then image, then registry, then container.", "ru": "Сначала jar, потом образ, потом реестр, потом контейнер." },
+            "incorrect": { "en": "The jar must exist before docker build; the registry sits between build and run.", "ru": "Jar должен существовать до docker build; реестр находится между сборкой и запуском." }
+          }
+        },
+        {
+          "id": "jar-image-p4-fill-instructions",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the two missing Dockerfile instructions.", "ru": "Впиши две пропущенные инструкции Dockerfile." },
+          "text": {
+            "en": "In a Dockerfile, ___ chooses the base image and ___ declares how the container starts the application.",
+            "ru": "В Dockerfile ___ выбирает базовый образ, а ___ объявляет, как контейнер запускает приложение."
+          },
+          "blanks": [
+            { "en": ["FROM", "from"], "ru": ["FROM", "from"] },
+            { "en": ["ENTRYPOINT", "entrypoint"], "ru": ["ENTRYPOINT", "entrypoint"] }
+          ],
+          "feedback": {
+            "correct": { "en": "FROM picks the runtime, ENTRYPOINT picks the process.", "ru": "FROM выбирает среду выполнения, ENTRYPOINT — процесс." },
+            "incorrect": { "en": "FROM sets the base image; ENTRYPOINT is the command the container runs.", "ru": "FROM задаёт базовый образ; ENTRYPOINT — команда, которую запускает контейнер." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "instructions-are-layers",
+      "title": { "en": "Instructions become cached layers", "ru": "Инструкции становятся кешируемыми слоями" },
+      "summary": {
+        "en": "Each instruction produces a layer, and Docker reuses one only if its own cache key and every layer below it are unchanged.",
+        "ru": "Каждая инструкция создаёт слой, и Docker переиспользует его, только если не изменились его собственный ключ кеша и все слои под ним."
+      },
+      "discovery": [
+        {
+          "id": "layers-d1-which-rebuild",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "You change the file copied by the third instruction and rebuild. Which layers does the daemon rebuild?",
+            "ru": "Вы меняете файл, который копирует третья инструкция, и пересобираете образ. Какие слои пересоберёт демон?"
+          },
+          "code": "FROM eclipse-temurin:21-jre\nWORKDIR /app\nCOPY config/ ./config/\nCOPY target/app.jar app.jar\nENTRYPOINT [\"java\", \"-jar\", \"/app/app.jar\"]",
+          "codeLang": "text",
+          "options": [
+            { "id": "a", "text": { "en": "The third one and everything after it", "ru": "Третью и всё, что идёт после неё" }, "correct": true },
+            { "id": "b", "text": { "en": "Only the third one", "ru": "Только третью" }, "correct": false,
+              "feedback": { "en": "The cache is a chain: each layer's validity depends on every layer below it.", "ru": "Кеш — это цепочка: годность каждого слоя зависит от всех слоёв под ним." } },
+            { "id": "c", "text": { "en": "All of them, including the base image", "ru": "Все, включая базовый образ" }, "correct": false,
+              "feedback": { "en": "Layers below the change stay cached — the base image is not rebuilt.", "ru": "Слои ниже изменения остаются в кеше — базовый образ не пересобирается." } }
+          ],
+          "reveal": {
+            "en": "Each instruction produces a **layer**, and the daemon reuses a layer only when **its own cache key and every layer below it are unchanged**. The cache is a chain, not a set of independent entries: the first instruction that changes invalidates itself *and everything after it*.\n\n```mermaid\nflowchart TB\n  L1[\"FROM eclipse-temurin:21-jre — cached\"] --> L2[\"WORKDIR /app — cached\"]\n  L2 --> L3[\"COPY config/ — CHANGED, rebuilt\"]\n  L3 --> L4[\"COPY app.jar — rebuilt, cache broken above\"]\n  L4 --> L5[\"ENTRYPOINT — rebuilt\"]\n```\n\nFor a `COPY`, the cache key includes a **digest of the copied content** — not the timestamp, not the destination name. Change one byte in a copied file and that layer's key changes, so it and everything stacked on top of it are rebuilt, re-pushed to the registry and re-pulled by every node.\n\nThis single rule is why instruction order decides how long your builds take.",
+            "ru": "Каждая инструкция создаёт **слой**, и демон переиспользует слой, только если **не изменились его собственный ключ кеша и все слои под ним**. Кеш — это цепочка, а не набор независимых записей: первая же изменившаяся инструкция обесценивает и себя, *и всё, что после неё*.\n\n```mermaid\nflowchart TB\n  L1[\"FROM eclipse-temurin:21-jre — из кеша\"] --> L2[\"WORKDIR /app — из кеша\"]\n  L2 --> L3[\"COPY config/ — ИЗМЕНИЛСЯ, пересобран\"]\n  L3 --> L4[\"COPY app.jar — пересобран, кеш выше сломан\"]\n  L4 --> L5[\"ENTRYPOINT — пересобран\"]\n```\n\nДля `COPY` в ключ кеша входит **дайджест копируемого содержимого** — не отметка времени и не имя приёмника. Измените один байт в копируемом файле — изменится ключ слоя, и он вместе со всем, что лежит сверху, будет пересобран, заново залит в реестр и заново скачан каждым узлом.\n\nИменно из этого правила следует, что порядок инструкций определяет длительность сборок."
+          },
+          "feedback": {
+            "correct": { "en": "The cache is a chain — one break invalidates everything above it.", "ru": "Кеш — цепочка: один разрыв обесценивает всё, что выше." },
+            "incorrect": { "en": "A changed instruction invalidates itself and every layer after it.", "ru": "Изменившаяся инструкция обесценивает себя и все слои после неё." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "layers-p1-independent-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Docker's layer cache is a set of independent entries, so changing an early instruction rebuilds only that one instruction.",
+            "ru": "Кеш слоёв Docker — это набор независимых записей, поэтому изменение ранней инструкции пересобирает только её саму."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": { "en": "It is a chain: everything stacked above a changed layer is rebuilt too.", "ru": "Это цепочка: всё, что лежит выше изменившегося слоя, тоже пересобирается." },
+            "incorrect": { "en": "No — a layer is reused only if every layer below it is also unchanged.", "ru": "Нет — слой переиспользуется, только если не изменились и все слои под ним." }
+          }
+        },
+        {
+          "id": "layers-p2-copy-cache-key",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does Docker put into the cache key of a `COPY` instruction?",
+            "ru": "Что Docker кладёт в ключ кеша инструкции `COPY`?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "A digest of the copied content", "ru": "Дайджест копируемого содержимого" }, "correct": true },
+            { "id": "b", "text": { "en": "The file's modification timestamp only", "ru": "Только время изменения файла" }, "correct": false,
+              "feedback": { "en": "A touched but unchanged file still hits the cache; the content digest decides.", "ru": "Файл с обновлённым временем, но прежним содержимым, всё равно попадёт в кеш: решает дайджест содержимого." } },
+            { "id": "c", "text": { "en": "The destination path inside the image only", "ru": "Только путь назначения внутри образа" }, "correct": false,
+              "feedback": { "en": "The destination is part of the instruction, but the content is what usually changes.", "ru": "Путь назначения — часть инструкции, но меняется обычно именно содержимое." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Content changes, key changes, layer rebuilds.", "ru": "Изменилось содержимое — изменился ключ — слой пересобран." },
+            "incorrect": { "en": "The copied content is digested, which is why one edited byte invalidates the layer.", "ru": "От копируемого содержимого берётся дайджест — поэтому один изменённый байт обесценивает слой." }
+          }
+        },
+        {
+          "id": "layers-p4-fill-rule",
+          "type": "fill_blank",
+          "prompt": { "en": "Complete the caching rule.", "ru": "Дополни правило кеширования." },
+          "text": {
+            "en": "Every Dockerfile instruction becomes a ___, and the daemon reuses it only when its cache key and every layer ___ it are unchanged.",
+            "ru": "Каждая инструкция Dockerfile становится ___, и демон переиспользует его, только если не изменились его ключ кеша и все слои ___."
+          },
+          "blanks": [
+            { "en": ["layer"], "ru": ["слоем", "слой"] },
+            { "en": ["below", "under"], "ru": ["ниже", "под ним"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Own key plus everything below — that is the whole cache rule.", "ru": "Собственный ключ плюс всё, что ниже, — это и есть всё правило кеша." },
+            "incorrect": { "en": "An instruction becomes a layer, reused only if it and every layer below are unchanged.", "ru": "Инструкция становится слоем, который переиспользуется, только если не изменились он и все слои ниже." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "fat-jar-one-layer",
+      "title": { "en": "The fat jar is one indivisible layer", "ru": "Fat jar — один неделимый слой" },
+      "summary": {
+        "en": "A single COPY of the fat jar makes one layer, so a one-line code change rewrites, re-pushes and re-pulls the whole jar.",
+        "ru": "Один COPY целого fat jar создаёт один слой, поэтому правка одной строки переписывает, перезаливает и перескачивает весь jar."
+      },
+      "discovery": [
+        {
+          "id": "fat-jar-d1-how-much",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The image below is rebuilt after changing one line in one controller. The jar is 45 MB. Roughly how many megabytes does the new application layer push to the registry?",
+            "ru": "Образ ниже пересобирают после правки одной строки в одном контроллере. Jar весит 45 МБ. Сколько примерно мегабайт нового слоя приложения уедет в реестр?"
+          },
+          "code": "FROM eclipse-temurin:21-jre\nWORKDIR /app\nCOPY target/app.jar app.jar\nENTRYPOINT [\"java\", \"-jar\", \"/app/app.jar\"]",
+          "codeLang": "text",
+          "options": [
+            { "id": "a", "text": { "en": "About 45 MB — the whole jar", "ru": "Около 45 МБ — весь jar" }, "correct": true },
+            { "id": "b", "text": { "en": "A few kilobytes — only the changed class", "ru": "Несколько килобайт — только изменившийся класс" }, "correct": false,
+              "feedback": { "en": "Docker sees one file, not the classes inside it; the whole layer is rewritten.", "ru": "Docker видит один файл, а не классы внутри него; переписывается весь слой." } },
+            { "id": "c", "text": { "en": "Nothing — the layer is cached because the Dockerfile did not change", "ru": "Ничего — слой в кеше, ведь Dockerfile не менялся" }, "correct": false,
+              "feedback": { "en": "A COPY's cache key includes the file's content digest, and the jar's content changed.", "ru": "В ключ кеша COPY входит дайджест содержимого файла, а содержимое jar изменилось." } }
+          ],
+          "reveal": {
+            "en": "A Spring Boot **fat jar** holds your classes *and* all your dependencies in one file, so Docker sees one indivisible blob. Change one line in one controller and the entire 45 MB layer is rewritten, pushed again and pulled again by every node.\n\n```mermaid\nflowchart TB\n  subgraph fat[\"one COPY of the fat jar\"]\n    F1[\"FROM eclipse-temurin:21-jre — 190 MB\"] --> F2[\"COPY app.jar — 45 MB, rebuilt every commit\"]\n  end\n  subgraph layered[\"the jar extracted into layers\"]\n    L1[\"FROM eclipse-temurin:21-jre — 190 MB\"] --> L2[\"dependencies — 43 MB, changes with pom.xml\"]\n    L2 --> L3[\"application — 1 MB, changes every commit\"]\n  end\n```\n\nBoth images are 235 MB. The difference is not size, it is **churn**: after a one-line change the first moves 45 MB and the second about 1 MB. Multiply that by fifty nodes and twenty releases a day and it is real minutes and real money. (The numbers are round illustrative ones — measure your own with `docker history`.)",
+            "ru": "**Fat jar** Spring Boot содержит ваши классы *и* все зависимости в одном файле, поэтому Docker видит один неделимый кусок. Измените одну строку в одном контроллере — и весь слой на 45 МБ будет переписан, заново залит и заново скачан каждым узлом.\n\n```mermaid\nflowchart TB\n  subgraph fat[\"один COPY целого fat jar\"]\n    F1[\"FROM eclipse-temurin:21-jre — 190 МБ\"] --> F2[\"COPY app.jar — 45 МБ, пересобирается на каждый коммит\"]\n  end\n  subgraph layered[\"jar, разложенный по слоям\"]\n    L1[\"FROM eclipse-temurin:21-jre — 190 МБ\"] --> L2[\"dependencies — 43 МБ, меняется вместе с pom.xml\"]\n    L2 --> L3[\"application — 1 МБ, меняется на каждый коммит\"]\n  end\n```\n\nОба образа весят 235 МБ. Разница не в размере, а в **объёме изменений**: после правки одной строки первый двигает 45 МБ, второй — около 1 МБ. Умножьте на полсотни узлов и двадцать релизов в день — это реальные минуты и реальные деньги. (Числа круглые и иллюстративные — свои смотрите через `docker history`.)"
+          },
+          "feedback": {
+            "correct": { "en": "One file, one layer, all 45 MB moved again.", "ru": "Один файл — один слой, все 45 МБ едут заново." },
+            "incorrect": { "en": "The jar is one file, so its whole layer is rewritten no matter how small the edit.", "ru": "Jar — один файл, поэтому его слой переписывается целиком, каким бы мелким ни был правка." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "fat-jar-p1-smaller-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Splitting a Spring Boot fat jar across several Docker layers makes the final image smaller.",
+            "ru": "Разложение fat jar Spring Boot по нескольким слоям Docker уменьшает итоговый образ."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": { "en": "The bytes are the same; what shrinks is the part that changes per commit.", "ru": "Байты те же; уменьшается та часть, что меняется от коммита к коммиту." },
+            "incorrect": { "en": "No — the total size is unchanged. Layering shrinks the churn, not the image.", "ru": "Нет — общий размер тот же. Слои уменьшают объём изменений, а не образ." }
+          }
+        },
+        {
+          "id": "fat-jar-p2-ten-deploys",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "`COPY target/app.jar app.jar` is the only COPY in an image deployed ten times a day. What is the practical problem?",
+            "ru": "`COPY target/app.jar app.jar` — единственный COPY в образе, который деплоят десять раз в день. В чём практическая проблема?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Every deploy rewrites, pushes and pulls the whole jar layer", "ru": "Каждый деплой переписывает, заливает и скачивает весь слой с jar" }, "correct": true },
+            { "id": "b", "text": { "en": "The container cannot start without a JDK in the image", "ru": "Контейнер не сможет стартовать без JDK в образе" }, "correct": false,
+              "feedback": { "en": "A JRE runs a jar perfectly well; the problem is rebuild and transfer cost.", "ru": "JRE прекрасно запускает jar; проблема в стоимости пересборки и передачи." } },
+            { "id": "c", "text": { "en": "The image becomes larger with every deploy", "ru": "Образ становится больше с каждым деплоем" }, "correct": false,
+              "feedback": { "en": "Each build produces a fresh image of the same size — the cost is transfer, not growth.", "ru": "Каждая сборка даёт свежий образ того же размера — цена в передаче, а не в росте." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Deploy speed is layer speed, and this layer is the whole jar.", "ru": "Скорость деплоя — это скорость слоёв, а этот слой — целый jar." },
+            "incorrect": { "en": "The jar is one indivisible layer, so every release moves all of it across the network.", "ru": "Jar — один неделимый слой, поэтому каждый релиз гоняет его целиком по сети." }
+          }
+        },
+        {
+          "id": "fat-jar-p4-fill-size",
+          "type": "fill_blank",
+          "prompt": { "en": "Complete the statement about layered jars.", "ru": "Дополни утверждение о слоистых jar." },
+          "text": {
+            "en": "Extracting a Spring Boot jar into layers does not change the image's total ___; it shrinks the part that ___ on every commit.",
+            "ru": "Разложение jar Spring Boot по слоям не меняет общий ___ образа; оно уменьшает ту часть, которая ___ на каждый коммит."
+          },
+          "blanks": [
+            { "en": ["size"], "ru": ["размер"] },
+            { "en": ["changes"], "ru": ["меняется", "изменяется"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Size stays, churn drops — that is the whole trade.", "ru": "Размер тот же, объём изменений падает — в этом вся сделка." },
+            "incorrect": { "en": "Size is unchanged; the changed part per commit is what gets smaller.", "ru": "Размер не меняется; меньше становится изменяемая часть на коммит." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "spring-boot-layered-jar",
+      "title": { "en": "Spring Boot's layered jar", "ru": "Слоистый jar Spring Boot" },
+      "summary": {
+        "en": "A Spring Boot jar carries a layer index and extracts into four folders that are copied rarest-changing first.",
+        "ru": "Jar Spring Boot несёт индекс слоёв и распаковывается в четыре папки, которые копируют начиная с самой редко меняющейся."
+      },
+      "discovery": [
+        {
+          "id": "layered-jar-d1-sort-copies",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "A Dockerfile copies the four folders extracted from a Spring Boot jar. Put the COPY instructions in the order that keeps the most layers cached.",
+            "ru": "Dockerfile копирует четыре папки, извлечённые из jar Spring Boot. Расставь инструкции COPY в порядке, который сохраняет в кеше больше всего слоёв."
+          },
+          "steps": [
+            { "id": "s1", "text": { "en": "COPY dependencies/", "ru": "COPY dependencies/" } },
+            { "id": "s2", "text": { "en": "COPY spring-boot-loader/", "ru": "COPY spring-boot-loader/" } },
+            { "id": "s3", "text": { "en": "COPY snapshot-dependencies/", "ru": "COPY snapshot-dependencies/" } },
+            { "id": "s4", "text": { "en": "COPY application/", "ru": "COPY application/" } }
+          ],
+          "reveal": {
+            "en": "Spring Boot builds its jar with a **layer index** and can extract itself into four folders, ordered by how often they change:\n\n| Layer | Contents | Changes |\n|---|---|---|\n| `dependencies/` | released third-party jars | when `pom.xml` does |\n| `spring-boot-loader/` | the loader classes | on a Spring Boot upgrade |\n| `snapshot-dependencies/` | `-SNAPSHOT` jars | when an internal library does |\n| `application/` | your classes and resources | every commit |\n\nThe extraction command (Spring Boot 3.3+):\n\n```bash\njava -Djarmode=tools -jar application.jar extract --layers --destination .\n```\n\nBefore 3.3 it was `-Djarmode=layertools -jar app.jar extract`, and the entrypoint was `ENTRYPOINT [\"java\", \"org.springframework.boot.loader.launch.JarLauncher\"]`. You will meet both forms in real repositories.\n\nThe ordering rule is **by change frequency, not by size**. Because the cache is a chain, whatever you copy first protects everything above it: put the 43 MB of dependencies at the bottom and the 1 MB of application code on top, and a normal commit rebuilds only that top megabyte. Add a starter to `pom.xml` and the dependency layer plus everything after it rebuilds — exactly as the chain rule predicts.",
+            "ru": "Spring Boot собирает jar с **индексом слоёв** и умеет распаковывать себя в четыре папки, упорядоченные по частоте изменений:\n\n| Слой | Содержимое | Когда меняется |\n|---|---|---|\n| `dependencies/` | выпущенные сторонние jar | вместе с `pom.xml` |\n| `spring-boot-loader/` | классы загрузчика | при обновлении Spring Boot |\n| `snapshot-dependencies/` | jar-файлы `-SNAPSHOT` | вместе с внутренней библиотекой |\n| `application/` | ваши классы и ресурсы | на каждый коммит |\n\nКоманда распаковки (Spring Boot 3.3+):\n\n```bash\njava -Djarmode=tools -jar application.jar extract --layers --destination .\n```\n\nДо 3.3 было `-Djarmode=layertools -jar app.jar extract`, а точкой входа — `ENTRYPOINT [\"java\", \"org.springframework.boot.loader.launch.JarLauncher\"]`. В реальных репозиториях встречаются оба варианта.\n\nПравило порядка — **по частоте изменений, а не по размеру**. Кеш — цепочка, поэтому то, что скопировано раньше, защищает всё, что выше: положите 43 МБ зависимостей вниз, а 1 МБ кода приложения — сверху, и обычный коммит пересоберёт только этот верхний мегабайт. Добавите стартер в `pom.xml` — пересоберётся слой зависимостей и всё после него, ровно как предсказывает правило цепочки."
+          },
+          "feedback": {
+            "correct": { "en": "Rarest change at the bottom, every-commit code on top.", "ru": "Самое редко меняющееся вниз, меняющийся на каждый коммит код — наверх." },
+            "incorrect": { "en": "Order by change frequency: dependencies, loader, snapshots, then application.", "ru": "Порядок по частоте изменений: dependencies, loader, snapshots, затем application." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "layered-jar-p1-every-commit",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which folder extracted from a Spring Boot layered jar changes on every commit?",
+            "ru": "Какая папка, извлечённая из слоистого jar Spring Boot, меняется на каждый коммит?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "application/", "ru": "application/" }, "correct": true },
+            { "id": "b", "text": { "en": "dependencies/", "ru": "dependencies/" }, "correct": false,
+              "feedback": { "en": "Released third-party jars change only when pom.xml does.", "ru": "Выпущенные сторонние jar меняются только вместе с pom.xml." } },
+            { "id": "c", "text": { "en": "spring-boot-loader/", "ru": "spring-boot-loader/" }, "correct": false,
+              "feedback": { "en": "The loader classes change on a Spring Boot upgrade, almost never otherwise.", "ru": "Классы загрузчика меняются при обновлении Spring Boot, в остальное время почти никогда." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Your classes and resources — which is why that layer goes last.", "ru": "Ваши классы и ресурсы — поэтому этот слой копируют последним." },
+            "incorrect": { "en": "It is application/: your own classes and resources.", "ru": "Это application/: ваши собственные классы и ресурсы." }
+          }
+        },
+        {
+          "id": "layered-jar-p2-match-folders",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each Spring Boot jar layer to what makes it change.",
+            "ru": "Соотнеси каждый слой jar Spring Boot с тем, что заставляет его меняться."
+          },
+          "pairs": [
+            { "id": "deps", "left": { "en": "dependencies/", "ru": "dependencies/" }, "right": { "en": "A change to pom.xml", "ru": "Изменение pom.xml" } },
+            { "id": "loader", "left": { "en": "spring-boot-loader/", "ru": "spring-boot-loader/" }, "right": { "en": "A Spring Boot upgrade", "ru": "Обновление Spring Boot" } },
+            { "id": "snapshots", "left": { "en": "snapshot-dependencies/", "ru": "snapshot-dependencies/" }, "right": { "en": "A new build of an internal -SNAPSHOT library", "ru": "Новая сборка внутренней библиотеки -SNAPSHOT" } },
+            { "id": "app", "left": { "en": "application/", "ru": "application/" }, "right": { "en": "Every commit to your own code", "ru": "Каждый коммит в ваш собственный код" } }
+          ],
+          "feedback": {
+            "correct": { "en": "That frequency order is exactly the COPY order.", "ru": "Этот порядок по частоте и есть порядок COPY." },
+            "incorrect": { "en": "dependencies follows pom.xml, loader follows the Boot version, snapshots follow internal libraries, application follows your commits.", "ru": "dependencies зависит от pom.xml, loader — от версии Boot, snapshots — от внутренних библиотек, application — от ваших коммитов." }
+          }
+        },
+        {
+          "id": "layered-jar-p3-by-size-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Spring Boot's extracted jar layers should be copied largest-first, so the big layers are cached.",
+            "ru": "Извлечённые слои jar Spring Boot нужно копировать начиная с самых больших, чтобы большие слои попадали в кеш."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": { "en": "The rule is change frequency; size only decides how much that costs.", "ru": "Правило — частота изменений; размер лишь определяет цену." },
+            "incorrect": { "en": "No — order by how often a layer changes, rarest first. Size is a coincidence.", "ru": "Нет — порядок по частоте изменений, редкое вниз. Размер здесь совпадение." }
+          }
+        },
+        {
+          "id": "layered-jar-p4-fill-extract",
+          "type": "fill_blank",
+          "prompt": { "en": "Complete the Spring Boot 3.3+ extraction command.", "ru": "Дополни команду распаковки для Spring Boot 3.3+." },
+          "text": {
+            "en": "java -Djarmode=___ -jar application.jar extract --___ --destination .",
+            "ru": "java -Djarmode=___ -jar application.jar extract --___ --destination ."
+          },
+          "blanks": [
+            { "en": ["tools"], "ru": ["tools"] },
+            { "en": ["layers"], "ru": ["layers"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Older projects use -Djarmode=layertools instead.", "ru": "В старых проектах вместо этого используется -Djarmode=layertools." },
+            "incorrect": { "en": "It is -Djarmode=tools ... extract --layers (older Boot versions: layertools).", "ru": "Это -Djarmode=tools ... extract --layers (в старых версиях Boot — layertools)." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "multi-stage-build",
+      "title": { "en": "Multi-stage builds", "ru": "Многоэтапная сборка" },
+      "summary": {
+        "en": "Several FROM blocks in one Dockerfile; only the last stage becomes the image, and COPY --from reaches back for artefacts.",
+        "ru": "Несколько блоков FROM в одном Dockerfile; образом становится только последний этап, а COPY --from достаёт артефакты из предыдущих."
+      },
+      "discovery": [
+        {
+          "id": "multi-stage-d1-what-ships",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does the published image built from this Dockerfile contain?",
+            "ru": "Что содержит опубликованный образ, собранный из этого Dockerfile?"
+          },
+          "code": "FROM maven:3.9-eclipse-temurin-21 AS builder\nWORKDIR /build\nCOPY pom.xml .\nRUN mvn -B dependency:go-offline\nCOPY src ./src\nRUN mvn -B package -DskipTests\n\nFROM eclipse-temurin:21-jre\nWORKDIR /app\nCOPY --from=builder /build/target/app.jar app.jar\nENTRYPOINT [\"java\", \"-jar\", \"/app/app.jar\"]",
+          "codeLang": "text",
+          "options": [
+            { "id": "a", "text": { "en": "The JRE base image and the jar — nothing from the builder stage", "ru": "Базовый образ с JRE и jar — ничего из этапа builder" }, "correct": true },
+            { "id": "b", "text": { "en": "Maven, the JDK, ~/.m2, the sources and the jar", "ru": "Maven, JDK, ~/.m2, исходники и jar" }, "correct": false,
+              "feedback": { "en": "Earlier stages are discarded; only what COPY --from pulls forward survives.", "ru": "Ранние этапы выбрасываются; остаётся только то, что перенёс COPY --from." } },
+            { "id": "c", "text": { "en": "Two images, one per FROM block", "ru": "Два образа, по одному на каждый FROM" }, "correct": false,
+              "feedback": { "en": "One Dockerfile produces one image: the last stage.", "ru": "Один Dockerfile даёт один образ — последний этап." } }
+          ],
+          "reveal": {
+            "en": "A **multi-stage build** is two or more `FROM` blocks in one Dockerfile. Earlier stages can do anything — run Maven, run tests, generate code — but only the **last** stage becomes the image. `COPY --from=<stage>` reaches back for the artefacts you want to keep.\n\n```mermaid\nflowchart LR\n  subgraph builder[\"stage builder — discarded\"]\n    A[\"maven plus JDK, ~520 MB\"] --> B[\"~/.m2, ~300 MB\"] --> C[\"src\"] --> D[\"target/app.jar\"]\n  end\n  subgraph runtime[\"stage runtime — becomes the image\"]\n    E[\"eclipse-temurin:21-jre, 190 MB\"] --> F[\"app.jar, 45 MB\"]\n  end\n  D -->|\"COPY --from=builder\"| F\n```\n\nWhat that buys you:\n\n- **The build tooling never ships.** No Maven, no compiler, no `~/.m2`, no source code in production — roughly 600 MB and a chunk of attack surface gone.\n- **Anyone can build it.** `docker build .` needs no local JDK or Maven, which simplifies CI images and onboarding.\n- **The Dockerfile really does build the app.** With a plain `COPY target/app.jar` you ship whatever happens to sit in `target/`; here the jar is compiled inside the build.",
+            "ru": "**Многоэтапная сборка** — это два или больше блоков `FROM` в одном Dockerfile. Ранние этапы могут делать что угодно — запускать Maven, гонять тесты, генерировать код, — но образом становится только **последний** этап. `COPY --from=<этап>` дотягивается назад за нужными артефактами.\n\n```mermaid\nflowchart LR\n  subgraph builder[\"этап builder — выбрасывается\"]\n    A[\"maven плюс JDK, ~520 МБ\"] --> B[\"~/.m2, ~300 МБ\"] --> C[\"src\"] --> D[\"target/app.jar\"]\n  end\n  subgraph runtime[\"этап runtime — становится образом\"]\n    E[\"eclipse-temurin:21-jre, 190 МБ\"] --> F[\"app.jar, 45 МБ\"]\n  end\n  D -->|\"COPY --from=builder\"| F\n```\n\nЧто это даёт:\n\n- **Инструменты сборки никуда не едут.** Ни Maven, ни компилятора, ни `~/.m2`, ни исходников в проде — минус примерно 600 МБ и заметный кусок поверхности атаки.\n- **Собрать может кто угодно.** Для `docker build .` не нужны локальные JDK и Maven — проще и образы CI, и онбординг.\n- **Dockerfile действительно собирает приложение.** С обычным `COPY target/app.jar` вы увозите то, что случайно лежит в `target/`; здесь jar компилируется внутри сборки."
+          },
+          "feedback": {
+            "correct": { "en": "Only the last stage ships; the builder is thrown away.", "ru": "Едет только последний этап; builder выбрасывается." },
+            "incorrect": { "en": "Only the final stage becomes the image — the builder's Maven and JDK are discarded.", "ru": "Образом становится только последний этап — Maven и JDK из builder выбрасываются." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "multi-stage-p1-all-stages-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In a multi-stage Docker build, the layers of every stage end up in the published image.",
+            "ru": "При многоэтапной сборке Docker слои всех этапов попадают в опубликованный образ."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": { "en": "Only the last stage ships; earlier ones exist just to produce artefacts.", "ru": "Едет только последний этап; ранние существуют лишь чтобы произвести артефакты." },
+            "incorrect": { "en": "No — only the final stage becomes the image; the rest is discarded.", "ru": "Нет — образом становится только последний этап; остальное выбрасывается." }
+          }
+        },
+        {
+          "id": "multi-stage-p2-word-bank",
+          "type": "word_bank",
+          "prompt": { "en": "Assemble the rule of a multi-stage Dockerfile.", "ru": "Собери правило многоэтапного Dockerfile." },
+          "tokens": {
+            "en": ["only", "the", "last", "stage", "becomes", "the", "image"],
+            "ru": ["образом", "становится", "только", "последний", "этап"]
+          },
+          "distractors": { "en": ["every"], "ru": ["каждый"] },
+          "feedback": {
+            "correct": { "en": "Everything else exists only to hand artefacts forward.", "ru": "Всё остальное существует только чтобы передать артефакты дальше." },
+            "incorrect": { "en": "Only the last stage becomes the image; the earlier ones are build scaffolding.", "ru": "Образом становится только последний этап; ранние — строительные леса." }
+          }
+        },
+        {
+          "id": "multi-stage-p3-fill-syntax",
+          "type": "fill_blank",
+          "prompt": { "en": "Complete the multi-stage syntax.", "ru": "Дополни синтаксис многоэтапной сборки." },
+          "text": {
+            "en": "FROM maven:3.9-eclipse-temurin-21 ___ builder\nCOPY --___=builder /build/target/app.jar app.jar",
+            "ru": "FROM maven:3.9-eclipse-temurin-21 ___ builder\nCOPY --___=builder /build/target/app.jar app.jar"
+          },
+          "blanks": [
+            { "en": ["AS", "as"], "ru": ["AS", "as"] },
+            { "en": ["from"], "ru": ["from"] }
+          ],
+          "feedback": {
+            "correct": { "en": "AS names a stage; --from reads from it.", "ru": "AS именует этап; --from читает из него." },
+            "incorrect": { "en": "It is `AS builder` to name the stage and `COPY --from=builder` to reach back into it.", "ru": "Это `AS builder`, чтобы назвать этап, и `COPY --from=builder`, чтобы взять из него файл." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "dependency-cache-order",
+      "title": { "en": "Instruction order and the CI cache", "ru": "Порядок инструкций и кеш в CI" },
+      "summary": {
+        "en": "Copy pom.xml and resolve dependencies before copying src/, and in CI seed the cache explicitly because a fresh runner has none.",
+        "ru": "Копируйте pom.xml и резолвите зависимости до копирования src/, а в CI наполняйте кеш явно — у свежего раннера его нет."
+      },
+      "discovery": [
+        {
+          "id": "cache-order-d1-spot-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "Every commit re-downloads all Maven dependencies in this builder stage. Which line causes it?",
+            "ru": "На каждый коммит этот этап builder заново качает все зависимости Maven. Из-за какой строки?"
+          },
+          "code": "FROM maven:3.9-eclipse-temurin-21 AS builder\nWORKDIR /build\nCOPY . .\nRUN mvn -B dependency:go-offline\nRUN mvn -B package -DskipTests",
+          "codeLang": "text",
+          "options": [
+            { "id": "a", "text": { "en": "`COPY . .` sits before the dependency resolution", "ru": "`COPY . .` стоит до резолва зависимостей" }, "correct": true },
+            { "id": "b", "text": { "en": "`-DskipTests` disables the test phase", "ru": "`-DskipTests` отключает фазу тестов" }, "correct": false,
+              "feedback": { "en": "Skipping tests changes build time, not what the layer cache does.", "ru": "Пропуск тестов влияет на время сборки, но не на работу кеша слоёв." } },
+            { "id": "c", "text": { "en": "`WORKDIR /build` creates an extra layer", "ru": "`WORKDIR /build` создаёт лишний слой" }, "correct": false,
+              "feedback": { "en": "WORKDIR's layer is tiny and its cache key does not change between commits.", "ru": "Слой WORKDIR крошечный, и его ключ кеша не меняется от коммита к коммиту." } }
+          ],
+          "reveal": {
+            "en": "`COPY . .` copies your sources too, so its content digest changes on **every** commit. Because the cache is a chain, the `dependency:go-offline` layer below it is invalidated as well — and the whole dependency download runs again.\n\nThe fix is to copy the rarely-changing `pom.xml` first, resolve dependencies, and only then copy `src/`:\n\n```dockerfile\nCOPY pom.xml .\nRUN mvn -B dependency:go-offline\nCOPY src ./src\nRUN mvn -B package -DskipTests\n```\n\nNow a code change invalidates only the last two layers; the download stays cached.\n\nIn **CI** that ordering is not enough on its own: a fresh runner starts with an **empty layer cache**, so every build downloads the internet no matter how well ordered the Dockerfile is. That is not Docker being slow — it is having nothing to reuse. Two remedies:\n\n- `docker build --cache-from <previously pushed image>` — seed the cache from the registry.\n- A BuildKit cache mount: `RUN --mount=type=cache,target=/root/.m2 mvn -B package` — a cache that survives across builds without becoming a layer.",
+            "ru": "`COPY . .` копирует и исходники, поэтому его дайджест содержимого меняется на **каждый** коммит. Кеш — цепочка, поэтому лежащий ниже слой `dependency:go-offline` тоже обесценивается, и всё скачивание зависимостей повторяется.\n\nЛечится копированием редко меняющегося `pom.xml` первым, затем резолвом зависимостей и только потом копированием `src/`:\n\n```dockerfile\nCOPY pom.xml .\nRUN mvn -B dependency:go-offline\nCOPY src ./src\nRUN mvn -B package -DskipTests\n```\n\nТеперь правка кода обесценивает только два последних слоя; скачивание остаётся в кеше.\n\nВ **CI** одного порядка мало: свежий раннер стартует с **пустым кешем слоёв**, поэтому каждая сборка качает полинтернета, как бы аккуратно ни был написан Dockerfile. Это не «Docker медленный» — это нечего переиспользовать. Два средства:\n\n- `docker build --cache-from <ранее залитый образ>` — наполнить кеш из реестра.\n- Кеш-монтирование BuildKit: `RUN --mount=type=cache,target=/root/.m2 mvn -B package` — кеш, который переживает сборки, не становясь слоем."
+          },
+          "feedback": {
+            "correct": { "en": "Sources change every commit, so everything after that COPY is rebuilt.", "ru": "Исходники меняются на каждый коммит, поэтому всё после этого COPY пересобирается." },
+            "incorrect": { "en": "`COPY . .` brings the sources in too early, invalidating the cached dependency download.", "ru": "`COPY . .` тянет исходники слишком рано и обесценивает закешированное скачивание зависимостей." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "cache-order-p1-sort-builder",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the builder-stage instructions so that a code-only change does not re-download Maven dependencies.",
+            "ru": "Расставь инструкции этапа builder так, чтобы правка только кода не тянула зависимости Maven заново."
+          },
+          "steps": [
+            { "id": "s1", "text": { "en": "COPY pom.xml .", "ru": "COPY pom.xml ." } },
+            { "id": "s2", "text": { "en": "RUN mvn -B dependency:go-offline", "ru": "RUN mvn -B dependency:go-offline" } },
+            { "id": "s3", "text": { "en": "COPY src ./src", "ru": "COPY src ./src" } },
+            { "id": "s4", "text": { "en": "RUN mvn -B package -DskipTests", "ru": "RUN mvn -B package -DskipTests" } }
+          ],
+          "feedback": {
+            "correct": { "en": "The rarely-changing pom.xml goes below the frequently-changing sources.", "ru": "Редко меняющийся pom.xml лежит ниже часто меняющихся исходников." },
+            "incorrect": { "en": "pom.xml and go-offline must come before COPY src, or every commit re-downloads everything.", "ru": "pom.xml и go-offline должны идти до COPY src, иначе каждый коммит качает всё заново." }
+          }
+        },
+        {
+          "id": "cache-order-p2-ci-slow",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Docker builds are fast locally but every CI build downloads all dependencies again. What is happening?",
+            "ru": "Локально сборки Docker быстрые, но в CI каждая сборка заново качает все зависимости. Что происходит?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "A fresh CI runner starts with an empty layer cache", "ru": "Свежий раннер CI стартует с пустым кешем слоёв" }, "correct": true },
+            { "id": "b", "text": { "en": "The Dockerfile instructions are in the wrong order", "ru": "Инструкции Dockerfile стоят в неправильном порядке" }, "correct": false,
+              "feedback": { "en": "The same file is fast locally, so the ordering is already fine — the cache itself is missing.", "ru": "Тот же файл локально быстрый, значит порядок уже верный — отсутствует сам кеш." } },
+            { "id": "c", "text": { "en": "The Docker daemon is simply slower on CI hardware", "ru": "Демон Docker просто медленнее на железе CI" }, "correct": false,
+              "feedback": { "en": "Re-downloading every dependency is a cache miss, not raw slowness.", "ru": "Повторное скачивание всех зависимостей — это промах кеша, а не медленное железо." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Nothing to reuse means everything is rebuilt from the base up.", "ru": "Нечего переиспользовать — всё пересобирается с базы." },
+            "incorrect": { "en": "CI runners start cold: without --cache-from or a cache mount there is nothing to reuse.", "ru": "Раннеры CI стартуют «холодными»: без --cache-from или кеш-монтирования переиспользовать нечего." }
+          }
+        },
+        {
+          "id": "cache-order-p3-reverse-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Swapping `COPY pom.xml` and `COPY src` in a builder stage changes nothing, since both are copied before `mvn package` anyway.",
+            "ru": "Поменять местами `COPY pom.xml` и `COPY src` на этапе builder ничего не меняет, ведь оба копируются до `mvn package`."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": { "en": "Position decides what the cache chain protects.", "ru": "Позиция определяет, что защищает цепочка кеша." },
+            "incorrect": { "en": "No — copying src first puts a per-commit change below the dependency download, invalidating it.", "ru": "Нет — копирование src первым ставит меняющееся на каждый коммит ниже скачивания зависимостей и обесценивает его." }
+          }
+        },
+        {
+          "id": "cache-order-p4-fill-ci",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the two CI cache mechanisms.", "ru": "Впиши два механизма кеша для CI." },
+          "text": {
+            "en": "In CI, seed the layer cache with docker build --___ against a previously pushed image, or use a BuildKit mount: RUN --mount=type=___,target=/root/.m2 mvn -B package",
+            "ru": "В CI наполните кеш слоёв через docker build --___ с ранее залитым образом или используйте монтирование BuildKit: RUN --mount=type=___,target=/root/.m2 mvn -B package"
+          },
+          "blanks": [
+            { "en": ["cache-from"], "ru": ["cache-from"] },
+            { "en": ["cache"], "ru": ["cache"] }
+          ],
+          "feedback": {
+            "correct": { "en": "A cache mount survives builds without ever becoming a layer.", "ru": "Кеш-монтирование переживает сборки, не становясь слоем." },
+            "incorrect": { "en": "They are `--cache-from` and `--mount=type=cache`.", "ru": "Это `--cache-from` и `--mount=type=cache`." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "build-context",
+      "title": { "en": "The build context and .dockerignore", "ru": "Контекст сборки и .dockerignore" },
+      "summary": {
+        "en": "The dot in `docker build .` names a folder the CLI packs and sends to the daemon; `.dockerignore` keeps junk out of it.",
+        "ru": "Точка в `docker build .` называет папку, которую CLI упаковывает и отправляет демону; `.dockerignore` не пускает туда лишнее."
+      },
+      "discovery": [
+        {
+          "id": "context-d1-what-is-dot",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does the trailing `.` do in `docker build -t shop-api:1.0.0 .`?",
+            "ru": "Что делает точка в конце команды `docker build -t shop-api:1.0.0 .`?"
+          },
+          "code": "docker build -t shop-api:1.0.0 .",
+          "codeLang": "text",
+          "options": [
+            { "id": "a", "text": { "en": "Names the folder that is packed and sent to the daemon as the build context", "ru": "Называет папку, которая пакуется и отправляется демону как контекст сборки" }, "correct": true },
+            { "id": "b", "text": { "en": "Tells Docker to keep the image on the local machine", "ru": "Говорит Docker оставить образ на локальной машине" }, "correct": false,
+              "feedback": { "en": "Where the image is stored is not what the argument means; it names the context folder.", "ru": "Аргумент не про то, где хранится образ; он называет папку контекста." } },
+            { "id": "c", "text": { "en": "Is only a hint about where the Dockerfile lives", "ru": "Это лишь подсказка, где лежит Dockerfile" }, "correct": false,
+              "feedback": { "en": "The Dockerfile path is `-f`; the dot is the whole folder that gets uploaded.", "ru": "Путь к Dockerfile задаёт `-f`; точка — это вся папка, которая загружается." } }
+          ],
+          "reveal": {
+            "en": "Before the first instruction runs, the CLI packs that folder — the **build context** — and sends it to the daemon. Without a `.dockerignore` that includes your local `target/`, your `.git/` history and any `node_modules/`: hundreds of megabytes transferred on every build, plus a `COPY . .` invalidated by files the image never needed.\n\nA typical `.dockerignore`:\n\n```\ntarget/\n.git/\nnode_modules/\n*.md\n.env\n```\n\nThe caveat: **only ignore what no `COPY` reads.** If your Dockerfile copies `target/app.jar` and you ignore all of `target/`, the build fails with \"file not found\" — one more argument for compiling inside a multi-stage build instead of copying a locally built jar.",
+            "ru": "Прежде чем выполнится первая инструкция, CLI упаковывает эту папку — **контекст сборки** — и отправляет её демону. Без `.dockerignore` туда попадают локальный `target/`, история `.git/` и любые `node_modules/`: сотни мегабайт на каждую сборку плюс `COPY . .`, который сбрасывается из-за файлов, никогда образу не нужных.\n\nТипичный `.dockerignore`:\n\n```\ntarget/\n.git/\nnode_modules/\n*.md\n.env\n```\n\nОговорка: **исключать можно только то, что не читает ни один `COPY`.** Если Dockerfile копирует `target/app.jar`, а вы исключили весь `target/`, сборка упадёт с ошибкой «файл не найден» — ещё один аргумент за компиляцию внутри многоэтапной сборки вместо копирования локально собранного jar."
+          },
+          "feedback": {
+            "correct": { "en": "The dot is the payload, not a formality.", "ru": "Точка — это полезная нагрузка, а не формальность." },
+            "incorrect": { "en": "It names the build context: the folder the CLI uploads to the daemon.", "ru": "Она называет контекст сборки — папку, которую CLI загружает демону." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "context-p1-still-uploaded-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Files listed in .dockerignore are still uploaded to the Docker daemon, they are merely not copied into the image.",
+            "ru": "Файлы, перечисленные в .dockerignore, всё равно загружаются демону Docker, просто не копируются в образ."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": { "en": "They never leave your machine, which is exactly what saves the transfer.", "ru": "Они вообще не покидают вашу машину — именно это и экономит передачу." },
+            "incorrect": { "en": "No — ignored paths are excluded from the context, so they are never sent at all.", "ru": "Нет — исключённые пути не попадают в контекст и вообще не отправляются." }
+          }
+        },
+        {
+          "id": "context-p2-ignored-copy",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A Dockerfile has `COPY target/app.jar app.jar` and the .dockerignore lists `target/`. What happens on `docker build .`?",
+            "ru": "В Dockerfile есть `COPY target/app.jar app.jar`, а в .dockerignore указан `target/`. Что будет при `docker build .`?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "The build fails: the file is not in the context", "ru": "Сборка упадёт: файла нет в контексте" }, "correct": true },
+            { "id": "b", "text": { "en": "The build succeeds; .dockerignore does not apply to explicit COPY paths", "ru": "Сборка пройдёт: .dockerignore не действует на явные пути в COPY" }, "correct": false,
+              "feedback": { "en": "It applies to everything — an ignored file never reaches the daemon.", "ru": "Он действует на всё — исключённый файл не доезжает до демона." } },
+            { "id": "c", "text": { "en": "The image is built with an empty app.jar", "ru": "Образ соберётся с пустым app.jar" }, "correct": false,
+              "feedback": { "en": "Docker does not invent an empty file; the COPY errors out.", "ru": "Docker не придумывает пустой файл; COPY завершится ошибкой." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Only ignore what no COPY reads.", "ru": "Исключайте только то, что не читает ни один COPY." },
+            "incorrect": { "en": "An ignored path is absent from the context, so the COPY fails with \"file not found\".", "ru": "Исключённого пути нет в контексте, поэтому COPY падает с «файл не найден»." }
+          }
+        },
+        {
+          "id": "context-p3-fill-name",
+          "type": "fill_blank",
+          "prompt": { "en": "Name the file and what it protects.", "ru": "Назови файл и то, что он защищает." },
+          "text": {
+            "en": "The ___ file keeps target/, .git/ and node_modules/ out of the build ___ that the CLI sends to the daemon.",
+            "ru": "Файл ___ не пускает target/, .git/ и node_modules/ в ___ сборки, который CLI отправляет демону."
+          },
+          "blanks": [
+            { "en": [".dockerignore", "dockerignore"], "ru": [".dockerignore", "dockerignore"] },
+            { "en": ["context"], "ru": ["контекст"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Less context means faster uploads and fewer pointless cache misses.", "ru": "Меньше контекст — быстрее загрузка и меньше бессмысленных промахов кеша." },
+            "incorrect": { "en": "It is `.dockerignore`, and it trims the build context.", "ru": "Это `.dockerignore`, и он урезает контекст сборки." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "runtime-base-and-user",
+      "title": { "en": "The base image and a non-root user", "ru": "Базовый образ и пользователь не root" },
+      "summary": {
+        "en": "Ship a JRE base rather than a JDK, and add a non-root USER so the container does not run as uid 0.",
+        "ru": "Отправляйте в прод базу с JRE, а не JDK, и добавьте USER не root, чтобы контейнер не работал под uid 0."
+      },
+      "discovery": [
+        {
+          "id": "base-d1-why-jre",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why does a deployed Spring Boot image usually start `FROM eclipse-temurin:21-jre` rather than the `-jdk` variant?",
+            "ru": "Почему образ Spring Boot для прода обычно начинается с `FROM eclipse-temurin:21-jre`, а не с варианта `-jdk`?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "The compiler is a build-time tool; dropping it saves about 150 MB", "ru": "Компилятор нужен во время сборки; отказ от него экономит около 150 МБ" }, "correct": true },
+            { "id": "b", "text": { "en": "A JRE executes jars faster than a JDK does", "ru": "JRE выполняет jar быстрее, чем JDK" }, "correct": false,
+              "feedback": { "en": "The runtime is the same; the JDK simply adds build and diagnostic tools.", "ru": "Среда выполнения та же; JDK лишь добавляет инструменты сборки и диагностики." } },
+            { "id": "c", "text": { "en": "A jar cannot run on a JDK image at all", "ru": "Jar вообще не запустится на образе с JDK" }, "correct": false,
+              "feedback": { "en": "It runs fine — a JDK contains a JRE. The argument is size and attack surface.", "ru": "Запустится — JDK содержит JRE. Аргумент — размер и поверхность атаки." } }
+          ],
+          "reveal": {
+            "en": "A compiler is a **build-time** tool. Dropping it saves roughly 150 MB in every image, on every node, on every pull.\n\nThe counter-argument is diagnostics: `jcmd`, `jstack` and `jmap` ship with the JDK, so some teams deliberately run a JDK image, or add `jattach`. Decide deliberately rather than by default.\n\nTwo other bases you will be asked about:\n\n- **Alpine** uses **musl** instead of glibc, so you need a JVM built for it, and DNS, locales and some native libraries behave differently. The saving is real but so is the surprise.\n- A **distroless** image, or simply a slim `-jre` one, is often the safer trade.\n\nWhen an image is unexpectedly large — say 800 MB — this is the first place to look: a JDK or even a Maven base that should have stayed in an earlier build stage. `docker history` shows you which layer holds the weight.",
+            "ru": "Компилятор — инструмент **времени сборки**. Отказ от него экономит примерно 150 МБ в каждом образе, на каждом узле, при каждом скачивании.\n\nКонтраргумент — диагностика: `jcmd`, `jstack` и `jmap` идут с JDK, поэтому некоторые команды намеренно возят образ с JDK или добавляют `jattach`. Решайте осознанно, а не по умолчанию.\n\nЕщё две базы, о которых спрашивают:\n\n- **Alpine** использует **musl** вместо glibc, поэтому нужна JVM, собранная под неё, а DNS, локали и часть нативных библиотек ведут себя иначе. Экономия реальна, но и сюрпризы тоже.\n- **Distroless** или просто slim-образ `-jre` часто оказывается более безопасным компромиссом.\n\nЕсли образ неожиданно большой — скажем, 800 МБ — смотреть надо сюда в первую очередь: JDK или даже база с Maven, которая должна была остаться на раннем этапе сборки. `docker history` покажет, в каком слое лежит вес."
+          },
+          "feedback": {
+            "correct": { "en": "Build-time tools do not belong in a runtime image.", "ru": "Инструментам времени сборки не место в образе для запуска." },
+            "incorrect": { "en": "The JRE runs the jar just as well; the JDK only adds ~150 MB of build tooling.", "ru": "JRE запускает jar не хуже; JDK лишь добавляет ~150 МБ инструментов сборки." }
+          }
+        },
+        {
+          "id": "base-d2-root-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Root inside a container is a harmless, container-only identity, unrelated to root on the host.",
+            "ru": "Root внутри контейнера — безобидная, чисто контейнерная роль, не связанная с root на хосте."
+          },
+          "answer": false,
+          "reveal": {
+            "en": "Root in the container is **uid 0 on the kernel the container shares with the host**. That is why many clusters simply refuse to schedule an image that needs it.\n\nThe fix is two lines in the Dockerfile:\n\n```dockerfile\nRUN useradd --system --no-create-home app\nUSER app\n```\n\n`useradd` creates the account inside the image; `USER` switches every following instruction — and the container's process — to it. Put `USER` after the `COPY` instructions that need write access, and before `ENTRYPOINT`, so the JVM itself runs unprivileged.",
+            "ru": "Root в контейнере — это **uid 0 на ядре, которое контейнер делит с хостом**. Именно поэтому многие кластеры просто не запускают образ, которому это нужно.\n\nЛечится двумя строками в Dockerfile:\n\n```dockerfile\nRUN useradd --system --no-create-home app\nUSER app\n```\n\n`useradd` создаёт учётную запись внутри образа; `USER` переключает на неё все последующие инструкции — и процесс контейнера. Ставьте `USER` после тех `COPY`, которым нужна запись, и до `ENTRYPOINT`, чтобы сама JVM работала без привилегий."
+          },
+          "feedback": {
+            "correct": { "en": "It is uid 0 on the shared kernel — that is the whole concern.", "ru": "Это uid 0 на общем ядре — в этом и вся суть опасения." },
+            "incorrect": { "en": "No — container root is uid 0 on the kernel shared with the host.", "ru": "Нет — root в контейнере это uid 0 на ядре, общем с хостом." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "base-p1-alpine",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What is the trade-off of an Alpine base image for a JVM service?",
+            "ru": "В чём компромисс базового образа Alpine для сервиса на JVM?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Smaller, but it uses musl instead of glibc, so DNS, locales and some native libraries behave differently", "ru": "Меньше по размеру, но там musl вместо glibc, поэтому DNS, локали и часть нативных библиотек ведут себя иначе" }, "correct": true },
+            { "id": "b", "text": { "en": "Smaller with no trade-off — it is always the right small base", "ru": "Меньше и без компромиссов — это всегда правильная маленькая база" }, "correct": false,
+              "feedback": { "en": "The saving is real, but so are the musl surprises; distroless or slim -jre is often safer.", "ru": "Экономия реальна, но и сюрпризы musl тоже; distroless или slim -jre часто безопаснее." } },
+            { "id": "c", "text": { "en": "Smaller, but it cannot run Java at all", "ru": "Меньше, но на нём вообще нельзя запускать Java" }, "correct": false,
+              "feedback": { "en": "It can — you just need a JVM built for musl.", "ru": "Можно — просто нужна JVM, собранная под musl." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Real saving, real surprises — decide per service.", "ru": "Реальная экономия, реальные сюрпризы — решайте по сервису." },
+            "incorrect": { "en": "Alpine's musl libc is the catch; a slim -jre or distroless base is often the safer trade.", "ru": "Подвох Alpine — libc musl; slim-образ -jre или distroless часто безопаснее." }
+          }
+        },
+        {
+          "id": "base-p2-jdk-always-wrong-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Shipping a JDK base image for a Spring Boot service is always the wrong choice.",
+            "ru": "Отправлять в прод базовый образ с JDK для сервиса на Spring Boot — всегда неправильный выбор."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": { "en": "Some teams pay the ~150 MB for jcmd, jstack and jmap on purpose.", "ru": "Некоторые команды намеренно платят ~150 МБ за jcmd, jstack и jmap." },
+            "incorrect": { "en": "No — the JDK's diagnostic tools are a legitimate reason, as long as it is a deliberate choice.", "ru": "Нет — диагностические инструменты JDK это законная причина, если выбор осознанный." }
+          }
+        },
+        {
+          "id": "base-p3-match-bases",
+          "type": "match_pairs",
+          "prompt": { "en": "Match each base image choice to what it gives you.", "ru": "Соотнеси каждый выбор базового образа с тем, что он даёт." },
+          "pairs": [
+            { "id": "jre", "left": { "en": "eclipse-temurin:21-jre", "ru": "eclipse-temurin:21-jre" }, "right": { "en": "Runtime only — the usual production base", "ru": "Только среда выполнения — обычная база для прода" } },
+            { "id": "jdk", "left": { "en": "eclipse-temurin:21-jdk", "ru": "eclipse-temurin:21-jdk" }, "right": { "en": "Adds the compiler and jcmd, jstack, jmap — about 150 MB more", "ru": "Добавляет компилятор и jcmd, jstack, jmap — примерно на 150 МБ больше" } },
+            { "id": "alpine", "left": { "en": "An Alpine base", "ru": "База на Alpine" }, "right": { "en": "musl instead of glibc: needs a JVM built for it, different DNS and locales", "ru": "musl вместо glibc: нужна JVM под неё, другие DNS и локали" } },
+            { "id": "distroless", "left": { "en": "A distroless image", "ru": "Distroless-образ" }, "right": { "en": "A small base that avoids Alpine's musl surprises", "ru": "Маленькая база без сюрпризов musl из Alpine" } }
+          ],
+          "feedback": {
+            "correct": { "en": "Base image choice is a size, diagnostics and compatibility trade.", "ru": "Выбор базы — это компромисс между размером, диагностикой и совместимостью." },
+            "incorrect": { "en": "-jre is runtime only, -jdk adds tooling, Alpine swaps libc, distroless stays small without that swap.", "ru": "-jre это только рантайм, -jdk добавляет инструменты, Alpine меняет libc, distroless остаётся маленьким без этой замены." }
+          }
+        },
+        {
+          "id": "base-p4-fill-user",
+          "type": "fill_blank",
+          "prompt": { "en": "Complete the two lines that stop the container running as root.", "ru": "Дополни две строки, которые убирают запуск контейнера от root." },
+          "text": {
+            "en": "RUN ___ --system --no-create-home app\n___ app",
+            "ru": "RUN ___ --system --no-create-home app\n___ app"
+          },
+          "blanks": [
+            { "en": ["useradd"], "ru": ["useradd"] },
+            { "en": ["USER", "user"], "ru": ["USER", "user"] }
+          ],
+          "feedback": {
+            "correct": { "en": "One account, one switch — and the cluster will schedule it.", "ru": "Одна учётная запись, одно переключение — и кластер согласится это запустить." },
+            "incorrect": { "en": "`RUN useradd ...` creates the account and `USER app` switches to it.", "ru": "`RUN useradd ...` создаёт учётную запись, а `USER app` переключается на неё." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "container-memory",
+      "title": { "en": "Telling the JVM about the container limit", "ru": "Как сказать JVM про лимит контейнера" },
+      "summary": {
+        "en": "Since Java 10 the JVM reads the container's cgroup limit, but takes only 25% of it as heap by default.",
+        "ru": "С Java 10 JVM читает лимит cgroup контейнера, но по умолчанию берёт под кучу лишь 25% от него."
+      },
+      "discovery": [
+        {
+          "id": "memory-d1-predict-heap",
+          "type": "predict_output",
+          "prompt": {
+            "en": "An untuned Spring Boot image runs in a container limited to 512 MB. How much of that does the JVM take as heap?",
+            "ru": "Ненастроенный образ Spring Boot работает в контейнере с лимитом 512 МБ. Сколько из этого JVM возьмёт под кучу?"
+          },
+          "code": "docker run -m 512m shop-api:1.0.0",
+          "codeLang": "text",
+          "options": [
+            { "id": "a", "text": { "en": "About 128 MB", "ru": "Около 128 МБ" }, "correct": true },
+            { "id": "b", "text": { "en": "About 512 MB — the whole limit", "ru": "Около 512 МБ — весь лимит" }, "correct": false,
+              "feedback": { "en": "The default MaxRAMPercentage is 25%, not 100%.", "ru": "MaxRAMPercentage по умолчанию равен 25%, а не 100%." } },
+            { "id": "c", "text": { "en": "A share of the host's total RAM, since the JVM ignores container limits", "ru": "Долю всей памяти хоста, ведь JVM игнорирует лимиты контейнера" }, "correct": false,
+              "feedback": { "en": "Since Java 10 the JVM reads the cgroup limit; that problem is a Java 8 story.", "ru": "С Java 10 JVM читает лимит cgroup; эта проблема осталась во временах Java 8." } }
+          ],
+          "reveal": {
+            "en": "Since Java 10 the JVM reads the container's **cgroup limit** — the memory ceiling the kernel enforces on the container. But the default **`MaxRAMPercentage` is 25%**: in a 512 MB container it takes 128 MB of heap and leaves the rest idle.\n\n```\nlimit 512 MB x 25%  = 128 MB heap   (default, most of the limit wasted)\nlimit 512 MB x 75%  = 384 MB heap   (-XX:MaxRAMPercentage=75)\n```\n\nSet it via `JAVA_TOOL_OPTIONS` so it stays overridable per environment:\n\n```dockerfile\nENV JAVA_TOOL_OPTIONS=\"-XX:MaxRAMPercentage=75\"\n```\n\nAnd remember the *rest* of the limit is not spare room: metaspace, thread stacks, the code cache and direct buffers live there too. Exceeding the limit does not throw an `OutOfMemoryError` — the kernel **OOM-kills** the container, which looks like an unexplained restart rather than a Java error.",
+            "ru": "Начиная с Java 10 JVM читает **лимит cgroup** контейнера — потолок памяти, который ядро навязывает контейнеру. Но по умолчанию **`MaxRAMPercentage` равен 25%**: в контейнере на 512 МБ она возьмёт 128 МБ кучи, а остальное будет простаивать.\n\n```\nлимит 512 МБ x 25%  = 128 МБ кучи   (по умолчанию, большая часть лимита впустую)\nлимит 512 МБ x 75%  = 384 МБ кучи   (-XX:MaxRAMPercentage=75)\n```\n\nЗадавайте это через `JAVA_TOOL_OPTIONS`, чтобы значение можно было переопределить в каждой среде:\n\n```dockerfile\nENV JAVA_TOOL_OPTIONS=\"-XX:MaxRAMPercentage=75\"\n```\n\nИ помните, что *остаток* лимита — не запас: там же живут metaspace, стеки потоков, кеш кода и прямые буферы. Превышение лимита не бросает `OutOfMemoryError` — ядро **убивает контейнер по OOM**, и это выглядит как необъяснимый перезапуск, а не как ошибка Java."
+          },
+          "feedback": {
+            "correct": { "en": "512 x 25% = 128 MB — most of the limit sits idle.", "ru": "512 x 25% = 128 МБ — большая часть лимита простаивает." },
+            "incorrect": { "en": "The default MaxRAMPercentage is 25%, so a 512 MB container gives 128 MB of heap.", "ru": "MaxRAMPercentage по умолчанию 25%, поэтому контейнер на 512 МБ даёт 128 МБ кучи." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "memory-p1-host-ram-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A modern JVM in a container with a memory limit sizes its heap from the host's total RAM.",
+            "ru": "Современная JVM в контейнере с лимитом памяти рассчитывает кучу от общей памяти хоста."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": { "en": "Since Java 10 it reads the cgroup limit; the old problem lives on Java 8 images.", "ru": "С Java 10 она читает лимит cgroup; старая проблема осталась в образах на Java 8." },
+            "incorrect": { "en": "No — since Java 10 the JVM reads the container's cgroup limit, not the host's RAM.", "ru": "Нет — с Java 10 JVM читает лимит cgroup контейнера, а не память хоста." }
+          }
+        },
+        {
+          "id": "memory-p2-percent-100",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "You set -XX:MaxRAMPercentage=100 in a 512 MB container. What is the risk?",
+            "ru": "Вы задали -XX:MaxRAMPercentage=100 в контейнере на 512 МБ. В чём риск?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Metaspace, thread stacks, code cache and direct buffers live outside the heap, so the container gets OOM-killed", "ru": "Metaspace, стеки потоков, кеш кода и прямые буферы живут вне кучи, поэтому контейнер убьют по OOM" }, "correct": true },
+            { "id": "b", "text": { "en": "None — the heap is the only thing the JVM allocates", "ru": "Никакого — куча это единственное, что выделяет JVM" }, "correct": false,
+              "feedback": { "en": "Non-heap memory is substantial and counts toward the same container limit.", "ru": "Память вне кучи существенна и учитывается в том же лимите контейнера." } },
+            { "id": "c", "text": { "en": "The JVM refuses to start with a percentage above 75", "ru": "JVM не стартует со значением выше 75" }, "correct": false,
+              "feedback": { "en": "It starts fine; the trouble shows up later as a kill under load.", "ru": "Она прекрасно стартует; беда проявляется позже, как убийство процесса под нагрузкой." } }
+          ],
+          "feedback": {
+            "correct": { "en": "The rest of the limit is not spare — it is where non-heap memory lives.", "ru": "Остаток лимита не запас — там живёт память вне кучи." },
+            "incorrect": { "en": "Non-heap memory shares the container limit, so a 100% heap share invites an OOM kill.", "ru": "Память вне кучи делит лимит контейнера, поэтому доля кучи в 100% ведёт к убийству по OOM." }
+          }
+        },
+        {
+          "id": "memory-p3-match-numbers",
+          "type": "match_pairs",
+          "prompt": { "en": "Match each memory setting or event to what it means in a container.", "ru": "Соотнеси каждую настройку или событие памяти с тем, что это значит в контейнере." },
+          "pairs": [
+            { "id": "default25", "left": { "en": "Default MaxRAMPercentage in a 512 MB container", "ru": "MaxRAMPercentage по умолчанию в контейнере на 512 МБ" }, "right": { "en": "25% — about 128 MB of heap", "ru": "25% — около 128 МБ кучи" } },
+            { "id": "tuned75", "left": { "en": "-XX:MaxRAMPercentage=75 in a 512 MB container", "ru": "-XX:MaxRAMPercentage=75 в контейнере на 512 МБ" }, "right": { "en": "About 384 MB of heap", "ru": "Около 384 МБ кучи" } },
+            { "id": "nonheap", "left": { "en": "Metaspace, thread stacks, code cache, direct buffers", "ru": "Metaspace, стеки потоков, кеш кода, прямые буферы" }, "right": { "en": "Memory outside the heap that still counts toward the limit", "ru": "Память вне кучи, которая всё равно учитывается в лимите" } },
+            { "id": "oom", "left": { "en": "Exceeding the container's memory limit", "ru": "Превышение лимита памяти контейнера" }, "right": { "en": "The kernel OOM-kills the container, no OutOfMemoryError", "ru": "Ядро убивает контейнер по OOM, без OutOfMemoryError" } }
+          ],
+          "feedback": {
+            "correct": { "en": "Heap share plus non-heap must both fit under the limit.", "ru": "Доля кучи и память вне кучи вместе должны уместиться в лимит." },
+            "incorrect": { "en": "25% is the default share, 75% is the usual tuned one, and overrunning the limit is a kernel kill.", "ru": "25% — доля по умолчанию, 75% — обычная настроенная, а превышение лимита это убийство ядром." }
+          }
+        },
+        {
+          "id": "memory-p4-fill-flag",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the flag and the variable that carries it.", "ru": "Впиши флаг и переменную, которая его передаёт." },
+          "text": {
+            "en": "Give the JVM more of the container limit with -XX:___=75, passed through the ___ environment variable so it stays overridable.",
+            "ru": "Отдайте JVM больше лимита контейнера через -XX:___=75, передав его переменной окружения ___, чтобы значение можно было переопределить."
+          },
+          "blanks": [
+            { "en": ["MaxRAMPercentage", "maxrampercentage"], "ru": ["MaxRAMPercentage", "maxrampercentage"] },
+            { "en": ["JAVA_TOOL_OPTIONS"], "ru": ["JAVA_TOOL_OPTIONS"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Set in the image, overridable per environment.", "ru": "Задано в образе, переопределяется в каждой среде." },
+            "incorrect": { "en": "It is -XX:MaxRAMPercentage=75 via JAVA_TOOL_OPTIONS.", "ru": "Это -XX:MaxRAMPercentage=75 через JAVA_TOOL_OPTIONS." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "entrypoint-exec-form",
+      "title": { "en": "Exec form and shutdown signals", "ru": "Exec-форма и сигналы завершения" },
+      "summary": {
+        "en": "Exec-form ENTRYPOINT makes the JVM PID 1 so SIGTERM reaches it; the shell form hides it behind /bin/sh, which does not forward signals.",
+        "ru": "ENTRYPOINT в exec-форме делает JVM процессом PID 1, и SIGTERM доходит до неё; shell-форма прячет её за /bin/sh, который сигналы не пробрасывает."
+      },
+      "discovery": [
+        {
+          "id": "entrypoint-d1-spot-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "`docker stop` kills this Spring Boot container mid-request instead of shutting it down gracefully. What is wrong?",
+            "ru": "`docker stop` убивает этот контейнер со Spring Boot посреди запроса вместо аккуратного завершения. Что не так?"
+          },
+          "code": "FROM eclipse-temurin:21-jre\nWORKDIR /app\nCOPY target/app.jar app.jar\nENTRYPOINT java -jar /app/app.jar",
+          "codeLang": "text",
+          "options": [
+            { "id": "a", "text": { "en": "The shell form puts /bin/sh at PID 1, so SIGTERM never reaches the JVM", "ru": "Shell-форма ставит на PID 1 /bin/sh, поэтому SIGTERM не доходит до JVM" }, "correct": true },
+            { "id": "b", "text": { "en": "The jar path is absolute while WORKDIR is already /app", "ru": "Путь к jar абсолютный, хотя WORKDIR уже /app" }, "correct": false,
+              "feedback": { "en": "A redundant absolute path is harmless; it has nothing to do with signals.", "ru": "Избыточный абсолютный путь безвреден и никак не связан с сигналами." } },
+            { "id": "c", "text": { "en": "`-jar` should be `-cp` for a Spring Boot jar", "ru": "Для jar Spring Boot вместо `-jar` нужно `-cp`" }, "correct": false,
+              "feedback": { "en": "`java -jar` is the normal way to start a Spring Boot jar.", "ru": "`java -jar` — обычный способ запустить jar Spring Boot." } }
+          ],
+          "reveal": {
+            "en": "There are two ways to write `ENTRYPOINT`:\n\n- **Exec form** — a JSON array: `ENTRYPOINT [\"java\", \"-jar\", \"/app/app.jar\"]`. Docker runs `java` directly, so the **JVM becomes PID 1**. `docker stop` sends `SIGTERM` to PID 1, the JVM receives it, and Spring Boot's graceful shutdown runs: it stops accepting new requests and finishes the in-flight ones.\n- **Shell form** — a bare string: `ENTRYPOINT java -jar /app/app.jar`. Docker wraps it in `/bin/sh -c`, so **`/bin/sh` is PID 1** and the JVM is its child. `sh` does not forward signals, so the JVM never sees `SIGTERM`. Ten seconds later Docker escalates to `SIGKILL` and the process dies mid-request.\n\n```mermaid\nflowchart LR\n  subgraph exec[\"exec form\"]\n    T1[\"docker stop sends SIGTERM\"] --> J1[\"PID 1 = JVM, graceful shutdown\"]\n  end\n  subgraph shell[\"shell form\"]\n    T2[\"docker stop sends SIGTERM\"] --> S2[\"PID 1 = /bin/sh, signal not forwarded\"]\n    S2 --> K2[\"SIGKILL after the timeout\"]\n  end\n```\n\nSo the JSON-array form is not a style preference: it is what makes a rolling deployment drain cleanly.",
+            "ru": "`ENTRYPOINT` можно записать двумя способами:\n\n- **Exec-форма** — массив JSON: `ENTRYPOINT [\"java\", \"-jar\", \"/app/app.jar\"]`. Docker запускает `java` напрямую, поэтому **JVM становится PID 1**. `docker stop` посылает `SIGTERM` процессу PID 1, JVM его получает, и срабатывает graceful shutdown Spring Boot: он перестаёт принимать новые запросы и дорабатывает текущие.\n- **Shell-форма** — просто строка: `ENTRYPOINT java -jar /app/app.jar`. Docker заворачивает её в `/bin/sh -c`, поэтому **PID 1 — это `/bin/sh`**, а JVM его потомок. `sh` сигналы не пробрасывает, и JVM никогда не увидит `SIGTERM`. Через десять секунд Docker переходит к `SIGKILL`, и процесс умирает посреди запроса.\n\n```mermaid\nflowchart LR\n  subgraph exec[\"exec-форма\"]\n    T1[\"docker stop посылает SIGTERM\"] --> J1[\"PID 1 = JVM, graceful shutdown\"]\n  end\n  subgraph shell[\"shell-форма\"]\n    T2[\"docker stop посылает SIGTERM\"] --> S2[\"PID 1 = /bin/sh, сигнал не проброшен\"]\n    S2 --> K2[\"SIGKILL после таймаута\"]\n  end\n```\n\nТак что форма с массивом JSON — не вопрос стиля: именно она позволяет выкатке аккуратно сливать трафик."
+          },
+          "feedback": {
+            "correct": { "en": "PID 1 is /bin/sh, and it swallows the signal.", "ru": "PID 1 — это /bin/sh, и он проглатывает сигнал." },
+            "incorrect": { "en": "The shell form wraps the JVM in /bin/sh -c, which does not forward SIGTERM.", "ru": "Shell-форма заворачивает JVM в /bin/sh -c, который не пробрасывает SIGTERM." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "entrypoint-p1-which-form",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which ENTRYPOINT lets Spring Boot's graceful shutdown run when the orchestrator stops the container?",
+            "ru": "Какой ENTRYPOINT позволяет отработать graceful shutdown Spring Boot, когда оркестратор останавливает контейнер?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "ENTRYPOINT [\"java\", \"-jar\", \"app.jar\"]", "ru": "ENTRYPOINT [\"java\", \"-jar\", \"app.jar\"]" }, "correct": true },
+            { "id": "b", "text": { "en": "ENTRYPOINT java -jar app.jar", "ru": "ENTRYPOINT java -jar app.jar" }, "correct": false,
+              "feedback": { "en": "The shell form runs it under /bin/sh -c, which never forwards SIGTERM.", "ru": "Shell-форма запускает её под /bin/sh -c, который не пробрасывает SIGTERM." } },
+            { "id": "c", "text": { "en": "ENTRYPOINT sh -c \"java -jar app.jar\"", "ru": "ENTRYPOINT sh -c \"java -jar app.jar\"" }, "correct": false,
+              "feedback": { "en": "This is the shell form written out explicitly — same PID 1 problem.", "ru": "Это та же shell-форма, только записанная явно — та же проблема с PID 1." } }
+          ],
+          "feedback": {
+            "correct": { "en": "The JSON array makes the JVM PID 1.", "ru": "Массив JSON делает JVM процессом PID 1." },
+            "incorrect": { "en": "Only the exec form (a JSON array) puts the JVM at PID 1 where SIGTERM lands.", "ru": "Только exec-форма (массив JSON) ставит JVM на PID 1, куда приходит SIGTERM." }
+          }
+        },
+        {
+          "id": "entrypoint-p2-sort-stop",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order what happens when an orchestrator stops a container whose ENTRYPOINT uses the exec form.",
+            "ru": "Расставь по порядку, что происходит, когда оркестратор останавливает контейнер с ENTRYPOINT в exec-форме."
+          },
+          "steps": [
+            { "id": "s1", "text": { "en": "docker stop sends SIGTERM to PID 1", "ru": "docker stop посылает SIGTERM процессу PID 1" } },
+            { "id": "s2", "text": { "en": "The JVM, which is PID 1, receives the signal", "ru": "JVM, которая и есть PID 1, получает сигнал" } },
+            { "id": "s3", "text": { "en": "Spring Boot stops accepting new requests and finishes in-flight ones", "ru": "Spring Boot перестаёт принимать новые запросы и дорабатывает текущие" } },
+            { "id": "s4", "text": { "en": "The process exits before the SIGKILL timeout expires", "ru": "Процесс завершается до истечения таймаута SIGKILL" } }
+          ],
+          "feedback": {
+            "correct": { "en": "That whole chain depends on the JVM actually being PID 1.", "ru": "Вся эта цепочка держится на том, что JVM действительно является PID 1." },
+            "incorrect": { "en": "SIGTERM to PID 1, the JVM gets it, Spring Boot drains, then the process exits.", "ru": "SIGTERM в PID 1, JVM его получает, Spring Boot сливает трафик, затем процесс завершается." }
+          }
+        },
+        {
+          "id": "entrypoint-p3-fill-exec",
+          "type": "fill_blank",
+          "prompt": { "en": "Complete the rule about entrypoint forms.", "ru": "Дополни правило про формы entrypoint." },
+          "text": {
+            "en": "Write the entrypoint in ___ form so the JVM becomes PID ___ and receives SIGTERM directly.",
+            "ru": "Пишите entrypoint в ___-форме, чтобы JVM стала PID ___ и получала SIGTERM напрямую."
+          },
+          "blanks": [
+            { "en": ["exec"], "ru": ["exec"] },
+            { "en": ["1"], "ru": ["1"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Exec form, PID 1, graceful shutdown — one chain.", "ru": "Exec-форма, PID 1, graceful shutdown — одна цепочка." },
+            "incorrect": { "en": "The exec form (JSON array) makes the JVM PID 1, which is where SIGTERM is delivered.", "ru": "Exec-форма (массив JSON) делает JVM процессом PID 1, куда и доставляется SIGTERM." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "ports-and-readiness",
+      "title": { "en": "Ports and readiness", "ru": "Порты и готовность" },
+      "summary": {
+        "en": "EXPOSE only documents a port; publishing is -p or the orchestrator, and a readiness endpoint says when traffic may arrive.",
+        "ru": "EXPOSE только документирует порт; публикует его -p или оркестратор, а эндпоинт готовности говорит, когда можно слать трафик."
+      },
+      "discovery": [
+        {
+          "id": "ports-d1-expose",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The image contains `EXPOSE 8080` and you start it with `docker run shop-api:1.0.0`. Can you reach the app at http://localhost:8080 from the host?",
+            "ru": "В образе есть `EXPOSE 8080`, и вы запускаете его командой `docker run shop-api:1.0.0`. Достучитесь ли вы до приложения по http://localhost:8080 с хоста?"
+          },
+          "code": "EXPOSE 8080\n\n$ docker run shop-api:1.0.0",
+          "codeLang": "text",
+          "options": [
+            { "id": "a", "text": { "en": "No — EXPOSE only documents the port; you need -p 8080:8080", "ru": "Нет — EXPOSE только документирует порт; нужен -p 8080:8080" }, "correct": true },
+            { "id": "b", "text": { "en": "Yes — EXPOSE publishes the port to the host", "ru": "Да — EXPOSE публикует порт на хост" }, "correct": false,
+              "feedback": { "en": "EXPOSE is documentation; publishing is a run-time decision.", "ru": "EXPOSE — это документация; публикация решается при запуске." } },
+            { "id": "c", "text": { "en": "Yes, but only if the app also listens on 8080 inside", "ru": "Да, но только если приложение внутри тоже слушает 8080" }, "correct": false,
+              "feedback": { "en": "Listening inside is necessary but not sufficient — the port still is not published.", "ru": "Слушать внутри необходимо, но недостаточно — порт всё равно не опубликован." } }
+          ],
+          "reveal": {
+            "en": "`EXPOSE 8080` **documents** which port the application listens on. It publishes nothing. The port becomes reachable only when something maps it:\n\n- `docker run -p 8080:8080 shop-api:1.0.0` — maps a host port to the container port.\n- In a cluster, the orchestrator's service definition does the same job.\n\nThe second half of the runtime contract is **readiness**. A container that has started is not necessarily ready: the Spring context may still be building. Expose `/actuator/health/readiness` and let the orchestrator probe it, so traffic arrives only once the app can actually serve it — and so a rolling deployment does not route requests into a half-started instance.\n\n```mermaid\nflowchart LR\n  E[\"EXPOSE 8080 — documentation\"] --> P[\"-p 8080:8080 or the service definition — publishes\"]\n  P --> R[\"/actuator/health/readiness — orchestrator probes\"]\n  R --> T[\"traffic starts arriving\"]\n```",
+            "ru": "`EXPOSE 8080` **документирует**, какой порт слушает приложение. Он ничего не публикует. Порт становится доступен, только когда его кто-то пробрасывает:\n\n- `docker run -p 8080:8080 shop-api:1.0.0` — отображает порт хоста на порт контейнера.\n- В кластере ту же работу делает описание сервиса в оркестраторе.\n\nВторая половина контракта времени выполнения — **готовность**. Запустившийся контейнер не обязательно готов: контекст Spring может ещё подниматься. Отдайте `/actuator/health/readiness` и дайте оркестратору его опрашивать, чтобы трафик приходил только когда приложение действительно может его обслужить — и чтобы выкатка не направила запросы в наполовину поднятый экземпляр.\n\n```mermaid\nflowchart LR\n  E[\"EXPOSE 8080 — документация\"] --> P[\"-p 8080:8080 или описание сервиса — публикация\"]\n  P --> R[\"/actuator/health/readiness — оркестратор опрашивает\"]\n  R --> T[\"начинает приходить трафик\"]\n```"
+          },
+          "feedback": {
+            "correct": { "en": "EXPOSE documents, -p publishes.", "ru": "EXPOSE документирует, -p публикует." },
+            "incorrect": { "en": "EXPOSE is documentation only; publishing is -p or the orchestrator's service definition.", "ru": "EXPOSE — только документация; публикует -p или описание сервиса в оркестраторе." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "ports-p1-expose-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "`EXPOSE 8080` in a Dockerfile publishes the port so the host can reach the container.",
+            "ru": "`EXPOSE 8080` в Dockerfile публикует порт, чтобы хост мог достучаться до контейнера."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": { "en": "It documents the port; -p or the orchestrator publishes it.", "ru": "Он документирует порт; публикует его -p или оркестратор." },
+            "incorrect": { "en": "No — EXPOSE only documents. Publishing is `-p 8080:8080` or a service definition.", "ru": "Нет — EXPOSE только документирует. Публикация это `-p 8080:8080` или описание сервиса." }
+          }
+        },
+        {
+          "id": "ports-p2-readiness",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "How does an orchestrator find out that a containerized Spring Boot app is ready to receive traffic?",
+            "ru": "Как оркестратор узнаёт, что приложение Spring Boot в контейнере готово принимать трафик?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "It probes a readiness endpoint such as /actuator/health/readiness", "ru": "Он опрашивает эндпоинт готовности, например /actuator/health/readiness" }, "correct": true },
+            { "id": "b", "text": { "en": "The EXPOSE instruction tells it", "ru": "Ему сообщает инструкция EXPOSE" }, "correct": false,
+              "feedback": { "en": "EXPOSE is static documentation and says nothing about the app's state.", "ru": "EXPOSE — статичная документация и ничего не говорит о состоянии приложения." } },
+            { "id": "c", "text": { "en": "The process being alive is enough — a started container is a ready container", "ru": "Достаточно живого процесса — запущенный контейнер и есть готовый" }, "correct": false,
+              "feedback": { "en": "The JVM starts long before the Spring context is up and able to serve.", "ru": "JVM стартует задолго до того, как контекст Spring поднялся и способен обслуживать." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Started is not the same as ready.", "ru": "Запущен — не то же самое, что готов." },
+            "incorrect": { "en": "A readiness endpoint is probed, so traffic arrives only after the context is up.", "ru": "Оркестратор опрашивает эндпоинт готовности, чтобы трафик приходил только после подъёма контекста." }
+          }
+        },
+        {
+          "id": "ports-p3-match-roles",
+          "type": "match_pairs",
+          "prompt": { "en": "Match each mechanism to its role in making a container reachable.", "ru": "Соотнеси каждый механизм с его ролью в том, чтобы контейнер стал доступен." },
+          "pairs": [
+            { "id": "expose", "left": { "en": "EXPOSE 8080", "ru": "EXPOSE 8080" }, "right": { "en": "Documents the port the app listens on", "ru": "Документирует порт, который слушает приложение" } },
+            { "id": "publish", "left": { "en": "docker run -p 8080:8080", "ru": "docker run -p 8080:8080" }, "right": { "en": "Publishes the container port on the host", "ru": "Публикует порт контейнера на хосте" } },
+            { "id": "service", "left": { "en": "The orchestrator's service definition", "ru": "Описание сервиса в оркестраторе" }, "right": { "en": "Publishes the port inside a cluster", "ru": "Публикует порт внутри кластера" } },
+            { "id": "readiness", "left": { "en": "/actuator/health/readiness", "ru": "/actuator/health/readiness" }, "right": { "en": "Tells the orchestrator when traffic may start arriving", "ru": "Сообщает оркестратору, когда можно начинать слать трафик" } }
+          ],
+          "feedback": {
+            "correct": { "en": "Documenting, publishing and readiness are three separate jobs.", "ru": "Документирование, публикация и готовность — три разные задачи." },
+            "incorrect": { "en": "EXPOSE documents, -p and the service definition publish, and the readiness probe gates traffic.", "ru": "EXPOSE документирует, -p и описание сервиса публикуют, а проба готовности пускает трафик." }
+          }
+        },
+        {
+          "id": "ports-p4-fill-publish",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the flag and the endpoint.", "ru": "Впиши флаг и эндпоинт." },
+          "text": {
+            "en": "Publish a container port with docker run ___ 8080:8080; an orchestrator learns the app can serve by probing /actuator/health/___.",
+            "ru": "Опубликуйте порт контейнера через docker run ___ 8080:8080; оркестратор узнаёт, что приложение может обслуживать, опрашивая /actuator/health/___."
+          },
+          "blanks": [
+            { "en": ["-p", "p"], "ru": ["-p", "p"] },
+            { "en": ["readiness"], "ru": ["readiness"] }
+          ],
+          "feedback": {
+            "correct": { "en": "One flag makes it reachable, one endpoint makes it safe to route to.", "ru": "Один флаг делает его доступным, один эндпоинт — безопасным для маршрутизации." },
+            "incorrect": { "en": "It is `-p 8080:8080` and `/actuator/health/readiness`.", "ru": "Это `-p 8080:8080` и `/actuator/health/readiness`." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "config-and-tags",
+      "title": { "en": "One image, many environments", "ru": "Один образ, много сред" },
+      "summary": {
+        "en": "Configuration arrives from outside the image, and a version or git-SHA tag says exactly which build is running.",
+        "ru": "Конфигурация приходит извне образа, а тег с версией или git SHA точно указывает, какая сборка работает."
+      },
+      "discovery": [
+        {
+          "id": "config-d1-two-environments",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The same service must run in staging and production with different databases and passwords. What do you do?",
+            "ru": "Один и тот же сервис должен работать на staging и в проде с разными базами и паролями. Что делать?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Ship one image and supply the values at run time — environment variables, a mounted config file or a secret store", "ru": "Возить один образ и подавать значения при запуске — переменные окружения, примонтированный файл конфигурации или хранилище секретов" }, "correct": true },
+            { "id": "b", "text": { "en": "Build one image per environment with the values baked into a layer", "ru": "Собирать по образу на среду, зашивая значения в слой" }, "correct": false,
+              "feedback": { "en": "Then the artefact you tested is not the artefact you ship, and the secrets are published in a layer.", "ru": "Тогда протестированный артефакт — не тот, что едет в прод, а секреты опубликованы в слое." } },
+            { "id": "c", "text": { "en": "Bake the production values in and rebuild the image whenever they change", "ru": "Зашить продовые значения и пересобирать образ при каждом их изменении" }, "correct": false,
+              "feedback": { "en": "A password change should not require a rebuild — and a baked secret stays in the layer forever.", "ru": "Смена пароля не должна требовать пересборки — а зашитый секрет остаётся в слое навсегда." } }
+          ],
+          "reveal": {
+            "en": "One image must be able to run anywhere, so the database URL and passwords arrive **from the environment**, never baked into a layer:\n\n```bash\ndocker run -e SPRING_DATASOURCE_URL=jdbc:postgresql://prod-db/shop \\\n           -e SPRING_DATASOURCE_PASSWORD=... shop-api:1.0.0\n```\n\nSpring Boot maps `SPRING_DATASOURCE_URL` onto `spring.datasource.url` automatically. A mounted config file or a secret store does the same job.\n\nThe other half of \"which build is this?\" is the **tag**. `:latest` is not a version — it is a label that moves to whatever was pushed last. Two nodes pulling at different times can end up running different code under one name, and a rollback becomes archaeology. Tag with the build number or the git SHA instead:\n\n```bash\ndocker build -t shop-api:1.4.7 -t shop-api:9f3c1ab .\n```\n\nThen a rollback is a tag change, and the tag CI built and the tag the cluster runs point at the same immutable digest.",
+            "ru": "Один образ должен уметь работать где угодно, поэтому URL базы и пароли приезжают **из окружения**, а не зашиваются в слой:\n\n```bash\ndocker run -e SPRING_DATASOURCE_URL=jdbc:postgresql://prod-db/shop \\\n           -e SPRING_DATASOURCE_PASSWORD=... shop-api:1.0.0\n```\n\nSpring Boot автоматически отображает `SPRING_DATASOURCE_URL` на `spring.datasource.url`. Примонтированный файл конфигурации или хранилище секретов решают ту же задачу.\n\nВторая половина вопроса «а что это за сборка?» — **тег**. `:latest` не версия, а ярлык, который переезжает на то, что залили последним. Два узла, скачавшие образ в разное время, могут работать на разном коде под одним именем, а откат превращается в археологию. Помечайте номером сборки или git SHA:\n\n```bash\ndocker build -t shop-api:1.4.7 -t shop-api:9f3c1ab .\n```\n\nТогда откат — это смена тега, а тег, который собрал CI, и тег, который запускает кластер, указывают на один и тот же неизменяемый дайджест."
+          },
+          "feedback": {
+            "correct": { "en": "One artefact everywhere; only the configuration differs.", "ru": "Один артефакт везде; различается только конфигурация." },
+            "incorrect": { "en": "Ship one image and inject configuration at run time — never bake it into a layer.", "ru": "Возите один образ и подавайте конфигурацию при запуске — не зашивайте её в слой." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "config-p1-rebuild-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "An image must be rebuilt for each environment when the database URL differs between staging and production.",
+            "ru": "Образ нужно пересобирать под каждую среду, если URL базы на staging и в проде разный."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": { "en": "The URL is configuration, and configuration arrives at run time.", "ru": "URL это конфигурация, а конфигурация приходит при запуске." },
+            "incorrect": { "en": "No — one image runs everywhere; the URL comes from an environment variable such as SPRING_DATASOURCE_URL.", "ru": "Нет — один образ работает везде; URL приходит переменной окружения, например SPRING_DATASOURCE_URL." }
+          }
+        },
+        {
+          "id": "config-p2-latest",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What is wrong with deploying the `:latest` tag?",
+            "ru": "Что не так с деплоем тега `:latest`?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "It is a moving label, so nodes pulling at different times can run different code and rollback becomes guesswork", "ru": "Это подвижный ярлык: узлы, скачавшие образ в разное время, могут работать на разном коде, а откат превращается в гадание" }, "correct": true },
+            { "id": "b", "text": { "en": "It always points at the newest build, which is too aggressive for production", "ru": "Он всегда указывает на самую свежую сборку, что слишком агрессивно для прода" }, "correct": false,
+              "feedback": { "en": "It does not even mean \"newest\" — it means whatever was pushed last, which can be an old rebuild.", "ru": "Он не означает даже «самая свежая» — он означает то, что залили последним, а это может быть старая пересборка." } },
+            { "id": "c", "text": { "en": "Docker refuses to pull :latest from a private registry", "ru": "Docker не станет скачивать :latest из приватного реестра" }, "correct": false,
+              "feedback": { "en": "It pulls fine; the problem is that the name does not identify a build.", "ru": "Скачает без проблем; беда в том, что имя не идентифицирует сборку." } }
+          ],
+          "feedback": {
+            "correct": { "en": "A tag should name one immutable build.", "ru": "Тег должен называть одну неизменяемую сборку." },
+            "incorrect": { "en": ":latest is whatever was pushed last, so it identifies no particular build.", "ru": ":latest — это то, что залили последним, поэтому он не идентифицирует конкретную сборку." }
+          }
+        },
+        {
+          "id": "config-p3-match",
+          "type": "match_pairs",
+          "prompt": { "en": "Match each item to its role in running one image everywhere.", "ru": "Соотнеси каждый элемент с его ролью в запуске одного образа везде." },
+          "pairs": [
+            { "id": "env", "left": { "en": "SPRING_DATASOURCE_URL", "ru": "SPRING_DATASOURCE_URL" }, "right": { "en": "Environment variable that points one image at this environment's database", "ru": "Переменная окружения, направляющая один образ на базу этой среды" } },
+            { "id": "latest", "left": { "en": ":latest", "ru": ":latest" }, "right": { "en": "A moving label, not a version", "ru": "Подвижный ярлык, а не версия" } },
+            { "id": "sha", "left": { "en": "A git SHA tag", "ru": "Тег с git SHA" }, "right": { "en": "Identifies exactly one build, so rollback is a tag change", "ru": "Идентифицирует ровно одну сборку, поэтому откат это смена тега" } },
+            { "id": "digest", "left": { "en": "An immutable digest", "ru": "Неизменяемый дайджест" }, "right": { "en": "What CI built and what the cluster runs must be the same one", "ru": "То, что собрал CI, и то, что запускает кластер, должно быть одним и тем же" } }
+          ],
+          "feedback": {
+            "correct": { "en": "Configuration varies, the artefact does not.", "ru": "Меняется конфигурация, а не артефакт." },
+            "incorrect": { "en": "Environment variables carry config; a SHA tag and a digest identify the exact build.", "ru": "Переменные окружения несут конфигурацию; тег с SHA и дайджест идентифицируют точную сборку." }
+          }
+        },
+        {
+          "id": "config-p4-fill",
+          "type": "fill_blank",
+          "prompt": { "en": "Complete both halves of the rule.", "ru": "Дополни обе половины правила." },
+          "text": {
+            "en": "Configuration arrives as ___ variables such as SPRING_DATASOURCE_URL, and images are tagged with the build number or the git ___ instead of latest.",
+            "ru": "Конфигурация приходит переменными ___, например SPRING_DATASOURCE_URL, а образы помечаются номером сборки или git ___ вместо latest."
+          },
+          "blanks": [
+            { "en": ["environment"], "ru": ["окружения", "среды"] },
+            { "en": ["SHA", "sha"], "ru": ["SHA", "sha"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Config from outside, identity from the tag.", "ru": "Конфигурация снаружи, идентичность — из тега." },
+            "incorrect": { "en": "Environment variables carry the config; a build number or git SHA identifies the image.", "ru": "Конфигурацию несут переменные окружения; образ идентифицирует номер сборки или git SHA." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "secrets-in-layers",
+      "title": { "en": "Layers are permanent", "ru": "Слои вечны" },
+      "summary": {
+        "en": "A file added in one layer stays in the image even if a later layer deletes it, so a secret passed with --build-arg is published.",
+        "ru": "Файл, добавленный в одном слое, остаётся в образе, даже если следующий слой его удалил, поэтому секрет из --build-arg считается опубликованным."
+      },
+      "discovery": [
+        {
+          "id": "secrets-d1-spot-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "A colleague passes the database password with `--build-arg` and deletes the file in a later RUN. Is the password safe in the published image?",
+            "ru": "Коллега передаёт пароль от базы через `--build-arg` и удаляет файл в следующем RUN. Безопасен ли пароль в опубликованном образе?"
+          },
+          "code": "ARG DB_PASSWORD\nRUN echo \"$DB_PASSWORD\" > /tmp/secret.txt && ./configure.sh\nRUN rm /tmp/secret.txt",
+          "codeLang": "text",
+          "options": [
+            { "id": "a", "text": { "en": "No — the layer that created the file is still in the image and anyone can extract it", "ru": "Нет — слой, создавший файл, остался в образе, и извлечь его может кто угодно" }, "correct": true },
+            { "id": "b", "text": { "en": "Yes — `rm` in the next instruction removes it from the image", "ru": "Да — `rm` в следующей инструкции убирает его из образа" }, "correct": false,
+              "feedback": { "en": "The later layer only hides the file from the final filesystem view; the earlier layer is untouched.", "ru": "Более поздний слой лишь прячет файл из итогового представления файловой системы; ранний слой остаётся." } },
+            { "id": "c", "text": { "en": "Yes — build arguments exist only during the build and are never stored", "ru": "Да — аргументы сборки живут только во время сборки и нигде не сохраняются" }, "correct": false,
+              "feedback": { "en": "Whatever a RUN wrote to disk while the argument was in scope is baked into that layer.", "ru": "Всё, что RUN записал на диск, пока аргумент был доступен, впечатано в этот слой." } }
+          ],
+          "reveal": {
+            "en": "An image is a stack of layers, and **every layer is kept**. A file added in one layer and deleted in a later one is still in the image: the deletion is recorded as a change in the newer layer, which merely hides the file from the final filesystem view. Anyone who pulls the image can unpack the older layer and read it.\n\n```mermaid\nflowchart TB\n  L1[\"RUN echo password > /tmp/secret.txt — the file lives here forever\"] --> L2[\"RUN rm /tmp/secret.txt — only hides it\"]\n  L2 --> L3[\"published image still contains layer 1\"]\n```\n\nSo secrets passed through `--build-arg`, or copied in and removed, must be treated as **published** — rotate them. The supported way to use a secret during a build without leaving it behind is BuildKit's secret mount:\n\n```dockerfile\nRUN --mount=type=secret,id=db_password ./configure.sh\n```\n\nIt makes the value available to that one command without ever becoming part of a layer.",
+            "ru": "Образ — это стопка слоёв, и **сохраняется каждый слой**. Файл, добавленный в одном слое и удалённый в следующем, остаётся в образе: удаление записано как изменение в более новом слое, которое лишь прячет файл из итогового представления файловой системы. Любой, кто скачал образ, может распаковать старый слой и прочитать его.\n\n```mermaid\nflowchart TB\n  L1[\"RUN echo password > /tmp/secret.txt — файл остаётся здесь навсегда\"] --> L2[\"RUN rm /tmp/secret.txt — только прячет его\"]\n  L2 --> L3[\"в опубликованном образе слой 1 на месте\"]\n```\n\nПоэтому секреты, переданные через `--build-arg` или скопированные и стёртые, считаются **опубликованными** — их надо менять. Штатный способ воспользоваться секретом во время сборки, не оставив следов, — секретное монтирование BuildKit:\n\n```dockerfile\nRUN --mount=type=secret,id=db_password ./configure.sh\n```\n\nОно делает значение доступным одной конкретной команде, но оно никогда не становится частью слоя."
+          },
+          "feedback": {
+            "correct": { "en": "Deleting in a later layer hides, it does not remove.", "ru": "Удаление в более позднем слое прячет, но не удаляет." },
+            "incorrect": { "en": "The password is published: the layer that wrote the file is still part of the image.", "ru": "Пароль опубликован: слой, записавший файл, остался частью образа." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "secrets-p1-rm-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "`RUN rm secret.txt` in a later Dockerfile instruction removes the file from the image.",
+            "ru": "`RUN rm secret.txt` в более поздней инструкции Dockerfile удаляет файл из образа."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": { "en": "It only hides it from the final filesystem view; the earlier layer keeps it.", "ru": "Он лишь прячет файл из итогового представления файловой системы; ранний слой его хранит." },
+            "incorrect": { "en": "No — the file stays in the layer that added it and can be extracted from the image.", "ru": "Нет — файл остаётся в слое, который его добавил, и его можно извлечь из образа." }
+          }
+        },
+        {
+          "id": "secrets-p2-word-bank",
+          "type": "word_bank",
+          "prompt": { "en": "Assemble the rule about deleted files in a Docker image.", "ru": "Собери правило про удалённые файлы в образе Docker." },
+          "tokens": {
+            "en": ["a", "deleted", "file", "still", "lives", "in", "the", "layer", "that", "added", "it"],
+            "ru": ["удалённый", "файл", "остаётся", "в", "слое", "который", "его", "добавил"]
+          },
+          "distractors": { "en": ["disappears"], "ru": ["исчезает"] },
+          "feedback": {
+            "correct": { "en": "Which is why a leaked secret must be rotated, not deleted.", "ru": "Поэтому утёкший секрет надо менять, а не удалять." },
+            "incorrect": { "en": "A deleted file still lives in the layer that added it — deletion only hides it.", "ru": "Удалённый файл остаётся в слое, который его добавил, — удаление лишь прячет его." }
+          }
+        },
+        {
+          "id": "secrets-p3-fill-mount",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the BuildKit mount that keeps a build-time secret out of the image.", "ru": "Впиши монтирование BuildKit, которое не пускает секрет времени сборки в образ." },
+          "text": {
+            "en": "RUN --mount=type=___,id=db_password ./configure.sh",
+            "ru": "RUN --mount=type=___,id=db_password ./configure.sh"
+          },
+          "blanks": [
+            { "en": ["secret"], "ru": ["secret"] }
+          ],
+          "feedback": {
+            "correct": { "en": "The value reaches that one command and never becomes a layer.", "ru": "Значение доходит до одной команды и никогда не становится слоем." },
+            "incorrect": { "en": "It is `--mount=type=secret` — unlike --build-arg, it leaves nothing behind.", "ru": "Это `--mount=type=secret` — в отличие от --build-arg, он не оставляет следов." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "without-a-dockerfile",
+      "title": { "en": "Building without a Dockerfile", "ru": "Сборка без Dockerfile" },
+      "summary": {
+        "en": "Buildpacks and Jib produce layered images straight from the Maven build, trading fine control for maintained defaults.",
+        "ru": "Buildpacks и Jib собирают слоистые образы прямо из сборки Maven, меняя тонкий контроль на поддерживаемые умолчания."
+      },
+      "discovery": [
+        {
+          "id": "no-dockerfile-d1-build-image",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Your team wants a layered, non-root, memory-tuned image, but nobody wants to maintain a Dockerfile. What does `mvn spring-boot:build-image` produce?",
+            "ru": "Команде нужен слоистый образ с пользователем не root и настроенной памятью, но поддерживать Dockerfile никто не хочет. Что даст `mvn spring-boot:build-image`?"
+          },
+          "code": "mvn spring-boot:build-image",
+          "codeLang": "text",
+          "options": [
+            { "id": "a", "text": { "en": "Exactly that image, built by Paketo buildpacks, with no Dockerfile in the project", "ru": "Ровно такой образ, собранный buildpack-ами Paketo, без Dockerfile в проекте" }, "correct": true },
+            { "id": "b", "text": { "en": "A Dockerfile you then build yourself", "ru": "Dockerfile, который вы потом собираете сами" }, "correct": false,
+              "feedback": { "en": "Scaffolding a Dockerfile is `docker init`; build-image produces the image itself.", "ru": "Сгенерировать Dockerfile — это `docker init`; build-image создаёт сам образ." } },
+            { "id": "c", "text": { "en": "A plain fat jar, the same as mvn package", "ru": "Обычный fat jar, то же самое, что mvn package" }, "correct": false,
+              "feedback": { "en": "It goes further than packaging: the output is a container image.", "ru": "Он идёт дальше упаковки: на выходе получается образ контейнера." } }
+          ],
+          "reveal": {
+            "en": "Three ways to avoid hand-writing a Dockerfile:\n\n- **Buildpacks** — `mvn spring-boot:build-image` (Paketo, built into the Spring Boot plugin) produces a layered, non-root, memory-tuned image from your project with no Dockerfile. You give up fine control and gain a maintained default.\n- **Jib** — `mvn jib:dockerBuild` builds a layered image from the Maven build itself: no Docker daemon needed, reproducible, and fast because it uploads only the layers that changed.\n- **`docker init`** — scaffolds a reasonable Dockerfile if you would rather own the file.\n\nAn interviewer usually wants to hear that you *know* these exist and can say when you would still hand-write the Dockerfile: an unusual base image, extra native packages, or a build that does more than compile.",
+            "ru": "Три способа не писать Dockerfile руками:\n\n- **Buildpacks** — `mvn spring-boot:build-image` (Paketo, встроен в плагин Spring Boot) делает из проекта слоистый образ с пользователем не root и настроенной памятью, без Dockerfile. Вы теряете тонкий контроль и получаете поддерживаемые умолчания.\n- **Jib** — `mvn jib:dockerBuild` собирает слоистый образ прямо из сборки Maven: демон Docker не нужен, результат воспроизводим, а быстро потому, что заливаются только изменившиеся слои.\n- **`docker init`** — сгенерирует приличный Dockerfile, если файл вы всё же хотите держать под своим контролем.\n\nСобеседующий обычно хочет услышать, что вы *знаете* об этих инструментах и можете сказать, когда всё-таки напишете Dockerfile руками: нестандартный базовый образ, дополнительные системные пакеты или сборка, которая делает больше, чем компиляцию."
+          },
+          "feedback": {
+            "correct": { "en": "Maintained defaults instead of a file you own.", "ru": "Поддерживаемые умолчания вместо файла, за который отвечаете вы." },
+            "incorrect": { "en": "Buildpacks build the image directly: layered, non-root and memory-tuned, with no Dockerfile.", "ru": "Buildpacks собирают образ напрямую: слоистый, не от root и с настроенной памятью, без Dockerfile." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "no-dockerfile-p1-jib",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What is distinctive about building a Spring Boot image with Jib?",
+            "ru": "Чем особенна сборка образа Spring Boot через Jib?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "It builds a layered image from the Maven build itself, without a Docker daemon", "ru": "Он собирает слоистый образ прямо из сборки Maven, без демона Docker" }, "correct": true },
+            { "id": "b", "text": { "en": "It compresses the fat jar so the image is smaller than a hand-written one", "ru": "Он сжимает fat jar, поэтому образ меньше, чем при ручном Dockerfile" }, "correct": false,
+              "feedback": { "en": "Its advantage is layering and upload speed, not compression.", "ru": "Его преимущество в слоях и скорости заливки, а не в сжатии." } },
+            { "id": "c", "text": { "en": "It generates a Dockerfile that you then build with docker build", "ru": "Он генерирует Dockerfile, который вы затем собираете через docker build" }, "correct": false,
+              "feedback": { "en": "That describes `docker init`; Jib produces the image itself.", "ru": "Так работает `docker init`; Jib создаёт сам образ." } }
+          ],
+          "feedback": {
+            "correct": { "en": "No daemon, reproducible, and only changed layers are uploaded.", "ru": "Без демона, воспроизводимо, и заливаются только изменившиеся слои." },
+            "incorrect": { "en": "Jib builds the layered image from the Maven build with no Docker daemon involved.", "ru": "Jib собирает слоистый образ из сборки Maven, и демон Docker для этого не нужен." }
+          }
+        },
+        {
+          "id": "no-dockerfile-p2-match-tools",
+          "type": "match_pairs",
+          "prompt": { "en": "Match each approach to what it does.", "ru": "Соотнеси каждый подход с тем, что он делает." },
+          "pairs": [
+            { "id": "buildpacks", "left": { "en": "mvn spring-boot:build-image", "ru": "mvn spring-boot:build-image" }, "right": { "en": "Paketo buildpacks build a layered, non-root, memory-tuned image with no Dockerfile", "ru": "Buildpack-и Paketo собирают слоистый образ не от root с настроенной памятью, без Dockerfile" } },
+            { "id": "jib", "left": { "en": "mvn jib:dockerBuild", "ru": "mvn jib:dockerBuild" }, "right": { "en": "Builds a layered image from the Maven build, no Docker daemon needed", "ru": "Собирает слоистый образ из сборки Maven, демон Docker не нужен" } },
+            { "id": "init", "left": { "en": "docker init", "ru": "docker init" }, "right": { "en": "Scaffolds a reasonable Dockerfile that you then own", "ru": "Генерирует приличный Dockerfile, за который дальше отвечаете вы" } },
+            { "id": "handwritten", "left": { "en": "A hand-written Dockerfile", "ru": "Dockerfile, написанный руками" }, "right": { "en": "Unusual base image, extra native packages, or a build that does more than compile", "ru": "Нестандартная база, дополнительные системные пакеты или сборка, которая делает больше, чем компиляцию" } }
+          ],
+          "feedback": {
+            "correct": { "en": "Know the tools, and know when you still want the file.", "ru": "Знайте инструменты и знайте, когда файл всё же нужен." },
+            "incorrect": { "en": "build-image uses buildpacks, Jib skips the daemon, docker init scaffolds a file, and hand-writing is for unusual needs.", "ru": "build-image использует buildpacks, Jib обходится без демона, docker init генерирует файл, а руками пишут под нестандартные нужды." }
+          }
+        },
+        {
+          "id": "no-dockerfile-p3-fill-goals",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the two Maven goals that build an image without a Dockerfile.", "ru": "Впиши две цели Maven, которые собирают образ без Dockerfile." },
+          "text": {
+            "en": "spring-boot:___ uses buildpacks, and jib:___ builds the image from the Maven build itself.",
+            "ru": "spring-boot:___ использует buildpacks, а jib:___ собирает образ прямо из сборки Maven."
+          },
+          "blanks": [
+            { "en": ["build-image"], "ru": ["build-image"] },
+            { "en": ["dockerBuild", "dockerbuild"], "ru": ["dockerBuild", "dockerbuild"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Both produce layered images; neither needs a Dockerfile.", "ru": "Обе дают слоистые образы; Dockerfile не нужен ни одной." },
+            "incorrect": { "en": "They are `spring-boot:build-image` and `jib:dockerBuild`.", "ru": "Это `spring-boot:build-image` и `jib:dockerBuild`." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "production-image-capstone",
+      "title": { "en": "The image you would actually deploy", "ru": "Образ, который действительно поедет в прод" },
+      "summary": {
+        "en": "Layer order, multi-stage isolation, memory, signals and tagging combine into one production Dockerfile.",
+        "ru": "Порядок слоёв, изоляция этапов, память, сигналы и теги складываются в один продовый Dockerfile."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "capstone-d1-one-line-change",
+          "type": "predict_output",
+          "prompt": {
+            "en": "This image is already built and pushed. A developer changes one line in a controller and the pipeline rebuilds. Which layers are rebuilt and roughly how much is pushed?",
+            "ru": "Этот образ уже собран и залит. Разработчик меняет одну строку в контроллере, и конвейер пересобирает образ. Какие слои пересоберутся и сколько примерно уедет в реестр?"
+          },
+          "code": "FROM maven:3.9-eclipse-temurin-21 AS builder\nWORKDIR /build\nCOPY pom.xml .\nRUN mvn -B dependency:go-offline\nCOPY src ./src\nRUN mvn -B package -DskipTests\n\nFROM eclipse-temurin:21-jre AS extractor\nWORKDIR /extract\nCOPY --from=builder /build/target/*.jar application.jar\nRUN java -Djarmode=tools -jar application.jar extract --layers --destination .\n\nFROM eclipse-temurin:21-jre\nWORKDIR /app\nRUN useradd --system --no-create-home app\nCOPY --from=extractor /extract/dependencies/ ./\nCOPY --from=extractor /extract/spring-boot-loader/ ./\nCOPY --from=extractor /extract/snapshot-dependencies/ ./\nCOPY --from=extractor /extract/application/ ./\nUSER app\nEXPOSE 8080\nENTRYPOINT [\"java\", \"-jar\", \"application.jar\"]",
+          "codeLang": "text",
+          "options": [
+            { "id": "a", "text": { "en": "Only the application layer and what follows it — about 1 MB is pushed", "ru": "Только слой application и то, что после него — уедет около 1 МБ" }, "correct": true },
+            { "id": "b", "text": { "en": "The whole jar layer — about 45 MB is pushed", "ru": "Весь слой с jar — уедет около 45 МБ" }, "correct": false,
+              "feedback": { "en": "There is no single jar layer here: the jar was extracted, and only application/ changed.", "ru": "Здесь нет единого слоя с jar: jar распакован, и изменился только application/." } },
+            { "id": "c", "text": { "en": "Every layer including the JRE base, because the sources changed", "ru": "Все слои, включая базу с JRE, ведь исходники изменились" }, "correct": false,
+              "feedback": { "en": "Layers below the first change stay cached; the base is never rebuilt by a code edit.", "ru": "Слои ниже первого изменения остаются в кеше; правка кода не пересобирает базу." } }
+          ],
+          "reveal": {
+            "en": "This is the whole topic in one file. Follow the change through it:\n\n1. **Builder stage** — `pom.xml` and `dependency:go-offline` sit below `COPY src`, so the dependency download stays cached; only the compile re-runs.\n2. **Extractor stage** — the fresh jar is split into its four layer folders.\n3. **Final stage** — `dependencies/`, `spring-boot-loader/` and `snapshot-dependencies/` are unchanged and stay cached. `application/` changed, so that layer and the instructions after it are rebuilt: about 1 MB moves to the registry instead of 45.\n\n```mermaid\nflowchart LR\n  B[\"builder: pom.xml, go-offline, src, package\"] --> X[\"extractor: jarmode tools extract --layers\"]\n  X --> R[\"runtime: JRE base, non-root USER, four COPY layers\"]\n  R --> E[\"exec-form ENTRYPOINT, PID 1\"]\n  E --> T[\"tag with the git SHA, push\"]\n```\n\nEverything the earlier atoms taught is visible here at once: the cache chain decides what rebuilds, layer order decides how much moves, the multi-stage split keeps Maven and the sources out of production, `USER app` drops root, the exec-form `ENTRYPOINT` keeps the JVM at PID 1 so `SIGTERM` drains it, and `EXPOSE 8080` documents a port that `-p` or the orchestrator still has to publish. The two things this file does *not* carry — the memory flag and the configuration — belong outside it: `JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=75` and the environment's database URL.",
+            "ru": "Это вся тема в одном файле. Проследите изменение по нему:\n\n1. **Этап builder** — `pom.xml` и `dependency:go-offline` лежат ниже `COPY src`, поэтому скачивание зависимостей остаётся в кеше; заново выполняется только компиляция.\n2. **Этап extractor** — свежий jar раскладывается по четырём папкам-слоям.\n3. **Финальный этап** — `dependencies/`, `spring-boot-loader/` и `snapshot-dependencies/` не изменились и берутся из кеша. `application/` изменился, поэтому пересобираются этот слой и инструкции после него: в реестр уезжает около 1 МБ вместо 45.\n\n```mermaid\nflowchart LR\n  B[\"builder: pom.xml, go-offline, src, package\"] --> X[\"extractor: jarmode tools extract --layers\"]\n  X --> R[\"runtime: база JRE, USER не root, четыре слоя COPY\"]\n  R --> E[\"ENTRYPOINT в exec-форме, PID 1\"]\n  E --> T[\"тег с git SHA, заливка\"]\n```\n\nЗдесь разом видно всё, чему учили прошлые атомы: цепочка кеша решает, что пересоберётся, порядок слоёв — сколько уедет, разделение на этапы держит Maven и исходники вне прода, `USER app` убирает root, `ENTRYPOINT` в exec-форме оставляет JVM на PID 1, чтобы `SIGTERM` дал ей слить трафик, а `EXPOSE 8080` документирует порт, который всё равно должен опубликовать `-p` или оркестратор. Двух вещей этот файл *не* несёт — флага памяти и конфигурации: им место снаружи, это `JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=75` и URL базы конкретной среды."
+          },
+          "feedback": {
+            "correct": { "en": "Layered jar plus cache chain: a code change costs about a megabyte.", "ru": "Слоистый jar плюс цепочка кеша: правка кода стоит примерно мегабайт." },
+            "incorrect": { "en": "Only application/ changed, so only that layer and the instructions after it rebuild — about 1 MB.", "ru": "Изменился только application/, поэтому пересобираются лишь этот слой и инструкции после него — около 1 МБ." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "capstone-p1-wrong-order",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This final stage re-pushes about 43 MB after nearly every commit, even though the jar was extracted into layers. Why?",
+            "ru": "Этот финальный этап заливает примерно 43 МБ почти после каждого коммита, хотя jar разложен по слоям. Почему?"
+          },
+          "code": "FROM eclipse-temurin:21-jre\nWORKDIR /app\nCOPY --from=extractor /extract/application/ ./\nCOPY --from=extractor /extract/snapshot-dependencies/ ./\nCOPY --from=extractor /extract/spring-boot-loader/ ./\nCOPY --from=extractor /extract/dependencies/ ./\nENTRYPOINT [\"java\", \"-jar\", \"application.jar\"]",
+          "codeLang": "text",
+          "options": [
+            { "id": "a", "text": { "en": "The layers are copied in reverse: application/ changes every commit and sits below the 43 MB dependencies layer, invalidating it", "ru": "Слои скопированы в обратном порядке: application/ меняется на каждый коммит и лежит ниже слоя dependencies на 43 МБ, обесценивая его" }, "correct": true },
+            { "id": "b", "text": { "en": "Extracting a jar into layers only helps when the image also uses a multi-stage build", "ru": "Разложение jar по слоям помогает, только если образ ещё и многоэтапный" }, "correct": false,
+              "feedback": { "en": "This image already uses stages; the defect is purely the COPY order.", "ru": "Этот образ уже многоэтапный; дефект исключительно в порядке COPY." } },
+            { "id": "c", "text": { "en": "The entrypoint should launch JarLauncher, otherwise the layers are re-merged at build time", "ru": "Точка входа должна запускать JarLauncher, иначе слои снова сливаются при сборке" }, "correct": false,
+              "feedback": { "en": "The entrypoint form has no effect on which layers are cached.", "ru": "Форма точки входа никак не влияет на то, какие слои кешируются." } }
+          ],
+          "feedback": {
+            "correct": { "en": "The cache is a chain, so the rarest-changing layer must sit at the bottom.", "ru": "Кеш — цепочка, поэтому самый редко меняющийся слой должен лежать внизу." },
+            "incorrect": { "en": "Copy dependencies/ first and application/ last; here the order is reversed, so every commit invalidates the big layer.", "ru": "dependencies/ копируют первым, а application/ последним; здесь порядок обратный, поэтому каждый коммит обесценивает большой слой." }
+          }
+        },
+        {
+          "id": "capstone-p2-predict-heap",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The image sets this environment variable and the container is started with a 1 GB memory limit. What is the JVM's maximum heap?",
+            "ru": "Образ задаёт эту переменную окружения, а контейнер запущен с лимитом памяти 1 ГБ. Какова максимальная куча JVM?"
+          },
+          "code": "ENV JAVA_TOOL_OPTIONS=\"-XX:MaxRAMPercentage=75\"\n\n$ docker run -m 1g shop-api:1.4.7",
+          "codeLang": "text",
+          "options": [
+            { "id": "a", "text": { "en": "About 768 MB", "ru": "Около 768 МБ" }, "correct": true },
+            { "id": "b", "text": { "en": "About 256 MB", "ru": "Около 256 МБ" }, "correct": false,
+              "feedback": { "en": "256 MB would be the 25% default; the image overrides it with 75%.", "ru": "256 МБ — это доля 25% по умолчанию; образ переопределяет её на 75%." } },
+            { "id": "c", "text": { "en": "About 1024 MB — the whole limit", "ru": "Около 1024 МБ — весь лимит" }, "correct": false,
+              "feedback": { "en": "75% of the limit is heap; the rest holds metaspace, stacks, code cache and direct buffers.", "ru": "Куча — 75% лимита; остальное занимают metaspace, стеки, кеш кода и прямые буферы." } }
+          ],
+          "feedback": {
+            "correct": { "en": "1024 x 75% = 768 MB, with the rest left for non-heap memory.", "ru": "1024 x 75% = 768 МБ, остальное остаётся памяти вне кучи." },
+            "incorrect": { "en": "MaxRAMPercentage=75 of a 1 GB limit is about 768 MB of heap.", "ru": "MaxRAMPercentage=75 от лимита в 1 ГБ — это примерно 768 МБ кучи." }
+          }
+        },
+        {
+          "id": "capstone-p3-sort-pipeline",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the stages of a production Spring Boot image build, from source to a pushed artefact.",
+            "ru": "Расставь по порядку этапы сборки продового образа Spring Boot — от исходников до залитого артефакта."
+          },
+          "steps": [
+            { "id": "s1", "text": { "en": "In a builder stage, COPY pom.xml, resolve dependencies, then COPY src and package", "ru": "На этапе builder скопировать pom.xml, разрешить зависимости, затем скопировать src и собрать пакет" } },
+            { "id": "s2", "text": { "en": "Extract the jar into layers with -Djarmode=tools ... extract --layers", "ru": "Распаковать jar по слоям через -Djarmode=tools ... extract --layers" } },
+            { "id": "s3", "text": { "en": "In the final JRE stage, COPY dependencies/, spring-boot-loader/, snapshot-dependencies/, application/", "ru": "На финальном этапе с JRE скопировать dependencies/, spring-boot-loader/, snapshot-dependencies/, application/" } },
+            { "id": "s4", "text": { "en": "Create an account and switch to it with USER", "ru": "Создать учётную запись и переключиться на неё через USER" } },
+            { "id": "s5", "text": { "en": "Declare an exec-form ENTRYPOINT so the JVM is PID 1", "ru": "Объявить ENTRYPOINT в exec-форме, чтобы JVM была PID 1" } },
+            { "id": "s6", "text": { "en": "Tag the image with the git SHA and push it", "ru": "Пометить образ тегом с git SHA и залить его" } }
+          ],
+          "feedback": {
+            "correct": { "en": "Build, split, stack rarest-first, drop privileges, wire signals, tag.", "ru": "Собрать, разложить, уложить редкое вниз, снять привилегии, настроить сигналы, пометить." },
+            "incorrect": { "en": "Build the jar, extract its layers, copy them rarest-first, drop root, set the exec ENTRYPOINT, then tag and push.", "ru": "Собрать jar, разложить его слои, скопировать редкое первым, уйти от root, задать exec-форму ENTRYPOINT, затем пометить и залить." }
+          }
+        },
+        {
+          "id": "capstone-p4-match-symptoms",
+          "type": "match_pairs",
+          "prompt": { "en": "Match each production symptom to the fix in the Dockerfile or the build.", "ru": "Соотнеси каждый продовый симптом с исправлением в Dockerfile или в сборке." },
+          "pairs": [
+            { "id": "churn", "left": { "en": "Every deploy pushes and pulls 45 MB", "ru": "Каждый деплой заливает и качает 45 МБ" }, "right": { "en": "Extract the layered jar and copy the folders rarest-changing first", "ru": "Разложить jar по слоям и копировать папки начиная с самой редко меняющейся" } },
+            { "id": "heap", "left": { "en": "The JVM uses only 128 MB in a 512 MB container", "ru": "JVM использует лишь 128 МБ в контейнере на 512 МБ" }, "right": { "en": "Set -XX:MaxRAMPercentage=75 via JAVA_TOOL_OPTIONS", "ru": "Задать -XX:MaxRAMPercentage=75 через JAVA_TOOL_OPTIONS" } },
+            { "id": "signal", "left": { "en": "docker stop kills the app mid-request", "ru": "docker stop убивает приложение посреди запроса" }, "right": { "en": "Use the exec form of ENTRYPOINT so the JVM is PID 1", "ru": "Использовать exec-форму ENTRYPOINT, чтобы JVM была PID 1" } },
+            { "id": "ci", "left": { "en": "Every CI build re-downloads all dependencies", "ru": "Каждая сборка в CI заново качает все зависимости" }, "right": { "en": "Seed the cache with --cache-from or a BuildKit cache mount", "ru": "Наполнить кеш через --cache-from или кеш-монтирование BuildKit" } },
+            { "id": "size", "left": { "en": "Maven and the sources are inside the shipped image", "ru": "Maven и исходники лежат внутри отправленного образа" }, "right": { "en": "Move the build into an earlier stage of a multi-stage Dockerfile", "ru": "Перенести сборку на ранний этап многоэтапного Dockerfile" } }
+          ],
+          "feedback": {
+            "correct": { "en": "Each symptom points straight at one instruction or build flag.", "ru": "Каждый симптом указывает ровно на одну инструкцию или флаг сборки." },
+            "incorrect": { "en": "Churn is layer order, idle memory is MaxRAMPercentage, hard kills are the shell form, cold CI is --cache-from, and shipped tooling is a missing stage.", "ru": "Объём изменений — порядок слоёв, простаивающая память — MaxRAMPercentage, жёсткие убийства — shell-форма, холодный CI — --cache-from, а уехавшие инструменты — отсутствующий этап." }
+          }
+        },
+        {
+          "id": "capstone-p5-fill-recipe",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the three missing pieces of the production recipe.", "ru": "Впиши три недостающих части продового рецепта." },
+          "text": {
+            "en": "Extract the jar with java -Djarmode=___ -jar app.jar extract --layers, copy ___/ before application/, and give the JVM the container's limit with -XX:___=75.",
+            "ru": "Распакуйте jar командой java -Djarmode=___ -jar app.jar extract --layers, скопируйте ___/ раньше application/ и отдайте JVM лимит контейнера через -XX:___=75."
+          },
+          "blanks": [
+            { "en": ["tools"], "ru": ["tools"] },
+            { "en": ["dependencies"], "ru": ["dependencies"] },
+            { "en": ["MaxRAMPercentage", "maxrampercentage"], "ru": ["MaxRAMPercentage", "maxrampercentage"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Extract, order by change frequency, then size the heap to the limit.", "ru": "Распаковать, упорядочить по частоте изменений, затем подогнать кучу под лимит." },
+            "incorrect": { "en": "`-Djarmode=tools`, `dependencies/` before `application/`, and `-XX:MaxRAMPercentage=75`.", "ru": "`-Djarmode=tools`, `dependencies/` до `application/` и `-XX:MaxRAMPercentage=75`." }
+          }
+        }
+      ]
+    }
+  ]
+}

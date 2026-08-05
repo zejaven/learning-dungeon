@@ -1,0 +1,3543 @@
+{
+  "schemaVersion": 1,
+  "topicId": "postgresql-write-performance",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "what-the-30-mb-is",
+      "title": {
+        "en": "What the 30 MB actually is",
+        "ru": "Что такое эти 30 МБ"
+      },
+      "summary": {
+        "en": "\"30 MB of data\" can mean one 30 MB record, a 30 MB request or a 30 MB table; only a large record or request is a write-performance problem.",
+        "ru": "«30 МБ данных» могут означать одну запись в 30 МБ, запрос на 30 МБ или таблицу в 30 МБ; проблемой записи является только большая запись или запрос."
+      },
+      "discovery": [
+        {
+          "id": "unit-d1-reading",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A team reports: \"we store 30 MB of data in PostgreSQL and writes are slow\". Which reading of \"30 MB\" is NOT a write-performance problem at all?",
+            "ru": "Команда сообщает: «мы храним в PostgreSQL 30 МБ данных, и запись медленная». Какое прочтение «30 МБ» вообще не является проблемой производительности записи?"
+          },
+          "reveal": {
+            "en": "Before tuning anything, pin down the **unit of work**. \"Large data\" has three different meanings, and they are not the same problem:\n\n```mermaid\nflowchart TD\n  Q[\"30 MB of data\"] --> A[\"one record is 30 MB\"]\n  Q --> B[\"one request carries 30 MB\"]\n  Q --> C[\"the whole table is 30 MB\"]\n  A --> W[\"write-performance problem\"]\n  B --> W\n  C --> N[\"fits in RAM, nothing wrong\"]\n```\n\nA 30 MB **table** fits in memory and has nothing wrong with it. The rest of this lesson assumes what the question implies: each **record** carries about 30 MB of **payload** — the opaque bytes the caller sends, as opposed to the small structured columns around them.\n\nWhy this matters: it decides what the unit of work is. If the payload is the unit, then the SQL statement, the round trip and the commit are rounding errors, and every optimisation aimed at them is aimed at the wrong thing.\n\nTwo other given facts constrain the answer just as much: the service **only writes** (so read replicas, caches and query tuning cannot fix it), and **many services call its API** (so throughput and queueing matter, not only the latency of one write).",
+            "ru": "До всякого тюнинга определите **единицу работы**. «Большие данные» имеют три разных значения, и это разные задачи:\n\n```mermaid\nflowchart TD\n  Q[\"30 МБ данных\"] --> A[\"одна запись — 30 МБ\"]\n  Q --> B[\"один запрос несёт 30 МБ\"]\n  Q --> C[\"вся таблица — 30 МБ\"]\n  A --> W[\"проблема производительности записи\"]\n  B --> W\n  C --> N[\"помещается в память, всё в порядке\"]\n```\n\nТаблица в 30 МБ помещается в память, и с ней всё в порядке. Дальше предполагается то, что подразумевает вопрос: каждая **запись** несёт около 30 МБ **полезной нагрузки** — непрозрачных байтов от вызывающего, в отличие от маленьких структурированных колонок вокруг них.\n\nПочему это важно: от этого зависит, что является единицей работы. Если единица — нагрузка, то SQL-statement, round trip и коммит становятся погрешностью, и любая оптимизация, направленная на них, направлена не туда.\n\nЕщё два данных факта ограничивают ответ не меньше: сервис **только пишет** (значит, реплики чтения, кэши и тюнинг запросов не помогут) и **много сервисов вызывают его API** (значит, важны пропускная способность и очереди, а не только задержка одной записи)."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — a 30 MB table fits in RAM; only a large record or request is a write problem.",
+              "ru": "Верно — таблица в 30 МБ помещается в память; проблема записи — только большая запись или запрос."
+            },
+            "incorrect": {
+              "en": "A 30 MB table is tiny and fits in RAM — it is not a write problem at all.",
+              "ru": "Таблица в 30 МБ крошечная и помещается в память — это вообще не проблема записи."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The whole table is 30 MB",
+                "ru": "Вся таблица занимает 30 МБ"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Each record carries a 30 MB payload",
+                "ru": "Каждая запись несёт 30 МБ полезной нагрузки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is exactly the hard case: every single write moves 30 MB.",
+                "ru": "Это как раз тяжёлый случай: каждая запись двигает 30 МБ."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Each API request carries 30 MB",
+                "ru": "Каждый запрос к API несёт 30 МБ"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A 30 MB request is a real load problem — the bytes still have to be received and stored.",
+                "ru": "Запрос на 30 МБ — настоящая проблема нагрузки: байты всё равно надо принять и сохранить."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "unit-p1-table-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In PostgreSQL, a table that has grown to 30 MB in total is a write-performance problem.",
+            "ru": "В PostgreSQL таблица, выросшая до 30 МБ целиком, является проблемой производительности записи."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A 30 MB table fits in RAM; the problem case is 30 MB per record.",
+              "ru": "Таблица в 30 МБ помещается в память; проблемный случай — 30 МБ на запись."
+            },
+            "incorrect": {
+              "en": "No — 30 MB in total is tiny; only 30 MB per record (or per request) is a write problem.",
+              "ru": "Нет — 30 МБ целиком это мало; проблемой записи является 30 МБ на запись (или на запрос)."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "unit-p2-only-writes",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A service only writes to PostgreSQL and never reads. Which optimisation is ruled out by that fact alone?",
+            "ru": "Сервис только пишет в PostgreSQL и никогда не читает. Какая оптимизация отпадает уже из-за одного этого факта?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Replicas and caches serve reads; a write-only service has none to serve.",
+              "ru": "Реплики и кэши обслуживают чтение; у сервиса, который только пишет, его нет."
+            },
+            "incorrect": {
+              "en": "Read replicas and caches only help reads — this service has none.",
+              "ru": "Реплики чтения и кэши помогают только чтению — у этого сервиса его нет."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Adding read replicas and a cache in front of the queries",
+                "ru": "Добавить реплики чтения и кэш перед запросами"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Reducing the bytes each record writes to disk",
+                "ru": "Уменьшить число байтов, которые каждая запись пишет на диск"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is still on the table — it attacks the write path directly.",
+                "ru": "Это как раз остаётся вариантом — бьёт прямо по пути записи."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Using fewer, bigger transactions",
+                "ru": "Использовать более редкие и крупные транзакции"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is a write-side lever and stays available.",
+                "ru": "Это рычаг на стороне записи, он остаётся доступным."
+              }
+            }
+          ]
+        },
+        {
+          "id": "unit-p3-fill-record",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing word.",
+            "ru": "Впиши пропущенное слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The unit of work decides everything that follows.",
+              "ru": "Единица работы определяет всё дальнейшее."
+            },
+            "incorrect": {
+              "en": "It is per record: only a large record (or request) is a write-performance problem.",
+              "ru": "Это «на запись»: проблемой записи является только большая запись (или запрос)."
+            }
+          },
+          "text": {
+            "en": "Before tuning, ask whether the 30 MB is one ___, one request, or the whole table.",
+            "ru": "До тюнинга уточните, что такое 30 МБ: одна ___, один запрос или вся таблица."
+          },
+          "answers": {
+            "en": [
+              "record"
+            ],
+            "ru": [
+              "запись",
+              "record"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "where-the-write-time-goes",
+      "title": {
+        "en": "Where the write time goes",
+        "ru": "Куда уходит время записи"
+      },
+      "summary": {
+        "en": "In a 30 MB INSERT the round trip, statement parsing, index entries and the commit are about 1% of the time; the payload is all the rest.",
+        "ru": "В INSERT на 30 МБ round trip, разбор statement, записи в индексы и коммит дают около 1% времени; всё остальное — полезная нагрузка."
+      },
+      "discovery": [
+        {
+          "id": "split-d1-share",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "One row-by-row INSERT of a 30 MB record is measured. Together, the network round trip, statement parsing, 5 index entries and the commit account for roughly what share of the time?",
+            "ru": "Измеряют один построчный INSERT записи в 30 МБ. Какую примерно долю времени вместе занимают сетевой round trip, разбор statement, 5 записей в индексы и коммит?"
+          },
+          "reveal": {
+            "en": "Price one write before you tune it. A single `INSERT` of a 30 MB record splits like this:\n\n```\nnetwork    0.4 ms   one client/server round trip\nparse      0.06 ms  parse, plan and execute one statement\ncompress   27 ms    the compression attempt on the payload\ntable      36 ms    writing the table's pages\nchunks     47 ms    per-chunk overhead of ~15 700 chunk rows\nwal        37 ms    writing the same bytes again to the WAL\nindex      0.3 ms   5 index entries\ncommit     1.5 ms   waiting for the WAL to reach the disk\n```\n\nThe **WAL** (write-ahead log) is PostgreSQL's crash-recovery journal — a later atom covers it in full. **Round trip** is one request/response hop between client and server; **commit** is the wait for that journal to reach the disk.\n\nEverything the usual answer attacks — round trips, statements, indexes, the commit — adds up to about **1%**:\n\n```mermaid\nflowchart LR\n  C[\"client\"] -->|\"INSERT of 30 MB\"| S[\"backend process\"]\n  S --> Z[\"compress attempt\"]\n  Z --> T[\"table pages and chunk rows\"]\n  T --> W[\"WAL record of about 31 MB\"]\n  W --> F[\"fsync on COMMIT\"]\n  W --> R[\"replicas and WAL archive\"]\n```\n\nThe rule to keep: **an optimisation can never be larger than the slice it touches.** So the first job is finding out which slice that is, not guessing at a knob.",
+            "ru": "Оцените стоимость одной записи до тюнинга. Один `INSERT` записи в 30 МБ раскладывается так:\n\n```\nсеть       0,4 мс   один round trip клиент/сервер\nразбор     0,06 мс  разбор, планирование и выполнение statement\nсжатие     27 мс    попытка сжатия нагрузки\nтаблица    36 мс    запись страниц таблицы\nкуски      47 мс    накладные расходы на ~15 700 строк-кусков\nwal        37 мс    запись тех же байтов ещё раз в WAL\nиндексы    0,3 мс   5 записей в индексы\nкоммит     1,5 мс   ожидание, пока WAL дойдёт до диска\n```\n\n**WAL** (write-ahead log, журнал упреждающей записи) — это журнал PostgreSQL для восстановления после сбоя; отдельный атом разберёт его целиком. **Round trip** — один цикл запрос/ответ между клиентом и сервером; **коммит** — ожидание, пока этот журнал дойдёт до диска.\n\nВсё, по чему бьёт привычный ответ — round trips, statements, индексы, коммит, — даёт в сумме около **1%**:\n\n```mermaid\nflowchart LR\n  C[\"клиент\"] -->|\"INSERT на 30 МБ\"| S[\"backend-процесс\"]\n  S --> Z[\"попытка сжатия\"]\n  Z --> T[\"страницы таблицы и строки-куски\"]\n  T --> W[\"запись WAL около 31 МБ\"]\n  W --> F[\"fsync при COMMIT\"]\n  W --> R[\"реплики и архив WAL\"]\n```\n\nПравило, которое стоит запомнить: **оптимизация никогда не бывает больше того куска, которого она касается.** Поэтому первая задача — выяснить, что это за кусок, а не гадать про ручки."
+          },
+          "feedback": {
+            "correct": {
+              "en": "About 1% — the payload is everything else.",
+              "ru": "Около 1% — всё остальное это полезная нагрузка."
+            },
+            "incorrect": {
+              "en": "About 1%: at 30 MB per record the payload dominates and the overhead is a rounding error.",
+              "ru": "Около 1%: при 30 МБ на запись доминирует нагрузка, а накладные расходы — погрешность."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "About 1%",
+                "ru": "Около 1%"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "About 30%",
+                "ru": "Около 30%"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That would be true for small rows; at 30 MB the payload swamps all of it.",
+                "ru": "Так было бы на маленьких строках; при 30 МБ нагрузка перекрывает всё это."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "About 70%",
+                "ru": "Около 70%"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The round trip and the commit are under 2 ms of a ~150 ms write.",
+                "ru": "Round trip и коммит — меньше 2 мс из записи примерно в 150 мс."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "split-p1-biggest",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In a single INSERT of a 30 MB record into PostgreSQL, which part costs the most time?",
+            "ru": "В одном INSERT записи на 30 МБ в PostgreSQL какая часть стоит больше всего времени?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Compression, table pages, chunk rows and the WAL are the whole write.",
+              "ru": "Сжатие, страницы таблицы, строки-куски и WAL — это и есть вся запись."
+            },
+            "incorrect": {
+              "en": "The payload does: compressing it, writing its pages and chunks, and logging it to the WAL.",
+              "ru": "Полезная нагрузка: её сжатие, запись её страниц и кусков и журналирование в WAL."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Handling the payload: compression, table pages, chunk rows and the WAL",
+                "ru": "Обработка нагрузки: сжатие, страницы таблицы, строки-куски и WAL"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Parsing and planning the statement",
+                "ru": "Разбор и планирование statement"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is 0.06 ms — a rounding error next to the payload.",
+                "ru": "Это 0,06 мс — погрешность рядом с нагрузкой."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The network round trip",
+                "ru": "Сетевой round trip"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "One round trip is 0.4 ms; the payload work is hundreds of times more.",
+                "ru": "Один round trip — 0,4 мс; работа с нагрузкой в сотни раз больше."
+              }
+            }
+          ]
+        },
+        {
+          "id": "split-p2-match-parts",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each part of a PostgreSQL write to what it actually is.",
+            "ru": "Соотнеси каждую часть записи в PostgreSQL с тем, чем она является."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Naming the parts is what lets you say which one an optimisation touches.",
+              "ru": "Названные части — это то, что позволяет сказать, какой из них касается оптимизация."
+            },
+            "incorrect": {
+              "en": "network is one round trip, compress is the attempt on the payload, wal is the second copy of the bytes, commit is the wait for the disk.",
+              "ru": "сеть — один round trip, сжатие — попытка на нагрузке, wal — вторая копия байтов, коммит — ожидание диска."
+            }
+          },
+          "pairs": [
+            {
+              "id": "network",
+              "left": {
+                "en": "network",
+                "ru": "сеть"
+              },
+              "right": {
+                "en": "One client/server round trip",
+                "ru": "Один round trip клиент/сервер"
+              }
+            },
+            {
+              "id": "compress",
+              "left": {
+                "en": "compress",
+                "ru": "сжатие"
+              },
+              "right": {
+                "en": "The compression attempt on the payload",
+                "ru": "Попытка сжатия полезной нагрузки"
+              }
+            },
+            {
+              "id": "wal",
+              "left": {
+                "en": "wal",
+                "ru": "wal"
+              },
+              "right": {
+                "en": "Writing the same bytes again to the write-ahead log",
+                "ru": "Запись тех же байтов ещё раз в журнал упреждающей записи"
+              }
+            },
+            {
+              "id": "commit",
+              "left": {
+                "en": "commit",
+                "ru": "коммит"
+              },
+              "right": {
+                "en": "Waiting for the log to reach the disk",
+                "ru": "Ожидание, пока журнал дойдёт до диска"
+              }
+            }
+          ]
+        },
+        {
+          "id": "split-p3-fill-share",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill in the share and the rule.",
+            "ru": "Впиши долю и правило."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That one number is why most standard advice fails on this table.",
+              "ru": "Именно это число объясняет, почему стандартные советы здесь не работают."
+            },
+            "incorrect": {
+              "en": "About 1%, and an optimisation can never be larger than the slice it touches.",
+              "ru": "Около 1%, и оптимизация никогда не бывает больше того куска, которого она касается."
+            }
+          },
+          "text": {
+            "en": "In a 30 MB INSERT, round trips, statements, index entries and the commit are about ___ % of the time — and an optimisation can never be larger than the ___ it touches.",
+            "ru": "В INSERT на 30 МБ round trips, statements, записи в индексы и коммит дают около ___ % времени — а оптимизация никогда не бывает больше того ___, которого она касается."
+          },
+          "blanks": [
+            {
+              "en": [
+                "1"
+              ],
+              "ru": [
+                "1"
+              ]
+            },
+            {
+              "en": [
+                "slice",
+                "share",
+                "part"
+              ],
+              "ru": [
+                "куска",
+                "кусок",
+                "части",
+                "часть"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "toast-basics",
+      "title": {
+        "en": "TOAST: what happens to an oversized value",
+        "ru": "TOAST: что происходит с большим значением"
+      },
+      "summary": {
+        "en": "A row must fit in an 8 KB page, so PostgreSQL hands any value over roughly 2 KB to TOAST, which compresses it, slices it and logs it.",
+        "ru": "Строка должна помещаться в страницу 8 КБ, поэтому значение больше примерно 2 КБ PostgreSQL отдаёт TOAST, который его сжимает, режет и журналирует."
+      },
+      "discovery": [
+        {
+          "id": "toast-d1-where-it-goes",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "PostgreSQL stores rows in 8 KB pages. You insert a 30 MB value into a bytea column. What happens to that value?",
+            "ru": "PostgreSQL хранит строки в страницах по 8 КБ. Вы вставляете значение в 30 МБ в колонку bytea. Что происходит с этим значением?"
+          },
+          "reveal": {
+            "en": "A row must fit in an 8 KB **page** (the fixed-size block PostgreSQL reads and writes), so a value over roughly **2 KB** is handled by **TOAST** — The Oversized-Attribute Storage Technique. The **heap** is the table's own pages, where the small columns stay.\n\nTOAST does three things, in this order:\n\n```mermaid\nflowchart TD\n  V[\"bytea value of 30 MB\"] --> Q{\"> ~2 KB?\"}\n  Q -->|no| H[\"stays inline in the heap page\"]\n  Q -->|yes| Z[\"compress\"]\n  Z --> K[\"slice into chunks of just under 2 KB\"]\n  K --> P[(\"hidden TOAST table\")]\n  P --> I[\"index entry per chunk\"]\n  P --> W[\"WAL: every chunk logged\"]\n```\n\n1. **Compress** it, if the column's storage mode allows.\n2. **Slice** what is left into chunks of just under 2 KB, stored as rows in a hidden TOAST table.\n3. **Log** all of it to the WAL, chunk row by chunk row.\n\nThat is the whole reason a 30 MB `INSERT` is expensive: nothing about it is one row write. The next atoms take the three steps one at a time.",
+            "ru": "Строка должна помещаться в **страницу** 8 КБ (блок фиксированного размера, который PostgreSQL читает и пишет), поэтому значение больше примерно **2 КБ** обрабатывает **TOAST** — The Oversized-Attribute Storage Technique. **Heap** — это собственные страницы таблицы, где остаются маленькие колонки.\n\nTOAST делает три вещи, в таком порядке:\n\n```mermaid\nflowchart TD\n  V[\"значение bytea 30 МБ\"] --> Q{\"> ~2 КБ?\"}\n  Q -->|нет| H[\"остаётся внутри heap-страницы\"]\n  Q -->|да| Z[\"сжатие\"]\n  Z --> K[\"нарезка на куски чуть меньше 2 КБ\"]\n  K --> P[(\"скрытая TOAST-таблица\")]\n  P --> I[\"запись в индекс на каждый кусок\"]\n  P --> W[\"WAL: журналируется каждый кусок\"]\n```\n\n1. **Сжать**, если это разрешает режим хранения колонки.\n2. **Нарезать** оставшееся на куски чуть меньше 2 КБ, хранимые строками в скрытой TOAST-таблице.\n3. **Записать** всё это в WAL, строку-кусок за строкой-куском.\n\nВот вся причина, почему `INSERT` на 30 МБ дорог: это ни в каком смысле не запись одной строки. Следующие атомы разберут эти три шага по одному."
+          },
+          "feedback": {
+            "correct": {
+              "en": "TOAST takes over: compress, slice into ~2 KB chunks, store them out of line.",
+              "ru": "Дальше работает TOAST: сжать, нарезать на куски ~2 КБ, хранить вне строки."
+            },
+            "incorrect": {
+              "en": "A value that size goes to TOAST — it is compressed, sliced into ~2 KB chunks and stored in a hidden table.",
+              "ru": "Значение такого размера уходит в TOAST — его сжимают, режут на куски ~2 КБ и кладут в скрытую таблицу."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "TOAST compresses it, slices it into chunks of just under 2 KB and stores them in a hidden table",
+                "ru": "TOAST сжимает его, режет на куски чуть меньше 2 КБ и хранит их в скрытой таблице"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It is stored inline, in one oversized 30 MB page",
+                "ru": "Оно хранится внутри строки, в одной большой странице на 30 МБ"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Pages are a fixed 8 KB; a value cannot stretch one.",
+                "ru": "Страницы фиксированы на 8 КБ; значение не может её растянуть."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The INSERT is rejected: a value cannot exceed the page size",
+                "ru": "INSERT отклоняется: значение не может быть больше страницы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Large values are normal — TOAST exists exactly to store them.",
+                "ru": "Большие значения — норма: TOAST существует именно для их хранения."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "toast-p1-small-value-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In PostgreSQL, a value of a few hundred bytes in a text column is handled by TOAST.",
+            "ru": "В PostgreSQL значение в несколько сотен байт в колонке text обрабатывается через TOAST."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Below roughly 2 KB the value simply stays inline in the heap page.",
+              "ru": "Меньше примерно 2 КБ значение просто остаётся внутри heap-страницы."
+            },
+            "incorrect": {
+              "en": "No — TOAST kicks in above roughly 2 KB; smaller values stay inline in the page.",
+              "ru": "Нет — TOAST включается выше примерно 2 КБ; значения меньше остаются внутри страницы."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "toast-p2-sort-steps",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order what TOAST does with an oversized value in PostgreSQL.",
+            "ru": "Расставь по порядку то, что TOAST делает с большим значением в PostgreSQL."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Compress, slice, store out of line, log — in that order, on every write.",
+              "ru": "Сжать, нарезать, положить вне строки, записать в журнал — в этом порядке, на каждой записи."
+            },
+            "incorrect": {
+              "en": "The order is: compress, slice into ~2 KB chunks, store them as rows with index entries, log every chunk to the WAL.",
+              "ru": "Порядок такой: сжать, нарезать на куски ~2 КБ, сохранить их строками с записями в индекс, записать каждый кусок в WAL."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Try to compress the value",
+                "ru": "Попытаться сжать значение"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Slice what is left into chunks of just under 2 KB",
+                "ru": "Нарезать оставшееся на куски чуть меньше 2 КБ"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Insert the chunks as rows in the hidden TOAST table, one index entry each",
+                "ru": "Вставить куски строками в скрытую TOAST-таблицу, по записи в индекс на каждый"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Write every chunk row to the WAL",
+                "ru": "Записать каждую строку-кусок в WAL"
+              }
+            }
+          ]
+        },
+        {
+          "id": "toast-p3-fill-sizes",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill in the two sizes and the mechanism.",
+            "ru": "Впиши два размера и механизм."
+          },
+          "feedback": {
+            "correct": {
+              "en": "8 KB page, ~2 KB threshold, TOAST above it.",
+              "ru": "Страница 8 КБ, порог ~2 КБ, выше него — TOAST."
+            },
+            "incorrect": {
+              "en": "A row must fit an 8 KB page, so a value over roughly 2 KB is handed to TOAST.",
+              "ru": "Строка должна поместиться в страницу 8 КБ, поэтому значение больше примерно 2 КБ отдаётся в TOAST."
+            }
+          },
+          "text": {
+            "en": "A PostgreSQL row must fit in a ___ KB page, so a value over roughly ___ KB is handed to ___.",
+            "ru": "Строка PostgreSQL должна поместиться в страницу ___ КБ, поэтому значение больше примерно ___ КБ отдаётся в ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "8"
+              ],
+              "ru": [
+                "8"
+              ]
+            },
+            {
+              "en": [
+                "2"
+              ],
+              "ru": [
+                "2"
+              ]
+            },
+            {
+              "en": [
+                "TOAST",
+                "toast"
+              ],
+              "ru": [
+                "TOAST",
+                "toast"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "compression-attempt",
+      "title": {
+        "en": "The compression attempt",
+        "ru": "Попытка сжатия"
+      },
+      "summary": {
+        "en": "bytea and text default to EXTENDED storage, so PostgreSQL tries to compress every large value — CPU that buys nothing on already-compressed data.",
+        "ru": "У bytea и text по умолчанию хранение EXTENDED, поэтому PostgreSQL пробует сжать каждое большое значение — процессорное время впустую на уже сжатых данных."
+      },
+      "discovery": [
+        {
+          "id": "compress-d1-jpeg",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The payload column holds 30 MB JPEG files, which are already compressed. Predict what PostgreSQL's compression step does on every insert.",
+            "ru": "Колонка payload хранит JPEG-файлы по 30 МБ, которые уже сжаты. Предскажи, что делает шаг сжатия в PostgreSQL на каждой вставке."
+          },
+          "code": "CREATE TABLE documents (id bigint, payload bytea);\n-- payload holds a 30 MB JPEG (already compressed)\nINSERT INTO documents VALUES (1, :jpeg);",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "`bytea` and `text` default to **EXTENDED** storage, which means \"compress it and move it out of line if it is large\". So PostgreSQL runs **pglz** (or **lz4**, if `default_toast_compression = lz4`) on the value before slicing it.\n\nWhether that pays depends entirely on the data:\n\n```\ncompressible JSON     may shrink about 4x  -> the whole write drops ~60%\nJPEG / PDF / zip      shrinks by nothing   -> pure CPU, ~27 ms per row\nencrypted blob        shrinks by nothing   -> pure CPU, ~27 ms per row\n```\n\nThe *attempt* costs CPU on every single write, even when it gains zero bytes. For a column of already-compressed payloads you turn it off by switching the storage mode:\n\n```sql\nALTER TABLE documents ALTER COLUMN payload SET STORAGE EXTERNAL;\n```\n\n**EXTERNAL** means \"store it out of line, but do not try to compress it\" — it removes ~27 ms of pointless work per row. And if the data *is* compressible, `lz4` is far cheaper CPU per megabyte than `pglz`, or you can compress in the application and store `EXTERNAL`, so you control the codec and level instead of letting the database guess.",
+            "ru": "У `bytea` и `text` по умолчанию хранение **EXTENDED**, что означает «сжать и вынести из строки, если оно большое». Поэтому PostgreSQL прогоняет **pglz** (или **lz4**, если `default_toast_compression = lz4`) по значению перед нарезкой.\n\nОкупается это или нет, целиком зависит от данных:\n\n```\nсжимаемый JSON        может уменьшиться в 4 раза -> вся запись падает на ~60%\nJPEG / PDF / zip      не уменьшается вовсе       -> чистый CPU, ~27 мс на строку\nзашифрованный blob    не уменьшается вовсе       -> чистый CPU, ~27 мс на строку\n```\n\n*Попытка* стоит процессорного времени на каждой записи, даже когда не даёт ни байта. Для колонки с уже сжатыми нагрузками её отключают сменой режима хранения:\n\n```sql\nALTER TABLE documents ALTER COLUMN payload SET STORAGE EXTERNAL;\n```\n\n**EXTERNAL** означает «хранить вне строки, но не пытаться сжимать» — это снимает ~27 мс бессмысленной работы на строку. А если данные *сжимаемые*, то `lz4` заметно дешевле по процессору на мегабайт, чем `pglz`; либо можно сжимать в приложении и хранить как `EXTERNAL`, чтобы кодек и уровень выбирали вы, а не гадала база."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The attempt runs anyway and gains nothing — pure CPU per row.",
+              "ru": "Попытка всё равно выполняется и ничего не даёт — чистый CPU на строку."
+            },
+            "incorrect": {
+              "en": "PostgreSQL does not know the data is already compressed: it tries, gains nothing, and pays the CPU.",
+              "ru": "PostgreSQL не знает, что данные уже сжаты: он пробует, ничего не выигрывает и платит процессором."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It tries to compress, gains nothing, and the CPU time is spent anyway",
+                "ru": "Пробует сжать, ничего не выигрывает, и процессорное время всё равно тратится"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It detects the JPEG and skips compression",
+                "ru": "Определяет JPEG и пропускает сжатие"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no content detection — only the column's storage mode decides.",
+                "ru": "Никакого распознавания содержимого нет — решает только режим хранения колонки."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It shrinks the value about 4x",
+                "ru": "Уменьшает значение примерно в 4 раза"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is what compressible JSON does; a JPEG is already compressed.",
+                "ru": "Так ведёт себя сжимаемый JSON; JPEG уже сжат."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "compress-p1-turn-off",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A PostgreSQL bytea column stores files that are already compressed. Which change removes the pointless compression attempt on every insert?",
+            "ru": "Колонка bytea в PostgreSQL хранит уже сжатые файлы. Какое изменение убирает бессмысленную попытку сжатия на каждой вставке?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "EXTERNAL keeps the value out of line but skips compressing it.",
+              "ru": "EXTERNAL держит значение вне строки, но не сжимает его."
+            },
+            "incorrect": {
+              "en": "It is SET STORAGE EXTERNAL — out of line, no compression attempt.",
+              "ru": "Это SET STORAGE EXTERNAL — вне строки, без попытки сжатия."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "ALTER TABLE ... ALTER COLUMN payload SET STORAGE EXTERNAL",
+                "ru": "ALTER TABLE ... ALTER COLUMN payload SET STORAGE EXTERNAL"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Making the table UNLOGGED",
+                "ru": "Сделать таблицу UNLOGGED"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That removes the WAL, not the compression attempt — and costs crash safety.",
+                "ru": "Это убирает WAL, а не попытку сжатия — и стоит устойчивости к сбою."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Setting default_toast_compression = lz4",
+                "ru": "Установить default_toast_compression = lz4"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "lz4 makes the attempt cheaper, but an already-compressed blob still will not shrink.",
+                "ru": "lz4 делает попытку дешевле, но уже сжатый blob всё равно не уменьшится."
+              }
+            }
+          ]
+        },
+        {
+          "id": "compress-p2-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each PostgreSQL storage choice or payload type to its effect on the write.",
+            "ru": "Соотнеси каждый вариант хранения в PostgreSQL или тип нагрузки с его влиянием на запись."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The codec question is really a data question: is this payload compressible at all?",
+              "ru": "Вопрос про кодек — на самом деле вопрос про данные: сжимаема ли эта нагрузка вообще?"
+            },
+            "incorrect": {
+              "en": "EXTENDED compresses, EXTERNAL skips it, lz4 is cheaper CPU, and an encrypted blob never shrinks.",
+              "ru": "EXTENDED сжимает, EXTERNAL пропускает сжатие, lz4 дешевле по CPU, а зашифрованный blob не уменьшается."
+            }
+          },
+          "pairs": [
+            {
+              "id": "extended",
+              "left": {
+                "en": "EXTENDED storage (the default)",
+                "ru": "Хранение EXTENDED (по умолчанию)"
+              },
+              "right": {
+                "en": "Tries to compress every large value",
+                "ru": "Пробует сжать каждое большое значение"
+              }
+            },
+            {
+              "id": "external",
+              "left": {
+                "en": "SET STORAGE EXTERNAL",
+                "ru": "SET STORAGE EXTERNAL"
+              },
+              "right": {
+                "en": "Out of line, no compression attempt",
+                "ru": "Вне строки, без попытки сжатия"
+              }
+            },
+            {
+              "id": "lz4",
+              "left": {
+                "en": "default_toast_compression = lz4",
+                "ru": "default_toast_compression = lz4"
+              },
+              "right": {
+                "en": "Far cheaper CPU per megabyte than pglz",
+                "ru": "Заметно дешевле по процессору на мегабайт, чем pglz"
+              }
+            },
+            {
+              "id": "encrypted",
+              "left": {
+                "en": "An encrypted 30 MB blob",
+                "ru": "Зашифрованный blob на 30 МБ"
+              },
+              "right": {
+                "en": "Shrinks by nothing, the attempt is pure cost",
+                "ru": "Не уменьшается вовсе, попытка — чистые расходы"
+              }
+            }
+          ]
+        },
+        {
+          "id": "compress-p3-fill-external",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the storage mode.",
+            "ru": "Впиши режим хранения."
+          },
+          "feedback": {
+            "correct": {
+              "en": "EXTERNAL is the mode for payloads that cannot compress any further.",
+              "ru": "EXTERNAL — режим для нагрузок, которые уже некуда сжимать."
+            },
+            "incorrect": {
+              "en": "It is EXTERNAL: out of line, and no compression attempt.",
+              "ru": "Это EXTERNAL: вне строки и без попытки сжатия."
+            }
+          },
+          "text": {
+            "en": "For an already-compressed payload column: ALTER TABLE ... ALTER COLUMN payload SET STORAGE ___.",
+            "ru": "Для колонки с уже сжатой нагрузкой: ALTER TABLE ... ALTER COLUMN payload SET STORAGE ___."
+          },
+          "answers": {
+            "en": [
+              "EXTERNAL",
+              "external"
+            ],
+            "ru": [
+              "EXTERNAL",
+              "external"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "toast-chunks",
+      "title": {
+        "en": "One INSERT, fifteen thousand rows",
+        "ru": "Один INSERT, пятнадцать тысяч строк"
+      },
+      "summary": {
+        "en": "A 30 MB value becomes about 15 700 chunk rows of just under 2 KB in a hidden TOAST table, each with its own index entry.",
+        "ru": "Значение в 30 МБ превращается примерно в 15 700 строк-кусков чуть меньше 2 КБ в скрытой TOAST-таблице, у каждой своя запись в индексе."
+      },
+      "discovery": [
+        {
+          "id": "chunks-d1-how-many",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A 30 MB bytea value is sliced into chunks of just under 2 KB. Roughly how many rows does one INSERT of that value actually write?",
+            "ru": "Значение bytea на 30 МБ режется на куски чуть меньше 2 КБ. Сколько примерно строк на самом деле пишет один INSERT этого значения?"
+          },
+          "reveal": {
+            "en": "Do the arithmetic once and the number stops being surprising:\n\n```\n30 MB  =  30 * 1024 KB  =  30 720 KB\nchunk  =  just under 2 KB\nrows   =  30 720 / ~1.96  ~=  15 700 chunk rows\n```\n\nThose rows go into a hidden **TOAST table** (`pg_toast.*`), one per chunk, and each gets an entry in the **TOAST index** so the value can be reassembled on read.\n\n```mermaid\nflowchart LR\n  R[\"one INSERT\"] --> H[\"1 heap row: id, metadata, TOAST pointer\"]\n  R --> T[(\"about 15 700 chunk rows\")]\n  T --> I[\"about 15 700 TOAST index entries\"]\n```\n\nThis is why \"30 MB is one row, so it is one write\" is wrong. It is one heap row **plus** ~15 700 chunk rows **plus** their index entries — and, as the next atom shows, a WAL record for every one of them. In the cost model that per-chunk overhead alone is 47 ms, the single largest slice of the write.\n\nA useful side effect: you can see the split in production by comparing `pg_relation_size` (the table's own pages) with `pg_total_relation_size` (the table plus its TOAST table and indexes).",
+            "ru": "Посчитайте один раз — и число перестанет удивлять:\n\n```\n30 МБ  =  30 * 1024 КБ  =  30 720 КБ\nкусок  =  чуть меньше 2 КБ\nстроки =  30 720 / ~1,96  ~=  15 700 строк-кусков\n```\n\nЭти строки уходят в скрытую **TOAST-таблицу** (`pg_toast.*`), по одной на кусок, и каждая получает запись в **TOAST-индексе**, чтобы значение можно было собрать обратно при чтении.\n\n```mermaid\nflowchart LR\n  R[\"один INSERT\"] --> H[\"1 heap-строка: id, метаданные, указатель на TOAST\"]\n  R --> T[(\"около 15 700 строк-кусков\")]\n  T --> I[\"около 15 700 записей в TOAST-индексе\"]\n```\n\nВот почему «30 МБ — это одна строка, значит, одна запись» неверно. Это одна heap-строка **плюс** ~15 700 строк-кусков **плюс** их записи в индексе — и, как покажет следующий атом, запись в WAL на каждую из них. В модели стоимости одни только накладные расходы на куски дают 47 мс — самый большой кусок записи.\n\nПолезный побочный эффект: разделение видно в продакшене, если сравнить `pg_relation_size` (собственные страницы таблицы) с `pg_total_relation_size` (таблица вместе с её TOAST-таблицей и индексами)."
+          },
+          "feedback": {
+            "correct": {
+              "en": "About 15 700 — one INSERT is fifteen thousand row writes.",
+              "ru": "Около 15 700 — один INSERT это пятнадцать тысяч записей строк."
+            },
+            "incorrect": {
+              "en": "About 15 700: 30 MB divided into chunks of just under 2 KB.",
+              "ru": "Около 15 700: 30 МБ, поделённые на куски чуть меньше 2 КБ."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "About 15 700",
+                "ru": "Около 15 700"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Exactly 1",
+                "ru": "Ровно 1"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "One heap row, yes — plus thousands of chunk rows underneath it.",
+                "ru": "Одна heap-строка — да, плюс тысячи строк-кусков под ней."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "About 30",
+                "ru": "Около 30"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That would be 1 MB chunks; TOAST chunks are just under 2 KB.",
+                "ru": "Это были бы куски по 1 МБ; куски TOAST — чуть меньше 2 КБ."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "chunks-p1-one-row-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In PostgreSQL, inserting one record with a 30 MB bytea payload writes one row.",
+            "ru": "В PostgreSQL вставка одной записи с нагрузкой bytea на 30 МБ пишет одну строку."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It is one heap row plus about 15 700 TOAST chunk rows and their index entries.",
+              "ru": "Это одна heap-строка плюс около 15 700 строк-кусков TOAST и их записи в индексе."
+            },
+            "incorrect": {
+              "en": "No — one heap row plus about 15 700 chunk rows plus an index entry for each.",
+              "ru": "Нет — одна heap-строка плюс около 15 700 строк-кусков плюс запись в индексе на каждую."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "chunks-p2-sizes",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The table holds a handful of rows, each with a 30 MB payload. Predict how the two size numbers compare.",
+            "ru": "В таблице несколько строк, у каждой нагрузка по 30 МБ. Предскажи, как соотносятся два размера."
+          },
+          "code": "SELECT pg_relation_size('documents')       AS heap_bytes,\n       pg_total_relation_size('documents') AS heap_plus_toast_bytes;",
+          "codeLang": "sql",
+          "feedback": {
+            "correct": {
+              "en": "The payload lives in the TOAST table, so only the total shows it.",
+              "ru": "Нагрузка живёт в TOAST-таблице, поэтому её видно только в общем размере."
+            },
+            "incorrect": {
+              "en": "pg_relation_size is the heap alone (tiny); pg_total_relation_size includes the TOAST table where the payload really is.",
+              "ru": "pg_relation_size — только heap (крошечный); pg_total_relation_size включает TOAST-таблицу, где на самом деле лежит нагрузка."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "heap_bytes is small; heap_plus_toast_bytes is where the payload shows up",
+                "ru": "heap_bytes мал; нагрузка видна в heap_plus_toast_bytes"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Both are about the same, since the payload is in the table",
+                "ru": "Оба примерно равны, ведь нагрузка лежит в таблице"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The payload is out of line in the TOAST table, which only the total counts.",
+                "ru": "Нагрузка вынесена в TOAST-таблицу, которую считает только общий размер."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Both are small, because TOAST compresses everything away",
+                "ru": "Оба малы, потому что TOAST всё сжимает"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Compression only helps compressible data, and the chunks still occupy disk.",
+                "ru": "Сжатие помогает только сжимаемым данным, и куски всё равно занимают диск."
+              }
+            }
+          ]
+        },
+        {
+          "id": "chunks-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble what one INSERT of a 30 MB value really writes.",
+            "ru": "Собери, что на самом деле пишет один INSERT значения на 30 МБ."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One heap row on top, thousands of chunk rows underneath.",
+              "ru": "Сверху одна heap-строка, под ней тысячи строк-кусков."
+            },
+            "incorrect": {
+              "en": "It is one heap row plus about 15 700 TOAST chunk rows.",
+              "ru": "Это одна heap-строка плюс около 15 700 строк-кусков TOAST."
+            }
+          },
+          "tokens": {
+            "en": [
+              "one",
+              "heap",
+              "row",
+              "plus",
+              "about",
+              "15700",
+              "TOAST",
+              "chunk",
+              "rows"
+            ],
+            "ru": [
+              "одна",
+              "heap-строка",
+              "плюс",
+              "около",
+              "15700",
+              "строк-кусков",
+              "TOAST"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "single",
+              "page"
+            ],
+            "ru": [
+              "единственная",
+              "страница"
+            ]
+          }
+        },
+        {
+          "id": "chunks-p4-fill-math",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill in the chunk size and the resulting row count.",
+            "ru": "Впиши размер куска и получившееся число строк."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That number is the answer to \"why is one insert so expensive?\".",
+              "ru": "Это число и есть ответ на вопрос «почему одна вставка так дорога?»."
+            },
+            "incorrect": {
+              "en": "Chunks are just under 2 KB, so 30 MB becomes about 15 700 chunk rows.",
+              "ru": "Куски чуть меньше 2 КБ, поэтому 30 МБ превращаются примерно в 15 700 строк-кусков."
+            }
+          },
+          "text": {
+            "en": "TOAST slices a large value into chunks of just under ___ KB, so a 30 MB value becomes about ___ chunk rows.",
+            "ru": "TOAST режет большое значение на куски чуть меньше ___ КБ, поэтому значение в 30 МБ становится примерно ___ строками-кусками."
+          },
+          "blanks": [
+            {
+              "en": [
+                "2"
+              ],
+              "ru": [
+                "2"
+              ]
+            },
+            {
+              "en": [
+                "15700",
+                "15 700"
+              ],
+              "ru": [
+                "15700",
+                "15 700"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "wal-amplification",
+      "title": {
+        "en": "The WAL writes the bytes again",
+        "ru": "WAL пишет байты ещё раз"
+      },
+      "summary": {
+        "en": "Every chunk row is also a WAL record, so 30 MB of payload costs about 61 MB of disk before replicas and the archive copy the WAL again.",
+        "ru": "Каждая строка-кусок — это ещё и запись в WAL, поэтому 30 МБ нагрузки стоят около 61 МБ диска, и это до того, как реплики и архив скопируют WAL ещё раз."
+      },
+      "discovery": [
+        {
+          "id": "wal-d1-how-much-disk",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A 30 MB record is inserted into PostgreSQL. Roughly how much disk does the primary write for that one record?",
+            "ru": "В PostgreSQL вставляют запись на 30 МБ. Сколько примерно диска пишет primary ради этой одной записи?"
+          },
+          "reveal": {
+            "en": "The **WAL** (write-ahead log) is not a small note about the change — **it contains the data**. PostgreSQL writes the row to the table's pages and then writes the same bytes *again* to the log, so that a crash can be recovered from the log alone.\n\n```\npayload written to the table   ~30 MB\nsame payload written to WAL    ~31 MB\n-----------------------------------\ndisk on the primary            ~61 MB per record\n```\n\nAnd that is only the primary:\n\n```mermaid\nflowchart LR\n  T[\"table pages: about 30 MB\"] --> W[\"WAL: about 31 MB\"]\n  W --> R[\"streaming replica copies the WAL\"]\n  W --> A[\"WAL archive copies the WAL\"]\n```\n\n**Streaming replication** ships the WAL to replicas and **WAL archiving** copies it to long-term storage, so each of those multiplies the WAL volume again. Every chunk row from the previous atom is logged individually — ~15 700 WAL records for one `INSERT`.\n\nWhy it matters for throughput: bytes per write is one of the two ceilings on how many writes the storage can absorb per second. Halving the bytes is worth more than any statement-level tuning.",
+            "ru": "**WAL** (write-ahead log, журнал упреждающей записи) — не маленькая пометка об изменении: **в нём лежат сами данные**. PostgreSQL пишет строку в страницы таблицы, а затем пишет те же байты *ещё раз* в журнал, чтобы после сбоя можно было восстановиться по одному журналу.\n\n```\nнагрузка записана в таблицу     ~30 МБ\nта же нагрузка записана в WAL   ~31 МБ\n---------------------------------------\nдиск на primary                 ~61 МБ на запись\n```\n\nИ это только primary:\n\n```mermaid\nflowchart LR\n  T[\"страницы таблицы: около 30 МБ\"] --> W[\"WAL: около 31 МБ\"]\n  W --> R[\"потоковая реплика копирует WAL\"]\n  W --> A[\"архив WAL копирует WAL\"]\n```\n\n**Потоковая репликация** отправляет WAL на реплики, а **архивация WAL** копирует его в долговременное хранилище, поэтому каждая из них умножает объём WAL ещё раз. Каждая строка-кусок из предыдущего атома журналируется отдельно — ~15 700 записей WAL на один `INSERT`.\n\nПочему это важно для пропускной способности: байты на запись — один из двух потолков того, сколько записей хранилище примет в секунду. Уменьшить байты вдвое ценнее любого тюнинга на уровне statement."
+          },
+          "feedback": {
+            "correct": {
+              "en": "About 61 MB — the payload is written to the table and again to the WAL.",
+              "ru": "Около 61 МБ — нагрузка пишется в таблицу и ещё раз в WAL."
+            },
+            "incorrect": {
+              "en": "About 61 MB: ~30 MB into the table plus ~31 MB of WAL containing the same bytes.",
+              "ru": "Около 61 МБ: ~30 МБ в таблицу плюс ~31 МБ WAL с теми же байтами."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "About 61 MB",
+                "ru": "Около 61 МБ"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "About 30 MB",
+                "ru": "Около 30 МБ"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That counts the table only; the WAL holds the same bytes a second time.",
+                "ru": "Это только таблица; WAL держит те же байты ещё раз."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "About 2 KB — only the WAL record header",
+                "ru": "Около 2 КБ — только заголовок записи WAL"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The WAL contains the data itself, not a pointer to it.",
+                "ru": "В WAL лежат сами данные, а не указатель на них."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "wal-p1-small-log-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "The PostgreSQL WAL is just a log of what changed, so a 30 MB insert produces only a few kilobytes of WAL.",
+            "ru": "WAL в PostgreSQL — просто журнал того, что изменилось, поэтому вставка на 30 МБ порождает лишь несколько килобайт WAL."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The WAL contains the data: a 30 MB insert writes about 30 MB of WAL.",
+              "ru": "В WAL лежат сами данные: вставка на 30 МБ пишет около 30 МБ WAL."
+            },
+            "incorrect": {
+              "en": "No — the WAL contains the data itself, so a 30 MB insert writes about 30 MB of WAL.",
+              "ru": "Нет — в WAL лежат сами данные, поэтому вставка на 30 МБ пишет около 30 МБ WAL."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "wal-p2-replicas",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Streaming replication and WAL archiving are enabled. What happens to the WAL produced by a 30 MB insert?",
+            "ru": "Включены потоковая репликация и архивация WAL. Что происходит с WAL, порождённым вставкой на 30 МБ?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Each consumer of the WAL copies the same bytes again.",
+              "ru": "Каждый потребитель WAL копирует те же байты ещё раз."
+            },
+            "incorrect": {
+              "en": "Both the replicas and the archive copy the WAL, multiplying the same bytes again.",
+              "ru": "И реплики, и архив копируют WAL, умножая те же байты ещё раз."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Replicas and the archive each copy it again",
+                "ru": "Реплики и архив копируют его ещё по разу"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Only the table pages are shipped; the WAL stays local",
+                "ru": "Отправляются только страницы таблицы; WAL остаётся локальным"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Replication ships the WAL itself — that is how a replica stays in sync.",
+                "ru": "Репликация отправляет именно WAL — так реплика и остаётся в синхронизации."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It is compressed away to almost nothing",
+                "ru": "Он сжимается почти до нуля"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "wal_compression only compresses full-page images, and only compressible ones.",
+                "ru": "wal_compression сжимает только full-page images, и только сжимаемые."
+              }
+            }
+          ]
+        },
+        {
+          "id": "wal-p3-sort-bytes",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the journey of the bytes of one 30 MB PostgreSQL insert.",
+            "ru": "Расставь по порядку путь байтов одной вставки на 30 МБ в PostgreSQL."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Compress, slice, table, log, copy — the same bytes handled five times.",
+              "ru": "Сжать, нарезать, таблица, журнал, копия — те же байты обрабатываются пять раз."
+            },
+            "incorrect": {
+              "en": "Compression attempt, slicing into chunk rows, table pages, WAL, then replicas and the archive.",
+              "ru": "Попытка сжатия, нарезка на строки-куски, страницы таблицы, WAL, затем реплики и архив."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "The value goes through the compression attempt",
+                "ru": "Значение проходит попытку сжатия"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "It is sliced into chunk rows of just under 2 KB",
+                "ru": "Оно режется на строки-куски чуть меньше 2 КБ"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "The rows are written to the table's pages",
+                "ru": "Строки пишутся в страницы таблицы"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "The same bytes are written again to the WAL",
+                "ru": "Те же байты пишутся ещё раз в WAL"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "Replicas and the WAL archive copy the WAL",
+                "ru": "Реплики и архив WAL копируют WAL"
+              }
+            }
+          ]
+        },
+        {
+          "id": "wal-p4-fill-amplification",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill in the disk cost and the second destination.",
+            "ru": "Впиши расход диска и второе место назначения."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Bytes per write is the number that caps throughput.",
+              "ru": "Байты на запись — то самое число, которое ограничивает пропускную способность."
+            },
+            "incorrect": {
+              "en": "About 61 MB: the payload is written to the table and again to the WAL.",
+              "ru": "Около 61 МБ: нагрузка пишется в таблицу и ещё раз в WAL."
+            }
+          },
+          "text": {
+            "en": "A 30 MB record costs about ___ MB of disk on the primary, because the payload is written to the table and again to the ___.",
+            "ru": "Запись в 30 МБ стоит около ___ МБ диска на primary, потому что нагрузка пишется в таблицу и ещё раз в ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "61",
+                "60"
+              ],
+              "ru": [
+                "61",
+                "60"
+              ]
+            },
+            {
+              "en": [
+                "WAL",
+                "wal"
+              ],
+              "ru": [
+                "WAL",
+                "wal"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "batching-and-copy",
+      "title": {
+        "en": "Batching and COPY",
+        "ru": "Батчинг и COPY"
+      },
+      "summary": {
+        "en": "Batching and COPY remove per-statement and per-commit overhead: about 0.9% of a 30 MB write, but roughly 80% of a small-row write.",
+        "ru": "Батчинг и COPY убирают накладные расходы на statement и коммит: около 0,9% записи на 30 МБ, но примерно 80% записи маленькой строки."
+      },
+      "discovery": [
+        {
+          "id": "batch-d1-predict",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Row-by-row inserts of 30 MB records took 598 ms each. The code is changed to batch them in one transaction. Predict the new time per record.",
+            "ru": "Построчные вставки записей по 30 МБ занимали 598 мс каждая. Код меняют на батч в одной транзакции. Предскажи новое время на запись."
+          },
+          "code": "for (Record r : records) {\n    ps.setBytes(1, r.payload());   // about 30 MB\n    ps.addBatch();\n}\nps.executeBatch();                 // one transaction",
+          "codeLang": "java",
+          "reveal": {
+            "en": "**Batching** means sending many rows in one round trip and committing them together — JDBC `addBatch()`/`executeBatch()` in one transaction, or the driver option `reWriteBatchedInserts=true`, which rewrites them into multi-row `INSERT`s.\n\nWhat it removes is real, but it is only the overhead:\n\n```\nper-statement round trips + per-row commits   5.7 ms\ntotal write                                 598 ms\nshare removed by batching                     0.9%\n```\n\nOn a small row the same technique removes about **80%**. Same technique, two verdicts — because the share it touches is completely different. When batching barely moves throughput, that is not a failed experiment: it is a measurement telling you the overhead was never the bottleneck, so the next thing to attack is the payload itself.\n\n**`COPY ... FROM STDIN`** streams rows in one statement with no per-row parse or plan. It is strictly better than batched `INSERT` for bulk loading — and it changes nothing about the bytes underneath: the same TOAST chunks and the same WAL.\n\nOne trap with Hibernate: `IDENTITY` id generation silently disables insert batching, because the id is only known after each insert. Use a sequence with an allocation size instead.",
+            "ru": "**Батчинг** — это отправка многих строк за один round trip и общий коммит: JDBC `addBatch()`/`executeBatch()` в одной транзакции или опция драйвера `reWriteBatchedInserts=true`, переписывающая их в многострочные `INSERT`.\n\nТо, что он убирает, реально, но это только накладные расходы:\n\n```\nround trips на statement + коммиты на строку    5,7 мс\nвся запись                                     598 мс\nдоля, снятая батчингом                           0,9%\n```\n\nНа маленькой строке тот же приём убирает около **80%**. Один приём, два вывода — потому что доля, которой он касается, совершенно разная. Когда батчинг почти не меняет пропускную способность, это не провалившийся эксперимент: это измерение, говорящее, что накладные расходы никогда не были узким местом, и дальше надо бить по самой нагрузке.\n\n**`COPY ... FROM STDIN`** передаёт строки потоком в одном statement, без разбора и планирования на каждую строку. Для массовой загрузки он строго лучше батча `INSERT` — и ничего не меняет в байтах под ним: те же куски TOAST и тот же WAL.\n\nЛовушка с Hibernate: генерация id через `IDENTITY` молча отключает батчинг вставок, потому что id известен только после каждой вставки. Используйте вместо неё sequence с allocation size."
+          },
+          "feedback": {
+            "correct": {
+              "en": "About 592 ms — batching removed 5.7 ms of a 598 ms write.",
+              "ru": "Около 592 мс — батчинг снял 5,7 мс из записи в 598 мс."
+            },
+            "incorrect": {
+              "en": "Barely anything changes: batching removes 5.7 ms of 598 ms, about 0.9%.",
+              "ru": "Меняется почти ничего: батчинг убирает 5,7 мс из 598 мс, около 0,9%."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "About 592 ms — roughly 1% faster",
+                "ru": "Около 592 мс — примерно на 1% быстрее"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "About 120 ms — roughly 5x faster",
+                "ru": "Около 120 мс — примерно в 5 раз быстрее"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Batching cannot touch the payload work, which is nearly the whole 598 ms.",
+                "ru": "Батчинг не касается работы с нагрузкой, а это почти все 598 мс."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "About 60 ms",
+                "ru": "Около 60 мс"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the small-row result; at 30 MB the overhead removed is 5.7 ms.",
+                "ru": "Это результат для маленькой строки; при 30 МБ снимается 5,7 мс накладных расходов."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "batch-p1-what-it-tells",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "You batch the inserts of 30 MB records and throughput barely moves. What does that tell you?",
+            "ru": "Вы собрали вставки записей по 30 МБ в батч, и пропускная способность почти не изменилась. О чём это говорит?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The measurement points at the payload — that is where the next change must go.",
+              "ru": "Измерение указывает на нагрузку — именно туда должно идти следующее изменение."
+            },
+            "incorrect": {
+              "en": "The overhead batching removes was never the bottleneck; the payload is.",
+              "ru": "Накладные расходы, которые убирает батчинг, никогда не были узким местом; узкое место — нагрузка."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The overhead batching removes was never the bottleneck — the payload is",
+                "ru": "Накладные расходы, снимаемые батчингом, никогда не были узким местом — им является нагрузка"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The batch size was too small — raise it and retry",
+                "ru": "Размер батча был слишком мал — увеличить и повторить"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A bigger batch still only removes round trips and commits, which are ~1% here.",
+                "ru": "Больший батч всё равно убирает только round trips и коммиты, а это здесь ~1%."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The driver silently ignored the batch",
+                "ru": "Драйвер молча проигнорировал батч"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Possible in Hibernate with IDENTITY ids — but at 30 MB a working batch would look the same.",
+                "ru": "Возможно в Hibernate с id через IDENTITY — но при 30 МБ работающий батч выглядел бы так же."
+              }
+            }
+          ]
+        },
+        {
+          "id": "batch-p2-copy-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "COPY ... FROM STDIN reduces the number of bytes PostgreSQL writes to disk per record.",
+            "ru": "COPY ... FROM STDIN уменьшает число байтов, которые PostgreSQL пишет на диск на каждую запись."
+          },
+          "feedback": {
+            "correct": {
+              "en": "COPY removes per-row parse and plan; the TOAST chunks and WAL are unchanged.",
+              "ru": "COPY убирает разбор и план на строку; куски TOAST и WAL остаются те же."
+            },
+            "incorrect": {
+              "en": "No — COPY removes per-row parsing and planning, but writes exactly the same bytes.",
+              "ru": "Нет — COPY убирает разбор и планирование на строку, но пишет ровно те же байты."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "batch-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each write-side technique to what it removes.",
+            "ru": "Соотнеси каждый приём на стороне записи с тем, что он убирает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "All of them attack overhead, none of them attack the bytes.",
+              "ru": "Все они бьют по накладным расходам, ни один — по байтам."
+            },
+            "incorrect": {
+              "en": "Batching removes round trips and per-row commits, COPY removes per-row parse and plan, IDENTITY disables batching.",
+              "ru": "Батчинг убирает round trips и коммиты на строку, COPY — разбор и план на строку, IDENTITY отключает батчинг."
+            }
+          },
+          "pairs": [
+            {
+              "id": "batching",
+              "left": {
+                "en": "addBatch() / executeBatch() in one transaction",
+                "ru": "addBatch() / executeBatch() в одной транзакции"
+              },
+              "right": {
+                "en": "Per-statement round trips and per-row commits",
+                "ru": "Round trips на statement и коммиты на строку"
+              }
+            },
+            {
+              "id": "rewrite",
+              "left": {
+                "en": "reWriteBatchedInserts=true",
+                "ru": "reWriteBatchedInserts=true"
+              },
+              "right": {
+                "en": "Rewrites the batch into multi-row INSERTs",
+                "ru": "Переписывает батч в многострочные INSERT"
+              }
+            },
+            {
+              "id": "copy",
+              "left": {
+                "en": "COPY ... FROM STDIN",
+                "ru": "COPY ... FROM STDIN"
+              },
+              "right": {
+                "en": "Per-row parse and plan, in one streamed statement",
+                "ru": "Разбор и план на строку, всё одним потоковым statement"
+              }
+            },
+            {
+              "id": "identity",
+              "left": {
+                "en": "Hibernate IDENTITY id generation",
+                "ru": "Генерация id через IDENTITY в Hibernate"
+              },
+              "right": {
+                "en": "Silently disables insert batching",
+                "ru": "Молча отключает батчинг вставок"
+              }
+            }
+          ]
+        },
+        {
+          "id": "batch-p4-fill-hibernate",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill in the Hibernate trap and its fix.",
+            "ru": "Впиши ловушку Hibernate и её решение."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A sequence with an allocation size hands out ids up front, so the batch survives.",
+              "ru": "Sequence с allocation size выдаёт id заранее, поэтому батч сохраняется."
+            },
+            "incorrect": {
+              "en": "IDENTITY silently disables insert batching; use a sequence with an allocation size.",
+              "ru": "IDENTITY молча отключает батчинг вставок; используйте sequence с allocation size."
+            }
+          },
+          "text": {
+            "en": "In Hibernate, ___ id generation silently disables insert batching; use a ___ with an allocation size instead.",
+            "ru": "В Hibernate генерация id через ___ молча отключает батчинг вставок; используйте вместо неё ___ с allocation size."
+          },
+          "blanks": [
+            {
+              "en": [
+                "IDENTITY",
+                "identity"
+              ],
+              "ru": [
+                "IDENTITY",
+                "identity"
+              ]
+            },
+            {
+              "en": [
+                "sequence"
+              ],
+              "ru": [
+                "sequence"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "index-cost",
+      "title": {
+        "en": "What indexes really cost a write",
+        "ru": "Во что индексы реально обходятся записи"
+      },
+      "summary": {
+        "en": "Each index adds one entry per row plus its own WAL — 0.2% of a 30 MB write, but 21% when eight indexes sit on a 512-byte row.",
+        "ru": "Каждый индекс добавляет одну запись на строку плюс собственный WAL — 0,2% записи на 30 МБ, но 21%, когда восемь индексов стоят на строке в 512 байт."
+      },
+      "discovery": [
+        {
+          "id": "index-d1-drop-five",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A write-only table has 30 MB rows and 5 indexes. You drop all five. By roughly how much does one write get faster?",
+            "ru": "На таблице только для записи строки по 30 МБ и 5 индексов. Вы удаляете все пять. Насколько примерно ускорится одна запись?"
+          },
+          "reveal": {
+            "en": "Every index costs, on every insert, **one extra entry per row plus its own WAL** for that entry. That is a real cost — but it is real *relative to what else the write is doing*:\n\n```\n30 MB row,  5 indexes    index share of the write   0.2%\n512 B row,  8 indexes    index share of the write    21%\n```\n\nSame mechanism, two completely different verdicts. \"Drop the indexes, they slow down writes\" is only good advice where the rest of the write is small.\n\nOn a **write-only** table the calculus is different in one way: an index that no query uses is pure cost, with nothing on the other side of the ledger. So the decision procedure is: list the indexes, find which queries actually use each one, drop the ones nothing uses — and measure their share of the write before spending query performance on the rest. Dropping an index you needed is paid for on every read, forever.",
+            "ru": "Каждый индекс стоит на каждой вставке **одной дополнительной записи на строку плюс собственного WAL** для этой записи. Это настоящая цена — но настоящая *относительно того, что запись делает помимо них*:\n\n```\nстрока 30 МБ,  5 индексов   доля индексов в записи   0,2%\nстрока 512 Б,  8 индексов   доля индексов в записи    21%\n```\n\nОдин механизм, два совершенно разных вывода. «Удалите индексы, они замедляют запись» — хороший совет только там, где остальная запись мала.\n\nНа таблице **только для записи** расклад отличается в одном: индекс, которым не пользуется ни один запрос, — чистые расходы, и на другой чаше весов ничего нет. Отсюда процедура решения: перечислить индексы, выяснить, какие запросы реально используют каждый, удалить те, которыми не пользуется никто, — и измерить их долю в записи, прежде чем платить за остальные производительностью запросов. Удалённый нужный индекс оплачивается на каждом чтении, и навсегда."
+          },
+          "feedback": {
+            "correct": {
+              "en": "About 0.2% — the index work is a rounding error next to 30 MB.",
+              "ru": "Около 0,2% — работа с индексами это погрешность рядом с 30 МБ."
+            },
+            "incorrect": {
+              "en": "About 0.2%: 5 index entries cost 0.3 ms of a ~150 ms write.",
+              "ru": "Около 0,2%: 5 записей в индексы стоят 0,3 мс из записи примерно в 150 мс."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "About 0.2%",
+                "ru": "Около 0,2%"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "About 20%",
+                "ru": "Около 20%"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the small-row case: eight indexes on a 512-byte row.",
+                "ru": "Это случай маленькой строки: восемь индексов на строке в 512 байт."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "About half",
+                "ru": "Примерно вдвое"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "No index cost comes close to the payload work on a 30 MB row.",
+                "ru": "Никакая цена индексов не сравнится с работой над нагрузкой в строке на 30 МБ."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "index-p1-which-to-drop",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "How do you decide which indexes to drop on a write-heavy PostgreSQL table?",
+            "ru": "Как решить, какие индексы удалять на таблице PostgreSQL с интенсивной записью?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Unused indexes are free to drop; the rest cost query performance.",
+              "ru": "Неиспользуемые индексы удаляются бесплатно; остальные стоят производительности запросов."
+            },
+            "incorrect": {
+              "en": "Drop the ones no query uses, and measure the share of the write before paying with query performance.",
+              "ru": "Удалять те, которыми не пользуется ни один запрос, и измерить долю в записи, прежде чем платить производительностью запросов."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Drop the ones no query uses, after measuring their share of the write",
+                "ru": "Удалить те, которыми не пользуется ни один запрос, измерив их долю в записи"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Drop all of them — a write-heavy table does not need indexes",
+                "ru": "Удалить все — таблице с интенсивной записью индексы не нужны"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Any index a query does use is paid for on every read once it is gone.",
+                "ru": "За любой индекс, который используется запросом, платят на каждом чтении, когда его удалили."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Drop the largest one — size is what slows the insert",
+                "ru": "Удалить самый большой — размер и замедляет вставку"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The insert cost is one entry per index, not the index's total size.",
+                "ru": "Цена вставки — одна запись на индекс, а не общий размер индекса."
+              }
+            }
+          ]
+        },
+        {
+          "id": "index-p2-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble what one index costs on every PostgreSQL insert.",
+            "ru": "Собери, во что обходится один индекс на каждой вставке в PostgreSQL."
+          },
+          "feedback": {
+            "correct": {
+              "en": "An entry, and the WAL that makes that entry durable.",
+              "ru": "Запись и WAL, который делает эту запись долговечной."
+            },
+            "incorrect": {
+              "en": "One extra entry per row, plus its own WAL for that entry.",
+              "ru": "Одна дополнительная запись на строку плюс собственный WAL для этой записи."
+            }
+          },
+          "tokens": {
+            "en": [
+              "one",
+              "extra",
+              "entry",
+              "per",
+              "row",
+              "plus",
+              "its",
+              "own",
+              "WAL"
+            ],
+            "ru": [
+              "одна",
+              "дополнительная",
+              "запись",
+              "на",
+              "строку",
+              "плюс",
+              "собственный",
+              "WAL"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "cache",
+              "scan"
+            ],
+            "ru": [
+              "кэш",
+              "скан"
+            ]
+          }
+        },
+        {
+          "id": "index-p3-fill-shares",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill in the two index shares.",
+            "ru": "Впиши две доли индексов."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Same mechanism, two verdicts — the row size decides.",
+              "ru": "Один механизм, два вывода — решает размер строки."
+            },
+            "incorrect": {
+              "en": "0.2% on a 30 MB row with 5 indexes; 21% on a 512-byte row with 8 indexes.",
+              "ru": "0,2% на строке в 30 МБ с 5 индексами; 21% на строке в 512 байт с 8 индексами."
+            }
+          },
+          "text": {
+            "en": "Indexes are about ___ % of a write when the row is 30 MB, but about ___ % when eight of them sit on a 512-byte row.",
+            "ru": "Индексы дают около ___ % записи, когда строка 30 МБ, но около ___ %, когда восемь из них стоят на строке в 512 байт."
+          },
+          "blanks": [
+            {
+              "en": [
+                "0.2",
+                "0,2"
+              ],
+              "ru": [
+                "0,2",
+                "0.2"
+              ]
+            },
+            {
+              "en": [
+                "21"
+              ],
+              "ru": [
+                "21"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "durability-knobs",
+      "title": {
+        "en": "The durability knobs",
+        "ru": "Ручки долговечности"
+      },
+      "summary": {
+        "en": "synchronous_commit = off costs a few hundred milliseconds of committed transactions on a crash; fsync = off risks an unrecoverable database; an UNLOGGED table is truncated after a crash.",
+        "ru": "synchronous_commit = off стоит нескольких сотен миллисекунд зафиксированных транзакций при сбое; fsync = off рискует невосстановимой базой; UNLOGGED-таблица усекается после сбоя."
+      },
+      "discovery": [
+        {
+          "id": "durability-d1-sync-off",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "You set synchronous_commit = off in PostgreSQL. The server then crashes. What exactly have you lost?",
+            "ru": "Вы поставили synchronous_commit = off в PostgreSQL. Затем сервер падает. Что именно вы потеряли?"
+          },
+          "reveal": {
+            "en": "With `synchronous_commit = off` the commit **stops waiting** for the WAL to be flushed to disk. It returns as soon as the record is in memory.\n\nWhat you lose: *recently committed transactions* — a window of a few hundred milliseconds. What you do **not** lose: everything else. No corruption, no torn rows, no loss of atomicity, consistency or isolation. Of the four ACID guarantees only **D**, durability, is weakened, and only for that window. A genuine option for telemetry; a bad one for payments.\n\nBefore reaching for it, note that **fewer, bigger transactions** attack the *same* cost — the per-commit wait — and give up nothing at all. Try that first.\n\nTwo neighbours that are often confused with it:\n\n```\nsynchronous_commit = off   lose a few hundred ms of committed transactions\nfsync = off                risk an unrecoverable database  -> never in production\nUNLOGGED table             no WAL at all, but truncated after a crash\n                           and never reaches replicas -> staging only\n```\n\nAn `UNLOGGED` table is a legitimate tool for data you can rebuild. It is never the table of record.",
+            "ru": "При `synchronous_commit = off` коммит **перестаёт ждать** сброса WAL на диск. Он возвращается, как только запись оказалась в памяти.\n\nЧто вы теряете: *недавно зафиксированные транзакции* — окно в несколько сотен миллисекунд. Что **не** теряете: всё остальное. Ни повреждений, ни рваных строк, ни потери атомарности, согласованности или изоляции. Из четырёх гарантий ACID слабеет только **D**, долговечность, и только на это окно. Для телеметрии это настоящий вариант, для платежей — плохой.\n\nПрежде чем хвататься за него, учтите: **более редкие и крупные транзакции** бьют по *той же* статье — ожиданию на коммите — и не жертвуют ничем. Начинать стоит с них.\n\nДва соседа, которых с ним часто путают:\n\n```\nsynchronous_commit = off   потеря нескольких сотен мс зафиксированных транзакций\nfsync = off                риск невосстановимой базы  -> в продакшене никогда\nUNLOGGED-таблица           WAL нет вовсе, но она усекается после сбоя\n                           и не доезжает до реплик -> только для промежуточных данных\n```\n\n`UNLOGGED`-таблица — законный инструмент для данных, которые можно пересобрать. Таблицей-источником истины она не бывает никогда."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Only durability, and only for a few hundred milliseconds.",
+              "ru": "Только долговечность, и только на несколько сотен миллисекунд."
+            },
+            "incorrect": {
+              "en": "You lose recently committed transactions — a window of a few hundred ms — and nothing else.",
+              "ru": "Вы теряете недавно зафиксированные транзакции — окно в несколько сотен мс — и больше ничего."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Recently committed transactions — a window of a few hundred milliseconds",
+                "ru": "Недавно зафиксированные транзакции — окно в несколько сотен миллисекунд"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The database may be unrecoverable",
+                "ru": "База может оказаться невосстановимой"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is fsync = off, a completely different setting.",
+                "ru": "Это fsync = off, совершенно другая настройка."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Torn rows and broken isolation between transactions",
+                "ru": "Рваные строки и нарушенная изоляция между транзакциями"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Atomicity, consistency and isolation are untouched; only durability is.",
+                "ru": "Атомарность, согласованность и изоляция не затронуты; затронута только долговечность."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "durability-p1-corrupt-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Setting synchronous_commit = off in PostgreSQL risks corrupting the database.",
+            "ru": "Установка synchronous_commit = off в PostgreSQL рискует повредить базу данных."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It risks losing recently committed transactions, nothing more; fsync = off is the dangerous one.",
+              "ru": "Он рискует потерей недавно зафиксированных транзакций, и только; опасен fsync = off."
+            },
+            "incorrect": {
+              "en": "No — it risks losing the last few hundred ms of commits; fsync = off is what risks corruption.",
+              "ru": "Нет — он рискует потерей коммитов за последние сотни мс; повреждением рискует fsync = off."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "durability-p2-safe-first",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Commit cost is a measurable share of your PostgreSQL write path. Which move attacks it while giving up nothing?",
+            "ru": "Цена коммита занимает заметную долю пути записи в PostgreSQL. Какой шаг бьёт по ней, ничем не жертвуя?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Fewer commits means less waiting, with no durability given up.",
+              "ru": "Меньше коммитов — меньше ожидания, и долговечностью не жертвуют."
+            },
+            "incorrect": {
+              "en": "Fewer, bigger transactions remove the same per-commit wait and cost nothing in guarantees.",
+              "ru": "Более редкие и крупные транзакции убирают то же ожидание на коммите и ничего не стоят в гарантиях."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Fewer, bigger transactions",
+                "ru": "Более редкие и крупные транзакции"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "fsync = off",
+                "ru": "fsync = off"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That trades the whole database for speed — never in production.",
+                "ru": "Это обмен всей базы на скорость — в продакшене никогда."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Making the table of record UNLOGGED",
+                "ru": "Сделать таблицу-источник истины UNLOGGED"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "An UNLOGGED table is truncated after a crash and never reaches replicas.",
+                "ru": "UNLOGGED-таблица усекается после сбоя и не доезжает до реплик."
+              }
+            }
+          ]
+        },
+        {
+          "id": "durability-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each PostgreSQL durability choice to what it actually costs you.",
+            "ru": "Соотнеси каждый выбор долговечности в PostgreSQL с тем, во что он реально обходится."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Three very different price tags that are routinely lumped together.",
+              "ru": "Три очень разные цены, которые регулярно валят в одну кучу."
+            },
+            "incorrect": {
+              "en": "synchronous_commit = off loses a short window of commits; fsync = off risks the database; UNLOGGED loses the table after a crash.",
+              "ru": "synchronous_commit = off теряет короткое окно коммитов; fsync = off рискует базой; UNLOGGED теряет таблицу после сбоя."
+            }
+          },
+          "pairs": [
+            {
+              "id": "sync",
+              "left": {
+                "en": "synchronous_commit = off",
+                "ru": "synchronous_commit = off"
+              },
+              "right": {
+                "en": "A few hundred ms of committed transactions on a crash",
+                "ru": "Несколько сотен мс зафиксированных транзакций при сбое"
+              }
+            },
+            {
+              "id": "fsync",
+              "left": {
+                "en": "fsync = off",
+                "ru": "fsync = off"
+              },
+              "right": {
+                "en": "Risk of an unrecoverable database",
+                "ru": "Риск невосстановимой базы данных"
+              }
+            },
+            {
+              "id": "unlogged",
+              "left": {
+                "en": "UNLOGGED table",
+                "ru": "UNLOGGED-таблица"
+              },
+              "right": {
+                "en": "Truncated after a crash, and never reaches replicas",
+                "ru": "Усекается после сбоя и не доезжает до реплик"
+              }
+            },
+            {
+              "id": "bigger-tx",
+              "left": {
+                "en": "Fewer, bigger transactions",
+                "ru": "Более редкие и крупные транзакции"
+              },
+              "right": {
+                "en": "Nothing at all",
+                "ru": "Вообще ничего"
+              }
+            }
+          ]
+        },
+        {
+          "id": "durability-p4-fill-settings",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two settings people confuse.",
+            "ru": "Впиши две настройки, которые путают."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One costs a window of commits; the other can cost the database.",
+              "ru": "Одна стоит окна коммитов, другая может стоить самой базы."
+            },
+            "incorrect": {
+              "en": "synchronous_commit = off loses recent commits; fsync = off risks an unrecoverable database.",
+              "ru": "synchronous_commit = off теряет недавние коммиты; fsync = off рискует невосстановимой базой."
+            }
+          },
+          "text": {
+            "en": "___ = off loses a few hundred ms of committed transactions on a crash; ___ = off risks an unrecoverable database.",
+            "ru": "___ = off теряет несколько сотен мс зафиксированных транзакций при сбое; ___ = off рискует невосстановимой базой."
+          },
+          "blanks": [
+            {
+              "en": [
+                "synchronous_commit"
+              ],
+              "ru": [
+                "synchronous_commit"
+              ]
+            },
+            {
+              "en": [
+                "fsync"
+              ],
+              "ru": [
+                "fsync"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "partitioning-reality",
+      "title": {
+        "en": "What partitioning actually buys",
+        "ru": "Что реально даёт партиционирование"
+      },
+      "summary": {
+        "en": "Partitioning does not make one insert faster; it keeps each partition's indexes small, spreads writes across files and turns retention into DETACH or DROP.",
+        "ru": "Партиционирование не ускоряет одну вставку; оно держит индексы каждой партиции маленькими, размазывает запись по файлам и превращает удержание данных в DETACH или DROP."
+      },
+      "discovery": [
+        {
+          "id": "part-d1-faster-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Partitioning a write-only PostgreSQL table makes each individual INSERT faster.",
+            "ru": "Партиционирование таблицы PostgreSQL, работающей только на запись, ускоряет каждую отдельную вставку."
+          },
+          "reveal": {
+            "en": "**Partitioning** splits one logical table into several physical partitions by a key — usually a time range. An insert still goes through the same path: the same TOAST chunks, the same WAL, the same commit. Nothing about one row gets cheaper.\n\nWhat it does buy is worth having, just not as a throughput fix:\n\n```mermaid\nflowchart LR\n  T[\"documents (logical table)\"] --> P1[\"documents_2026_06\"]\n  T --> P2[\"documents_2026_07\"]\n  T --> P3[\"documents_2026_08\"]\n  P1 --> D[\"retention: DETACH or DROP, instant\"]\n```\n\n- Each partition's **indexes stay small**, so index maintenance does not degrade as the table grows into terabytes.\n- The write is **spread across files** instead of concentrating on one.\n- **Retention becomes `DETACH` or `DROP`** of a whole partition, instead of a `DELETE` of millions of rows followed by a vacuum to reclaim the space.\n\nThat third point is often the real reason to partition a table that only grows. But if someone offers partitioning as the answer to \"writes are too slow\", the honest reply is that a single insert does not get faster.",
+            "ru": "**Партиционирование** делит одну логическую таблицу на несколько физических партиций по ключу — обычно по диапазону времени. Вставка всё равно идёт тем же путём: те же куски TOAST, тот же WAL, тот же коммит. Ничего в одной строке дешевле не становится.\n\nТо, что оно даёт, ценно — просто не как средство от пропускной способности:\n\n```mermaid\nflowchart LR\n  T[\"documents (логическая таблица)\"] --> P1[\"documents_2026_06\"]\n  T --> P2[\"documents_2026_07\"]\n  T --> P3[\"documents_2026_08\"]\n  P1 --> D[\"удержание: DETACH или DROP, мгновенно\"]\n```\n\n- **Индексы каждой партиции остаются маленькими**, поэтому их обслуживание не деградирует, когда таблица дорастает до терабайт.\n- Запись **размазывается по файлам**, а не концентрируется в одном.\n- **Удержание превращается в `DETACH` или `DROP`** целой партиции вместо `DELETE` миллионов строк и последующего вакуума для возврата места.\n\nТретий пункт часто и есть настоящая причина партиционировать только растущую таблицу. Но если партиционирование предлагают как ответ на «запись слишком медленная», честный ответ — что одна вставка быстрее не станет."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One insert takes the same path; partitioning helps with size and retention.",
+              "ru": "Одна вставка идёт тем же путём; партиционирование помогает с размером и удержанием данных."
+            },
+            "incorrect": {
+              "en": "No — a single insert is unchanged; partitioning keeps indexes small and makes retention cheap.",
+              "ru": "Нет — одна вставка не меняется; партиционирование держит индексы маленькими и удешевляет удержание данных."
+            }
+          },
+          "answer": false
+        }
+      ],
+      "practice": [
+        {
+          "id": "part-p1-what-it-buys",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does partitioning a large, write-only PostgreSQL table actually buy you?",
+            "ru": "Что реально даёт партиционирование большой таблицы PostgreSQL, работающей только на запись?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Smaller per-partition indexes and instant retention — not a faster insert.",
+              "ru": "Маленькие индексы в партициях и мгновенное удержание данных — но не более быстрая вставка."
+            },
+            "incorrect": {
+              "en": "Smaller per-partition indexes, writes spread across files, and retention as DETACH or DROP.",
+              "ru": "Маленькие индексы в партициях, запись, размазанная по файлам, и удержание через DETACH или DROP."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Smaller per-partition indexes and cheap retention via DETACH or DROP",
+                "ru": "Маленькие индексы в каждой партиции и дешёвое удержание данных через DETACH или DROP"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A faster single INSERT",
+                "ru": "Более быструю одиночную вставку"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "One insert takes exactly the same path through TOAST, the WAL and the commit.",
+                "ru": "Одна вставка идёт ровно тем же путём через TOAST, WAL и коммит."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Less WAL per row",
+                "ru": "Меньше WAL на строку"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The same row produces the same WAL, whichever partition it lands in.",
+                "ru": "Та же строка порождает тот же WAL, в какую бы партицию она ни попала."
+              }
+            }
+          ]
+        },
+        {
+          "id": "part-p2-retention-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "On a partitioned PostgreSQL table, dropping a month of old data can be a DETACH or DROP of one partition instead of a DELETE plus a vacuum.",
+            "ru": "На партиционированной таблице PostgreSQL удаление месяца старых данных может быть DETACH или DROP одной партиции вместо DELETE плюс вакуум."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That is often the strongest reason to partition an append-only table.",
+              "ru": "Часто это самая сильная причина партиционировать таблицу, которая только растёт."
+            },
+            "incorrect": {
+              "en": "It can — retention becomes a metadata operation instead of deleting millions of rows.",
+              "ru": "Может — удержание данных становится операцией над метаданными вместо удаления миллионов строк."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "part-p3-fill-retention",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two retention operations.",
+            "ru": "Впиши две операции удержания данных."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Both are metadata operations; a DELETE is millions of row writes plus a vacuum.",
+              "ru": "Обе — операции над метаданными; DELETE это миллионы записей строк плюс вакуум."
+            },
+            "incorrect": {
+              "en": "DETACH or DROP of a partition, instead of a DELETE plus a vacuum.",
+              "ru": "DETACH или DROP партиции вместо DELETE плюс вакуум."
+            }
+          },
+          "text": {
+            "en": "Partitioning turns retention into ___ or ___ of a partition instead of a DELETE plus a vacuum.",
+            "ru": "Партиционирование превращает удержание данных в ___ или ___ партиции вместо DELETE плюс вакуум."
+          },
+          "blanks": [
+            {
+              "en": [
+                "DETACH",
+                "detach"
+              ],
+              "ru": [
+                "DETACH",
+                "detach"
+              ]
+            },
+            {
+              "en": [
+                "DROP",
+                "drop"
+              ],
+              "ru": [
+                "DROP",
+                "drop"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "payload-to-object-storage",
+      "title": {
+        "en": "The fix: the bytes leave PostgreSQL",
+        "ru": "Решение: байты уходят из PostgreSQL"
+      },
+      "summary": {
+        "en": "Moving the payload to object storage and keeping a small metadata row turns a 149.6 ms write into 2.3 ms with no tuning at all.",
+        "ru": "Вынос нагрузки в объектное хранилище и маленькая строка с метаданными превращают запись за 149,6 мс в 2,3 мс вообще без тюнинга."
+      },
+      "discovery": [
+        {
+          "id": "objstore-d1-after",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The same code, the same 4 indexes, the same one-insert-per-record loop — only the payload now lives in object storage and the row holds a URL. Predict the new time per write.",
+            "ru": "Тот же код, те же 4 индекса, тот же цикл «одна вставка на запись» — только нагрузка теперь лежит в объектном хранилище, а строка держит URL. Предскажи новое время на запись."
+          },
+          "code": "-- before: payload bytea, 30 MB per row, 4 indexes -> 149.6 ms per write\n-- after:  payload in object storage, row holds a url + checksum\nINSERT INTO documents (id, owner, type, status, url, checksum, size_bytes, created_at)\nVALUES (1, 'svc-a', 'pdf', 'ready', 's3://docs/ab12c3', 'ab12c3', 31457280, now());",
+            "codeLang": "sql",
+          "reveal": {
+            "en": "A relational database is superb at small structured rows, transactions and queries. It is a **mediocre file server**: it makes every byte durable twice, replicates it, backs it up, vacuums it and passes it through a single backend process. Thirty megabytes of opaque payload get none of that value and pay all of its cost.\n\nSo put the bytes where bytes are cheap — **object storage** (S3, MinIO, a filesystem) — and keep in PostgreSQL the row it is genuinely good at:\n\n```\nid, owner, type, status, url, checksum, size, timestamps   ~1.5 KB per row\n```\n\n```mermaid\nflowchart LR\n  B[\"payload of 30 MB\"] --> O[\"object storage\"]\n  M[\"metadata row: id, url, checksum, size\"] --> P[\"PostgreSQL\"]\n  O --> R[\"149.6 ms becomes 2.3 ms per write\"]\n  P --> R\n```\n\n**149.6 ms per write becomes 2.3 ms** — roughly two orders of magnitude — with the same code, the same four indexes and the same insert loop. Nothing was tuned. The bytes simply stopped being compressed, sliced into ~15 700 chunks, written to the heap and written again to the WAL.\n\nThis is why it is a *design* change rather than a knob: no configuration setting can beat removing the work entirely.",
+            "ru": "Реляционная база великолепна на маленьких структурированных строках, транзакциях и запросах. Файловый сервер из неё **посредственный**: она делает каждый байт долговечным дважды, реплицирует его, кладёт в бэкап, вакуумит и пропускает через один backend-процесс. Тридцать мегабайт непрозрачной нагрузки не получают из этого ничего и оплачивают всё.\n\nПоэтому положите байты туда, где байты дёшевы, — в **объектное хранилище** (S3, MinIO, файловая система), — а в PostgreSQL оставьте строку, в которой он действительно хорош:\n\n```\nid, владелец, тип, статус, url, контрольная сумма, размер, метки времени   ~1,5 КБ на строку\n```\n\n```mermaid\nflowchart LR\n  B[\"нагрузка 30 МБ\"] --> O[\"объектное хранилище\"]\n  M[\"строка метаданных: id, url, контрольная сумма, размер\"] --> P[\"PostgreSQL\"]\n  O --> R[\"149,6 мс превращаются в 2,3 мс на запись\"]\n  P --> R\n```\n\n**149,6 мс на запись превращаются в 2,3 мс** — примерно два порядка — при том же коде, тех же четырёх индексах и том же цикле вставок. Ничего не тюнили. Байты просто перестали сжиматься, резаться на ~15 700 кусков, писаться в heap и писаться ещё раз в WAL.\n\nВот почему это изменение *дизайна*, а не ручка: никакая настройка не победит полное устранение работы."
+          },
+          "feedback": {
+            "correct": {
+              "en": "2.3 ms — the bytes stopped going through TOAST and the WAL.",
+              "ru": "2,3 мс — байты перестали идти через TOAST и WAL."
+            },
+            "incorrect": {
+              "en": "2.3 ms: with the payload gone, only a ~1.5 KB row is written.",
+              "ru": "2,3 мс: когда нагрузки нет, пишется только строка примерно в 1,5 КБ."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "About 2.3 ms",
+                "ru": "Около 2,3 мс"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "About 75 ms — roughly half",
+                "ru": "Около 75 мс — примерно вдвое меньше"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The payload was nearly the whole write, not half of it.",
+                "ru": "Нагрузка была почти всей записью, а не её половиной."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Still about 149 ms — nothing was tuned",
+                "ru": "По-прежнему около 149 мс — ведь ничего не тюнили"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing was tuned, but the work itself was removed — that is the point.",
+                "ru": "Ничего не тюнили, но саму работу убрали — в этом и суть."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "objstore-p1-why-faster",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A 30 MB payload moves to object storage and the PostgreSQL row shrinks to ~1.5 KB. Why does the write get about two orders of magnitude faster with no tuning?",
+            "ru": "Нагрузка на 30 МБ уходит в объектное хранилище, и строка в PostgreSQL сжимается до ~1,5 КБ. Почему запись ускоряется примерно на два порядка без всякого тюнинга?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "No compression attempt, no chunk rows, no 30 MB of WAL.",
+              "ru": "Ни попытки сжатия, ни строк-кусков, ни 30 МБ WAL."
+            },
+            "incorrect": {
+              "en": "The bytes stopped being TOASTed and written twice — to the table and to the WAL.",
+              "ru": "Байты перестали проходить через TOAST и писаться дважды — в таблицу и в WAL."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The bytes stopped going through TOAST and the WAL",
+                "ru": "Байты перестали идти через TOAST и WAL"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The indexes were dropped along with the payload",
+                "ru": "Вместе с нагрузкой удалили и индексы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The same four indexes stayed; only the payload column left.",
+                "ru": "Те же четыре индекса остались; ушла только колонка с нагрузкой."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The commit no longer waits for the disk",
+                "ru": "Коммит больше не ждёт диск"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The commit still waits; it was only 1.5 ms to begin with.",
+                "ru": "Коммит по-прежнему ждёт; он и так был всего 1,5 мс."
+              }
+            }
+          ]
+        },
+        {
+          "id": "objstore-p2-always-wrong-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Storing files in a relational database is always the wrong choice.",
+            "ru": "Хранить файлы в реляционной базе данных — всегда неправильный выбор."
+          },
+          "reveal": {
+            "en": "\"Always\" is the wrong word. Keeping payloads inside PostgreSQL is the right call when:\n\n- the payloads are **small** (a thumbnail, a signature, a short document);\n- a **single consistent backup** containing everything is a hard requirement, or a compliance rule dictates where the data lives;\n- operating a **second storage system** — running it, backing it up, restoring it in step with the database — costs more than the write path does.\n\nAt 30 MB per record with a throughput problem, none of those hold, so the payload goes out. But be honest about the price of moving it: one atomic write becomes two systems to operate, back up and restore consistently; deletes need care in reverse; and \"restore the database to Tuesday\" no longer restores the payloads.",
+            "ru": "«Всегда» — неверное слово. Держать нагрузки внутри PostgreSQL правильно, когда:\n\n- нагрузки **маленькие** (миниатюра, подпись, короткий документ);\n- **единый согласованный бэкап**, содержащий всё, является жёстким требованием, или норма регулятора диктует, где лежат данные;\n- эксплуатация **второго хранилища** — запуск, бэкапы, согласованное восстановление вместе с базой — обходится дороже, чем путь записи.\n\nПри 30 МБ на запись и проблеме с пропускной способностью ничего из этого не выполняется, поэтому нагрузка уходит. Но о цене выноса стоит говорить честно: одна атомарная запись превращается в две системы, которые надо эксплуатировать, бэкапить и согласованно восстанавливать; удаление требует аккуратности в обратном порядке; а «восстановить базу на состояние вторника» больше не восстанавливает сами нагрузки."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Small payloads, or a hard single-backup requirement, make it the right call.",
+              "ru": "Маленькие нагрузки или жёсткое требование единого бэкапа делают это верным выбором."
+            },
+            "incorrect": {
+              "en": "Not always — small payloads, a single-backup requirement, or the cost of a second system can justify it.",
+              "ru": "Не всегда — маленькие нагрузки, требование единого бэкапа или цена второй системы это оправдывают."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "objstore-p3-fill-columns",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill in the two columns that replace the payload.",
+            "ru": "Впиши две колонки, которые заменяют нагрузку."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One locates the blob, the other verifies it.",
+              "ru": "Одна находит blob, другая его проверяет."
+            },
+            "incorrect": {
+              "en": "The row keeps a URL that locates the blob and a checksum that verifies it.",
+              "ru": "Строка держит URL, который находит blob, и контрольную сумму, которая его проверяет."
+            }
+          },
+          "text": {
+            "en": "With the payload in object storage, the PostgreSQL row keeps the metadata plus a ___ that locates the blob and a ___ that verifies it.",
+            "ru": "Когда нагрузка в объектном хранилище, строка PostgreSQL держит метаданные плюс ___, который находит blob, и ___, которая его проверяет."
+          },
+          "blanks": [
+            {
+              "en": [
+                "URL",
+                "url"
+              ],
+              "ru": [
+                "URL",
+                "url"
+              ]
+            },
+            {
+              "en": [
+                "checksum"
+              ],
+              "ru": [
+                "контрольную сумму",
+                "контрольная сумма",
+                "checksum"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dual-write-ordering",
+      "title": {
+        "en": "The dual write and its order",
+        "ru": "Двойная запись и её порядок"
+      },
+      "summary": {
+        "en": "No transaction spans object storage and PostgreSQL, so write the blob first under a content-hash key and insert the row second.",
+        "ru": "Ни одна транзакция не охватывает объектное хранилище и PostgreSQL, поэтому blob пишут первым под ключом-хэшем содержимого, а строку вставляют второй."
+      },
+      "discovery": [
+        {
+          "id": "dual-d1-order",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The service must store a blob in object storage and a metadata row in PostgreSQL. Either step can fail. Which order survives a failure best?",
+            "ru": "Сервис должен сохранить blob в объектном хранилище и строку метаданных в PostgreSQL. Упасть может любой шаг. Какой порядок лучше переживает отказ?"
+          },
+          "reveal": {
+            "en": "Splitting the data across two systems creates a **dual write**: two writes that must both succeed, with **no transaction spanning them**. You cannot make it atomic, so you choose which failure you prefer.\n\n```mermaid\nsequenceDiagram\n  participant C as caller\n  participant S as write service\n  participant O as object storage\n  participant P as PostgreSQL\n  C->>S: POST /documents (30 MB)\n  S->>O: PUT blob (key = content hash)\n  O-->>S: stored\n  S->>P: INSERT metadata + url (one transaction)\n  P-->>S: committed\n  S-->>C: 201 Created\n```\n\n**Blob first, row second**, under a key derived from the **content hash** — which makes the upload **idempotent**, so a retry overwrites itself instead of creating a second copy.\n\nWhy this order:\n\n- Blob succeeds, row fails -> an **orphan blob**: unreferenced bytes that a nightly sweeper deletes. Invisible to callers.\n- Row succeeds, blob fails -> a **dangling row**: a record whose URL points at nothing, which your API happily returns to a caller. That is a bug, not a cleanup task.\n\nIf other services must be told about the new record, publish that with the **outbox pattern** in the same transaction as the row (so the event cannot be lost or sent without the row), and deduplicate at the consumer with the **inbox pattern**. Deleting runs in reverse: row first, blob after — or a tombstone.",
+            "ru": "Разделение данных между двумя системами порождает **двойную запись**: две записи, которые обе должны пройти, и **ни одна транзакция их не охватывает**. Сделать это атомарным нельзя, поэтому вы выбираете, какой отказ вам предпочтительнее.\n\n```mermaid\nsequenceDiagram\n  participant C as вызывающий\n  participant S as сервис записи\n  participant O as объектное хранилище\n  participant P as PostgreSQL\n  C->>S: POST /documents (30 МБ)\n  S->>O: PUT blob (ключ = хэш содержимого)\n  O-->>S: сохранено\n  S->>P: INSERT метаданных и url (одна транзакция)\n  P-->>S: зафиксировано\n  S-->>C: 201 Created\n```\n\n**Сначала blob, потом строка**, под ключом из **хэша содержимого** — это делает загрузку **идемпотентной**, поэтому повтор перезаписывает сам себя, а не создаёт вторую копию.\n\nПочему такой порядок:\n\n- Blob прошёл, строка упала -> **осиротевший blob**: байты, на которые никто не ссылается, их удалит ночной уборщик. Вызывающим не видно.\n- Строка прошла, blob упал -> **висящая строка**: запись, чей URL указывает в никуда, и ваш API спокойно вернёт её вызывающему. Это ошибка, а не задача на уборку.\n\nЕсли о новой записи нужно сообщить другим сервисам, публикуйте это через **Outbox-паттерн** в той же транзакции, что и строку (тогда событие нельзя потерять или отправить без строки), и дедуплицируйте у потребителя **Inbox-паттерном**. Удаление идёт в обратном порядке: сначала строка, потом blob — либо надгробие."
+          },
+          "feedback": {
+            "correct": {
+              "en": "An orphan blob is sweepable; a dangling row is a bug your API returns.",
+              "ru": "Осиротевший blob можно вычистить; висящая строка — ошибка, которую вернёт ваш API."
+            },
+            "incorrect": {
+              "en": "Blob first: a failed row insert leaves sweepable bytes, while the reverse leaves a row pointing at nothing.",
+              "ru": "Сначала blob: упавшая вставка строки оставит байты, которые можно вычистить, а обратный порядок — строку, указывающую в никуда."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Blob first, then the row",
+                "ru": "Сначала blob, потом строка"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Row first, then the blob",
+                "ru": "Сначала строка, потом blob"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That leaves a row whose URL points at nothing — a bug the API returns to callers.",
+                "ru": "Так остаётся строка, чей URL указывает в никуда, — ошибка, которую API вернёт вызывающим."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Either — one transaction covers both systems",
+                "ru": "Любой — одна транзакция охватывает обе системы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "No transaction spans PostgreSQL and object storage; that is the whole problem.",
+                "ru": "Ни одна транзакция не охватывает PostgreSQL и объектное хранилище; в этом и вся проблема."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "dual-p1-blob-failed",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A service PUTs a blob to object storage and then inserts the metadata row into PostgreSQL. The blob upload succeeded and the row insert failed. What is left, and how is it handled?",
+            "ru": "Сервис делает PUT blob в объектное хранилище, а затем вставляет строку метаданных в PostgreSQL. Blob загрузился, вставка строки упала. Что осталось и как с этим быть?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Unreferenced bytes cost storage, not correctness.",
+              "ru": "Байты, на которые никто не ссылается, стоят места, но не корректности."
+            },
+            "incorrect": {
+              "en": "An unreferenced blob remains; a nightly sweeper deletes it, and no caller ever saw it.",
+              "ru": "Остаётся blob, на который никто не ссылается; его удалит ночной уборщик, и ни один вызывающий его не видел."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "An unreferenced blob, deleted later by a sweeper",
+                "ru": "Blob без ссылок, который позже удалит уборщик"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A row pointing at nothing, which the API returns to callers",
+                "ru": "Строка, указывающая в никуда, которую API вернёт вызывающим"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is what the opposite order produces — the reason blob goes first.",
+                "ru": "Это результат обратного порядка — потому blob и идёт первым."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — the failed INSERT rolls the upload back",
+                "ru": "Ничего — упавший INSERT откатит загрузку"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A database rollback cannot undo a PUT to another system.",
+                "ru": "Откат в базе не может отменить PUT в другую систему."
+              }
+            }
+          ]
+        },
+        {
+          "id": "dual-p2-sort-write",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the write path of a service that stores a 30 MB payload in object storage and its metadata in PostgreSQL.",
+            "ru": "Расставь по порядку путь записи сервиса, который хранит нагрузку на 30 МБ в объектном хранилище, а метаданные — в PostgreSQL."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Blob, then row and outbox in one transaction, then the response.",
+              "ru": "Blob, затем строка и outbox в одной транзакции, затем ответ."
+            },
+            "incorrect": {
+              "en": "Receive, PUT the blob under a content-hash key, INSERT the row plus the outbox event in one transaction, then answer 201.",
+              "ru": "Принять, PUT blob под ключом-хэшем содержимого, INSERT строки и события outbox в одной транзакции, затем ответить 201."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Receive the request with the payload",
+                "ru": "Принять запрос с полезной нагрузкой"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "PUT the blob under a key derived from its content hash",
+                "ru": "Сделать PUT blob под ключом из хэша его содержимого"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "INSERT the metadata row with the URL",
+                "ru": "Вставить строку метаданных с URL"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Write the notification to the outbox in that same transaction",
+                "ru": "Записать уведомление в outbox в той же транзакции"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "Answer 201 Created to the caller",
+                "ru": "Ответить вызывающему 201 Created"
+              }
+            }
+          ]
+        },
+        {
+          "id": "dual-p3-match-mechanisms",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each mechanism of a payload-in-object-storage design to its role.",
+            "ru": "Соотнеси каждый механизм схемы «нагрузка в объектном хранилище» с его ролью."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Each one covers a specific failure of the dual write.",
+              "ru": "Каждый закрывает конкретный отказ двойной записи."
+            },
+            "incorrect": {
+              "en": "Content hash makes retries idempotent, blob-first makes failures sweepable, outbox publishes with the row, inbox deduplicates at the consumer.",
+              "ru": "Хэш содержимого делает повторы идемпотентными, blob-первым делает отказ вычищаемым, outbox публикует вместе со строкой, inbox дедуплицирует у потребителя."
+            }
+          },
+          "pairs": [
+            {
+              "id": "hashkey",
+              "left": {
+                "en": "Key derived from the content hash",
+                "ru": "Ключ из хэша содержимого"
+              },
+              "right": {
+                "en": "Makes a retried upload idempotent",
+                "ru": "Делает повторную загрузку идемпотентной"
+              }
+            },
+            {
+              "id": "order",
+              "left": {
+                "en": "Blob first, row second",
+                "ru": "Сначала blob, потом строка"
+              },
+              "right": {
+                "en": "A failure leaves sweepable bytes, not a dangling row",
+                "ru": "Отказ оставляет вычищаемые байты, а не висящую строку"
+              }
+            },
+            {
+              "id": "outbox",
+              "left": {
+                "en": "Outbox pattern",
+                "ru": "Outbox-паттерн"
+              },
+              "right": {
+                "en": "Publishes the event in the row's own transaction",
+                "ru": "Публикует событие в той же транзакции, что и строку"
+              }
+            },
+            {
+              "id": "inbox",
+              "left": {
+                "en": "Inbox pattern",
+                "ru": "Inbox-паттерн"
+              },
+              "right": {
+                "en": "Deduplicates the event at the consumer",
+                "ru": "Дедуплицирует событие у потребителя"
+              }
+            }
+          ]
+        },
+        {
+          "id": "dual-p4-fill-delete",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill in the write order and the delete order.",
+            "ru": "Впиши порядок записи и порядок удаления."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Both orders leave sweepable bytes rather than a reference to nothing.",
+              "ru": "Оба порядка оставляют вычищаемые байты, а не ссылку в никуда."
+            },
+            "incorrect": {
+              "en": "Writing: blob first, row second. Deleting: row first, blob after.",
+              "ru": "Запись: сначала blob, потом строка. Удаление: сначала строка, потом blob."
+            }
+          },
+          "text": {
+            "en": "Writing: ___ first, row second. Deleting is the reverse: ___ first, blob after.",
+            "ru": "Запись: сначала ___, потом строка. Удаление наоборот: сначала ___, потом blob."
+          },
+          "blanks": [
+            {
+              "en": [
+                "blob"
+              ],
+              "ru": [
+                "blob"
+              ]
+            },
+            {
+              "en": [
+                "row"
+              ],
+              "ru": [
+                "строка",
+                "строку",
+                "row"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "two-ceilings",
+      "title": {
+        "en": "Two ceilings, and only one is the pool",
+        "ru": "Два потолка, и только один из них — пул"
+      },
+      "summary": {
+        "en": "Throughput is capped by connections times per-write cost AND by disk bandwidth divided by bytes per write; at ~61 MB per record the disk caps you near 8 writes per second.",
+        "ru": "Пропускную способность ограничивают соединения × стоимость записи И пропускная способность диска ÷ байты на запись; при ~61 МБ на запись диск упирает вас примерно в 8 записей в секунду."
+      },
+      "discovery": [
+        {
+          "id": "ceiling-d1-pool",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Each write moves about 61 MB to disk and the volume does 500 MB/s. With a pool of 20 connections, 300 waiting callers drain in 37.5 s. Predict the drain time after raising the pool to 200.",
+            "ru": "Каждая запись двигает на диск около 61 МБ, том выдаёт 500 МБ/с. При пуле в 20 соединений очередь из 300 вызывающих разбирается за 37,5 с. Предскажи время разбора после увеличения пула до 200."
+          },
+          "code": "callers      300\nwrite cost   about 61 MB of disk each\nvolume       500 MB/s\n\npool = 20    -> drain time 37.5 s\npool = 200   -> drain time ?",
+          "codeLang": "text",
+          "reveal": {
+            "en": "\"Many services use its API\" makes people reach for the connection pool. But there are **two independent ceilings**:\n\n- **connections x per-write cost** — how many writes can be in flight;\n- **disk bandwidth / bytes per write** — how many the storage can absorb.\n\n```\n500 MB/s / 61 MB per record  ~=  8 writes per second\n300 callers / 8 per second   ~=  37.5 s,  whatever the pool size\n```\n\nRaising the pool from 20 to 200 changes the drain time **not at all**. It just moves the queue from the pool to the disk — and PostgreSQL is worse off for it, because every connection is an operating-system process. A full pool is a **symptom**; the job is to find which resource is actually saturated before adding more of a different one.\n\nOnce the payload is out and a row is 1.5 KB, the disk ceiling jumps into the hundreds of thousands per second and the **pool becomes the real limit** — *then* pool size, and PgBouncer in front of many clients, is a sensible lever.\n\nThe API shape is a third lever. If callers do not need the record queryable the instant they get a response, **accept the request, put it on a queue and persist in the background**: the caller's latency stops being the write's latency and bursts are absorbed instead of rejected. That is a real change to the contract, not a free win — and retried submissions must not create duplicates, so idempotency is what makes the retry safe.",
+            "ru": "Из-за фразы «много сервисов используют его API» люди хватаются за пул соединений. Но потолков **два, и они независимы**:\n\n- **соединения × стоимость записи** — сколько записей может быть в полёте;\n- **пропускная способность диска / байты на запись** — сколько их примет хранилище.\n\n```\n500 МБ/с / 61 МБ на запись   ~=  8 записей в секунду\n300 вызывающих / 8 в секунду ~=  37,5 с,  при любом размере пула\n```\n\nУвеличение пула с 20 до 200 не меняет время разбора **вообще**. Оно лишь переносит очередь из пула на диск — и PostgreSQL от этого только хуже, потому что каждое соединение является процессом операционной системы. Полный пул — **симптом**; задача в том, чтобы найти реально насыщенный ресурс, прежде чем добавлять другой.\n\nКак только нагрузка вынесена и строка занимает 1,5 КБ, потолок диска подскакивает до сотен тысяч в секунду, и **настоящим пределом становится пул** — *вот тогда* размер пула и PgBouncer перед множеством клиентов являются разумным рычагом.\n\nФорма API — третий рычаг. Если вызывающим не нужно, чтобы запись стала доступной для запросов в тот же миг, когда пришёл ответ, — **примите запрос, положите его в очередь и сохраняйте в фоне**: задержка вызывающего перестаёт быть задержкой записи, а всплески поглощаются, а не отклоняются. Это настоящее изменение контракта, а не бесплатный выигрыш, — и повторные отправки не должны создавать дубликаты, поэтому безопасным повтор делает идемпотентность."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Unchanged — the disk was the ceiling, not the pool.",
+              "ru": "Без изменений — потолком был диск, а не пул."
+            },
+            "incorrect": {
+              "en": "Still 37.5 s: at 61 MB per write the disk absorbs ~8 writes/s no matter how many connections wait.",
+              "ru": "Всё те же 37,5 с: при 61 МБ на запись диск принимает ~8 записей/с, сколько бы соединений ни ждало."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "37.5 s — unchanged",
+                "ru": "37,5 с — без изменений"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "About 3.75 s — ten times the connections, ten times the throughput",
+                "ru": "Около 3,75 с — в десять раз больше соединений, в десять раз больше пропускной способности"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Connections do not create disk bandwidth; the queue just moves to the disk.",
+                "ru": "Соединения не создают пропускной способности диска; очередь просто переезжает на диск."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "About 19 s — roughly half",
+                "ru": "Около 19 с — примерно вдвое меньше"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The saturated resource is the volume, and it did not change at all.",
+                "ru": "Насыщенный ресурс — том, и он вообще не изменился."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "ceiling-p1-full-pool",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The connection pool of a PostgreSQL write API is always full. What should you conclude?",
+            "ru": "Пул соединений API записи в PostgreSQL всегда полон. Какой вывод стоит сделать?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "A full pool tells you writes are queueing, not why.",
+              "ru": "Полный пул говорит, что записи стоят в очереди, но не почему."
+            },
+            "incorrect": {
+              "en": "A full pool is a symptom — find the saturated resource before adding connections.",
+              "ru": "Полный пул — симптом; найдите насыщенный ресурс, прежде чем добавлять соединения."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It is a symptom — find which resource is saturated first",
+                "ru": "Это симптом — сначала выяснить, какой ресурс насыщен"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The pool is too small — raise it",
+                "ru": "Пул слишком мал — увеличить его"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "If the disk is the ceiling, more connections just move the queue and add OS processes.",
+                "ru": "Если потолком является диск, новые соединения лишь переносят очередь и добавляют процессы ОС."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The database needs more CPU",
+                "ru": "Базе нужно больше процессора"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "On a 30 MB payload write the bottleneck is bytes to disk, not CPU cycles.",
+                "ru": "На записи нагрузки в 30 МБ узкое место — байты на диск, а не такты процессора."
+              }
+            }
+          ]
+        },
+        {
+          "id": "ceiling-p2-async",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A write API is changed to accept the request, put it on a queue and persist it in the background. What does that buy, and what does it cost?",
+            "ru": "API записи меняют так, что он принимает запрос, кладёт его в очередь и сохраняет в фоне. Что это даёт и чего стоит?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Latency and burst absorption in exchange for read-your-write.",
+              "ru": "Задержка и поглощение всплесков в обмен на чтение сразу после записи."
+            },
+            "incorrect": {
+              "en": "The caller's latency stops being the write's latency and bursts are absorbed — but the record is not queryable the instant the caller is answered.",
+              "ru": "Задержка вызывающего перестаёт быть задержкой записи и всплески поглощаются — но запись недоступна для запросов в тот же миг, когда ему ответили."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Caller latency drops and bursts are absorbed, but the record is not queryable the instant the caller is answered",
+                "ru": "Задержка вызывающего падает и всплески поглощаются, но запись недоступна для запросов сразу после ответа"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It raises the disk's write ceiling",
+                "ru": "Это поднимает потолок записи у диска"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The same bytes still have to be written; only when they are written changes.",
+                "ru": "Те же байты всё равно надо записать; меняется только когда."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It removes the need for idempotency on retried submissions",
+                "ru": "Это снимает необходимость идемпотентности при повторных отправках"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The opposite — queued retries make duplicate protection more important, not less.",
+                "ru": "Наоборот — повторы через очередь делают защиту от дубликатов важнее, а не наоборот."
+              }
+            }
+          ]
+        },
+        {
+          "id": "ceiling-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each throughput factor to what it determines.",
+            "ru": "Соотнеси каждый фактор пропускной способности с тем, что он определяет."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two ceilings, and the lower one is the one you are standing under.",
+              "ru": "Два потолка, и вы стоите под тем, который ниже."
+            },
+            "incorrect": {
+              "en": "Connections set how many writes are in flight; disk bandwidth over bytes per write sets how many the storage absorbs.",
+              "ru": "Соединения задают, сколько записей в полёте; пропускная способность диска на байты записи задаёт, сколько примет хранилище."
+            }
+          },
+          "pairs": [
+            {
+              "id": "conns",
+              "left": {
+                "en": "connections x per-write cost",
+                "ru": "соединения × стоимость записи"
+              },
+              "right": {
+                "en": "How many writes can be in flight",
+                "ru": "Сколько записей может быть в полёте"
+              }
+            },
+            {
+              "id": "disk",
+              "left": {
+                "en": "disk bandwidth / bytes per write",
+                "ru": "пропускная способность диска / байты на запись"
+              },
+              "right": {
+                "en": "How many writes the storage can absorb",
+                "ru": "Сколько записей примет хранилище"
+              }
+            },
+            {
+              "id": "biggerpool",
+              "left": {
+                "en": "A bigger pool while the disk is saturated",
+                "ru": "Больший пул при насыщенном диске"
+              },
+              "right": {
+                "en": "Moves the queue from the pool to the disk",
+                "ru": "Переносит очередь из пула на диск"
+              }
+            },
+            {
+              "id": "pgbouncer",
+              "left": {
+                "en": "PgBouncer in front of many clients",
+                "ru": "PgBouncer перед множеством клиентов"
+              },
+              "right": {
+                "en": "Sensible once the pool, not the disk, is the limit",
+                "ru": "Разумен, когда пределом стал пул, а не диск"
+              }
+            }
+          ]
+        },
+        {
+          "id": "ceiling-p4-fill-math",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Compute the disk ceiling.",
+            "ru": "Посчитай потолок диска."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Single-digit writes per second, no matter how big the pool is.",
+              "ru": "Единицы записей в секунду, каким бы большим ни был пул."
+            },
+            "incorrect": {
+              "en": "500 MB/s divided by about 61 MB per record is roughly 8 writes per second.",
+              "ru": "500 МБ/с, делённые примерно на 61 МБ на запись, дают около 8 записей в секунду."
+            }
+          },
+          "text": {
+            "en": "A volume doing ___ MB/s at about 61 MB of disk per record tops out around ___ writes per second.",
+            "ru": "Том, выдающий ___ МБ/с, при примерно 61 МБ диска на запись упирается примерно в ___ записей в секунду."
+          },
+          "blanks": [
+            {
+              "en": [
+                "500"
+              ],
+              "ru": [
+                "500"
+              ]
+            },
+            {
+              "en": [
+                "8"
+              ],
+              "ru": [
+                "8"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "production-rollout",
+      "title": {
+        "en": "Proving it and migrating safely",
+        "ru": "Как доказать и как мигрировать"
+      },
+      "summary": {
+        "en": "Measure with pg_stat_* before and after, and move existing payloads out in the background: add the URL column, write new records outside, backfill, drop the column.",
+        "ru": "Измеряйте через pg_stat_* до и после, а существующие нагрузки выносите в фоне: добавить колонку URL, писать новые записи наружу, перенести старые, удалить колонку."
+      },
+      "discovery": [
+        {
+          "id": "rollout-d1-sort-migration",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "A table already holds terabytes of 30 MB rows. Order the steps that move the payloads to object storage without downtime.",
+            "ru": "В таблице уже терабайты строк по 30 МБ. Расставь по порядку шаги переноса нагрузок в объектное хранилище без простоя."
+          },
+          "reveal": {
+            "en": "The migration is done in the background, and every step is reversible until the last:\n\n```mermaid\nflowchart LR\n  A[\"add the url column\"] --> B[\"new records go to object storage\"]\n  B --> C[\"backfill old payloads in small batches\"]\n  C --> D[\"DROP COLUMN payload\"]\n  D --> E[\"VACUUM FULL or pg_repack to reclaim space\"]\n```\n\n`DROP COLUMN` is an **instant metadata change** — PostgreSQL simply stops showing the column; it does not rewrite the table. The disk space comes back only when the table is rewritten by `VACUUM FULL` or `pg_repack`, which you schedule separately.\n\nAnd measure, because **a change with no before-number is a belief**:\n\n```\npg_stat_statements                        where time goes per statement\npg_stat_wal, pg_stat_bgwriter             WAL volume and checkpoints\npg_relation_size vs pg_total_relation_size  how much of the table is TOAST\n```\n\nAfterwards, watch the four numbers that would have told you all of this in the first place: **writes per second**, **p95 write latency**, **WAL bytes per second** and **pool wait time**.",
+            "ru": "Миграция выполняется в фоне, и каждый шаг обратим до последнего:\n\n```mermaid\nflowchart LR\n  A[\"добавить колонку url\"] --> B[\"новые записи идут в объектное хранилище\"]\n  B --> C[\"перенести старые нагрузки небольшими партиями\"]\n  C --> D[\"DROP COLUMN payload\"]\n  D --> E[\"VACUUM FULL или pg_repack, чтобы вернуть место\"]\n```\n\n`DROP COLUMN` — **мгновенное изменение метаданных**: PostgreSQL просто перестаёт показывать колонку, таблицу он не переписывает. Место на диске вернётся только тогда, когда таблицу перепишет `VACUUM FULL` или `pg_repack`, который планируют отдельно.\n\nИ измеряйте, потому что **изменение без числа «до» является верой**:\n\n```\npg_stat_statements                            куда уходит время по statement\npg_stat_wal, pg_stat_bgwriter                 объём WAL и контрольные точки\npg_relation_size против pg_total_relation_size  какая часть таблицы это TOAST\n```\n\nПосле — следите за четырьмя числами, которые рассказали бы всё это с самого начала: **записей в секунду**, **p95 задержки записи**, **байтов WAL в секунду** и **времени ожидания в пуле**."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Add, write new records outside, backfill, drop, reclaim — each step reversible until the drop.",
+              "ru": "Добавить, писать новые наружу, перенести старые, удалить, вернуть место — каждый шаг обратим до удаления."
+            },
+            "incorrect": {
+              "en": "Add the URL column, send new records to object storage, backfill in batches, DROP COLUMN, then reclaim the space.",
+              "ru": "Добавить колонку URL, отправлять новые записи в объектное хранилище, перенести старые партиями, DROP COLUMN, затем вернуть место."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Add the url column to the table",
+                "ru": "Добавить в таблицу колонку url"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Write new records to object storage and fill in the url",
+                "ru": "Писать новые записи в объектное хранилище и заполнять url"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Backfill the old payloads in small batches",
+                "ru": "Перенести старые нагрузки небольшими партиями"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "DROP COLUMN payload once nothing reads it",
+                "ru": "Сделать DROP COLUMN payload, когда её никто не читает"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "Reclaim the space with VACUUM FULL or pg_repack",
+                "ru": "Вернуть место через VACUUM FULL или pg_repack"
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "rollout-p1-which-view",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which PostgreSQL view tells you where time goes per statement?",
+            "ru": "Какое представление PostgreSQL показывает, куда уходит время по statement?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "pg_stat_statements is the first stop before any tuning.",
+              "ru": "pg_stat_statements — первая остановка до всякого тюнинга."
+            },
+            "incorrect": {
+              "en": "pg_stat_statements. pg_stat_bgwriter is about checkpoints; pg_stat_wal is about WAL volume.",
+              "ru": "pg_stat_statements. pg_stat_bgwriter — про контрольные точки, pg_stat_wal — про объём WAL."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "pg_stat_statements",
+                "ru": "pg_stat_statements"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "pg_stat_bgwriter",
+                "ru": "pg_stat_bgwriter"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That reports checkpoint and background writer activity, not per-statement time.",
+                "ru": "Оно сообщает про контрольные точки и фоновый writer, а не про время по statement."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "pg_stat_wal",
+                "ru": "pg_stat_wal"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That reports WAL volume — useful here, but not per-statement time.",
+                "ru": "Оно сообщает про объём WAL — полезно здесь, но это не время по statement."
+              }
+            }
+          ]
+        },
+        {
+          "id": "rollout-p2-drop-column-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In PostgreSQL, DROP COLUMN on a terabyte-sized table rewrites the table and needs downtime.",
+            "ru": "В PostgreSQL DROP COLUMN на таблице размером в терабайт переписывает таблицу и требует простоя."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It is instant metadata; the space returns later with VACUUM FULL or pg_repack.",
+              "ru": "Это мгновенное изменение метаданных; место вернёт позже VACUUM FULL или pg_repack."
+            },
+            "incorrect": {
+              "en": "No — DROP COLUMN is an instant metadata change; only reclaiming the space rewrites the table.",
+              "ru": "Нет — DROP COLUMN мгновенно меняет метаданные; таблицу переписывает только возврат места."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "rollout-p3-match-metrics",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each metric of a write-heavy PostgreSQL service to what it tells you.",
+            "ru": "Соотнеси каждую метрику сервиса с интенсивной записью в PostgreSQL с тем, что она показывает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Together they say whether a change helped and where the queue moved.",
+              "ru": "Вместе они говорят, помогло ли изменение и куда переехала очередь."
+            },
+            "incorrect": {
+              "en": "Writes/s is throughput, p95 is the tail a caller sees, WAL bytes/s is durability traffic, pool wait time is queueing.",
+              "ru": "Записей/с — пропускная способность, p95 — хвост, который видит вызывающий, байты WAL/с — трафик долговечности, время ожидания в пуле — очередь."
+            }
+          },
+          "pairs": [
+            {
+              "id": "wps",
+              "left": {
+                "en": "Writes per second",
+                "ru": "Записей в секунду"
+              },
+              "right": {
+                "en": "The throughput the service actually sustains",
+                "ru": "Пропускная способность, которую сервис реально держит"
+              }
+            },
+            {
+              "id": "p95",
+              "left": {
+                "en": "p95 write latency",
+                "ru": "p95 задержки записи"
+              },
+              "right": {
+                "en": "The tail a calling service actually experiences",
+                "ru": "Хвост, который реально ощущает вызывающий сервис"
+              }
+            },
+            {
+              "id": "walbytes",
+              "left": {
+                "en": "WAL bytes per second",
+                "ru": "Байтов WAL в секунду"
+              },
+              "right": {
+                "en": "How much durability traffic each write creates",
+                "ru": "Сколько трафика долговечности создаёт каждая запись"
+              }
+            },
+            {
+              "id": "poolwait",
+              "left": {
+                "en": "Pool wait time",
+                "ru": "Время ожидания в пуле"
+              },
+              "right": {
+                "en": "Whether callers are queueing for a connection",
+                "ru": "Стоят ли вызывающие в очереди за соединением"
+              }
+            }
+          ]
+        },
+        {
+          "id": "rollout-p4-fill-reclaim",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill in the two ways to reclaim the space.",
+            "ru": "Впиши два способа вернуть место."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Dropping the column is instant; getting the disk back is a separate, scheduled job.",
+              "ru": "Удаление колонки мгновенно; возврат диска — отдельная запланированная работа."
+            },
+            "incorrect": {
+              "en": "The space comes back with VACUUM FULL or pg_repack, not with DROP COLUMN itself.",
+              "ru": "Место возвращает VACUUM FULL или pg_repack, а не сам DROP COLUMN."
+            }
+          },
+          "text": {
+            "en": "DROP COLUMN is an instant metadata change; the disk space comes back only with VACUUM ___ or ___.",
+            "ru": "DROP COLUMN — мгновенное изменение метаданных; место на диске возвращает только VACUUM ___ или ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "FULL",
+                "full"
+              ],
+              "ru": [
+                "FULL",
+                "full"
+              ]
+            },
+            {
+              "en": [
+                "pg_repack"
+              ],
+              "ru": [
+                "pg_repack"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "the-whole-write-plan",
+      "title": {
+        "en": "The whole write, end to end",
+        "ru": "Вся запись от начала до конца"
+      },
+      "summary": {
+        "en": "One 30 MB write in full: TOAST and the WAL make the payload ~99% of the cost, which is why the fix is a design change first and knobs second.",
+        "ru": "Одна запись на 30 МБ целиком: TOAST и WAL делают нагрузку ~99% стоимости, поэтому решение — сначала изменение дизайна, а ручки потом."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "cap-d1-batching-encrypted",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Reason through this from scratch: a table of encrypted 30 MB payloads with 5 indexes, measured at 598 ms per record. JDBC batching with reWriteBatchedInserts=true is switched on. Predict the measured time per record afterwards.",
+            "ru": "Разбери с нуля: таблица с зашифрованными нагрузками по 30 МБ и 5 индексами, измерено 598 мс на запись. Включают батчинг JDBC с reWriteBatchedInserts=true. Предскажи измеренное время на запись после этого."
+          },
+          "code": "table    documents(id bigint, payload bytea)  -- 5 indexes\npayload  30 MB, encrypted (incompressible)\nbefore   598 ms per record, row-by-row INSERT\nchange   addBatch/executeBatch + reWriteBatchedInserts=true",
+          "codeLang": "text",
+          "reveal": {
+            "en": "Put the whole pipeline together and the prediction is forced:\n\n```mermaid\nflowchart TD\n  I[\"INSERT of 30 MB\"] --> Z[\"compression attempt: encrypted, gains nothing\"]\n  Z --> K[\"slice into about 15 700 chunk rows\"]\n  K --> T[\"table pages\"]\n  T --> W[\"WAL: the same bytes again, about 61 MB total\"]\n  W --> R[\"replicas and archive copy the WAL\"]\n  I --> O[\"overhead: round trip, parse, 5 index entries, commit = about 1 percent\"]\n  O --> B[\"this is all batching can remove\"]\n```\n\nBatching removes 5.7 ms of round trips and per-row commits — 0.9% — so 598 ms becomes about 592 ms. Everything else is untouched: the compression attempt still runs and still gains nothing on encrypted bytes, the value is still sliced into ~15 700 chunk rows, and the WAL still carries the payload a second time.\n\nThat is the shape of the whole answer. The payload is the cost, so the fix is a **design change** — the bytes go to object storage and PostgreSQL keeps a small row with a URL and a checksum, written blob-first so a failure leaves sweepable bytes. Only *after* that are the standard levers worth their effort: batching or `COPY`, dropping indexes no query uses, fewer and bigger transactions, and `synchronous_commit = off` if the data tolerates losing the last few hundred milliseconds.",
+            "ru": "Соберите весь пайплайн — и предсказание становится вынужденным:\n\n```mermaid\nflowchart TD\n  I[\"INSERT на 30 МБ\"] --> Z[\"попытка сжатия: зашифровано, выигрыша нет\"]\n  Z --> K[\"нарезка примерно на 15 700 строк-кусков\"]\n  K --> T[\"страницы таблицы\"]\n  T --> W[\"WAL: те же байты снова, всего около 61 МБ\"]\n  W --> R[\"реплики и архив копируют WAL\"]\n  I --> O[\"накладные расходы: round trip, разбор, 5 индексов, коммит = около 1 процента\"]\n  O --> B[\"это всё, что может убрать батчинг\"]\n```\n\nБатчинг убирает 5,7 мс round trips и коммитов на строку — 0,9%, — поэтому 598 мс превращаются примерно в 592 мс. Всё остальное не тронуто: попытка сжатия по-прежнему выполняется и по-прежнему ничего не даёт на зашифрованных байтах, значение по-прежнему режется на ~15 700 строк-кусков, а WAL по-прежнему несёт нагрузку второй раз.\n\nТакова форма всего ответа. Стоимость — это нагрузка, поэтому решением является **изменение дизайна**: байты уходят в объектное хранилище, а PostgreSQL держит маленькую строку с URL и контрольной суммой, записанную по правилу «сначала blob», чтобы отказ оставлял вычищаемые байты. И только *после* этого стандартные рычаги стоят усилий: батчинг или `COPY`, удаление индексов, которыми не пользуется ни один запрос, более редкие и крупные транзакции и `synchronous_commit = off`, если данные терпят потерю последних сотен миллисекунд."
+          },
+          "feedback": {
+            "correct": {
+              "en": "About 592 ms — batching cannot touch compression, chunks or the WAL.",
+              "ru": "Около 592 мс — батчинг не касается ни сжатия, ни кусков, ни WAL."
+            },
+            "incorrect": {
+              "en": "About 592 ms: batching removes 5.7 ms of overhead; the payload work is untouched.",
+              "ru": "Около 592 мс: батчинг убирает 5,7 мс накладных расходов; работа с нагрузкой не тронута."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "About 592 ms",
+                "ru": "Около 592 мс"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "About 120 ms — batching is the standard fix for slow inserts",
+                "ru": "Около 120 мс — батчинг это стандартное средство от медленных вставок"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It is the standard fix for small rows; here it touches ~1% of the write.",
+                "ru": "Это стандартное средство для маленьких строк; здесь оно касается ~1% записи."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "About 6 ms — the round trips and commits were the bottleneck",
+                "ru": "Около 6 мс — round trips и коммиты и были узким местом"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "They were 5.7 ms in total, out of 598 ms.",
+                "ru": "Они составляли 5,7 мс в сумме из 598 мс."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cap-p1-spot-order",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This write path stores a 30 MB payload in object storage and its metadata in PostgreSQL. What breaks when the upload on the last line fails?",
+            "ru": "Этот путь записи сохраняет нагрузку на 30 МБ в объектном хранилище, а метаданные — в PostgreSQL. Что ломается, если загрузка в последней строке падает?"
+          },
+          "code": "String url = \"s3://docs/\" + UUID.randomUUID();\njdbc.update(\"INSERT INTO documents (id, url, checksum) VALUES (?, ?, ?)\",\n            id, url, sha256);\nobjectStore.put(url, payload);   // upload after the row is committed",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Two things are wrong here, and they compound.\n\n**The order.** The row is committed before the blob exists, so a failed upload leaves a **dangling row**: a record whose URL points at nothing, which the API will return to a caller as if it were valid. Reversed — blob first, row second — the same failure leaves an **orphan blob**, which a sweeper deletes and no caller ever sees.\n\n**The key.** `UUID.randomUUID()` makes every attempt write to a different key, so a retry after a timeout leaves a second copy behind. A key derived from the **content hash** makes the upload idempotent: the retry overwrites itself.\n\nThe corrected shape is: compute the content hash, `PUT` the blob under it, then `INSERT` the row (with the outbox event, if other services need telling) in one transaction.",
+            "ru": "Здесь не так две вещи, и они усиливают друг друга.\n\n**Порядок.** Строка зафиксирована до того, как blob существует, поэтому упавшая загрузка оставляет **висящую строку**: запись, чей URL указывает в никуда, и API вернёт её вызывающему как настоящую. В обратном порядке — сначала blob, потом строка — тот же отказ оставит **осиротевший blob**, который удалит уборщик и которого ни один вызывающий не увидит.\n\n**Ключ.** `UUID.randomUUID()` заставляет каждую попытку писать по новому ключу, поэтому повтор после таймаута оставит вторую копию. Ключ из **хэша содержимого** делает загрузку идемпотентной: повтор перезаписывает сам себя.\n\nПравильная форма такая: посчитать хэш содержимого, сделать `PUT` blob под ним, затем в одной транзакции сделать `INSERT` строки (и события outbox, если другим сервисам нужно уведомление)."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A committed row now points at a blob that does not exist.",
+              "ru": "Зафиксированная строка теперь указывает на несуществующий blob."
+            },
+            "incorrect": {
+              "en": "The row is already committed, so the failure leaves a record whose URL points at nothing.",
+              "ru": "Строка уже зафиксирована, поэтому отказ оставляет запись, чей URL указывает в никуда."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A committed row points at a blob that does not exist, and the API will serve it",
+                "ru": "Зафиксированная строка указывает на несуществующий blob, и API его отдаст"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The blob is uploaded twice",
+                "ru": "Blob загружается дважды"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The upload failed — nothing was stored at all.",
+                "ru": "Загрузка упала — ничего не сохранилось вовсе."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — the INSERT is rolled back when put() throws",
+                "ru": "Ничего — INSERT откатывается, когда put() бросает исключение"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The INSERT already committed; no transaction spans PostgreSQL and object storage.",
+                "ru": "INSERT уже зафиксирован; ни одна транзакция не охватывает PostgreSQL и объектное хранилище."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p2-ceiling-predict",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Predict the sustained write ceiling of this PostgreSQL service.",
+            "ru": "Предскажи устойчивый потолок записи этого сервиса на PostgreSQL."
+          },
+          "code": "record   30 MB payload in a bytea column\ndisk     500 MB/s dedicated volume\npool     raised from 20 to 200 connections\nindexes  5, none of them dropped",
+          "codeLang": "text",
+          "feedback": {
+            "correct": {
+              "en": "About 8 per second: ~61 MB of disk per record against 500 MB/s.",
+              "ru": "Около 8 в секунду: ~61 МБ диска на запись против 500 МБ/с."
+            },
+            "incorrect": {
+              "en": "About 8 per second — the payload writes ~61 MB (table + WAL) and the pool cannot change that.",
+              "ru": "Около 8 в секунду — нагрузка пишет ~61 МБ (таблица + WAL), и пул на это не влияет."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "About 8 writes per second, unchanged by the pool",
+                "ru": "Около 8 записей в секунду, и пул этого не меняет"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "About 80 writes per second — ten times the connections",
+                "ru": "Около 80 записей в секунду — в десять раз больше соединений"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Connections do not create bandwidth; the disk ceiling is unchanged.",
+                "ru": "Соединения не создают пропускной способности; потолок диска не изменился."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "About 16 writes per second — 500 MB/s divided by 30 MB",
+                "ru": "Около 16 записей в секунду — 500 МБ/с, делённые на 30 МБ"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That forgets the WAL: the payload is written twice, so it is ~61 MB per record.",
+                "ru": "Здесь забыт WAL: нагрузка пишется дважды, поэтому это ~61 МБ на запись."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p3-sort-plan",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "A write-only PostgreSQL service stores ~30 MB records and many services call its API. Order the plan of work from the biggest win to the smallest.",
+            "ru": "Сервис на PostgreSQL только пишет записи по ~30 МБ, и много сервисов вызывают его API. Расставь план работ от самого крупного выигрыша к самому мелкому."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Clarify, measure, redesign, then tune — and prove it with numbers.",
+              "ru": "Уточнить, измерить, изменить дизайн, затем тюнить — и доказать числами."
+            },
+            "incorrect": {
+              "en": "Confirm the unit, measure one write, move the payload out, then batching and indexes, then re-measure.",
+              "ru": "Подтвердить единицу, измерить одну запись, вынести нагрузку, затем батчинг и индексы, затем измерить снова."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Confirm the 30 MB is per record, not per request or the whole table",
+                "ru": "Подтвердить, что 30 МБ — на запись, а не на запрос и не вся таблица"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Measure one write and see that the payload is nearly all of it",
+                "ru": "Измерить одну запись и увидеть, что почти вся она — нагрузка"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Move the payload to object storage: blob first, metadata row second",
+                "ru": "Вынести нагрузку в объектное хранилище: сначала blob, потом строка метаданных"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Then batch or COPY, and drop indexes no query uses",
+                "ru": "Затем батчинг или COPY и удаление индексов, которыми не пользуется ни один запрос"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "Re-measure writes per second, p95 latency and WAL bytes per second",
+                "ru": "Измерить снова записи в секунду, p95 задержки и байты WAL в секунду"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p4-match-whole-flow",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each mechanism to its role in a large-payload write path.",
+            "ru": "Соотнеси каждый механизм с его ролью в пути записи большой нагрузки."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two mechanisms create the cost, three manage it once the bytes move out.",
+              "ru": "Два механизма создают стоимость, три управляют ею после выноса байтов."
+            },
+            "incorrect": {
+              "en": "TOAST slices the value, the WAL doubles it, object storage removes it, the content hash makes retries safe, the outbox ships the event with the row.",
+              "ru": "TOAST режет значение, WAL его удваивает, объектное хранилище его убирает, хэш содержимого делает повторы безопасными, outbox отправляет событие вместе со строкой."
+            }
+          },
+          "pairs": [
+            {
+              "id": "toast",
+              "left": {
+                "en": "TOAST",
+                "ru": "TOAST"
+              },
+              "right": {
+                "en": "Slices a value over ~2 KB into ~2 KB chunk rows",
+                "ru": "Режет значение больше ~2 КБ на строки-куски по ~2 КБ"
+              }
+            },
+            {
+              "id": "wal",
+              "left": {
+                "en": "The WAL",
+                "ru": "WAL"
+              },
+              "right": {
+                "en": "Writes every one of those chunk rows a second time",
+                "ru": "Пишет каждую из этих строк-кусков ещё раз"
+              }
+            },
+            {
+              "id": "objstore",
+              "left": {
+                "en": "Object storage",
+                "ru": "Объектное хранилище"
+              },
+              "right": {
+                "en": "Takes the bytes off the database write path entirely",
+                "ru": "Полностью убирает байты с пути записи в базу"
+              }
+            },
+            {
+              "id": "hash",
+              "left": {
+                "en": "Content-hash blob key",
+                "ru": "Ключ blob из хэша содержимого"
+              },
+              "right": {
+                "en": "Makes a retried upload overwrite itself",
+                "ru": "Заставляет повторную загрузку перезаписать саму себя"
+              }
+            },
+            {
+              "id": "outbox",
+              "left": {
+                "en": "Outbox pattern",
+                "ru": "Outbox-паттерн"
+              },
+              "right": {
+                "en": "Notifies other services in the row's transaction",
+                "ru": "Уведомляет другие сервисы в транзакции строки"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p5-fill-numbers",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill in the three numbers that carry the whole answer.",
+            "ru": "Впиши три числа, на которых держится весь ответ."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Chunks, disk per record, row size after the move — the argument in three numbers.",
+              "ru": "Куски, диск на запись, размер строки после выноса — весь аргумент в трёх числах."
+            },
+            "incorrect": {
+              "en": "About 15 700 chunk rows, about 61 MB of disk per record, and a ~1.5 KB row once the payload is out.",
+              "ru": "Около 15 700 строк-кусков, около 61 МБ диска на запись и строка ~1,5 КБ после выноса нагрузки."
+            }
+          },
+          "text": {
+            "en": "One 30 MB record becomes about ___ TOAST chunk rows and roughly ___ MB of disk on the primary; moving the payload to object storage leaves a row of about ___ KB.",
+            "ru": "Одна запись в 30 МБ становится примерно ___ строками-кусками TOAST и примерно ___ МБ диска на primary; вынос нагрузки в объектное хранилище оставляет строку примерно в ___ КБ."
+          },
+          "blanks": [
+            {
+              "en": [
+                "15700",
+                "15 700"
+              ],
+              "ru": [
+                "15700",
+                "15 700"
+              ]
+            },
+            {
+              "en": [
+                "61",
+                "60"
+              ],
+              "ru": [
+                "61",
+                "60"
+              ]
+            },
+            {
+              "en": [
+                "1.5",
+                "1,5"
+              ],
+              "ru": [
+                "1,5",
+                "1.5"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

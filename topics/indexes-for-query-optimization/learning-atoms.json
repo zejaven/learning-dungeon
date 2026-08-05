@@ -1,0 +1,3223 @@
+{
+  "schemaVersion": 1,
+  "topicId": "indexes-for-query-optimization",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "query-first",
+      "title": {
+        "en": "Design from the query",
+        "ru": "Проектируй от запроса"
+      },
+      "summary": {
+        "en": "An index is a tool for one specific lookup, so index design starts from the slow query, not from the table.",
+        "ru": "Индекс — инструмент для конкретного поиска, поэтому проектирование индексов начинается с медленного запроса, а не с таблицы."
+      },
+      "discovery": [
+        {
+          "id": "query-first-d1-where-to-start",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A table in production feels slow. What do you look at FIRST to decide which index to add?",
+            "ru": "Таблица на проде работает медленно. На что ты посмотришь ПЕРВЫМ, чтобы решить, какой индекс добавить?"
+          },
+          "reveal": {
+            "en": "An **index** is not a property of a table — it is a tool built for one specific lookup. So the useful question is never \"which columns of this table deserve an index?\" but \"which query is slow, and what shape does it have?\"\n\nThe real workflow is a loop, not a one-time guess:\n\n```mermaid\nflowchart LR\n  F[\"find the slow query\"] --> P[\"read its query plan\"]\n  P --> I[\"add the narrowest index that helps\"]\n  I --> M[\"measure again\"]\n  M --> F\n```\n\nA **query plan** is the database's own description of how it intends to run a query — which index it will use, or whether it will read the whole table instead. You find the slow query in logs or monitoring, read its plan, add the narrowest index that removes the full table read, then measure again.\n\nWhy not just index everything that looks important? Because an index built without a query behind it is usually never used, and an unused index still costs storage and still has to be updated on every write.",
+            "ru": "**Индекс** — это не свойство таблицы, а инструмент для конкретного поиска. Поэтому полезный вопрос звучит не «каким колонкам этой таблицы нужен индекс?», а «какой запрос медленный и какая у него форма?».\n\nРеальный процесс — это цикл, а не разовая догадка:\n\n```mermaid\nflowchart LR\n  F[\"найти медленный запрос\"] --> P[\"прочитать его план запроса\"]\n  P --> I[\"добавить самый узкий индекс, который помогает\"]\n  I --> M[\"замерить снова\"]\n  M --> F\n```\n\n**План запроса** — это описание самой базы, как она собирается выполнять запрос: какой индекс использует или прочитает всю таблицу целиком. Ты находишь медленный запрос в логах или мониторинге, читаешь его план, добавляешь самый узкий индекс, убирающий полное чтение таблицы, и снова замеряешь.\n\nПочему нельзя просто проиндексировать всё «важное на вид»? Потому что индекс без запроса за спиной обычно никем не используется, а неиспользуемый индекс всё равно занимает место и всё равно обновляется при каждой записи."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the queries decide the indexes, not the table.",
+              "ru": "Верно — индексы определяют запросы, а не таблица."
+            },
+            "incorrect": {
+              "en": "Start from the slow queries: an index is built for one specific lookup.",
+              "ru": "Начинай с медленных запросов: индекс строится под конкретный поиск."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The actual slow queries that run against the table",
+                "ru": "Конкретные медленные запросы, которые идут к этой таблице"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The table definition — index every column that looks important",
+                "ru": "Определение таблицы — проиндексировать каждую важную на вид колонку"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "An index is not a property of a table; columns look important only relative to a query.",
+                "ru": "Индекс — не свойство таблицы; колонки выглядят важными только относительно запроса."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The number of rows in the table",
+                "ru": "Количество строк в таблице"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Row count tells you the table is big, not which lookup is slow.",
+                "ru": "Число строк говорит, что таблица большая, но не о том, какой поиск медленный."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "query-first-p1-table-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Indexes should be chosen by reading the table definition, without looking at the queries.",
+            "ru": "Индексы следует выбирать по определению таблицы, не заглядывая в запросы."
+          },
+          "feedback": {
+            "correct": {
+              "en": "An index serves a specific lookup, so the query shape decides it.",
+              "ru": "Индекс обслуживает конкретный поиск, поэтому его определяет форма запроса."
+            },
+            "incorrect": {
+              "en": "No — index design starts from the slow queries; the table alone does not tell you the lookup.",
+              "ru": "Нет — проектирование индексов начинается с медленных запросов; сама таблица не говорит о поиске."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "query-first-p2-artifact",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "You are asked to speed up a database. Which artifact tells you what to index?",
+            "ru": "Тебя просят ускорить базу данных. Какой артефакт подскажет, что индексировать?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The slow query list is the input to index design.",
+              "ru": "Список медленных запросов — вход для проектирования индексов."
+            },
+            "incorrect": {
+              "en": "The list of slow queries: their WHERE/JOIN/ORDER BY shape is what an index must match.",
+              "ru": "Список медленных запросов: индекс должен совпадать с их формой WHERE/JOIN/ORDER BY."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The list of slow queries and their shapes",
+                "ru": "Список медленных запросов и их форма"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The ER diagram of the schema",
+                "ru": "ER-диаграмма схемы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The schema shows relationships, not which lookups are actually slow.",
+                "ru": "Схема показывает связи, а не то, какие поиски реально медленные."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The list of columns that are declared NOT NULL",
+                "ru": "Список колонок, объявленных NOT NULL"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nullability is a constraint; it says nothing about lookup speed.",
+                "ru": "Обязательность значения — это ограничение; о скорости поиска оно ничего не говорит."
+              }
+            }
+          ]
+        },
+        {
+          "id": "query-first-p3-loop-steps",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the loop of tuning a slow query with an index.",
+            "ru": "Расставь по порядку цикл ускорения медленного запроса индексом."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Find, read the plan, add the narrowest index, measure — then repeat.",
+              "ru": "Найти, прочитать план, добавить самый узкий индекс, замерить — и снова."
+            },
+            "incorrect": {
+              "en": "The order is: find the slow query, read its plan, add the narrowest index, measure again.",
+              "ru": "Порядок: найти медленный запрос, прочитать его план, добавить самый узкий индекс, замерить снова."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Find the slow query in logs or monitoring",
+                "ru": "Найти медленный запрос в логах или мониторинге"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Read its query plan",
+                "ru": "Прочитать его план запроса"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Add the narrowest index that matches the query",
+                "ru": "Добавить самый узкий индекс, подходящий запросу"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Measure again and confirm the improvement",
+                "ru": "Замерить снова и подтвердить улучшение"
+              }
+            }
+          ]
+        },
+        {
+          "id": "query-first-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing word.",
+            "ru": "Впиши пропущенное слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The query shape is the specification the index has to match.",
+              "ru": "Форма запроса — это спецификация, под которую подгоняется индекс."
+            },
+            "incorrect": {
+              "en": "It is the query: an index is a tool for one specific lookup, not a table property.",
+              "ru": "Это запрос: индекс — инструмент для конкретного поиска, а не свойство таблицы."
+            }
+          },
+          "text": {
+            "en": "Index design starts from the ___, not from the table.",
+            "ru": "Проектирование индексов начинается с ___, а не с таблицы."
+          },
+          "blanks": [
+            {
+              "en": [
+                "query",
+                "queries",
+                "slow query"
+              ],
+              "ru": [
+                "запроса",
+                "запросов",
+                "запрос"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "index-source-clauses",
+      "title": {
+        "en": "Where index columns come from",
+        "ru": "Откуда берутся колонки индекса"
+      },
+      "summary": {
+        "en": "Candidate index columns come from WHERE, JOIN ON, ORDER BY and GROUP BY; columns that only appear in the SELECT list do not drive the search.",
+        "ru": "Колонки-кандидаты берутся из WHERE, JOIN ON, ORDER BY и GROUP BY; колонки, встречающиеся только в списке SELECT, поиск не ведут."
+      },
+      "discovery": [
+        {
+          "id": "source-clauses-d1-which-columns",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which columns of this query are candidates for an index?",
+            "ru": "Какие колонки этого запроса — кандидаты для индекса?"
+          },
+          "code": "SELECT o.id, o.total\nFROM orders o\nJOIN customers c ON c.id = o.customer_id\nWHERE o.status = 'NEW'\nORDER BY o.created_at;",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "Read a query and extract the columns that appear in exactly four places:\n\n- **`WHERE`** — the filter columns (which rows do we keep?)\n- **`JOIN ... ON`** — the columns that match two tables\n- **`ORDER BY`** — the columns that define the output order\n- **`GROUP BY`** — the columns the rows are aggregated by\n\n```mermaid\nflowchart TD\n  Q[\"slow query\"] --> W[\"WHERE columns: filter\"]\n  Q --> J[\"JOIN ON columns: match\"]\n  Q --> O[\"ORDER BY columns: sort\"]\n  Q --> G[\"GROUP BY columns: aggregate\"]\n  W --> IDX[\"candidate index columns\"]\n  J --> IDX\n  O --> IDX\n  G --> IDX\n```\n\nHere that gives `o.status`, `o.customer_id`, `c.id` and `o.created_at`.\n\nWhy is the `SELECT` list excluded? Those columns are just **data to return** once the rows are already found — they take no part in finding them. (They matter for one narrow purpose, covered later.) So `o.id` and `o.total` are not, by themselves, a reason to build an index.",
+            "ru": "Прочитай запрос и выпиши колонки, которые встречаются ровно в четырёх местах:\n\n- **`WHERE`** — колонки фильтра (какие строки оставляем?)\n- **`JOIN ... ON`** — колонки, по которым сопоставляются две таблицы\n- **`ORDER BY`** — колонки, задающие порядок вывода\n- **`GROUP BY`** — колонки, по которым строки агрегируются\n\n```mermaid\nflowchart TD\n  Q[\"медленный запрос\"] --> W[\"колонки WHERE: фильтр\"]\n  Q --> J[\"колонки JOIN ON: сопоставление\"]\n  Q --> O[\"колонки ORDER BY: сортировка\"]\n  Q --> G[\"колонки GROUP BY: агрегация\"]\n  W --> IDX[\"кандидаты в колонки индекса\"]\n  J --> IDX\n  O --> IDX\n  G --> IDX\n```\n\nЗдесь это даёт `o.status`, `o.customer_id`, `c.id` и `o.created_at`.\n\nПочему список `SELECT` исключён? Эти колонки — просто **данные для возврата**, когда строки уже найдены; в самом поиске они не участвуют. (Они важны для одной узкой цели, о ней позже.) Так что `o.id` и `o.total` сами по себе — не повод строить индекс."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Filter, join, sort and group columns — those are the candidates.",
+              "ru": "Колонки фильтра, джойна, сортировки и группировки — вот кандидаты."
+            },
+            "incorrect": {
+              "en": "Candidates come from WHERE, JOIN ON, ORDER BY and GROUP BY — not from the SELECT list.",
+              "ru": "Кандидаты берутся из WHERE, JOIN ON, ORDER BY и GROUP BY — а не из списка SELECT."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "o.status, o.customer_id, c.id, o.created_at",
+                "ru": "o.status, o.customer_id, c.id, o.created_at"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "o.id and o.total — the columns being selected",
+                "ru": "o.id и o.total — колонки, которые выбираются"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "SELECT-list columns are data to return; they take no part in finding rows.",
+                "ru": "Колонки списка SELECT — данные для возврата; в поиске строк они не участвуют."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Every column of the orders table",
+                "ru": "Все колонки таблицы orders"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Only the columns the query actually filters, joins, sorts or groups by are candidates.",
+                "ru": "Кандидаты — только те колонки, по которым запрос реально фильтрует, джойнит, сортирует или группирует."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "source-clauses-p1-select-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In SQL, a column that appears only in the SELECT list is what makes the database find the matching rows faster.",
+            "ru": "В SQL колонка, которая встречается только в списке SELECT, — это то, что ускоряет поиск подходящих строк."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Only filter, join, sort and group columns drive the search.",
+              "ru": "Поиск ведут только колонки фильтра, джойна, сортировки и группировки."
+            },
+            "incorrect": {
+              "en": "No — SELECT-only columns are data to return; WHERE/JOIN/ORDER BY/GROUP BY columns find the rows.",
+              "ru": "Нет — колонки только из SELECT возвращают данные; строки находят колонки WHERE/JOIN/ORDER BY/GROUP BY."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "source-clauses-p2-not-a-source",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which part of a SQL query does NOT supply candidate index columns?",
+            "ru": "Какая часть SQL-запроса НЕ даёт колонок-кандидатов для индекса?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The SELECT list returns data; it does not locate rows.",
+              "ru": "Список SELECT возвращает данные; строки он не находит."
+            },
+            "incorrect": {
+              "en": "It is the SELECT list — WHERE, JOIN ON, ORDER BY and GROUP BY are the four sources.",
+              "ru": "Это список SELECT — четыре источника: WHERE, JOIN ON, ORDER BY и GROUP BY."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The SELECT list",
+                "ru": "Список SELECT"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The GROUP BY clause",
+                "ru": "Клауза GROUP BY"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "GROUP BY columns are aggregation keys and are genuine index candidates.",
+                "ru": "Колонки GROUP BY — ключи агрегации и вполне себе кандидаты для индекса."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The JOIN ... ON clause",
+                "ru": "Клауза JOIN ... ON"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "JOIN ON columns match two tables and are prime index candidates.",
+                "ru": "Колонки JOIN ON сопоставляют две таблицы и являются первыми кандидатами."
+              }
+            }
+          ]
+        },
+        {
+          "id": "source-clauses-p3-match-clauses",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each SQL clause to the role its columns play.",
+            "ru": "Соотнеси каждую SQL-клаузу с ролью, которую играют её колонки."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Four clauses, four roles — and all four supply index candidates.",
+              "ru": "Четыре клаузы, четыре роли — и все четыре дают кандидатов для индекса."
+            },
+            "incorrect": {
+              "en": "WHERE filters, JOIN ON matches, ORDER BY sorts, GROUP BY aggregates.",
+              "ru": "WHERE фильтрует, JOIN ON сопоставляет, ORDER BY сортирует, GROUP BY агрегирует."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "WHERE",
+                "ru": "WHERE"
+              },
+              "right": {
+                "en": "Decides which rows are kept",
+                "ru": "Решает, какие строки оставить"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "JOIN ... ON",
+                "ru": "JOIN ... ON"
+              },
+              "right": {
+                "en": "Matches rows of two tables",
+                "ru": "Сопоставляет строки двух таблиц"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "ORDER BY",
+                "ru": "ORDER BY"
+              },
+              "right": {
+                "en": "Defines the output order",
+                "ru": "Задаёт порядок вывода"
+              }
+            },
+            {
+              "id": "m4",
+              "left": {
+                "en": "GROUP BY",
+                "ru": "GROUP BY"
+              },
+              "right": {
+                "en": "Aggregates rows into groups",
+                "ru": "Агрегирует строки в группы"
+              }
+            }
+          ]
+        },
+        {
+          "id": "source-clauses-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing clause names.",
+            "ru": "Впиши два пропущенных названия клауз."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Those four clauses are the complete source list for index candidates.",
+              "ru": "Эти четыре клаузы — полный список источников кандидатов для индекса."
+            },
+            "incorrect": {
+              "en": "The four sources are WHERE, JOIN ON, ORDER BY and GROUP BY.",
+              "ru": "Четыре источника — WHERE, JOIN ON, ORDER BY и GROUP BY."
+            }
+          },
+          "text": {
+            "en": "Candidate index columns come from ___, JOIN ON, ORDER BY and ___.",
+            "ru": "Колонки-кандидаты для индекса берутся из ___, JOIN ON, ORDER BY и ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "WHERE",
+                "where"
+              ],
+              "ru": [
+                "WHERE",
+                "where"
+              ]
+            },
+            {
+              "en": [
+                "GROUP BY",
+                "group by"
+              ],
+              "ru": [
+                "GROUP BY",
+                "group by"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "equality-first",
+      "title": {
+        "en": "Equality columns come first",
+        "ru": "Колонки равенства идут первыми"
+      },
+      "summary": {
+        "en": "In a composite index, columns compared with = go first, because they pin the index to one narrow contiguous slice of keys.",
+        "ru": "В составном индексе колонки, сравниваемые через =, идут первыми, потому что они прижимают индекс к одному узкому непрерывному срезу ключей."
+      },
+      "discovery": [
+        {
+          "id": "equality-first-d1-which-column",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A query runs `WHERE tenant_id = ? ORDER BY created_at`. Which column belongs FIRST in the index?",
+            "ru": "Запрос выполняет `WHERE tenant_id = ? ORDER BY created_at`. Какая колонка должна быть ПЕРВОЙ в индексе?"
+          },
+          "reveal": {
+            "en": "A **composite index** is an index on several columns at once. Its keys are sorted **left to right**: first by the first column, then — inside each group of equal values — by the second column, and so on.\n\nTwo words you need from here on:\n\n- **seek** — jump straight to the matching keys and read only them;\n- **scan** — read everything and throw most of it away.\n\nAn **equality** predicate (`tenant_id = ?`) fixes the leading column to a single value, so all matching keys form one contiguous block — that is exactly what makes a seek possible:\n\n```mermaid\nflowchart LR\n  I[\"index (tenant_id, created_at)\"] --> T1[\"block: tenant_id = 7\"]\n  I --> T2[\"block: tenant_id = 8\"]\n  T1 --> R[\"inside the block, created_at is already ordered\"]\n```\n\nPut the sort column first instead, and the tenant's rows are scattered all over the index — there is no block to seek to. That is why equality columns lead.",
+            "ru": "**Составной индекс** — это индекс сразу по нескольким колонкам. Его ключи отсортированы **слева направо**: сначала по первой колонке, затем — внутри каждой группы одинаковых значений — по второй, и так далее.\n\nДва слова, которые понадобятся дальше:\n\n- **seek (поиск)** — прыгнуть сразу к нужным ключам и прочитать только их;\n- **scan (скан)** — прочитать всё и почти всё выбросить.\n\nПредикат **равенства** (`tenant_id = ?`) фиксирует ведущую колонку в одно значение, поэтому все подходящие ключи образуют один непрерывный блок — именно это и делает seek возможным:\n\n```mermaid\nflowchart LR\n  I[\"индекс (tenant_id, created_at)\"] --> T1[\"блок: tenant_id = 7\"]\n  I --> T2[\"блок: tenant_id = 8\"]\n  T1 --> R[\"внутри блока created_at уже упорядочен\"]\n```\n\nПоставь первой колонку сортировки — и строки арендатора окажутся размазаны по всему индексу, прыгать будет некуда. Поэтому колонки равенства идут первыми."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The equality column leads: it fixes one contiguous block of keys.",
+              "ru": "Ведёт колонка равенства: она фиксирует один непрерывный блок ключей."
+            },
+            "incorrect": {
+              "en": "tenant_id: the equality column comes first so the index can seek to one block.",
+              "ru": "tenant_id: колонка равенства идёт первой, чтобы индекс мог прыгнуть в один блок."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "tenant_id",
+                "ru": "tenant_id"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "created_at",
+                "ru": "created_at"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Leading with the sort column scatters one tenant's rows across the whole index.",
+                "ru": "Если вести колонкой сортировки, строки одного арендатора размажутся по всему индексу."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Either one — column order does not matter",
+                "ru": "Любая — порядок колонок не важен"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Column order is the whole game: (a, b) and (b, a) serve different queries.",
+                "ru": "Порядок колонок — это вся суть: (a, b) и (b, a) обслуживают разные запросы."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "equality-first-p1-order-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In a composite database index, the order of the columns does not matter.",
+            "ru": "В составном индексе базы данных порядок колонок не важен."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Keys are sorted left to right, so (a, b) and (b, a) serve different queries.",
+              "ru": "Ключи отсортированы слева направо, поэтому (a, b) и (b, a) обслуживают разные запросы."
+            },
+            "incorrect": {
+              "en": "No — column order decides which queries can seek the index at all.",
+              "ru": "Нет — порядок колонок решает, какие запросы вообще смогут искать по индексу."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "equality-first-p2-why",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why do equality columns go first in a composite index?",
+            "ru": "Почему колонки равенства идут первыми в составном индексе?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "One fixed value means one contiguous block of keys — that is a seek.",
+              "ru": "Одно фиксированное значение — один непрерывный блок ключей, это и есть seek."
+            },
+            "incorrect": {
+              "en": "Because a fixed value pins the index to one contiguous block the database can seek to.",
+              "ru": "Потому что фиксированное значение прижимает индекс к одному непрерывному блоку, куда можно прыгнуть."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A fixed value pins the index to one contiguous block of keys",
+                "ru": "Фиксированное значение прижимает индекс к одному непрерывному блоку ключей"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Because = is a cheaper comparison for the CPU than < or >",
+                "ru": "Потому что = — более дешёвое сравнение для процессора, чем < или >"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It is not about comparison cost; it is that = fixes the leading key to one value.",
+                "ru": "Дело не в стоимости сравнения, а в том, что = фиксирует ведущий ключ в одно значение."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Because they are usually declared first in the table",
+                "ru": "Потому что в таблице они обычно объявлены первыми"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Index order has nothing to do with the order of columns in the table.",
+                "ru": "Порядок в индексе никак не связан с порядком колонок в таблице."
+              }
+            }
+          ]
+        },
+        {
+          "id": "equality-first-p3-spot-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "What is wrong with this index for this query?",
+            "ru": "Что не так с этим индексом для этого запроса?"
+          },
+          "code": "-- query\nSELECT * FROM orders\nWHERE tenant_id = ?\nORDER BY created_at;\n\n-- index\nCREATE INDEX idx_orders ON orders (created_at, tenant_id);",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "Both columns are present, but in the wrong order. With `(created_at, tenant_id)` the index is sorted by time first, so one tenant's rows are spread across the entire index — there is no single block to seek to, and the database has to walk far more keys than it needs.\n\nSwap them to `(tenant_id, created_at)`: the equality pins one block, and inside that block the rows are already in `created_at` order.\n\n**Containing the right columns is not enough — the order is what makes an index usable.**",
+            "ru": "Обе колонки на месте, но в неверном порядке. При `(created_at, tenant_id)` индекс отсортирован сначала по времени, поэтому строки одного арендатора размазаны по всему индексу — прыгать некуда, и базе придётся пройти гораздо больше ключей, чем нужно.\n\nПоменяй их местами: `(tenant_id, created_at)` — равенство фиксирует один блок, а внутри блока строки уже идут в порядке `created_at`.\n\n**Наличия нужных колонок мало — пригодность индекса определяет их порядок.**"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the equality column must lead, not the sort column.",
+              "ru": "Верно — вести должна колонка равенства, а не колонка сортировки."
+            },
+            "incorrect": {
+              "en": "The columns are in the wrong order: the equality column tenant_id must come first.",
+              "ru": "Колонки в неверном порядке: первой должна идти колонка равенства tenant_id."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The sort column is placed before the equality column, so the index cannot narrow to one tenant first",
+                "ru": "Колонка сортировки стоит перед колонкой равенства, поэтому индекс не может сначала сузиться до одного арендатора"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing is wrong — both columns of the query are in the index",
+                "ru": "Всё в порядке — обе колонки запроса есть в индексе"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Containing the columns is not enough; their order decides whether a seek is possible.",
+                "ru": "Наличия колонок недостаточно; возможность seek определяет их порядок."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "created_at should be dropped from the index entirely",
+                "ru": "created_at нужно вообще убрать из индекса"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "created_at belongs in the index — just after tenant_id, not before it.",
+                "ru": "created_at индексу нужен — просто после tenant_id, а не перед ним."
+              }
+            }
+          ]
+        },
+        {
+          "id": "equality-first-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing word.",
+            "ru": "Впиши пропущенное слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Equality first: a fixed value gives one contiguous block to seek to.",
+              "ru": "Сначала равенство: фиксированное значение даёт один непрерывный блок для seek."
+            },
+            "incorrect": {
+              "en": "Equality columns come first, because = pins the index to one contiguous block.",
+              "ru": "Первыми идут колонки равенства, потому что = прижимает индекс к одному непрерывному блоку."
+            }
+          },
+          "text": {
+            "en": "In a composite index, ___ columns come before the sort column.",
+            "ru": "В составном индексе колонки ___ идут перед колонкой сортировки."
+          },
+          "blanks": [
+            {
+              "en": [
+                "equality",
+                "="
+              ],
+              "ru": [
+                "равенства",
+                "equality",
+                "="
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sort-column-next",
+      "title": {
+        "en": "The sort column comes next",
+        "ru": "Колонка сортировки идёт следом"
+      },
+      "summary": {
+        "en": "Placing the ORDER BY column right after the equality columns makes the rows come out already sorted, so the database skips a separate sort step.",
+        "ru": "Колонка ORDER BY сразу после колонок равенства делает строки уже отсортированными, поэтому база пропускает отдельный шаг сортировки."
+      },
+      "discovery": [
+        {
+          "id": "sort-next-d1-free-order-by",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The index matches the two equality filters and ends with the sort column. What happens to the ORDER BY?",
+            "ru": "Индекс совпадает с двумя фильтрами равенства и заканчивается колонкой сортировки. Что произойдёт с ORDER BY?"
+          },
+          "code": "CREATE INDEX idx_orders ON orders (tenant_id, status, created_at);\n\nSELECT * FROM orders\nWHERE tenant_id = ? AND status = ?\nORDER BY created_at;",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "Once the equality columns are fixed, the **remaining keys inside that block are already in sorted order**. The database reads them in order and skips the sort step entirely — the `ORDER BY` becomes free.\n\n```mermaid\nflowchart LR\n  E[\"tenant_id = ? AND status = ?\"] --> B[\"one contiguous block of index keys\"]\n  B --> S[\"inside the block created_at is already ascending\"]\n  S --> N[\"no separate sort step\"]\n```\n\nThat is why `(tenant_id, status, created_at)` is the right index here: the two equalities jump straight to the matching block, and `created_at` is already ordered inside it.\n\nWithout the sort column in the index, the database would still find the rows quickly and then pay for a separate sort of the whole result set — which for a large result is often the expensive half of the query.",
+            "ru": "Как только колонки равенства зафиксированы, **оставшиеся ключи внутри этого блока уже идут по порядку**. База читает их подряд и полностью пропускает шаг сортировки — `ORDER BY` достаётся бесплатно.\n\n```mermaid\nflowchart LR\n  E[\"tenant_id = ? AND status = ?\"] --> B[\"один непрерывный блок ключей индекса\"]\n  B --> S[\"внутри блока created_at уже по возрастанию\"]\n  S --> N[\"отдельного шага сортировки нет\"]\n```\n\nИменно поэтому здесь правильный индекс — `(tenant_id, status, created_at)`: два равенства сразу прыгают в нужный блок, а `created_at` внутри него уже упорядочен.\n\nБез колонки сортировки в индексе база всё равно быстро найдёт строки, но затем заплатит за отдельную сортировку всего результата — а для большого результата это часто и есть дорогая половина запроса."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The rows arrive in created_at order, so no sort is needed.",
+              "ru": "Строки приходят в порядке created_at, поэтому сортировка не нужна."
+            },
+            "incorrect": {
+              "en": "After the equalities, created_at is already ordered inside the block — the sort step is skipped.",
+              "ru": "После равенств created_at внутри блока уже упорядочен — шаг сортировки пропускается."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The database reads the rows already in created_at order and skips the sort",
+                "ru": "База читает строки уже в порядке created_at и пропускает сортировку"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The rows are found via the index and then sorted afterwards",
+                "ru": "Строки находятся по индексу, а потом сортируются отдельно"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The extra sort is exactly what this column order removes.",
+                "ru": "Именно эту лишнюю сортировку такой порядок колонок и убирает."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The ORDER BY makes the index unusable",
+                "ru": "ORDER BY делает индекс непригодным"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The opposite: a sort column in the index is one of its main benefits.",
+                "ru": "Наоборот: колонка сортировки в индексе — одно из его главных преимуществ."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "sort-next-p1-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A composite index can remove the need for a separate sort step in a query that has ORDER BY.",
+            "ru": "Составной индекс может убрать необходимость в отдельном шаге сортировки в запросе с ORDER BY."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Index keys are stored in order, so the sort column can be read, not sorted.",
+              "ru": "Ключи индекса хранятся по порядку, поэтому колонку сортировки можно просто читать."
+            },
+            "incorrect": {
+              "en": "It can — after the equality columns, the sort column is already ordered inside the block.",
+              "ru": "Может — после колонок равенства колонка сортировки внутри блока уже упорядочена."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "sort-next-p2-where",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Where does the ORDER BY column belong in a composite index?",
+            "ru": "Где в составном индексе должна стоять колонка ORDER BY?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right after the equalities — that is where it is already ordered.",
+              "ru": "Сразу после равенств — именно там она уже упорядочена."
+            },
+            "incorrect": {
+              "en": "Right after the equality columns, so the rows come out sorted with no extra step.",
+              "ru": "Сразу после колонок равенства, чтобы строки выходили отсортированными без лишнего шага."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Right after the equality columns",
+                "ru": "Сразу после колонок равенства"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "First, before everything else",
+                "ru": "Первой, перед всем остальным"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Leading with it scatters the filtered rows across the index, so nothing can be sought.",
+                "ru": "Если вести ею, отфильтрованные строки размажутся по индексу, и seek станет невозможен."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "In a separate single-column index of its own",
+                "ru": "В отдельном одноколоночном индексе"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A separate index cannot combine the filter and the order in one pass.",
+                "ru": "Отдельный индекс не может объединить фильтр и порядок за один проход."
+              }
+            }
+          ]
+        },
+        {
+          "id": "sort-next-p3-order-columns",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the index columns for `WHERE tenant_id = ? AND status = ? ORDER BY created_at`.",
+            "ru": "Расставь колонки индекса для `WHERE tenant_id = ? AND status = ? ORDER BY created_at`."
+          },
+          "feedback": {
+            "correct": {
+              "en": "(tenant_id, status, created_at): equalities seek, created_at is already sorted inside.",
+              "ru": "(tenant_id, status, created_at): равенства ищут, created_at внутри уже отсортирован."
+            },
+            "incorrect": {
+              "en": "The index is (tenant_id, status, created_at) — equality columns first, sort column last.",
+              "ru": "Индекс — (tenant_id, status, created_at): сначала колонки равенства, последней — сортировка."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "tenant_id — equality, the most selective of the two",
+                "ru": "tenant_id — равенство, более селективное из двух"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "status — the second equality column",
+                "ru": "status — вторая колонка равенства"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "created_at — the sort column",
+                "ru": "created_at — колонка сортировки"
+              }
+            }
+          ]
+        },
+        {
+          "id": "sort-next-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the index definition.",
+            "ru": "Дополни определение индекса."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two equalities seek to the block; created_at is already ordered inside it.",
+              "ru": "Два равенства прыгают в блок; created_at внутри него уже упорядочен."
+            },
+            "incorrect": {
+              "en": "The index is (tenant_id, status, created_at): equalities first, then the sort column.",
+              "ru": "Индекс — (tenant_id, status, created_at): сначала равенства, затем колонка сортировки."
+            }
+          },
+          "text": {
+            "en": "For `WHERE tenant_id = ? AND status = ? ORDER BY created_at`, index (tenant_id, ___, ___).",
+            "ru": "Для `WHERE tenant_id = ? AND status = ? ORDER BY created_at` индекс — (tenant_id, ___, ___)."
+          },
+          "blanks": [
+            {
+              "en": [
+                "status"
+              ],
+              "ru": [
+                "status"
+              ]
+            },
+            {
+              "en": [
+                "created_at"
+              ],
+              "ru": [
+                "created_at"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "range-last",
+      "title": {
+        "en": "Range columns go last",
+        "ru": "Диапазонные колонки идут последними"
+      },
+      "summary": {
+        "en": "A range predicate opens the index up: any column placed after a range column can only filter, not seek — hence equality, then sort, then range.",
+        "ru": "Диапазонный предикат «раскрывает» индекс: любая колонка после диапазонной годится только для фильтрации, но не для seek — отсюда равенство, затем сортировка, затем диапазон."
+      },
+      "discovery": [
+        {
+          "id": "range-last-d1-after-range",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The leading index column is used as a range. How is `status`, the column after it, used?",
+            "ru": "Ведущая колонка индекса используется как диапазон. Как используется `status` — колонка после неё?"
+          },
+          "code": "CREATE INDEX idx_events ON events (created_at, status);\n\nSELECT * FROM events\nWHERE created_at >= ? AND status = 'NEW';",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "A **range** predicate (`>=`, `<`, `BETWEEN`, `>`) does not fix a column to one value — it matches many values at once. Inside that whole span, the *next* column runs through its own order again and again, so it is no longer globally sorted. The database can still read it and throw away non-matching rows, but it can no longer jump to them.\n\nThat gives the full column-order recipe, often abbreviated **E-S-R**:\n\n```mermaid\nflowchart LR\n  E[\"Equality: = columns\"] --> S[\"Sort: the ORDER BY column\"]\n  S --> R[\"Range: >=, <, BETWEEN\"]\n  R --> X[\"anything after a range: filter only, no seek\"]\n```\n\nSo the index above is backwards. `(status, created_at)` would be better: `status = 'NEW'` fixes one block, and inside it `created_at >= ?` is a contiguous tail of that block — both columns then narrow the search.",
+            "ru": "**Диапазонный** предикат (`>=`, `<`, `BETWEEN`, `>`) не фиксирует колонку в одно значение — он подходит сразу многим значениям. Внутри всего этого промежутка *следующая* колонка снова и снова проходит свой порядок, поэтому глобально она уже не отсортирована. База всё ещё может её прочитать и отбросить неподходящие строки, но прыгнуть к ним она уже не может.\n\nОтсюда полный рецепт порядка колонок, который часто сокращают как **E-S-R** (Equality, Sort, Range):\n\n```mermaid\nflowchart LR\n  E[\"Equality: колонки с =\"] --> S[\"Sort: колонка ORDER BY\"]\n  S --> R[\"Range: >=, <, BETWEEN\"]\n  R --> X[\"всё после диапазона: только фильтр, без seek\"]\n```\n\nЗначит, индекс выше перевёрнут. Лучше был бы `(status, created_at)`: `status = 'NEW'` фиксирует один блок, а внутри него `created_at >= ?` — непрерывный хвост этого блока, и обе колонки сужают поиск."
+          },
+          "feedback": {
+            "correct": {
+              "en": "After a range, a column can only filter what the range already returned.",
+              "ru": "После диапазона колонка может лишь фильтровать то, что диапазон уже вернул."
+            },
+            "incorrect": {
+              "en": "A range spans many values, so the next column is no longer ordered — it can filter, not seek.",
+              "ru": "Диапазон охватывает много значений, поэтому следующая колонка уже не упорядочена — только фильтр, без seek."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Only as a filter over the rows the range already returned — it cannot narrow the seek",
+                "ru": "Только как фильтр по строкам, уже возвращённым диапазоном — сузить seek она не может"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "As a second seek key that narrows the search further",
+                "ru": "Как второй ключ seek, дополнительно сужающий поиск"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Only columns before the range can be sought; after it the order is broken.",
+                "ru": "Искать можно только по колонкам до диапазона; после него порядок нарушен."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It is skipped completely, so the table row must be read to check it",
+                "ru": "Она полностью пропускается, поэтому для проверки нужно читать строку таблицы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The value is in the index, so it can be checked there — it just cannot drive the seek.",
+                "ru": "Значение есть в индексе, поэтому проверить его можно там — просто оно не ведёт seek."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "range-last-p1-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In a composite index, a column placed after a range column can still be used to seek.",
+            "ru": "В составном индексе колонка, стоящая после диапазонной, всё ещё годится для seek."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A range spans many values, so anything after it is filter-only.",
+              "ru": "Диапазон охватывает много значений, поэтому всё после него — только фильтр."
+            },
+            "incorrect": {
+              "en": "No — after a range column the following columns can only filter, never seek.",
+              "ru": "Нет — после диапазонной колонки следующие могут только фильтровать, но не искать."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "range-last-p2-recipe",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which column order is the recommended recipe for a composite index?",
+            "ru": "Какой порядок колонок — рекомендуемый рецепт для составного индекса?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "E-S-R: equality, sort, range.",
+              "ru": "E-S-R: равенство, сортировка, диапазон."
+            },
+            "incorrect": {
+              "en": "Equality first, then the sort column, then ranges last (E-S-R).",
+              "ru": "Сначала равенство, затем колонка сортировки, диапазоны — последними (E-S-R)."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Equality columns, then the sort column, then range columns",
+                "ru": "Колонки равенства, затем колонка сортировки, затем диапазонные"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Range columns, then equality columns, then the sort column",
+                "ru": "Диапазонные колонки, затем колонки равенства, затем колонка сортировки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A leading range breaks the order for everything after it, wasting both other columns.",
+                "ru": "Ведущий диапазон ломает порядок для всего, что после него, обесценивая обе другие колонки."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The sort column, then equality columns, then range columns",
+                "ru": "Колонка сортировки, затем колонки равенства, затем диапазонные"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Leading with the sort column scatters the filtered rows, so there is no block to seek to.",
+                "ru": "Ведущая колонка сортировки размазывает отфильтрованные строки, и прыгать некуда."
+              }
+            }
+          ]
+        },
+        {
+          "id": "range-last-p3-esr-steps",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the three column groups of the E-S-R rule for composite indexes.",
+            "ru": "Расставь три группы колонок правила E-S-R для составных индексов."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Equality narrows, sort comes for free, range is placed where it can break nothing.",
+              "ru": "Равенство сужает, сортировка достаётся бесплатно, диапазон стоит там, где ничего не ломает."
+            },
+            "incorrect": {
+              "en": "Equality, then Sort, then Range — that is what E-S-R stands for.",
+              "ru": "Equality, затем Sort, затем Range — вот что означает E-S-R."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Equality columns (col = ?)",
+                "ru": "Колонки равенства (col = ?)"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "The sort column (ORDER BY col)",
+                "ru": "Колонка сортировки (ORDER BY col)"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Range columns (col >= ?, BETWEEN)",
+                "ru": "Диапазонные колонки (col >= ?, BETWEEN)"
+              }
+            }
+          ]
+        },
+        {
+          "id": "range-last-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Spell out the E-S-R rule.",
+            "ru": "Раскрой правило E-S-R."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Equality, Sort, Range — the composite index column-order recipe.",
+              "ru": "Equality, Sort, Range — рецепт порядка колонок составного индекса."
+            },
+            "incorrect": {
+              "en": "E-S-R = equality columns, then the sort column, then range columns.",
+              "ru": "E-S-R = колонки равенства, затем колонка сортировки, затем диапазонные колонки."
+            }
+          },
+          "text": {
+            "en": "E-S-R: ___ columns, then the ___ column, then ___ columns.",
+            "ru": "E-S-R: колонки ___, затем колонка ___, затем колонки ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "equality"
+              ],
+              "ru": [
+                "равенства",
+                "equality"
+              ]
+            },
+            {
+              "en": [
+                "sort"
+              ],
+              "ru": [
+                "сортировки",
+                "sort"
+              ]
+            },
+            {
+              "en": [
+                "range"
+              ],
+              "ru": [
+                "диапазона",
+                "диапазонные",
+                "range"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "selectivity",
+      "title": {
+        "en": "Selectivity",
+        "ru": "Селективность"
+      },
+      "summary": {
+        "en": "Selectivity is the fraction of rows a value narrows the search down to; an index only earns its keep when that fraction is small.",
+        "ru": "Селективность — доля строк, к которой значение сужает поиск; индекс оправдывает себя, только если эта доля мала."
+      },
+      "discovery": [
+        {
+          "id": "selectivity-d1-boolean",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A table has 1,000,000 rows and 95% of them have `is_active = true`. You add an index on `is_active`. What will the database most likely do for `WHERE is_active = true`?",
+            "ru": "В таблице 1 000 000 строк, и у 95% из них `is_active = true`. Ты добавляешь индекс на `is_active`. Что база, скорее всего, сделает для `WHERE is_active = true`?"
+          },
+          "reveal": {
+            "en": "**Selectivity** is the fraction of rows that one value narrows the search down to. An index only earns its keep if that fraction is small:\n\n```\nemail = 'a@b.c'   ->      ~1 row of 1,000,000  -> highly selective\nis_active = true  -> ~950,000 of 1,000,000    -> poorly selective\n```\n\nWith `is_active`, the database would have to fetch almost the whole table anyway — and doing that *through* an index (key, then row, key, then row) is slower than simply reading the table straight through. So the optimizer ignores the index and reads the table instead.\n\nA practical consequence: when several equality columns are equally eligible for the leading position, put the **most selective** one first, so the index narrows fastest.",
+            "ru": "**Селективность** — это доля строк, к которой одно значение сужает поиск. Индекс оправдывает себя, только если эта доля мала:\n\n```\nemail = 'a@b.c'   ->        ~1 строка из 1 000 000 -> высокая селективность\nis_active = true  -> ~950 000 из 1 000 000        -> низкая селективность\n```\n\nС `is_active` базе всё равно пришлось бы достать почти всю таблицу — а делать это *через* индекс (ключ, потом строка, ключ, потом строка) медленнее, чем просто прочитать таблицу подряд. Поэтому оптимизатор игнорирует индекс и читает таблицу.\n\nПрактический вывод: когда несколько колонок равенства одинаково подходят на ведущую позицию, ставь первой **самую селективную**, чтобы индекс сужал быстрее всего."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Nearly all rows match, so scanning beats hopping through an index.",
+              "ru": "Подходит почти всё, поэтому скан выгоднее прыжков по индексу."
+            },
+            "incorrect": {
+              "en": "The index is poorly selective — 95% of rows match, so the optimizer scans instead.",
+              "ru": "Индекс плохо селективен — подходит 95% строк, поэтому оптимизатор выбирает скан."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Ignore the index and scan the table",
+                "ru": "Проигнорировать индекс и просканировать таблицу"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Use the index — any index is faster than a scan",
+                "ru": "Использовать индекс — любой индекс быстрее скана"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "When almost every row matches, going through the index is slower than reading the table.",
+                "ru": "Когда подходит почти каждая строка, проход через индекс медленнее чтения таблицы."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Use the index and then sort the result",
+                "ru": "Использовать индекс, а потом отсортировать результат"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no ORDER BY here; the issue is that the column separates almost nothing.",
+                "ru": "Здесь нет ORDER BY; проблема в том, что колонка почти ничего не разделяет."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "selectivity-p1-boolean-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "An index on a boolean column where 95% of the rows share the same value usually speeds up a query filtering on that value.",
+            "ru": "Индекс на boolean-колонке, где у 95% строк одно и то же значение, обычно ускоряет запрос по этому значению."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Low selectivity: almost every row still has to be fetched, so the optimizer scans.",
+              "ru": "Низкая селективность: доставать всё равно почти каждую строку, поэтому оптимизатор сканирует."
+            },
+            "incorrect": {
+              "en": "No — such a column separates almost nothing, so the index is usually ignored.",
+              "ru": "Нет — такая колонка почти ничего не разделяет, поэтому индекс обычно игнорируется."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "selectivity-p2-what-is-it",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In index design, what does selectivity measure?",
+            "ru": "Что измеряет селективность при проектировании индексов?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The smaller the fraction, the more an index is worth.",
+              "ru": "Чем меньше доля, тем ценнее индекс."
+            },
+            "incorrect": {
+              "en": "Selectivity is the fraction of rows one value narrows the search down to.",
+              "ru": "Селективность — доля строк, к которой одно значение сужает поиск."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The fraction of rows that one value narrows the search down to",
+                "ru": "Долю строк, к которой одно значение сужает поиск"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "How many indexes a table has",
+                "ru": "Сколько индексов у таблицы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is index count; selectivity is about how narrowly a value filters.",
+                "ru": "Это количество индексов; селективность — о том, насколько узко фильтрует значение."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "How quickly the disk can read index pages",
+                "ru": "Как быстро диск читает страницы индекса"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Selectivity is a property of the data distribution, not of the hardware.",
+                "ru": "Селективность — свойство распределения данных, а не железа."
+              }
+            }
+          ]
+        },
+        {
+          "id": "selectivity-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each selectivity term to its meaning.",
+            "ru": "Соотнеси каждый термин селективности с его значением."
+          },
+          "feedback": {
+            "correct": {
+              "en": "High selectivity makes an index worth using; low selectivity makes the optimizer scan.",
+              "ru": "Высокая селективность делает индекс полезным; низкая заставляет оптимизатор сканировать."
+            },
+            "incorrect": {
+              "en": "Selectivity = fraction narrowed to; high = ~one row; low = still most rows.",
+              "ru": "Селективность — доля, к которой сужается; высокая — ~одна строка; низкая — всё ещё почти все."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "selectivity",
+                "ru": "селективность"
+              },
+              "right": {
+                "en": "The fraction of rows a value narrows down to",
+                "ru": "Доля строк, к которой сужает значение"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "high selectivity (email)",
+                "ru": "высокая селективность (email)"
+              },
+              "right": {
+                "en": "One value points at about one row",
+                "ru": "Одно значение указывает примерно на одну строку"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "low selectivity (is_active, 95% true)",
+                "ru": "низкая селективность (is_active, 95% true)"
+              },
+              "right": {
+                "en": "One value still matches most of the table",
+                "ru": "Одно значение всё ещё покрывает большую часть таблицы"
+              }
+            },
+            {
+              "id": "m4",
+              "left": {
+                "en": "the most selective equality column",
+                "ru": "самая селективная колонка равенства"
+              },
+              "right": {
+                "en": "Goes first, so the index narrows fastest",
+                "ru": "Ставится первой, чтобы индекс сужал быстрее всего"
+              }
+            }
+          ]
+        },
+        {
+          "id": "selectivity-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing term.",
+            "ru": "Впиши пропущенный термин."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Low selectivity is why an index on a boolean rarely helps.",
+              "ru": "Низкая селективность — причина, почему индекс на boolean редко помогает."
+            },
+            "incorrect": {
+              "en": "It is selectivity — the fraction of rows a value narrows the search down to.",
+              "ru": "Это селективность — доля строк, к которой значение сужает поиск."
+            }
+          },
+          "text": {
+            "en": "The fraction of rows a value narrows the search down to is called ___.",
+            "ru": "Доля строк, к которой значение сужает поиск, называется ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "selectivity"
+              ],
+              "ru": [
+                "селективность",
+                "селективностью",
+                "selectivity"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "leftmost-prefix",
+      "title": {
+        "en": "The leftmost prefix rule",
+        "ru": "Правило левого префикса"
+      },
+      "summary": {
+        "en": "A composite index (a, b, c) can be sought only on a leftmost prefix: a, or a and b, or all three — never b or c alone.",
+        "ru": "Составной индекс (a, b, c) пригоден для seek только по левому префиксу: a, или a и b, или все три — но не по b или c отдельно."
+      },
+      "discovery": [
+        {
+          "id": "leftmost-d1-middle-column",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The query constrains only `status`, the SECOND column of the index. Can the index seek?",
+            "ru": "Запрос ограничивает только `status` — ВТОРУЮ колонку индекса. Сможет ли индекс сделать seek?"
+          },
+          "code": "CREATE INDEX idx_orders ON orders (tenant_id, status, created_at);\n\nSELECT * FROM orders WHERE status = 'NEW';",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "A composite index is usable for a seek only when the query constrains a **leftmost prefix** of its columns — `a`, or `a, b`, or `a, b, c`, but not `b` alone and not `c` alone.\n\nThe reason is the sort order: the keys are sorted left to right, so `status` values are ordered only *inside* each `tenant_id` group. Across the whole index they repeat over and over, so there is no single place to jump to.\n\n```mermaid\nflowchart TD\n  I[\"index (tenant_id, status, created_at)\"]\n  I --> P1[\"WHERE tenant_id = ?  -> seek\"]\n  I --> P2[\"WHERE tenant_id = ? AND status = ?  -> seek\"]\n  I --> P3[\"WHERE status = ?  -> no leftmost prefix, no seek\"]\n```\n\nThe upside of this rule is reuse: **one well-ordered composite index serves every query that hits one of its prefixes**, which is why a single `(tenant_id, status, created_at)` can replace several single-column indexes. Design the order so the common queries land on a prefix.",
+            "ru": "Составной индекс годится для seek, только когда запрос ограничивает **левый префикс** его колонок — `a`, или `a, b`, или `a, b, c`, но не `b` отдельно и не `c` отдельно.\n\nПричина в порядке сортировки: ключи отсортированы слева направо, поэтому значения `status` упорядочены только *внутри* каждой группы `tenant_id`. По всему индексу они повторяются снова и снова, и прыгать некуда.\n\n```mermaid\nflowchart TD\n  I[\"индекс (tenant_id, status, created_at)\"]\n  I --> P1[\"WHERE tenant_id = ?  -> seek\"]\n  I --> P2[\"WHERE tenant_id = ? AND status = ?  -> seek\"]\n  I --> P3[\"WHERE status = ?  -> нет левого префикса, без seek\"]\n```\n\nПлюс этого правила — переиспользование: **один хорошо упорядоченный составной индекс обслуживает каждый запрос, попадающий в его префикс**, поэтому единственный `(tenant_id, status, created_at)` может заменить несколько одноколоночных. Проектируй порядок так, чтобы частые запросы попадали в префикс."
+          },
+          "feedback": {
+            "correct": {
+              "en": "No leftmost prefix, no seek — status alone is not the leading column.",
+              "ru": "Нет левого префикса — нет seek: status сам по себе не ведущая колонка."
+            },
+            "incorrect": {
+              "en": "status is ordered only inside each tenant_id group, so there is nowhere to jump to.",
+              "ru": "status упорядочен только внутри каждой группы tenant_id, поэтому прыгать некуда."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "No — status is not a leftmost prefix, so there is no seek",
+                "ru": "Нет — status не левый префикс, поэтому seek невозможен"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Yes — status is one of the index columns, so the index seeks on it",
+                "ru": "Да — status есть среди колонок индекса, поэтому seek по нему будет"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Being present is not enough; keys are sorted left to right, so the leading column must be fixed.",
+                "ru": "Присутствия мало; ключи отсортированы слева направо, поэтому ведущая колонка должна быть зафиксирована."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Yes, after the database re-sorts the index by status",
+                "ru": "Да, после того как база пересортирует индекс по status"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "An index is never re-sorted at query time; its order is fixed when it is created.",
+                "ru": "Индекс не пересортируется во время запроса; его порядок задан при создании."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "leftmost-p1-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A composite index on (a, b, c) can seek a query that constrains only column c.",
+            "ru": "Составной индекс по (a, b, c) может сделать seek для запроса, ограничивающего только колонку c."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Only leftmost prefixes are seekable: a, or a and b, or all three.",
+              "ru": "Искать можно только по левым префиксам: a, или a и b, или все три."
+            },
+            "incorrect": {
+              "en": "No — c alone is not a leftmost prefix, so the index cannot seek.",
+              "ru": "Нет — c сам по себе не левый префикс, поэтому seek невозможен."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "leftmost-p2-which-query",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which query can seek the index `(tenant_id, status, created_at)`?",
+            "ru": "Какой запрос сможет сделать seek по индексу `(tenant_id, status, created_at)`?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The leading column is constrained, so the prefix (tenant_id) is seekable.",
+              "ru": "Ведущая колонка ограничена, поэтому по префиксу (tenant_id) можно искать."
+            },
+            "incorrect": {
+              "en": "Only a query that constrains tenant_id, the leading column, hits a leftmost prefix.",
+              "ru": "Только запрос, ограничивающий tenant_id — ведущую колонку, — попадает в левый префикс."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "WHERE tenant_id = ?",
+                "ru": "WHERE tenant_id = ?"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "WHERE status = ? AND created_at >= ?",
+                "ru": "WHERE status = ? AND created_at >= ?"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Two index columns, but the leading one is missing — no leftmost prefix, no seek.",
+                "ru": "Две колонки индекса, но нет ведущей — нет левого префикса, нет seek."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "WHERE created_at >= ?",
+                "ru": "WHERE created_at >= ?"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "created_at is the last column; it is ordered only inside a fixed (tenant_id, status) pair.",
+                "ru": "created_at — последняя колонка; она упорядочена только внутри фиксированной пары (tenant_id, status)."
+              }
+            }
+          ]
+        },
+        {
+          "id": "leftmost-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "For an index on (a, b, c), match each query filter to what the index can do.",
+            "ru": "Для индекса по (a, b, c) соотнеси каждый фильтр запроса с тем, что сможет индекс."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Prefixes are seekable; a filter that skips the leading column is not.",
+              "ru": "По префиксам искать можно; фильтр, пропускающий ведущую колонку, — нет."
+            },
+            "incorrect": {
+              "en": "a, then (a, b), then (a, b, c) are prefixes; b alone is not.",
+              "ru": "a, затем (a, b), затем (a, b, c) — префиксы; b сам по себе — нет."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "WHERE a = ?",
+                "ru": "WHERE a = ?"
+              },
+              "right": {
+                "en": "Seeks on the prefix (a)",
+                "ru": "Ищет по префиксу (a)"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "WHERE a = ? AND b = ?",
+                "ru": "WHERE a = ? AND b = ?"
+              },
+              "right": {
+                "en": "Seeks on the prefix (a, b)",
+                "ru": "Ищет по префиксу (a, b)"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "WHERE a = ? AND b = ? AND c = ?",
+                "ru": "WHERE a = ? AND b = ? AND c = ?"
+              },
+              "right": {
+                "en": "Seeks on all three columns",
+                "ru": "Ищет по всем трём колонкам"
+              }
+            },
+            {
+              "id": "m4",
+              "left": {
+                "en": "WHERE b = ?",
+                "ru": "WHERE b = ?"
+              },
+              "right": {
+                "en": "Cannot seek: no leftmost prefix",
+                "ru": "Seek невозможен: нет левого префикса"
+              }
+            }
+          ]
+        },
+        {
+          "id": "leftmost-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing words.",
+            "ru": "Впиши два пропущенных слова."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That is why one composite index can serve several queries.",
+              "ru": "Именно поэтому один составной индекс может обслужить несколько запросов."
+            },
+            "incorrect": {
+              "en": "It is the leftmost prefix: a, or a and b, or all three columns.",
+              "ru": "Это левый префикс: a, или a и b, или все три колонки."
+            }
+          },
+          "text": {
+            "en": "A composite index (a, b, c) can be sought only on a ___ ___ of its columns.",
+            "ru": "Составной индекс (a, b, c) пригоден для seek только по ___ ___ его колонок."
+          },
+          "blanks": [
+            {
+              "en": [
+                "leftmost",
+                "left"
+              ],
+              "ru": [
+                "левому",
+                "левый",
+                "leftmost"
+              ]
+            },
+            {
+              "en": [
+                "prefix"
+              ],
+              "ru": [
+                "префиксу",
+                "префикс",
+                "prefix"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "covering-index",
+      "title": {
+        "en": "Covering indexes",
+        "ru": "Covering-индексы"
+      },
+      "summary": {
+        "en": "If an index contains every column a query needs, the database answers from the index alone and never reads the table row.",
+        "ru": "Если индекс содержит все нужные запросу колонки, база отвечает из одного индекса и не читает строку таблицы."
+      },
+      "discovery": [
+        {
+          "id": "covering-d1-two-hops",
+          "type": "predict_output",
+          "prompt": {
+            "en": "How many places does the database have to read to answer this query?",
+            "ru": "Сколько мест базе нужно прочитать, чтобы ответить на этот запрос?"
+          },
+          "code": "CREATE INDEX idx_orders ON orders (customer_id, created_at, total);\n\nSELECT created_at, total FROM orders\nWHERE customer_id = ?\nORDER BY created_at;",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "Normally an index stores the indexed columns plus a pointer to the row, so answering a query takes **two hops**: find the key in the index, then go to the table to read the other columns.\n\nIf the index already contains **every column the query needs** — the filter columns *and* the columns in the `SELECT` list — the second hop disappears. That is a **covering index**: the query is answered from the index alone.\n\n```mermaid\nflowchart LR\n  Q[\"SELECT created_at, total WHERE customer_id = ?\"] --> I[\"index (customer_id, created_at, total)\"]\n  I --> A[\"answer returned from the index\"]\n  I -.->|\"not needed\"| T[\"table row\"]\n```\n\nHere `customer_id` seeks, `created_at` supplies the order, and `total` is simply carried along so no table lookup is needed.\n\nThe cost is **width**: every extra carried column makes the index keys bigger, so it uses more storage and slows down writes. Cover deliberately — for hot queries — not by default.",
+            "ru": "Обычно индекс хранит проиндексированные колонки плюс указатель на строку, поэтому ответ на запрос требует **двух прыжков**: найти ключ в индексе, затем пойти в таблицу за остальными колонками.\n\nЕсли индекс уже содержит **все нужные запросу колонки** — и колонки фильтра, *и* колонки из списка `SELECT`, — второй прыжок исчезает. Это **covering-индекс**: запрос отвечается из одного индекса.\n\n```mermaid\nflowchart LR\n  Q[\"SELECT created_at, total WHERE customer_id = ?\"] --> I[\"индекс (customer_id, created_at, total)\"]\n  I --> A[\"ответ выдан из индекса\"]\n  I -.->|\"не нужна\"| T[\"строка таблицы\"]\n```\n\nЗдесь `customer_id` ищет, `created_at` задаёт порядок, а `total` просто несётся следом, чтобы обращение к таблице не понадобилось.\n\nЦена — **ширина**: каждая лишняя перенесённая колонка увеличивает ключи индекса, поэтому он занимает больше места и замедляет запись. Покрывай осознанно — для горячих запросов, — а не по умолчанию."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Every needed column is in the index, so the table row is never touched.",
+              "ru": "Все нужные колонки есть в индексе, поэтому строка таблицы не трогается вовсе."
+            },
+            "incorrect": {
+              "en": "The index carries created_at and total too, so it covers the query — one read, no table hop.",
+              "ru": "Индекс несёт и created_at, и total, поэтому он покрывает запрос — одно чтение, без прыжка в таблицу."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Only the index — every column the query needs is already in it",
+                "ru": "Только индекс — все нужные запросу колонки уже в нём"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The index, and then the table row for each match",
+                "ru": "Индекс, а затем строку таблицы для каждого совпадения"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the normal two-hop case — but here the index already carries created_at and total.",
+                "ru": "Это обычный случай с двумя прыжками — но здесь индекс уже несёт created_at и total."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The table only, because SELECT columns are never stored in an index",
+                "ru": "Только таблицу, потому что колонки SELECT никогда не хранятся в индексе"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Any column can be put into an index; total is in this one precisely to avoid the table.",
+                "ru": "В индекс можно положить любую колонку; total здесь как раз для того, чтобы не идти в таблицу."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "covering-p1-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A covering index lets the database answer a query without reading the table row.",
+            "ru": "Covering-индекс позволяет базе ответить на запрос, не читая строку таблицы."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It contains every column the query needs, so the second hop disappears.",
+              "ru": "Он содержит все нужные запросу колонки, поэтому второй прыжок исчезает."
+            },
+            "incorrect": {
+              "en": "It does — that is the definition: the index holds every column the query needs.",
+              "ru": "Позволяет — в этом и определение: индекс содержит все нужные запросу колонки."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "covering-p2-what-makes",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What makes an index covering for a given query?",
+            "ru": "Что делает индекс covering-индексом для конкретного запроса?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Filter columns plus SELECT columns — all of them inside the index.",
+              "ru": "Колонки фильтра плюс колонки SELECT — все внутри индекса."
+            },
+            "incorrect": {
+              "en": "It contains every column the query needs, including the SELECT-list ones.",
+              "ru": "Он содержит все нужные запросу колонки, включая те, что в списке SELECT."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It contains every column the query needs, including the SELECT-list columns",
+                "ru": "Он содержит все нужные запросу колонки, включая колонки из списка SELECT"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It is defined on the table's primary key",
+                "ru": "Он построен по первичному ключу таблицы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Covering is about which columns the index carries, not about which key it is built on.",
+                "ru": "Covering — про то, какие колонки несёт индекс, а не про то, по какому ключу он построен."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It indexes all the rows of the table, with no filter",
+                "ru": "Он индексирует все строки таблицы, без фильтра"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Covering is about columns, not rows — an index over all rows is just an ordinary index.",
+                "ru": "Covering — про колонки, а не про строки: индекс по всем строкам — это обычный индекс."
+              }
+            }
+          ]
+        },
+        {
+          "id": "covering-p3-match-roles",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "For `SELECT created_at, total FROM orders WHERE customer_id = ? ORDER BY created_at` and the index (customer_id, created_at, total), match each column to its job.",
+            "ru": "Для `SELECT created_at, total FROM orders WHERE customer_id = ? ORDER BY created_at` и индекса (customer_id, created_at, total) соотнеси каждую колонку с её ролью."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Seek, sort, carry — three different jobs in one index.",
+              "ru": "Поиск, сортировка, перенос — три разные роли в одном индексе."
+            },
+            "incorrect": {
+              "en": "customer_id seeks, created_at sorts, total is carried so no table lookup is needed.",
+              "ru": "customer_id ищет, created_at сортирует, total несётся следом, чтобы не идти в таблицу."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "customer_id",
+                "ru": "customer_id"
+              },
+              "right": {
+                "en": "Seeks to the matching rows",
+                "ru": "Прыгает к подходящим строкам"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "created_at",
+                "ru": "created_at"
+              },
+              "right": {
+                "en": "Supplies the sort order for free",
+                "ru": "Бесплатно даёт порядок сортировки"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "total",
+                "ru": "total"
+              },
+              "right": {
+                "en": "Carried along so no table lookup is needed",
+                "ru": "Несётся следом, чтобы не обращаться к таблице"
+              }
+            }
+          ]
+        },
+        {
+          "id": "covering-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing term.",
+            "ru": "Впиши пропущенный термин."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It removes the second hop, at the price of wider keys.",
+              "ru": "Он убирает второй прыжок ценой более широких ключей."
+            },
+            "incorrect": {
+              "en": "It is a covering index — it answers the query without touching the table row.",
+              "ru": "Это covering-индекс — он отвечает на запрос, не трогая строку таблицы."
+            }
+          },
+          "text": {
+            "en": "An index that already contains every column a query needs is called a ___ index.",
+            "ru": "Индекс, который уже содержит все нужные запросу колонки, называется ___-индексом."
+          },
+          "blanks": [
+            {
+              "en": [
+                "covering"
+              ],
+              "ru": [
+                "covering",
+                "покрывающим",
+                "покрывающий"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "join-column-indexes",
+      "title": {
+        "en": "Indexing join columns",
+        "ru": "Индексы на колонках джойна"
+      },
+      "summary": {
+        "en": "A foreign key used in a JOIN usually needs an index on the child side, otherwise every join probes that table linearly.",
+        "ru": "Внешнему ключу, по которому идёт JOIN, обычно нужен индекс на стороне-потомке, иначе каждый джойн линейно прощупывает эту таблицу."
+      },
+      "discovery": [
+        {
+          "id": "join-d1-missing-fk-index",
+          "type": "predict_output",
+          "prompt": {
+            "en": "`customers.id` is the primary key and is indexed. `orders.customer_id` has no index. What is the problem with this join?",
+            "ru": "`customers.id` — первичный ключ, он проиндексирован. У `orders.customer_id` индекса нет. В чём проблема этого джойна?"
+          },
+          "code": "SELECT c.name, o.total\nFROM customers c\nJOIN orders o ON o.customer_id = c.id;",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "`JOIN ... ON` columns are index candidates exactly like `WHERE` columns — the database is still looking rows up by a value, just a value taken from the other table.\n\nA join walks one table and, for each row, looks up the matching rows in the other. The side being looked up is the one that needs the index — and that is usually the **child side**, the table holding the foreign key:\n\n```mermaid\nflowchart LR\n  C[\"customers (id is indexed)\"] -->|\"for each row\"| P[\"look up orders by customer_id\"]\n  P --> N[\"no index: linear probe of orders\"]\n  P --> Y[\"index on orders(customer_id): seek\"]\n```\n\nAn index on the parent's primary key does not help here: nobody is searching `customers` by id — `customers` is being read, `orders` is being searched. This matters most in join-heavy schemas, such as the link table of a many-to-many relationship, where both foreign keys are probed constantly.",
+            "ru": "Колонки `JOIN ... ON` — такие же кандидаты для индекса, как и колонки `WHERE`: база всё так же ищет строки по значению, просто значение взято из другой таблицы.\n\nДжойн проходит одну таблицу и для каждой строки ищет подходящие строки в другой. Индекс нужен той стороне, в которой ищут, — а это обычно **сторона-потомок**, таблица с внешним ключом:\n\n```mermaid\nflowchart LR\n  C[\"customers (id проиндексирован)\"] -->|\"для каждой строки\"| P[\"искать orders по customer_id\"]\n  P --> N[\"без индекса: линейный перебор orders\"]\n  P --> Y[\"индекс на orders(customer_id): seek\"]\n```\n\nИндекс на первичном ключе родителя здесь не помогает: по id никто `customers` не ищет — `customers` читают, а ищут в `orders`. Особенно это важно в схемах с обилием джойнов, например в связующей таблице связи многие-ко-многим, где оба внешних ключа прощупываются постоянно."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The searched side is orders, and its foreign key has no index.",
+              "ru": "Ищут в orders, а у её внешнего ключа нет индекса."
+            },
+            "incorrect": {
+              "en": "The join searches orders by customer_id — without an index that probe is linear.",
+              "ru": "Джойн ищет в orders по customer_id — без индекса этот перебор линейный."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Every customer row makes the database probe orders linearly, because orders.customer_id is not indexed",
+                "ru": "Каждая строка customers заставляет базу линейно перебирать orders, потому что orders.customer_id не проиндексирован"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing — indexing the primary key side is enough for a join",
+                "ru": "Ничего — для джойна достаточно индекса на стороне первичного ключа"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The primary key index helps searches of customers; here it is orders that is searched.",
+                "ru": "Индекс первичного ключа помогает искать в customers; здесь ищут в orders."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The join cannot run at all until both sides are indexed",
+                "ru": "Джойн вообще не выполнится, пока обе стороны не проиндексированы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It runs fine — just slowly; indexes affect speed, not correctness.",
+                "ru": "Он прекрасно выполнится — просто медленно; индексы влияют на скорость, а не на корректность."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "join-p1-pk-enough-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Indexing the primary key of the parent table is enough to make a JOIN on a foreign key fast.",
+            "ru": "Индекса на первичном ключе родительской таблицы достаточно, чтобы JOIN по внешнему ключу был быстрым."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The side being searched is the child table, and its foreign key needs the index.",
+              "ru": "Ищут в таблице-потомке, и индекс нужен именно её внешнему ключу."
+            },
+            "incorrect": {
+              "en": "No — the child-side foreign key is the column being looked up, so it needs the index.",
+              "ru": "Нет — ищут по внешнему ключу на стороне-потомке, поэтому индекс нужен ему."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "join-p2-which-column",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In `SELECT ... FROM customers c JOIN orders o ON o.customer_id = c.id`, which column most often needs a new index?",
+            "ru": "В `SELECT ... FROM customers c JOIN orders o ON o.customer_id = c.id` какой колонке чаще всего нужен новый индекс?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The child-side foreign key is the one being probed.",
+              "ru": "Прощупывают внешний ключ на стороне-потомке."
+            },
+            "incorrect": {
+              "en": "orders.customer_id — the foreign key on the child side, which the join searches by.",
+              "ru": "orders.customer_id — внешний ключ на стороне-потомке, по которому и ищет джойн."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "orders.customer_id",
+                "ru": "orders.customer_id"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "customers.id",
+                "ru": "customers.id"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "As a primary key it is already indexed, and it is not the side being searched.",
+                "ru": "Как первичный ключ он уже проиндексирован, и ищут не в этой стороне."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "orders.total",
+                "ru": "orders.total"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "total appears only in the SELECT list; it does not take part in matching rows.",
+                "ru": "total встречается только в списке SELECT; в сопоставлении строк он не участвует."
+              }
+            }
+          ]
+        },
+        {
+          "id": "join-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the rule for indexing join columns.",
+            "ru": "Собери правило индексирования колонок джойна."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The child side holds the foreign key, and that is the side being searched.",
+              "ru": "Внешний ключ лежит на стороне-потомке, и именно в ней ищут."
+            },
+            "incorrect": {
+              "en": "Index the foreign key on the child side of the join — that is where the lookup happens.",
+              "ru": "Индексируй внешний ключ на стороне-потомке джойна — именно там идёт поиск."
+            }
+          },
+          "tokens": {
+            "en": [
+              "index",
+              "the",
+              "foreign",
+              "key",
+              "on",
+              "the",
+              "child",
+              "side"
+            ],
+            "ru": [
+              "индексируй",
+              "внешний",
+              "ключ",
+              "на",
+              "стороне-потомке"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "parent"
+            ],
+            "ru": [
+              "родителя"
+            ]
+          }
+        },
+        {
+          "id": "join-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing word.",
+            "ru": "Впиши пропущенное слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Without it, every join probes the child table linearly.",
+              "ru": "Без него каждый джойн линейно перебирает таблицу-потомок."
+            },
+            "incorrect": {
+              "en": "It is the foreign key: the child-side column the join searches by.",
+              "ru": "Это внешний ключ: колонка на стороне-потомке, по которой ищет джойн."
+            }
+          },
+          "text": {
+            "en": "In a JOIN, the ___ key column on the child table usually needs its own index.",
+            "ru": "В JOIN колонке ___ ключа в таблице-потомке обычно нужен свой индекс."
+          },
+          "blanks": [
+            {
+              "en": [
+                "foreign",
+                "fk"
+              ],
+              "ru": [
+                "внешнего",
+                "внешний",
+                "foreign"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "partial-and-expression-indexes",
+      "title": {
+        "en": "Partial and expression indexes",
+        "ru": "Частичные индексы и индексы по выражению"
+      },
+      "summary": {
+        "en": "An index must match the shape of the predicate: index only the rows you query (partial), or index the expression you filter on.",
+        "ru": "Индекс должен совпадать с формой предиката: индексируй только нужные строки (частичный) или само выражение, по которому фильтруешь."
+      },
+      "discovery": [
+        {
+          "id": "expression-d1-lower-email",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The column `email` is indexed, but the filter applies `LOWER()` to it. Will the index be used?",
+            "ru": "Колонка `email` проиндексирована, но фильтр применяет к ней `LOWER()`. Будет ли использован индекс?"
+          },
+          "code": "CREATE INDEX idx_users_email ON users (email);\n\nSELECT * FROM users WHERE LOWER(email) = ?;",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "An index is sorted by exactly the thing it was built on. `idx_users_email` is sorted by `email`, but the query asks about `LOWER(email)` — a different value, in a different order. So the index cannot be sought, and the database scans.\n\nThe fix is to build the index on the **expression** itself — an **expression (functional) index**: `CREATE INDEX ... ON users (LOWER(email))`.\n\nThe same idea applies to rows instead of values. If a table is 99% `status = 'CLOSED'` and every query looks only at open rows, index only those rows — a **partial (filtered) index**. It stays tiny, so it is fast to search and cheap to maintain.\n\n```mermaid\nflowchart LR\n  F1[\"filter: LOWER(email) = ?\"] --> I1[\"expression index on LOWER(email)\"]\n  F2[\"filter: status = 'OPEN', table is 99% closed\"] --> I2[\"partial index WHERE status = 'OPEN'\"]\n```\n\nBoth are the same rule: **the index has to be organised the way you ask for things.**",
+            "ru": "Индекс отсортирован ровно по тому, по чему он построен. `idx_users_email` отсортирован по `email`, а запрос спрашивает про `LOWER(email)` — другое значение и другой порядок. Поэтому seek невозможен, и база сканирует.\n\nРешение — построить индекс по самому **выражению**: **индекс по выражению (functional)** — `CREATE INDEX ... ON users (LOWER(email))`.\n\nТа же идея работает и со строками вместо значений. Если таблица на 99% состоит из `status = 'CLOSED'`, а все запросы смотрят только на открытые строки, индексируй только их — **частичный (filtered) индекс**. Он остаётся крошечным, поэтому быстро ищется и дёшево поддерживается.\n\n```mermaid\nflowchart LR\n  F1[\"фильтр: LOWER(email) = ?\"] --> I1[\"индекс по выражению LOWER(email)\"]\n  F2[\"фильтр: status = 'OPEN', таблица на 99% закрыта\"] --> I2[\"частичный индекс WHERE status = 'OPEN'\"]\n```\n\nОба случая — одно правило: **индекс должен быть организован так же, как ты спрашиваешь.**"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The index stores email, not LOWER(email) — different value, different order.",
+              "ru": "Индекс хранит email, а не LOWER(email) — другое значение, другой порядок."
+            },
+            "incorrect": {
+              "en": "No — a plain index on email does not match a filter on LOWER(email); index the expression.",
+              "ru": "Нет — обычный индекс по email не подходит фильтру по LOWER(email); индексируй выражение."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "No — the index stores email, not LOWER(email)",
+                "ru": "Нет — индекс хранит email, а не LOWER(email)"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Yes — LOWER() does not change which column is being filtered",
+                "ru": "Да — LOWER() не меняет того, по какой колонке идёт фильтр"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It changes the value being compared, and the index is sorted by the raw column.",
+                "ru": "Он меняет сравниваемое значение, а индекс отсортирован по исходной колонке."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Yes, once the database rewrites the query to remove LOWER()",
+                "ru": "Да, как только база перепишет запрос и уберёт LOWER()"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Removing LOWER() would change the query's meaning, so no database does that.",
+                "ru": "Убрать LOWER() значило бы изменить смысл запроса, поэтому так не делает ни одна база."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "expression-p1-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A plain index on `email` is used for a query that filters on `LOWER(email)`.",
+            "ru": "Обычный индекс по `email` используется для запроса, который фильтрует по `LOWER(email)`."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The index is sorted by email; the filter asks about a different value.",
+              "ru": "Индекс отсортирован по email; фильтр спрашивает про другое значение."
+            },
+            "incorrect": {
+              "en": "No — you need an index on the expression LOWER(email) itself.",
+              "ru": "Нет — нужен индекс по самому выражению LOWER(email)."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "partial-p2-which-index",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A table is 99% `status = 'CLOSED'`, and every query reads only `status = 'OPEN'` rows. Which index fits best?",
+            "ru": "Таблица на 99% состоит из `status = 'CLOSED'`, и все запросы читают только строки `status = 'OPEN'`. Какой индекс подойдёт лучше всего?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "A partial index holds only the 1% that queries actually touch.",
+              "ru": "Частичный индекс хранит только тот 1%, к которому реально обращаются запросы."
+            },
+            "incorrect": {
+              "en": "A partial index restricted to WHERE status = 'OPEN' stays tiny and fast.",
+              "ru": "Частичный индекс с ограничением WHERE status = 'OPEN' остаётся крошечным и быстрым."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A partial index restricted to WHERE status = 'OPEN'",
+                "ru": "Частичный индекс с ограничением WHERE status = 'OPEN'"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A full index on status over all rows",
+                "ru": "Полный индекс по status по всем строкам"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It would mostly index rows nobody queries, and status is poorly selective anyway.",
+                "ru": "Он в основном проиндексирует строки, которые никто не запрашивает, а status и так плохо селективен."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "An index on every column of the table",
+                "ru": "Индекс по каждой колонке таблицы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Indexes are built for specific lookups, never column by column just in case.",
+                "ru": "Индексы строят под конкретные поиски, а не по колонке на всякий случай."
+              }
+            }
+          ]
+        },
+        {
+          "id": "partial-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each query filter to the index that matches its shape.",
+            "ru": "Соотнеси каждый фильтр запроса с индексом, совпадающим по форме."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The index has to be organised the way the query asks.",
+              "ru": "Индекс должен быть организован так же, как спрашивает запрос."
+            },
+            "incorrect": {
+              "en": "Function in the filter -> expression index; a rare subset of rows -> partial index; two equalities -> composite.",
+              "ru": "Функция в фильтре -> индекс по выражению; редкое подмножество строк -> частичный; два равенства -> составной."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "WHERE LOWER(email) = ?",
+                "ru": "WHERE LOWER(email) = ?"
+              },
+              "right": {
+                "en": "An expression index on LOWER(email)",
+                "ru": "Индекс по выражению LOWER(email)"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "WHERE status = 'OPEN' on a 99% closed table",
+                "ru": "WHERE status = 'OPEN' в таблице, закрытой на 99%"
+              },
+              "right": {
+                "en": "A partial index limited to the open rows",
+                "ru": "Частичный индекс только по открытым строкам"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "WHERE tenant_id = ? AND status = ?",
+                "ru": "WHERE tenant_id = ? AND status = ?"
+              },
+              "right": {
+                "en": "A composite index on (tenant_id, status)",
+                "ru": "Составной индекс по (tenant_id, status)"
+              }
+            }
+          ]
+        },
+        {
+          "id": "expression-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing word.",
+            "ru": "Впиши пропущенное слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The index must be sorted by exactly what the query asks for.",
+              "ru": "Индекс должен быть отсортирован ровно по тому, что спрашивает запрос."
+            },
+            "incorrect": {
+              "en": "Index the expression itself: an index on email does not match a filter on LOWER(email).",
+              "ru": "Индексируй само выражение: индекс по email не подходит фильтру по LOWER(email)."
+            }
+          },
+          "text": {
+            "en": "If a query filters on LOWER(email), the index must be built on the ___ itself.",
+            "ru": "Если запрос фильтрует по LOWER(email), индекс нужно строить по самому ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "expression"
+              ],
+              "ru": [
+                "выражению",
+                "выражение",
+                "expression"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "over-indexing-cost",
+      "title": {
+        "en": "The cost of too many indexes",
+        "ru": "Цена лишних индексов"
+      },
+      "summary": {
+        "en": "Every index has to be updated on INSERT, UPDATE and DELETE and takes storage, so more indexes means faster reads but slower writes.",
+        "ru": "Каждый индекс обновляется при INSERT, UPDATE и DELETE и занимает место, поэтому больше индексов — быстрее чтение, но медленнее запись."
+      },
+      "discovery": [
+        {
+          "id": "over-index-d1-insert-cost",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A table has 12 indexes. What happens on every INSERT into that table?",
+            "ru": "У таблицы 12 индексов. Что происходит при каждом INSERT в неё?"
+          },
+          "reveal": {
+            "en": "An index is a second copy of some of your data, kept in sorted order. That copy has to stay correct, so **every `INSERT`, `UPDATE` and `DELETE` must update every affected index** as part of the same statement:\n\n```mermaid\nflowchart LR\n  W[\"INSERT / UPDATE / DELETE\"] --> T[\"write the table row\"]\n  W --> I1[\"update index 1\"]\n  W --> I2[\"update index 2\"]\n  W --> I3[\"update index N\"]\n```\n\nSo indexes trade write speed and storage for read speed. They also cost planning time: the more indexes exist, the longer the optimizer spends choosing among them.\n\nThis is why several single-column indexes are usually worse than **one well-ordered composite index**: the composite is one structure to maintain and lets the database seek through the combined keys in a single pass, instead of searching two indexes and combining the results.",
+            "ru": "Индекс — это вторая копия части твоих данных, хранимая в отсортированном порядке. Эта копия обязана оставаться корректной, поэтому **каждый `INSERT`, `UPDATE` и `DELETE` должен обновить каждый затронутый индекс** в рамках того же оператора:\n\n```mermaid\nflowchart LR\n  W[\"INSERT / UPDATE / DELETE\"] --> T[\"записать строку таблицы\"]\n  W --> I1[\"обновить индекс 1\"]\n  W --> I2[\"обновить индекс 2\"]\n  W --> I3[\"обновить индекс N\"]\n```\n\nЗначит, индексы меняют скорость записи и место на скорость чтения. Есть и цена планирования: чем больше индексов, тем дольше оптимизатор выбирает между ними.\n\nПоэтому несколько одноколоночных индексов обычно хуже **одного хорошо упорядоченного составного**: составной — это одна структура для поддержки, и база проходит объединённые ключи за один проход, а не ищет в двух индексах и объединяет результаты."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Each index is a sorted copy that must be kept correct on every write.",
+              "ru": "Каждый индекс — отсортированная копия, которую нужно поддерживать при каждой записи."
+            },
+            "incorrect": {
+              "en": "All 12 are updated inside the same statement — that is the write cost of indexes.",
+              "ru": "Все 12 обновляются в рамках того же оператора — это и есть цена индексов при записи."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "All 12 indexes must be updated as part of the insert",
+                "ru": "Все 12 индексов должны обновиться в рамках этой вставки"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Only the primary key index is updated; the rest are rebuilt later in the background",
+                "ru": "Обновляется только индекс первичного ключа; остальные перестраиваются позже в фоне"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Indexes must stay correct immediately, or a following query would miss the new row.",
+                "ru": "Индексы обязаны быть корректны сразу, иначе следующий запрос не найдёт новую строку."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing extra — indexes only affect reads",
+                "ru": "Ничего дополнительно — индексы влияют только на чтение"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "An index is a second sorted copy of the data; every write has to maintain it.",
+                "ru": "Индекс — вторая отсортированная копия данных; её поддерживает каждая запись."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "over-index-p1-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Adding more indexes to a table makes both reads and writes faster.",
+            "ru": "Добавление новых индексов к таблице ускоряет и чтение, и запись."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Faster reads, slower writes — every write maintains every affected index.",
+              "ru": "Чтение быстрее, запись медленнее — каждая запись поддерживает каждый затронутый индекс."
+            },
+            "incorrect": {
+              "en": "No — reads get faster, writes get slower, and storage grows.",
+              "ru": "Нет — чтение ускоряется, запись замедляется, а место расходуется."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "over-index-p2-composite-vs-two",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A query filters `WHERE tenant_id = ? AND status = ?`. Which is usually the better design?",
+            "ru": "Запрос фильтрует `WHERE tenant_id = ? AND status = ?`. Какой вариант обычно лучше?"
+          },
+          "reveal": {
+            "en": "One composite index on `(tenant_id, status)` lets the database seek through the combined keys in a **single pass** — the two values together identify one contiguous block.\n\nWith two separate single-column indexes there is no such block. The database has to search each index on its own and then combine the two sets of matching rows, which is extra work — and it also has two structures to keep updated on every write instead of one.\n\nThe exception is when the two columns are genuinely used apart in different queries; then the leftmost prefix rule already lets one composite serve both, provided the leading column is the one queried alone.",
+            "ru": "Один составной индекс по `(tenant_id, status)` позволяет базе пройти объединённые ключи **за один проход** — два значения вместе задают один непрерывный блок.\n\nС двумя отдельными одноколоночными индексами такого блока нет. Базе приходится искать в каждом индексе отдельно, а затем объединять два набора подходящих строк — это лишняя работа, плюс при каждой записи нужно поддерживать две структуры вместо одной.\n\nИсключение — если колонки реально используются порознь в разных запросах; но и тогда правило левого префикса позволяет одному составному обслужить оба, если ведущей стоит та колонка, по которой спрашивают отдельно."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One composite seeks in a single pass and is one structure to maintain.",
+              "ru": "Один составной ищет за один проход и требует поддержки одной структуры."
+            },
+            "incorrect": {
+              "en": "One composite index on (tenant_id, status) beats two single-column indexes here.",
+              "ru": "Один составной индекс по (tenant_id, status) здесь лучше двух одноколоночных."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "One composite index on (tenant_id, status)",
+                "ru": "Один составной индекс по (tenant_id, status)"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Two separate single-column indexes, one per column",
+                "ru": "Два отдельных одноколоночных индекса, по одному на колонку"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The database then searches both and combines the results, and maintains two structures on every write.",
+                "ru": "Тогда база ищет в обоих и объединяет результаты, а при каждой записи поддерживает две структуры."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "An index on every column of the table, to be safe",
+                "ru": "Индекс по каждой колонке таблицы, на всякий случай"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Unused indexes still cost storage and still slow every write down.",
+                "ru": "Неиспользуемые индексы всё равно занимают место и замедляют каждую запись."
+              }
+            }
+          ]
+        },
+        {
+          "id": "over-index-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the trade-off that every index makes.",
+            "ru": "Собери компромисс, который несёт каждый индекс."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Reads gain, writes pay — plus storage.",
+              "ru": "Чтение выигрывает, запись платит — плюс место на диске."
+            },
+            "incorrect": {
+              "en": "Every index speeds up reads and slows down writes.",
+              "ru": "Каждый индекс ускоряет чтение и замедляет запись."
+            }
+          },
+          "tokens": {
+            "en": [
+              "every",
+              "index",
+              "speeds",
+              "up",
+              "reads",
+              "and",
+              "slows",
+              "down",
+              "writes"
+            ],
+            "ru": [
+              "каждый",
+              "индекс",
+              "ускоряет",
+              "чтение",
+              "и",
+              "замедляет",
+              "запись"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "storage"
+            ],
+            "ru": [
+              "память"
+            ]
+          }
+        },
+        {
+          "id": "over-index-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing words.",
+            "ru": "Впиши два пропущенных слова."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That is why you add the narrowest index that helps, and no more.",
+              "ru": "Поэтому добавляют самый узкий индекс, который помогает, и не больше."
+            },
+            "incorrect": {
+              "en": "More indexes mean faster reads and slower writes.",
+              "ru": "Больше индексов — быстрее чтение и медленнее запись."
+            }
+          },
+          "text": {
+            "en": "More indexes mean faster ___ and slower ___.",
+            "ru": "Больше индексов — быстрее ___ и медленнее ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "reads",
+                "read"
+              ],
+              "ru": [
+                "чтение",
+                "чтения",
+                "reads"
+              ]
+            },
+            {
+              "en": [
+                "writes",
+                "write"
+              ],
+              "ru": [
+                "запись",
+                "записи",
+                "writes"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "plan-may-still-scan",
+      "title": {
+        "en": "The plan decides, not you",
+        "ru": "Решает план, а не ты"
+      },
+      "summary": {
+        "en": "The optimizer may still scan despite a matching index, so confirm with the query plan instead of assuming.",
+        "ru": "Оптимизатор может выбрать скан даже при подходящем индексе, поэтому проверяй по плану запроса, а не предполагай."
+      },
+      "discovery": [
+        {
+          "id": "plan-d1-still-slow",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "You created exactly the index the query seemed to need, but the query is still slow. What do you do next?",
+            "ru": "Ты создал именно тот индекс, который вроде бы нужен запросу, но запрос всё ещё медленный. Что дальше?"
+          },
+          "reveal": {
+            "en": "Creating an index is a request, not a guarantee. The optimizer picks the cheapest plan it can estimate, and it will read the table instead when:\n\n```mermaid\nflowchart TD\n  P[\"the index exists but the plan shows a scan\"]\n  P --> R1[\"the query returns most of the table\"]\n  P --> R2[\"the filtered column is poorly selective\"]\n  P --> R3[\"the filter shape does not match the index\"]\n```\n\n- **Returns most of the table** — hopping index -> row -> index -> row is slower than reading straight through.\n- **Poor selectivity** — the same thing for one particular value, such as a boolean that is 95% `true`.\n- **Shape mismatch** — you filtered on an expression the index was not built on, or the query constrains no leftmost prefix of a composite index.\n\nSo read the **query plan** and check whether the index is actually used; never conclude it from the fact that you created it. And remember that an index points at *candidate* rows — a database that keeps several row versions still has to check which version your transaction may see.",
+            "ru": "Создание индекса — это заявка, а не гарантия. Оптимизатор выбирает самый дешёвый план по своим оценкам и предпочтёт прочитать таблицу, когда:\n\n```mermaid\nflowchart TD\n  P[\"индекс есть, но в плане скан\"]\n  P --> R1[\"запрос возвращает большую часть таблицы\"]\n  P --> R2[\"колонка фильтра плохо селективна\"]\n  P --> R3[\"форма фильтра не совпадает с индексом\"]\n```\n\n- **Возвращается большая часть таблицы** — прыжки индекс -> строка -> индекс -> строка медленнее сплошного чтения.\n- **Плохая селективность** — то же самое для конкретного значения, например boolean, который на 95% `true`.\n- **Несовпадение формы** — ты отфильтровал по выражению, под которое индекс не строился, или запрос не ограничивает ни одного левого префикса составного индекса.\n\nПоэтому читай **план запроса** и проверяй, действительно ли индекс используется; никогда не делай вывод из одного факта его создания. И помни: индекс указывает на *кандидатные* строки — база, хранящая несколько версий строки, всё равно проверит, какую версию видит твоя транзакция."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The plan is the only place that tells you what actually happens.",
+              "ru": "План — единственное место, которое говорит, что происходит на самом деле."
+            },
+            "incorrect": {
+              "en": "Read the query plan: creating an index does not guarantee the optimizer uses it.",
+              "ru": "Прочитай план запроса: создание индекса не гарантирует, что оптимизатор его использует."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Read the query plan to see whether the index is actually used",
+                "ru": "Прочитать план запроса и посмотреть, используется ли индекс на самом деле"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Add a second index on the same columns in a different order",
+                "ru": "Добавить второй индекс по тем же колонкам в другом порядке"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is guessing again — and it adds write cost. The plan tells you what is actually happening.",
+                "ru": "Это снова догадка — и лишняя цена при записи. Что происходит на деле, скажет план."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Assume the index is used and conclude that indexes do not help here",
+                "ru": "Считать, что индекс используется, и заключить, что индексы тут не помогают"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The assumption is the bug: the optimizer may be scanning for a reason you can see in the plan.",
+                "ru": "Ошибка именно в предположении: оптимизатор может сканировать по причине, видной в плане."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "plan-p1-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "If a matching index exists, the database is guaranteed to use it.",
+            "ru": "Если подходящий индекс существует, база гарантированно его использует."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The optimizer still chooses; a scan can be cheaper.",
+              "ru": "Выбор всё равно за оптимизатором; скан может оказаться дешевле."
+            },
+            "incorrect": {
+              "en": "No — the optimizer may scan when the query returns most of the table or the column is poorly selective.",
+              "ru": "Нет — оптимизатор может сканировать, если запрос возвращает большую часть таблицы или колонка плохо селективна."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "plan-p2-reason",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which of these is a real reason a database chooses a table scan over an existing index?",
+            "ru": "Какая из причин реально заставляет базу выбрать скан таблицы вместо существующего индекса?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "When almost everything matches, reading straight through is cheaper.",
+              "ru": "Когда подходит почти всё, сплошное чтение обходится дешевле."
+            },
+            "incorrect": {
+              "en": "The query returning most of the table: then index hops cost more than a straight read.",
+              "ru": "Запрос возвращает большую часть таблицы: тогда прыжки по индексу дороже сплошного чтения."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The query returns most of the table's rows",
+                "ru": "Запрос возвращает большую часть строк таблицы"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The index was created recently",
+                "ru": "Индекс создан недавно"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Age is irrelevant; the optimizer compares estimated costs, not creation dates.",
+                "ru": "Возраст не важен; оптимизатор сравнивает оценки стоимости, а не даты создания."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The table has a primary key",
+                "ru": "У таблицы есть первичный ключ"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A primary key does not stop other indexes from being used.",
+                "ru": "Первичный ключ не мешает использовать другие индексы."
+              }
+            }
+          ]
+        },
+        {
+          "id": "plan-p3-match-fix",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each reason an index is skipped to the fix for it.",
+            "ru": "Соотнеси каждую причину, по которой индекс не используется, с её решением."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Each cause has its own fix — the plan tells you which cause you have.",
+              "ru": "У каждой причины своё решение — какая причина у тебя, скажет план."
+            },
+            "incorrect": {
+              "en": "Too many rows -> narrow the query; poor selectivity -> a better column; expression -> expression index; wrong order -> reorder.",
+              "ru": "Слишком много строк -> сузить запрос; плохая селективность -> другая колонка; выражение -> индекс по выражению; неверный порядок -> переупорядочить."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "The query returns most of the table",
+                "ru": "Запрос возвращает большую часть таблицы"
+              },
+              "right": {
+                "en": "No index will help; narrow the query itself",
+                "ru": "Никакой индекс не поможет; сузь сам запрос"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "The filtered column is poorly selective",
+                "ru": "Колонка фильтра плохо селективна"
+              },
+              "right": {
+                "en": "Lead with a more selective column instead",
+                "ru": "Поставь ведущей более селективную колонку"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "You filter on LOWER(email) but indexed email",
+                "ru": "Фильтруешь по LOWER(email), а проиндексирован email"
+              },
+              "right": {
+                "en": "Build the index on the expression",
+                "ru": "Построй индекс по выражению"
+              }
+            },
+            {
+              "id": "m4",
+              "left": {
+                "en": "The query constrains only the second index column",
+                "ru": "Запрос ограничивает только вторую колонку индекса"
+              },
+              "right": {
+                "en": "Reorder the index so the query hits a leftmost prefix",
+                "ru": "Переупорядочь индекс, чтобы запрос попал в левый префикс"
+              }
+            }
+          ]
+        },
+        {
+          "id": "plan-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing word.",
+            "ru": "Впиши пропущенное слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Check, do not assume — the optimizer has the last word.",
+              "ru": "Проверяй, а не предполагай — последнее слово за оптимизатором."
+            },
+            "incorrect": {
+              "en": "Confirm with the query plan: it shows whether the index was used or the table was scanned.",
+              "ru": "Подтверди по плану запроса: он показывает, использован индекс или просканирована таблица."
+            }
+          },
+          "text": {
+            "en": "Do not assume an index is used — confirm it with the query ___.",
+            "ru": "Не предполагай, что индекс используется — подтверди это по ___ запроса."
+          },
+          "blanks": [
+            {
+              "en": [
+                "plan"
+              ],
+              "ru": [
+                "плану",
+                "план",
+                "plan"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "index-design-end-to-end",
+      "title": {
+        "en": "Designing an index end to end",
+        "ru": "Проектируем индекс от начала до конца"
+      },
+      "summary": {
+        "en": "The whole method: take the columns from the query's clauses, order them equality-sort-range with the most selective first, cover only when it pays, and confirm with the plan.",
+        "ru": "Весь метод: взять колонки из клауз запроса, упорядочить их равенство-сортировка-диапазон, начиная с самых селективных, покрывать только когда это окупается, и проверить по плану."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "capstone-d1-cold-design",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The table holds thousands of tenants but only three distinct status values. What does this index actually give the query?",
+            "ru": "В таблице тысячи арендаторов, но всего три различных значения status. Что этот индекс реально даёт запросу?"
+          },
+          "code": "CREATE INDEX idx_orders ON orders (status, created_at);\n\nSELECT id, total FROM orders\nWHERE tenant_id = ? AND status = 'NEW'\nORDER BY created_at;",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "Walk the whole method on this query:\n\n```mermaid\nflowchart LR\n  Q[\"the slow query\"] --> C[\"columns from WHERE / JOIN / ORDER BY / GROUP BY\"]\n  C --> O[\"order them: equality, sort, range\"]\n  O --> S[\"most selective equality column first\"]\n  S --> V[\"add SELECT columns only to cover\"]\n  V --> P[\"confirm with the query plan\"]\n```\n\nThe clauses give `tenant_id`, `status` (equalities) and `created_at` (sort). Both filters are equalities, so the most selective one leads — `tenant_id` has thousands of distinct values, `status` only three.\n\nThe existing `(status, created_at)` index can be sought, because `status` is its leading column — but it narrows to a third of the table, and `tenant_id` is not in the index at all, so it is checked row by row. The sort is free, yet most of the work is wasted.\n\nThe right index is `(tenant_id, status, created_at)`. Adding `total` and `id` would make it cover the query as well — worth it only if this query is hot enough to justify the extra width.",
+            "ru": "Пройдём весь метод на этом запросе:\n\n```mermaid\nflowchart LR\n  Q[\"медленный запрос\"] --> C[\"колонки из WHERE / JOIN / ORDER BY / GROUP BY\"]\n  C --> O[\"упорядочить: равенство, сортировка, диапазон\"]\n  O --> S[\"самая селективная колонка равенства первой\"]\n  S --> V[\"колонки SELECT добавлять только ради covering\"]\n  V --> P[\"подтвердить по плану запроса\"]\n```\n\nКлаузы дают `tenant_id`, `status` (равенства) и `created_at` (сортировка). Оба фильтра — равенства, поэтому ведёт самое селективное: у `tenant_id` тысячи различных значений, у `status` — всего три.\n\nПо существующему индексу `(status, created_at)` seek возможен, ведь `status` — его ведущая колонка, но он сужает лишь до трети таблицы, а `tenant_id` в индексе нет вовсе, поэтому он проверяется построчно. Сортировка достаётся бесплатно, но большая часть работы всё равно потрачена зря.\n\nПравильный индекс — `(tenant_id, status, created_at)`. Добавление `total` и `id` сделало бы его ещё и covering — это оправданно, только если запрос достаточно горячий, чтобы окупить лишнюю ширину."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It seeks on a poorly selective column and checks tenant_id row by row.",
+              "ru": "Он ищет по плохо селективной колонке и проверяет tenant_id построчно."
+            },
+            "incorrect": {
+              "en": "status leads, so the index narrows to a third of the table; tenant_id is missing and is filtered row by row.",
+              "ru": "Ведёт status, поэтому индекс сужает лишь до трети таблицы; tenant_id в нём нет и он фильтруется построчно."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It narrows only by status — about a third of the table — and checks tenant_id row by row",
+                "ru": "Он сужает только по status — примерно до трети таблицы — и проверяет tenant_id построчно"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing at all — the index cannot be used, because tenant_id is missing from it",
+                "ru": "Совсем ничего — индекс использовать нельзя, ведь в нём нет tenant_id"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A missing column is a filter, not a disqualifier: status is the leading column, so a seek is possible.",
+                "ru": "Отсутствующая колонка — это фильтр, а не запрет: status — ведущая колонка, поэтому seek возможен."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It is optimal — both filter columns and the sort column are handled",
+                "ru": "Он оптимален — обе колонки фильтра и колонка сортировки обслужены"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "tenant_id is not in the index at all, and the most selective column should have led.",
+                "ru": "tenant_id в индексе вообще нет, а вести должна была самая селективная колонка."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "capstone-p1-spot-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "What is wrong with this index for this query?",
+            "ru": "Что не так с этим индексом для этого запроса?"
+          },
+          "code": "-- query\nSELECT * FROM orders\nWHERE tenant_id = ? AND created_at >= ?\nORDER BY created_at;\n\n-- index\nCREATE INDEX idx_orders ON orders (created_at, tenant_id);",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "The range column is leading. `created_at >= ?` matches a whole span of values, and inside that span `tenant_id` runs through its own order again and again — so `tenant_id` can only be checked, never sought.\n\nSwap them: `(tenant_id, created_at)`. The equality pins one tenant's block, the range becomes a contiguous tail of that block, and because `created_at` is also the sort column the `ORDER BY` costs nothing.\n\nThat is E-S-R doing all three jobs with one index: **equality narrows, sort comes free, range is placed last where it can break nothing.**",
+            "ru": "Ведёт диапазонная колонка. `created_at >= ?` покрывает целый промежуток значений, и внутри него `tenant_id` снова и снова проходит свой порядок — поэтому `tenant_id` можно только проверять, но не искать по нему.\n\nПоменяй местами: `(tenant_id, created_at)`. Равенство фиксирует блок одного арендатора, диапазон становится непрерывным хвостом этого блока, а так как `created_at` ещё и колонка сортировки, `ORDER BY` не стоит ничего.\n\nЭто E-S-R, делающий все три работы одним индексом: **равенство сужает, сортировка достаётся бесплатно, диапазон стоит последним, где он ничего не ломает.**"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Range first breaks the seek for everything after it.",
+              "ru": "Диапазон первым ломает seek для всего, что после него."
+            },
+            "incorrect": {
+              "en": "The range column leads, so tenant_id after it can only filter — index (tenant_id, created_at) instead.",
+              "ru": "Ведёт диапазонная колонка, поэтому tenant_id после неё только фильтрует — нужен индекс (tenant_id, created_at)."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The range column is first, so tenant_id after it can only filter, never seek",
+                "ru": "Диапазонная колонка стоит первой, поэтому tenant_id после неё может только фильтровать, но не искать"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing — both WHERE columns are present in the index",
+                "ru": "Всё в порядке — обе колонки WHERE есть в индексе"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Presence is not enough; a leading range makes the following column unseekable.",
+                "ru": "Присутствия мало; ведущий диапазон делает следующую колонку непригодной для seek."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "created_at should be removed, because a column cannot be used for filtering and sorting at once",
+                "ru": "created_at нужно убрать, ведь колонка не может одновременно фильтровать и сортировать"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "One column can do both — as the last column it supplies the range and the order together.",
+                "ru": "Одна колонка может и то, и другое — последней она даёт и диапазон, и порядок."
+              }
+            }
+          ]
+        },
+        {
+          "id": "capstone-p2-which-queries",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Which of the three queries below can seek this index?",
+            "ru": "Какие из трёх запросов ниже смогут сделать seek по этому индексу?"
+          },
+          "code": "CREATE INDEX idx_orders ON orders (tenant_id, status, created_at);\n\n-- A: WHERE tenant_id = ?\n-- B: WHERE tenant_id = ? AND status = ?\n-- C: WHERE status = ? AND created_at >= ?",
+          "codeLang": "sql",
+          "feedback": {
+            "correct": {
+              "en": "A and B constrain leftmost prefixes; C skips the leading column.",
+              "ru": "A и B ограничивают левые префиксы; C пропускает ведущую колонку."
+            },
+            "incorrect": {
+              "en": "A and B: both start at tenant_id. C constrains no leftmost prefix, so it cannot seek.",
+              "ru": "A и B: оба начинаются с tenant_id. C не ограничивает левый префикс, поэтому seek невозможен."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A and B",
+                "ru": "A и B"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "All three",
+                "ru": "Все три"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "C names two index columns but not the leading one, so there is no prefix to seek.",
+                "ru": "C называет две колонки индекса, но не ведущую, поэтому префикса для seek нет."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "B only",
+                "ru": "Только B"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A single leading column is a valid leftmost prefix, so A seeks too.",
+                "ru": "Одна ведущая колонка — тоже полноценный левый префикс, поэтому A ищет по индексу."
+              }
+            }
+          ]
+        },
+        {
+          "id": "capstone-p3-design-steps",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the steps of designing an index for a slow query.",
+            "ru": "Расставь по порядку шаги проектирования индекса под медленный запрос."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Collect the columns, order them E-S-R, consider covering, then verify.",
+              "ru": "Собрать колонки, упорядочить по E-S-R, подумать о covering, затем проверить."
+            },
+            "incorrect": {
+              "en": "Columns from the clauses, equality first (most selective), then the sort column, then ranges, cover last, verify with the plan.",
+              "ru": "Колонки из клауз, сначала равенства (самые селективные), затем сортировка, затем диапазоны, covering в конце, проверка по плану."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Collect the columns from WHERE, JOIN ON, ORDER BY and GROUP BY",
+                "ru": "Собрать колонки из WHERE, JOIN ON, ORDER BY и GROUP BY"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Put the equality columns first, the most selective one leading",
+                "ru": "Поставить первыми колонки равенства, ведущей — самую селективную"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Add the ORDER BY column next, so the sort is free",
+                "ru": "Следом добавить колонку ORDER BY, чтобы сортировка была бесплатной"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Put the range columns last",
+                "ru": "Диапазонные колонки поставить последними"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "Add SELECT-list columns only if the query is hot enough to cover",
+                "ru": "Добавить колонки из списка SELECT, только если запрос достаточно горячий для covering"
+              }
+            },
+            {
+              "id": "s6",
+              "text": {
+                "en": "Confirm with the query plan that the index is used",
+                "ru": "Подтвердить по плану запроса, что индекс используется"
+              }
+            }
+          ]
+        },
+        {
+          "id": "capstone-p4-match-mechanisms",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each index-design mechanism to its job.",
+            "ru": "Соотнеси каждый механизм проектирования индексов с его ролью."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Five mechanisms, five distinct jobs — together they are the whole method.",
+              "ru": "Пять механизмов, пять разных ролей — вместе они и есть весь метод."
+            },
+            "incorrect": {
+              "en": "Equality narrows, the sort column removes the sort, ranges go last, selectivity decides worth, covering removes the table hop.",
+              "ru": "Равенство сужает, колонка сортировки убирает сортировку, диапазоны идут последними, селективность решает ценность, covering убирает поход в таблицу."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "Equality columns first",
+                "ru": "Колонки равенства первыми"
+              },
+              "right": {
+                "en": "Jump straight to one narrow block of keys",
+                "ru": "Прыгнуть сразу в один узкий блок ключей"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "The ORDER BY column after them",
+                "ru": "Колонка ORDER BY после них"
+              },
+              "right": {
+                "en": "Rows come out sorted, so no sort step is needed",
+                "ru": "Строки выходят отсортированными, отдельная сортировка не нужна"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "Range columns last",
+                "ru": "Диапазонные колонки последними"
+              },
+              "right": {
+                "en": "Nothing placed after a range can be sought",
+                "ru": "Всё, что стоит после диапазона, для seek непригодно"
+              }
+            },
+            {
+              "id": "m4",
+              "left": {
+                "en": "Selectivity",
+                "ru": "Селективность"
+              },
+              "right": {
+                "en": "Decides whether the index is worth using at all",
+                "ru": "Решает, стоит ли вообще использовать индекс"
+              }
+            },
+            {
+              "id": "m5",
+              "left": {
+                "en": "A covering index",
+                "ru": "Covering-индекс"
+              },
+              "right": {
+                "en": "Removes the second hop to the table row",
+                "ru": "Убирает второй прыжок к строке таблицы"
+              }
+            }
+          ]
+        },
+        {
+          "id": "capstone-p5-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Write the index and the rule behind it.",
+            "ru": "Напиши индекс и правило, стоящее за ним."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That is the 60-second answer: equality columns, then the sort column.",
+              "ru": "Это и есть ответ за 60 секунд: колонки равенства, затем колонка сортировки."
+            },
+            "incorrect": {
+              "en": "The index is (tenant_id, status, created_at), because equality columns precede the sort column.",
+              "ru": "Индекс — (tenant_id, status, created_at), потому что колонки равенства идут перед колонкой сортировки."
+            }
+          },
+          "text": {
+            "en": "For `WHERE tenant_id = ? AND status = ? ORDER BY created_at`, create an index on (___, ___, ___), because equality columns come before the ___ column.",
+            "ru": "Для `WHERE tenant_id = ? AND status = ? ORDER BY created_at` создай индекс по (___, ___, ___), потому что колонки равенства идут перед колонкой ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "tenant_id"
+              ],
+              "ru": [
+                "tenant_id"
+              ]
+            },
+            {
+              "en": [
+                "status"
+              ],
+              "ru": [
+                "status"
+              ]
+            },
+            {
+              "en": [
+                "created_at"
+              ],
+              "ru": [
+                "created_at"
+              ]
+            },
+            {
+              "en": [
+                "sort"
+              ],
+              "ru": [
+                "сортировки",
+                "sort"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

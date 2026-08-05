@@ -1,0 +1,3124 @@
+{
+  "schemaVersion": 1,
+  "topicId": "memory-leaks",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "reachability",
+      "title": {
+        "en": "GC roots and reachability",
+        "ru": "GC root и достижимость"
+      },
+      "summary": {
+        "en": "The GC frees an object only when no chain of references reaches it from a GC root.",
+        "ru": "GC освобождает объект, только когда к нему не ведёт ни одна цепочка ссылок от GC root."
+      },
+      "discovery": [
+        {
+          "id": "reach-d1-when-freed",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "When is the garbage collector allowed to free an object on the heap?",
+            "ru": "Когда сборщик мусора имеет право освободить объект в куче?"
+          },
+          "reveal": {
+            "en": "The garbage collector never asks whether you still *need* an object. It measures only **reachability**.\n\nA **GC root** is a starting point the JVM always treats as alive: a running thread's stack (its local variables), a static field, a JNI handle. An object is **reachable** when some chain of references leads to it from any root, and **unreachable** when no such chain exists.\n\n```mermaid\nflowchart LR\n  R[\"GC root (thread stack, static field)\"] --> A[\"object A\"]\n  A --> B[\"object B\"]\n  C[\"object C\"] --> D[\"object D\"]\n```\n\n`A` and `B` are reachable, so the GC must keep them. `C` and `D` have no path from a root, so the collector may reclaim them — even though `C` still points to `D`.\n\nWhy this rule? Reachability is the only thing the JVM can actually verify. Freeing a still-referenced object would let the program read memory that no longer exists. So reachability is a safe approximation of \"still in use\" — and, as the next step shows, it is not the same thing.",
+            "ru": "Сборщик мусора никогда не спрашивает, *нужен* ли тебе объект. Он измеряет только **достижимость**.\n\n**GC root** — это точка отсчёта, которую JVM всегда считает живой: стек работающего потока (его локальные переменные), статическое поле, JNI-handle. Объект **достижим**, когда от какого-нибудь root к нему ведёт цепочка ссылок, и **недостижим**, когда такой цепочки нет.\n\n```mermaid\nflowchart LR\n  R[\"GC root (стек потока, статическое поле)\"] --> A[\"объект A\"]\n  A --> B[\"объект B\"]\n  C[\"объект C\"] --> D[\"объект D\"]\n```\n\n`A` и `B` достижимы, поэтому GC обязан их сохранить. К `C` и `D` пути от root нет, поэтому сборщик может освободить их — даже несмотря на то, что `C` всё ещё ссылается на `D`.\n\nПочему такое правило? Достижимость — единственное, что JVM реально может проверить. Освободить объект, на который есть ссылка, значит позволить программе прочитать уже исчезнувшую память. Так что достижимость — безопасное приближение к «всё ещё используется», и, как покажет следующий шаг, это не одно и то же."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Reachability decides, not your intent.",
+              "ru": "Решает достижимость, а не твои намерения."
+            },
+            "incorrect": {
+              "en": "Only unreachable objects may be freed — whether you use them does not matter.",
+              "ru": "Освободить можно только недостижимые объекты — используешь ты их или нет, неважно."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "When no chain of references reaches it from a GC root",
+                "ru": "Когда к нему не ведёт ни одна цепочка ссылок от GC root"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "When the program stops using it",
+                "ru": "Когда программа перестаёт им пользоваться"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The GC cannot see your intent — it only sees references.",
+                "ru": "GC не видит твоих намерений — он видит только ссылки."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "When the method that created it returns",
+                "ru": "Когда завершается метод, создавший его"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The local variable disappears, but the object survives if anything else still references it.",
+                "ru": "Локальная переменная исчезает, но объект выживает, если на него ссылается что-то ещё."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "reach-p1-stops-using-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In Java, an object becomes collectable as soon as the program stops using it.",
+            "ru": "В Java объект становится пригодным для сборки, как только программа перестаёт им пользоваться."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Being unused is not enough; only unreachable objects are collectable.",
+              "ru": "«Не используется» — недостаточно; собрать можно только недостижимые объекты."
+            },
+            "incorrect": {
+              "en": "No — the GC frees an object only when no reference chain from a GC root reaches it.",
+              "ru": "Нет — GC освобождает объект, только когда к нему не ведёт цепочка ссылок от GC root."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "reach-p2-which-root",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which of these is a GC root in the JVM?",
+            "ru": "Что из перечисленного является GC root в JVM?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Live thread stacks, static fields and JNI handles are the roots.",
+              "ru": "Стеки живых потоков, статические поля и JNI-handle — вот эти root."
+            },
+            "incorrect": {
+              "en": "GC roots are live thread stacks, static fields and JNI handles.",
+              "ru": "GC root — это стеки живых потоков, статические поля и JNI-handle."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A static field of a loaded class",
+                "ru": "Статическое поле загруженного класса"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "An object stored inside a HashMap",
+                "ru": "Объект, лежащий внутри HashMap"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It is reachable through the map, but the map itself has to be rooted somewhere — it is not a root.",
+                "ru": "Он достижим через мапу, но сама мапа тоже должна откуда-то держаться — это не root."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A local variable of a method that already returned",
+                "ru": "Локальная переменная уже завершившегося метода"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Its stack frame is gone; only a live thread's stack counts as a root.",
+                "ru": "Её stack frame исчез; root — только стек живого потока."
+              }
+            }
+          ]
+        },
+        {
+          "id": "reach-p3-match-terms",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each garbage-collection term to its meaning.",
+            "ru": "Соотнеси термин сборки мусора с его значением."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Roots start the search; everything the search cannot touch may be freed.",
+              "ru": "Root — начало обхода; всё, до чего обход не дотянулся, может быть освобождено."
+            },
+            "incorrect": {
+              "en": "A root starts reachability; reachable objects are kept, unreachable ones may be freed.",
+              "ru": "Root начинает достижимость; достижимые объекты сохраняются, недостижимые могут быть освобождены."
+            }
+          },
+          "pairs": [
+            {
+              "id": "root",
+              "left": {
+                "en": "GC root",
+                "ru": "GC root"
+              },
+              "right": {
+                "en": "Starting point of reachability: thread stack, static field, JNI handle",
+                "ru": "Точка отсчёта достижимости: стек потока, статическое поле, JNI-handle"
+              }
+            },
+            {
+              "id": "reachable",
+              "left": {
+                "en": "Reachable object",
+                "ru": "Достижимый объект"
+              },
+              "right": {
+                "en": "Some chain of references leads to it from a root",
+                "ru": "От root к нему ведёт какая-то цепочка ссылок"
+              }
+            },
+            {
+              "id": "unreachable",
+              "left": {
+                "en": "Unreachable object",
+                "ru": "Недостижимый объект"
+              },
+              "right": {
+                "en": "No chain of references leads to it — the GC may free it",
+                "ru": "К нему не ведёт ни одна цепочка ссылок — GC может его освободить"
+              }
+            },
+            {
+              "id": "collector",
+              "left": {
+                "en": "Garbage collector",
+                "ru": "Сборщик мусора"
+              },
+              "right": {
+                "en": "Frees unreachable objects and nothing else",
+                "ru": "Освобождает недостижимые объекты и ничего больше"
+              }
+            }
+          ]
+        },
+        {
+          "id": "reach-p4-fill-unreachable",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing term.",
+            "ru": "Впиши пропущенный термин."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Unreachable means no reference chain from any root leads to the object.",
+              "ru": "Недостижим — значит, ни от одного root к объекту не ведёт цепочка ссылок."
+            },
+            "incorrect": {
+              "en": "The word is unreachable: no chain of references from any GC root reaches the object.",
+              "ru": "Нужное слово — недостижим: от GC root к объекту не ведёт ни одна цепочка ссылок."
+            }
+          },
+          "text": {
+            "en": "The GC may free an object only once it is ___ from every GC root.",
+            "ru": "GC может освободить объект, только когда тот ___ от всех GC root."
+          },
+          "blanks": [
+            {
+              "en": [
+                "unreachable"
+              ],
+              "ru": [
+                "недостижим",
+                "недостижимым",
+                "unreachable"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "reachable-garbage",
+      "title": {
+        "en": "A leak is reachable garbage",
+        "ru": "Утечка — это достижимый мусор"
+      },
+      "summary": {
+        "en": "A memory leak is an object you no longer need that is still reachable, so the GC may not free it.",
+        "ru": "Утечка памяти — это ненужный объект, который всё ещё достижим, поэтому GC не имеет права его освободить."
+      },
+      "discovery": [
+        {
+          "id": "garbage-d1-gc-prevents-leaks",
+          "type": "true_false",
+          "prompt": {
+            "en": "Java has a garbage collector, so a Java program cannot leak memory.",
+            "ru": "В Java есть сборщик мусора, поэтому Java-программа не может течь по памяти."
+          },
+          "reveal": {
+            "en": "The GC guarantees you can never read freed memory — it prevents **dangling pointers**. It cannot guess that you are finished with an object that is still referenced.\n\nTwo different notions:\n\n- **garbage** — you no longer need it;\n- **unreachable** — nothing references it any more.\n\nThe GC collects the *unreachable*, not the merely unused. A **memory leak** in Java is the gap between the two: an object you no longer need that is still reachable, so the GC is *not allowed* to free it — reachable garbage. It piles up until the heap has no room and the JVM throws `OutOfMemoryError`.\n\n```mermaid\nflowchart TD\n  O[\"object on the heap\"] --> Q{\"reachable from a GC root?\"}\n  Q -->|no| C[\"collected\"]\n  Q -->|yes| L{\"do you still need it?\"}\n  L -->|yes| W[\"fine: live working set\"]\n  L -->|no| K[\"leak: retained garbage\"]\n```\n\nSo a Java leak is never \"the GC forgot something\". It is always \"a reference is still there\".",
+            "ru": "GC гарантирует, что ты никогда не прочитаешь освобождённую память, — он предотвращает **висячие указатели**. Но он не может догадаться, что ты закончил работу с объектом, на который ещё есть ссылка.\n\nДва разных понятия:\n\n- **мусор** — он тебе больше не нужен;\n- **недостижимый** — на него больше ничто не ссылается.\n\nGC собирает *недостижимое*, а не просто неиспользуемое. **Утечка памяти** в Java — это разрыв между этими понятиями: ненужный объект, который всё ещё достижим, поэтому GC *не имеет права* его освободить, — достижимый мусор. Он копится, пока в куче не кончится место и JVM не бросит `OutOfMemoryError`.\n\n```mermaid\nflowchart TD\n  O[\"объект в куче\"] --> Q{\"достижим от GC root?\"}\n  Q -->|нет| C[\"собран\"]\n  Q -->|да| L{\"он тебе ещё нужен?\"}\n  L -->|да| W[\"норма: рабочий набор\"]\n  L -->|нет| K[\"утечка: удержанный мусор\"]\n```\n\nПоэтому утечка в Java — это никогда не «GC что-то забыл». Это всегда «ссылка всё ещё есть»."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The GC frees the unreachable; a leak is garbage that stays reachable.",
+              "ru": "GC освобождает недостижимое; утечка — это мусор, который остаётся достижимым."
+            },
+            "incorrect": {
+              "en": "It can — an object you no longer need but still reference is reachable garbage the GC may not free.",
+              "ru": "Может — ненужный объект, на который есть ссылка, это достижимый мусор, и GC не вправе его освободить."
+            }
+          },
+          "answer": false
+        }
+      ],
+      "practice": [
+        {
+          "id": "garbage-p1-what-is-leak",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What exactly is a memory leak in Java?",
+            "ru": "Что такое утечка памяти в Java?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Reachable garbage: needed by nobody, referenced by something.",
+              "ru": "Достижимый мусор: никому не нужен, но на него что-то ссылается."
+            },
+            "incorrect": {
+              "en": "A leak is an object you no longer need that is still reachable from a GC root.",
+              "ru": "Утечка — это ненужный объект, который всё ещё достижим от GC root."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "An object that is no longer needed but is still reachable",
+                "ru": "Объект, который больше не нужен, но всё ещё достижим"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "An object that became unreachable but has not been collected yet",
+                "ru": "Объект, ставший недостижимым, но ещё не собранный"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is just pending work for the GC — it will be freed on some later cycle.",
+                "ru": "Это просто отложенная работа GC — он освободит объект на одном из следующих циклов."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A pointer to memory that has already been freed",
+                "ru": "Указатель на уже освобождённую память"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is a dangling pointer — exactly what the GC does prevent.",
+                "ru": "Это висячий указатель — как раз то, что GC предотвращает."
+              }
+            }
+          ]
+        },
+        {
+          "id": "garbage-p2-same-thing-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "For the JVM, \"garbage\" and \"unreachable\" mean the same thing.",
+            "ru": "Для JVM «мусор» и «недостижимый» означают одно и то же."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Garbage is what you no longer need; unreachable is what nothing references. A leak lives in the gap.",
+              "ru": "Мусор — это то, что тебе не нужно; недостижимый — то, на что нет ссылок. В этом разрыве и живёт утечка."
+            },
+            "incorrect": {
+              "en": "No — the GC collects only the unreachable, and unneeded-but-referenced objects are the leak.",
+              "ru": "Нет — GC собирает только недостижимое, а ненужные, но удерживаемые объекты и есть утечка."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "garbage-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the definition. A memory leak in Java is an object that is ...",
+            "ru": "Собери определение. Утечка памяти в Java — это объект, который ..."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Still reachable, no longer needed — the GC may not free it.",
+              "ru": "Всё ещё достижим, но больше не нужен — GC не вправе его освободить."
+            },
+            "incorrect": {
+              "en": "A leak is still reachable but no longer needed; unreachable objects are simply collected.",
+              "ru": "Утечка всё ещё достижима, но больше не нужна; недостижимые объекты просто собираются."
+            }
+          },
+          "tokens": {
+            "en": [
+              "still",
+              "reachable",
+              "but",
+              "no",
+              "longer",
+              "needed"
+            ],
+            "ru": [
+              "всё",
+              "ещё",
+              "достижим",
+              "но",
+              "больше",
+              "не",
+              "нужен"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "unreachable",
+              "already",
+              "freed"
+            ],
+            "ru": [
+              "недостижим",
+              "уже",
+              "освобождён"
+            ]
+          }
+        },
+        {
+          "id": "garbage-p4-fill-two",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill in the two opposite terms.",
+            "ru": "Впиши два противоположных термина."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The GC collects the unreachable; what is retained and unneeded is the leak.",
+              "ru": "GC собирает недостижимое; удержанное и ненужное — это утечка."
+            },
+            "incorrect": {
+              "en": "The GC collects unreachable objects; a leak is reachable garbage.",
+              "ru": "GC собирает недостижимые объекты; утечка — это достижимый мусор."
+            }
+          },
+          "text": {
+            "en": "The GC collects ___ objects, not the merely unused; a leak is ___ garbage.",
+            "ru": "GC собирает ___ объекты, а не просто неиспользуемые; утечка — это ___ мусор."
+          },
+          "blanks": [
+            {
+              "en": [
+                "unreachable"
+              ],
+              "ru": [
+                "недостижимые",
+                "unreachable"
+              ]
+            },
+            {
+              "en": [
+                "reachable"
+              ],
+              "ru": [
+                "достижимый",
+                "reachable"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "static-collections",
+      "title": {
+        "en": "Ever-growing static collections",
+        "ru": "Постоянно растущие статические коллекции"
+      },
+      "summary": {
+        "en": "A static collection that is only ever added to pins every entry for the whole JVM run.",
+        "ru": "Статическая коллекция, в которую только добавляют, закрепляет каждую запись на всё время работы JVM."
+      },
+      "discovery": [
+        {
+          "id": "static-d1-predict-growth",
+          "type": "predict_output",
+          "prompt": {
+            "en": "This runs on every request of a service that stays up for weeks. Predict what happens to the heap.",
+            "ru": "Это выполняется на каждый запрос сервиса, который работает неделями. Предскажи, что произойдёт с кучей."
+          },
+          "code": "class Registry {\n    static final Map<String, Session> CACHE = new HashMap<>();\n}\n\nvoid onRequest(String id, Session session) {\n    Registry.CACHE.put(id, session);   // nothing ever removes it\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "A `static` field is a **GC root**: it lives as long as its class is loaded, i.e. for the whole JVM run. Everything the static collection references is therefore reachable — forever, unless you remove it yourself.\n\n```mermaid\nsequenceDiagram\n  participant R as Request\n  participant C as static CACHE (GC root)\n  participant G as Garbage Collector\n  R->>C: put(entry)\n  Note over R: request ends, local reference gone\n  G->>G: cycle runs\n  G-->>C: entry still reachable, not freed\n  Note over C: repeats every request, the heap grows\n```\n\nNotice what does *not* help: the request handler's local variable disappears when the method returns, but that was never the only reference. A plain `HashMap` also has no size cap and no eviction — nothing shrinks it but your own `remove()`.\n\nThis is the most common leak in real services, because a registry or cache is exactly the kind of thing people make `static` \"so it is easy to reach from anywhere\".",
+            "ru": "Поле `static` — это **GC root**: оно живёт, пока загружен его класс, то есть всё время работы JVM. Поэтому всё, на что ссылается статическая коллекция, достижимо — навсегда, пока ты сам это не удалишь.\n\n```mermaid\nsequenceDiagram\n  participant R as Запрос\n  participant C as статический CACHE (GC root)\n  participant G as Сборщик мусора\n  R->>C: put(entry)\n  Note over R: запрос завершён, локальная ссылка исчезла\n  G->>G: цикл запускается\n  G-->>C: запись всё ещё достижима, не освобождена\n  Note over C: повторяется на каждый запрос, куча растёт\n```\n\nОбрати внимание, что *не* помогает: локальная переменная обработчика исчезает при выходе из метода, но она и не была единственной ссылкой. У обычного `HashMap` к тому же нет ни ограничения размера, ни вытеснения — его не уменьшит ничто, кроме твоего `remove()`.\n\nЭто самая частая утечка в реальных сервисах, потому что реестр или кэш — как раз то, что делают `static`, «чтобы было удобно достать откуда угодно»."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The static field is a GC root, so every entry is pinned.",
+              "ru": "Статическое поле — GC root, поэтому каждая запись закреплена."
+            },
+            "incorrect": {
+              "en": "The static map keeps every session reachable, so the heap grows until OutOfMemoryError.",
+              "ru": "Статическая мапа держит каждую сессию достижимой, поэтому куча растёт до OutOfMemoryError."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It grows without bound until OutOfMemoryError",
+                "ru": "Она растёт без предела, пока не случится OutOfMemoryError"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Each session is freed when its request finishes",
+                "ru": "Каждая сессия освобождается по завершении своего запроса"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The handler's local reference is gone, but the static map still references the session.",
+                "ru": "Локальная ссылка обработчика исчезла, но статическая мапа всё ещё ссылается на сессию."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The map drops its oldest entries as it fills up",
+                "ru": "Мапа выбрасывает самые старые записи по мере заполнения"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A plain HashMap has no eviction policy; only your own remove() shrinks it.",
+                "ru": "У обычного HashMap нет политики вытеснения; уменьшить его может только твой remove()."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "static-p1-request-ends-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "An object put into a static HashMap becomes collectable once the method that added it returns.",
+            "ru": "Объект, положенный в статический HashMap, становится пригодным для сборки, как только завершается добавивший его метод."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The local reference dies, but the static map still holds the object.",
+              "ru": "Локальная ссылка умирает, но статическая мапа всё ещё держит объект."
+            },
+            "incorrect": {
+              "en": "No — the static field is a GC root, so the entry stays reachable until you remove it.",
+              "ru": "Нет — статическое поле это GC root, поэтому запись остаётся достижимой, пока ты её не удалишь."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "static-p2-why-pinned",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why does an ever-growing static collection cause a memory leak?",
+            "ru": "Почему постоянно растущая статическая коллекция вызывает утечку памяти?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "A static field is a GC root that lives for the whole JVM run.",
+              "ru": "Статическое поле — GC root, живущий всё время работы JVM."
+            },
+            "incorrect": {
+              "en": "The static field is a GC root, so every entry it holds stays reachable for the JVM's lifetime.",
+              "ru": "Статическое поле — GC root, поэтому каждая его запись остаётся достижимой всё время жизни JVM."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The static field is a GC root for the whole JVM run, so every entry stays reachable",
+                "ru": "Статическое поле — GC root на всё время работы JVM, поэтому каждая запись остаётся достижимой"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The garbage collector skips static fields when it scans",
+                "ru": "Сборщик мусора пропускает статические поля при обходе"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It does not skip them — it starts from them, which is precisely the problem.",
+                "ru": "Он их не пропускает — он с них начинает, в чём и состоит проблема."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Objects referenced by static fields are allocated outside the heap",
+                "ru": "Объекты, на которые ссылаются статические поля, размещаются вне кучи"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "They are ordinary heap objects; what is special is only that a root keeps them reachable.",
+                "ru": "Это обычные объекты в куче; особенность лишь в том, что root держит их достижимыми."
+              }
+            }
+          ]
+        },
+        {
+          "id": "static-p3-sort-lifecycle",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order how one entry of an unbounded static cache turns into a leak.",
+            "ru": "Расставь по порядку, как одна запись неограниченного статического кэша превращается в утечку."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The local reference dies, the root's reference does not.",
+              "ru": "Локальная ссылка умирает, ссылка от root — нет."
+            },
+            "incorrect": {
+              "en": "The order is: create, put into the static map, lose the local reference, survive the GC, repeat until OOM.",
+              "ru": "Порядок: создать, положить в статическую мапу, потерять локальную ссылку, пережить GC, повторять до OOM."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "A request handler creates an object",
+                "ru": "Обработчик запроса создаёт объект"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "It is put into a static Map and never removed",
+                "ru": "Он кладётся в статическую Map и никогда не удаляется"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "The request ends and the local reference disappears",
+                "ru": "Запрос завершается, и локальная ссылка исчезает"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "The GC runs and finds the entry still reachable from the static field",
+                "ru": "GC запускается и находит запись всё ещё достижимой от статического поля"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "This repeats per request until the heap is full and OutOfMemoryError is thrown",
+                "ru": "Так повторяется на каждый запрос, пока куча не заполнится и не будет брошен OutOfMemoryError"
+              }
+            }
+          ]
+        },
+        {
+          "id": "static-p4-fill-root",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill in the two missing words.",
+            "ru": "Впиши два пропущенных слова."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Root plus reference equals reachable — for as long as the JVM runs.",
+              "ru": "Root плюс ссылка равно достижим — на всё время работы JVM."
+            },
+            "incorrect": {
+              "en": "A static field is a GC root, so everything it holds stays reachable.",
+              "ru": "Статическое поле — это GC root, поэтому всё, что оно держит, остаётся достижимым."
+            }
+          },
+          "text": {
+            "en": "A static field is a GC ___, so every entry of a static collection stays ___.",
+            "ru": "Статическое поле — это GC ___, поэтому каждая запись статической коллекции остаётся ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "root"
+              ],
+              "ru": [
+                "root"
+              ]
+            },
+            {
+              "en": [
+                "reachable"
+              ],
+              "ru": [
+                "достижимой",
+                "достижима",
+                "reachable"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "listeners",
+      "title": {
+        "en": "Forgotten listeners and callbacks",
+        "ru": "Забытые listener и callback"
+      },
+      "summary": {
+        "en": "A listener that never unsubscribes from a long-lived publisher keeps itself and everything it references alive.",
+        "ru": "Listener, который не отписался от долгоживущего publisher, держит живым себя и всё, на что ссылается."
+      },
+      "discovery": [
+        {
+          "id": "listeners-d1-dialog-closed",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The dialog is closed and every other reference to it is dropped. Can the GC free it?",
+            "ru": "Диалог закрыт, и все остальные ссылки на него сброшены. Может ли GC его освободить?"
+          },
+          "code": "class Dialog {\n    private final byte[] preview = new byte[20_000_000];\n\n    Dialog(Button button) {\n        button.addListener(this::onClick);   // the button lives as long as the app\n    }\n\n    void onClick(Event e) { /* ... */ }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "No. A **publisher** (here the long-lived `Button`) keeps a list of its **subscribers**. `this::onClick` is a bound method reference, so the list now holds a reference to the `Dialog` itself.\n\n```mermaid\nflowchart LR\n  R[\"GC root\"] --> B[\"Button (lives for the whole app)\"]\n  B --> L[\"listener list\"]\n  L --> D[\"Dialog\"]\n  D --> P[\"its 20 MB preview\"]\n```\n\nThe path from a GC root is unbroken, so the dialog — and everything it references, including the 20 MB array — stays reachable. Closing the dialog changes nothing: closing is your application's notion, not the JVM's.\n\nThe rule: **whoever subscribes must unsubscribe.** Call `removeListener` when the subscriber's work is done, and the last path from the root disappears with it. The leak is worse than it looks, because a listener usually drags a whole object graph behind it.",
+            "ru": "Нет. **Publisher** (здесь долгоживущая `Button`) хранит список своих **подписчиков**. `this::onClick` — это связанная ссылка на метод, поэтому список теперь держит ссылку на сам `Dialog`.\n\n```mermaid\nflowchart LR\n  R[\"GC root\"] --> B[\"Button (живёт всё время работы приложения)\"]\n  B --> L[\"список слушателей\"]\n  L --> D[\"Dialog\"]\n  D --> P[\"его preview на 20 МБ\"]\n```\n\nПуть от GC root не прерван, поэтому диалог — и всё, на что он ссылается, включая массив на 20 МБ, — остаётся достижимым. Закрытие диалога ничего не меняет: «закрыт» — это понятие твоего приложения, а не JVM.\n\nПравило: **кто подписался, тот и отписывается.** Вызови `removeListener`, когда работа подписчика закончена, и последний путь от root исчезнет вместе с ним. Утечка тут хуже, чем кажется, потому что listener обычно тянет за собой целый граф объектов."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The button's listener list is still a path from a GC root to the dialog.",
+              "ru": "Список слушателей кнопки — всё ещё путь от GC root к диалогу."
+            },
+            "incorrect": {
+              "en": "It cannot — the publisher's subscriber list still references the dialog.",
+              "ru": "Не может — список подписчиков publisher всё ещё ссылается на диалог."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "No — the button's listener list still references it",
+                "ru": "Нет — список слушателей кнопки всё ещё на него ссылается"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Yes — closing a dialog removes its listeners",
+                "ru": "Да — закрытие диалога удаляет его слушателей"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Closing is an application-level idea; nothing unsubscribes you automatically.",
+                "ru": "«Закрыт» — понятие уровня приложения; автоматически тебя никто не отписывает."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Yes — a method reference does not keep its object alive",
+                "ru": "Да — ссылка на метод не удерживает свой объект живым"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A bound method reference holds the receiver, so it keeps the dialog reachable.",
+                "ru": "Связанная ссылка на метод держит получателя, поэтому диалог остаётся достижимым."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "listeners-p1-auto-unsub-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A listener is unsubscribed automatically once the rest of the application drops its references to it.",
+            "ru": "Listener отписывается автоматически, как только остальное приложение сбрасывает ссылки на него."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The publisher's list is itself a reference — you must unregister explicitly.",
+              "ru": "Список publisher — это тоже ссылка; отписываться нужно явно."
+            },
+            "incorrect": {
+              "en": "No — the publisher still references the listener, which is exactly why it leaks.",
+              "ru": "Нет — publisher всё ещё ссылается на listener, из-за чего и возникает утечка."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "listeners-p2-fix",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What fixes a forgotten-listener memory leak?",
+            "ru": "Что чинит утечку памяти из-за забытого listener?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Unregistering removes the last path from the GC root.",
+              "ru": "Отписка убирает последний путь от GC root."
+            },
+            "incorrect": {
+              "en": "Unregister the listener from the publisher when the subscriber's work is done.",
+              "ru": "Отпиши listener от publisher, когда работа подписчика закончена."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Unregistering the listener from the publisher when the work is done",
+                "ru": "Отписать listener от publisher, когда работа закончена"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Setting the subscriber's own fields to null",
+                "ru": "Обнулить собственные поля подписчика"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The problem is the publisher's reference to the subscriber, not the subscriber's fields.",
+                "ru": "Проблема в ссылке publisher на подписчика, а не в полях подписчика."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Storing the listener in a static field so it is registered only once",
+                "ru": "Сохранить listener в статическом поле, чтобы регистрировать его один раз"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A static field is a GC root — that makes the lifetime longer, not shorter.",
+                "ru": "Статическое поле — это GC root, так время жизни станет длиннее, а не короче."
+              }
+            }
+          ]
+        },
+        {
+          "id": "listeners-p3-sort-leak",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order how a forgotten listener turns into a memory leak.",
+            "ru": "Расставь по порядку, как забытый listener превращается в утечку памяти."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The subscriber list outlives the subscriber's usefulness.",
+              "ru": "Список подписчиков переживает полезность самого подписчика."
+            },
+            "incorrect": {
+              "en": "Subscribe, finish the work, drop your own reference — but the publisher's list still holds the object.",
+              "ru": "Подписался, закончил работу, сбросил свою ссылку — но список publisher всё ещё держит объект."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "A short-lived object subscribes to a long-lived publisher",
+                "ru": "Короткоживущий объект подписывается на долгоживущий publisher"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Its work ends and the application drops its own reference",
+                "ru": "Его работа заканчивается, и приложение сбрасывает свою ссылку"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "The publisher's subscriber list still references the object",
+                "ru": "Список подписчиков publisher всё ещё ссылается на объект"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "The object and everything it references stay reachable from a GC root",
+                "ru": "Объект и всё, на что он ссылается, остаются достижимыми от GC root"
+              }
+            }
+          ]
+        },
+        {
+          "id": "listeners-p4-fill-unregister",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing action.",
+            "ru": "Впиши пропущенное действие."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Unregistering is what breaks the chain from the publisher to the subscriber.",
+              "ru": "Отписка — это то, что рвёт цепочку от publisher к подписчику."
+            },
+            "incorrect": {
+              "en": "You must unregister (unsubscribe) the listener from the publisher.",
+              "ru": "Нужно отписать listener от publisher."
+            }
+          },
+          "text": {
+            "en": "To stop a listener leak you must ___ it from the publisher when its work is done.",
+            "ru": "Чтобы остановить утечку через listener, нужно ___ его от publisher, когда его работа закончена."
+          },
+          "blanks": [
+            {
+              "en": [
+                "unregister",
+                "unsubscribe",
+                "remove"
+              ],
+              "ru": [
+                "отписать",
+                "отписаться",
+                "unregister",
+                "unsubscribe"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threadlocal-pools",
+      "title": {
+        "en": "ThreadLocal in a thread pool",
+        "ru": "ThreadLocal в пуле потоков"
+      },
+      "summary": {
+        "en": "A value left in a ThreadLocal is pinned by the pooled thread that outlives the task until remove() is called.",
+        "ru": "Значение, оставленное в ThreadLocal, закреплено потоком из пула, который переживает задачу, пока не вызван remove()."
+      },
+      "discovery": [
+        {
+          "id": "tl-d1-predict-buffers",
+          "type": "predict_output",
+          "prompt": {
+            "en": "handle() runs on a pool of 50 threads and is called thousands of times. Predict what happens to the buffers.",
+            "ru": "handle() выполняется на пуле из 50 потоков и вызывается тысячи раз. Предскажи, что произойдёт с буферами."
+          },
+          "code": "static final ThreadLocal<byte[]> BUFFER = new ThreadLocal<>();\n\nvoid handle(Request r) {\n    BUFFER.set(new byte[10_000_000]);\n    process(r);\n}   // task ends; remove() is never called",
+          "codeLang": "java",
+          "reveal": {
+            "en": "A `ThreadLocal` stores one value **per thread**, and the value is held by the `Thread` object itself — not by your task. A live thread's stack is a GC root, so whatever a live thread holds stays reachable.\n\nIn a pool that is exactly the problem: pool threads are **reused** for thousands of tasks and live as long as the pool does. A value left behind when a task ends is pinned to that thread until something overwrites it or you call `remove()`.\n\n```mermaid\nflowchart LR\n  T[\"pool thread (lives for hours)\"] --> M[\"its ThreadLocal values\"]\n  M --> V[\"buffer left by an earlier task\"]\n  V --> G[\"everything that buffer references\"]\n```\n\nHere at most one buffer per thread survives (a later `set` replaces the previous one), so about 50 x 10 MB of dead data rides along. The fix is to clear it in a `finally` block, so it happens even when the task throws:\n\n```java\ntry {\n    BUFFER.set(new byte[10_000_000]);\n    process(r);\n} finally {\n    BUFFER.remove();\n}\n```",
+            "ru": "`ThreadLocal` хранит одно значение **на поток**, и держит это значение сам объект `Thread`, а не твоя задача. Стек живого потока — это GC root, поэтому всё, что держит живой поток, остаётся достижимым.\n\nВ пуле это и есть проблема: потоки пула **переиспользуются** для тысяч задач и живут столько же, сколько пул. Значение, оставленное при завершении задачи, закреплено за этим потоком, пока что-нибудь его не перезапишет или ты не вызовешь `remove()`.\n\n```mermaid\nflowchart LR\n  T[\"поток пула (живёт часами)\"] --> M[\"его значения ThreadLocal\"]\n  M --> V[\"буфер, оставленный прошлой задачей\"]\n  V --> G[\"всё, на что ссылается буфер\"]\n```\n\nЗдесь выживает максимум один буфер на поток (следующий `set` заменяет предыдущий), то есть около 50 x 10 МБ мёртвых данных катаются вместе с пулом. Лечение — очищать значение в блоке `finally`, чтобы это случалось даже при исключении:\n\n```java\ntry {\n    BUFFER.set(new byte[10_000_000]);\n    process(r);\n} finally {\n    BUFFER.remove();\n}\n```"
+          },
+          "feedback": {
+            "correct": {
+              "en": "One leftover value per pooled thread, kept alive by the thread itself.",
+              "ru": "По одному забытому значению на поток пула, и держит их сам поток."
+            },
+            "incorrect": {
+              "en": "Pool threads outlive the tasks, so each keeps its last buffer until remove() or the next set().",
+              "ru": "Потоки пула переживают задачи, поэтому каждый держит последний буфер до remove() или следующего set()."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Up to 50 buffers stay in memory — one per pooled thread — long after the tasks end",
+                "ru": "В памяти остаётся до 50 буферов — по одному на поток пула — задолго после завершения задач"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Each buffer is freed as soon as its task finishes",
+                "ru": "Каждый буфер освобождается сразу по завершении своей задачи"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The task finishes, but the pooled thread lives on and still holds the value.",
+                "ru": "Задача завершается, но поток пула продолжает жить и всё ещё держит значение."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "One buffer per task stays in memory, so thousands accumulate",
+                "ru": "В памяти остаётся по буферу на задачу, поэтому их копятся тысячи"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A thread holds one value per ThreadLocal; the next task on that thread overwrites the previous buffer.",
+                "ru": "Поток держит одно значение на ThreadLocal; следующая задача на этом потоке перезапишет прошлый буфер."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "tl-p1-why-dangerous",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why is ThreadLocal dangerous specifically in a thread pool?",
+            "ru": "Почему ThreadLocal опасен именно в пуле потоков?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Reused, long-lived threads keep whatever the previous task left behind.",
+              "ru": "Переиспользуемые долгоживущие потоки держат всё, что оставила прошлая задача."
+            },
+            "incorrect": {
+              "en": "Pool threads are reused and long-lived, so a value left behind outlives the task that set it.",
+              "ru": "Потоки пула переиспользуются и живут долго, поэтому оставленное значение переживает задачу, которая его положила."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Pool threads are reused and long-lived, so a leftover value stays reachable after the task ends",
+                "ru": "Потоки пула переиспользуются и живут долго, поэтому забытое значение остаётся достижимым после задачи"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The pool creates a new thread per task, so the values pile up",
+                "ru": "Пул создаёт новый поток на каждую задачу, поэтому значения накапливаются"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A pool reuses its threads — that reuse is exactly why the value survives the task.",
+                "ru": "Пул переиспользует потоки — именно из-за переиспользования значение переживает задачу."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "ThreadLocal values are stored outside the heap and cannot be collected",
+                "ru": "Значения ThreadLocal хранятся вне кучи и не могут быть собраны"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "They are ordinary heap objects; the live thread is simply a GC root that keeps them reachable.",
+                "ru": "Это обычные объекты в куче; живой поток — просто GC root, который держит их достижимыми."
+              }
+            }
+          ]
+        },
+        {
+          "id": "tl-p2-auto-clear-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A ThreadLocal value is cleared automatically when the task finishes and its thread returns to the pool.",
+            "ru": "Значение ThreadLocal очищается автоматически, когда задача завершается и её поток возвращается в пул."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Nothing clears it for you — call remove() yourself.",
+              "ru": "За тебя его никто не очистит — вызывай remove() сам."
+            },
+            "incorrect": {
+              "en": "No — the value stays on the thread until remove() is called or a later set() replaces it.",
+              "ru": "Нет — значение остаётся на потоке, пока не вызван remove() или его не заменит следующий set()."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "tl-p3-word-bank-fix",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the fix for a ThreadLocal leak on a pooled thread.",
+            "ru": "Собери решение утечки ThreadLocal на потоке из пула."
+          },
+          "feedback": {
+            "correct": {
+              "en": "finally guarantees the cleanup even when the task throws.",
+              "ru": "finally гарантирует очистку даже при исключении в задаче."
+            },
+            "incorrect": {
+              "en": "Call remove() in a finally block, so cleanup happens on every path out of the task.",
+              "ru": "Вызывай remove() в блоке finally, чтобы очистка происходила на любом пути выхода из задачи."
+            }
+          },
+          "tokens": {
+            "en": [
+              "call",
+              "remove()",
+              "in",
+              "a",
+              "finally",
+              "block"
+            ],
+            "ru": [
+              "вызвать",
+              "remove()",
+              "в",
+              "блоке",
+              "finally"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "set(null)",
+              "catch"
+            ],
+            "ru": [
+              "set(null)",
+              "catch"
+            ]
+          }
+        },
+        {
+          "id": "tl-p4-fill-remove-finally",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill in the method and the block.",
+            "ru": "Впиши метод и блок."
+          },
+          "feedback": {
+            "correct": {
+              "en": "remove() in finally runs even if the task throws.",
+              "ru": "remove() в finally выполнится, даже если задача бросит исключение."
+            },
+            "incorrect": {
+              "en": "Clear a ThreadLocal with remove(), placed in a finally block.",
+              "ru": "Очищай ThreadLocal вызовом remove() в блоке finally."
+            }
+          },
+          "text": {
+            "en": "Clear a ThreadLocal by calling ___() inside a ___ block.",
+            "ru": "Очищай ThreadLocal вызовом ___() внутри блока ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "remove"
+              ],
+              "ru": [
+                "remove"
+              ]
+            },
+            {
+              "en": [
+                "finally"
+              ],
+              "ru": [
+                "finally"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "unclosed-resources",
+      "title": {
+        "en": "Unclosed resources",
+        "ru": "Незакрытые ресурсы"
+      },
+      "summary": {
+        "en": "Streams, connections and Statements hold OS handles and buffers until close(); try-with-resources guarantees it.",
+        "ru": "Потоки, соединения и Statement держат OS-handle и буферы до close(); try-with-resources это гарантирует."
+      },
+      "discovery": [
+        {
+          "id": "res-d1-spot-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This method looks tidy and does call close(). What is the defect?",
+            "ru": "Метод выглядит аккуратно и даже вызывает close(). В чём дефект?"
+          },
+          "code": "void load(Path p) throws IOException {\n    InputStream in = Files.newInputStream(p);\n    byte[] data = in.readAllBytes();\n    process(data);\n    in.close();\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "The `close()` call is on the happy path only. If `readAllBytes()` or `process()` throws, the method exits and `close()` never runs.\n\nWhy that matters: a stream, a `Connection` or a `Statement` is more than a Java object. It holds an **OS handle** (a file descriptor, a socket) plus internal buffers. Those are not released when the object is collected — the GC reclaims memory, it does not close operating-system resources. Under load, an endpoint that throws once in a while accumulates open handles and buffers until the process runs out of them.\n\n`try-with-resources` closes anything declared in its header on every exit path, including exceptions:\n\n```java\ntry (InputStream in = Files.newInputStream(p)) {\n    process(in.readAllBytes());\n}\n```\n\nRule of thumb: if a class implements `AutoCloseable`, it belongs in a try-with-resources header, never in a bare local variable.",
+            "ru": "Вызов `close()` стоит только на «счастливом пути». Если `readAllBytes()` или `process()` бросит исключение, метод завершится, и `close()` не выполнится.\n\nПочему это важно: поток, `Connection` или `Statement` — это больше, чем Java-объект. Он держит **OS-handle** (файловый дескриптор, сокет) и внутренние буферы. Они не освобождаются при сборке объекта — GC возвращает память, но не закрывает ресурсы операционной системы. Под нагрузкой endpoint, который иногда бросает исключение, накапливает открытые handle и буферы, пока они не кончатся.\n\n`try-with-resources` закрывает всё, объявленное в его заголовке, на любом пути выхода, включая исключения:\n\n```java\ntry (InputStream in = Files.newInputStream(p)) {\n    process(in.readAllBytes());\n}\n```\n\nПравило: если класс реализует `AutoCloseable`, его место в заголовке try-with-resources, а не в простой локальной переменной."
+          },
+          "feedback": {
+            "correct": {
+              "en": "close() is skipped on the exception path.",
+              "ru": "На пути с исключением close() пропускается."
+            },
+            "incorrect": {
+              "en": "If anything throws before close(), the handle and buffers are never released — use try-with-resources.",
+              "ru": "Если что-то бросит исключение до close(), handle и буферы не освободятся — используй try-with-resources."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "If readAllBytes() or process() throws, close() is skipped and the handle and buffers leak",
+                "ru": "Если readAllBytes() или process() бросит исключение, close() пропускается, и handle с буферами утекают"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing is wrong — the GC closes the stream once it becomes unreachable",
+                "ru": "Всё в порядке — GC закроет поток, когда тот станет недостижимым"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The GC reclaims memory; it does not release OS handles for you.",
+                "ru": "GC возвращает память; освобождать OS-handle за тебя он не будет."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "readAllBytes() loads the whole file into memory",
+                "ru": "readAllBytes() загружает весь файл в память"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That may be wasteful, but the array is freed once unreferenced — it is not what leaks here.",
+                "ru": "Это может быть расточительно, но массив освободится, когда на него не будет ссылок, — утечка не в нём."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "res-p1-which-construct",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which construct guarantees a stream or connection is closed even when an exception is thrown?",
+            "ru": "Какая конструкция гарантирует закрытие потока или соединения даже при исключении?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "try-with-resources closes on every exit path.",
+              "ru": "try-with-resources закрывает на любом пути выхода."
+            },
+            "incorrect": {
+              "en": "It is try-with-resources: the resource is closed on normal and exceptional exits alike.",
+              "ru": "Это try-with-resources: ресурс закрывается и при нормальном, и при исключительном выходе."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "try-with-resources",
+                "ru": "try-with-resources"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Declaring the resource final",
+                "ru": "Объявление ресурса final"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "final fixes the reference, not the resource's lifetime — nothing gets closed.",
+                "ru": "final фиксирует ссылку, а не время жизни ресурса — ничего не закрывается."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Letting the garbage collector reclaim the object",
+                "ru": "Дать сборщику мусора освободить объект"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Collection frees memory only; OS handles stay open.",
+                "ru": "Сборка освобождает только память; OS-handle остаются открытыми."
+              }
+            }
+          ]
+        },
+        {
+          "id": "res-p2-gc-closes-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "The garbage collector closes files and sockets when their Java objects become unreachable.",
+            "ru": "Сборщик мусора закрывает файлы и сокеты, когда их Java-объекты становятся недостижимыми."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The GC manages heap memory, not operating-system resources.",
+              "ru": "GC управляет памятью кучи, а не ресурсами операционной системы."
+            },
+            "incorrect": {
+              "en": "No — you must close() them, ideally through try-with-resources.",
+              "ru": "Нет — их нужно закрывать через close(), лучше всего через try-with-resources."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "res-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble what unclosed streams and connections keep holding.",
+            "ru": "Собери, что продолжают держать незакрытые потоки и соединения."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Handles and buffers accumulate until you close them.",
+              "ru": "Handle и буферы накапливаются, пока их не закроешь."
+            },
+            "incorrect": {
+              "en": "Unclosed resources hold OS handles and buffers until close() is called.",
+              "ru": "Незакрытые ресурсы держат OS-handle и буферы, пока не вызван close()."
+            }
+          },
+          "tokens": {
+            "en": [
+              "unclosed",
+              "resources",
+              "hold",
+              "OS",
+              "handles",
+              "and",
+              "buffers"
+            ],
+            "ru": [
+              "незакрытые",
+              "ресурсы",
+              "держат",
+              "OS-handle",
+              "и",
+              "буферы"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "nothing",
+              "sorted"
+            ],
+            "ru": [
+              "ничего",
+              "отсортированные"
+            ]
+          }
+        },
+        {
+          "id": "res-p4-fill-twr",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the construct that closes resources automatically.",
+            "ru": "Впиши конструкцию, которая закрывает ресурсы автоматически."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Declaring the resource in the try header closes it on every path out.",
+              "ru": "Объявление ресурса в заголовке try закрывает его на любом пути выхода."
+            },
+            "incorrect": {
+              "en": "The answer is try-with-resources.",
+              "ru": "Ответ — try-with-resources."
+            }
+          },
+          "text": {
+            "en": "Open streams, connections and Statements inside ___ so they are always closed.",
+            "ru": "Открывай потоки, соединения и Statement внутри ___, чтобы они всегда закрывались."
+          },
+          "blanks": [
+            {
+              "en": [
+                "try-with-resources",
+                "try with resources"
+              ],
+              "ru": [
+                "try-with-resources",
+                "try with resources"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "capturing-lambdas",
+      "title": {
+        "en": "Inner classes and capturing lambdas",
+        "ru": "Внутренние классы и захватывающие лямбды"
+      },
+      "summary": {
+        "en": "A non-static inner class or a lambda that uses the enclosing instance holds an implicit reference to it.",
+        "ru": "Нестатический внутренний класс или лямбда, использующая объемлющий экземпляр, держит на него неявную ссылку."
+      },
+      "discovery": [
+        {
+          "id": "lambda-d1-what-stays",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The scheduler keeps the returned Runnable forever. What stays in memory?",
+            "ru": "Планировщик держит возвращённый Runnable вечно. Что остаётся в памяти?"
+          },
+          "code": "class Report {\n    private final byte[] data = new byte[50_000_000];\n\n    Runnable task() {\n        return () -> System.out.println(data.length);   // uses an instance field\n    }\n}\n\nscheduler.scheduleAtFixedRate(new Report().task(), 0, 1, TimeUnit.HOURS);",
+          "codeLang": "java",
+          "reveal": {
+            "en": "The lambda reads `data`, an **instance** field. To do that it needs the `Report` it came from, so the compiler gives it an implicit reference to that enclosing instance. The same is true of a non-static **inner class**: every instance of it silently points at its outer object.\n\n```mermaid\nflowchart LR\n  S[\"scheduler (long-lived)\"] --> L[\"lambda\"]\n  L --> R[\"enclosing Report\"]\n  R --> D[\"its 50 MB array\"]\n```\n\nSo a tiny object keeps a large one alive: as long as the scheduler holds the lambda, the whole `Report` — and everything `Report` references — is reachable.\n\nTwo ways out, both about removing that hidden edge: a **static** nested class has no enclosing instance at all, and a lambda that captures only what it truly needs (a copied `int length`, say) does not need the outer object either.",
+            "ru": "Лямбда читает `data` — **поле экземпляра**. Чтобы это сделать, ей нужен тот `Report`, из которого она создана, поэтому компилятор даёт ей неявную ссылку на объемлющий экземпляр. То же верно для нестатического **внутреннего класса**: каждый его экземпляр молча указывает на внешний объект.\n\n```mermaid\nflowchart LR\n  S[\"планировщик (живёт долго)\"] --> L[\"лямбда\"]\n  L --> R[\"объемлющий Report\"]\n  R --> D[\"его массив на 50 МБ\"]\n```\n\nТак крошечный объект держит живым большой: пока планировщик держит лямбду, весь `Report` — и всё, на что он ссылается, — достижим.\n\nДва выхода, и оба про удаление этой скрытой связи: у **static** вложенного класса объемлющего экземпляра нет вовсе, а лямбде, которая захватывает только действительно нужное (например, скопированное `int length`), внешний объект тоже не нужен."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The lambda drags its enclosing instance along.",
+              "ru": "Лямбда тянет за собой объемлющий экземпляр."
+            },
+            "incorrect": {
+              "en": "The lambda uses an instance field, so it holds the whole Report — array included.",
+              "ru": "Лямбда использует поле экземпляра, поэтому держит весь Report — вместе с массивом."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The whole Report instance, including its 50 MB array",
+                "ru": "Весь экземпляр Report, включая массив на 50 МБ"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Only the small Runnable object",
+                "ru": "Только маленький объект Runnable"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The lambda reads an instance field, so it must reference the Report that created it.",
+                "ru": "Лямбда читает поле экземпляра, поэтому обязана ссылаться на создавший её Report."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — Report becomes unreachable as soon as task() returns",
+                "ru": "Ничего — Report становится недостижимым сразу после выхода из task()"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The returned lambda still references its enclosing Report, so a path from a root remains.",
+                "ru": "Возвращённая лямбда всё ещё ссылается на объемлющий Report, поэтому путь от root сохраняется."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "lambda-p1-inner-implicit-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A non-static inner class instance holds an implicit reference to its enclosing object.",
+            "ru": "Экземпляр нестатического внутреннего класса держит неявную ссылку на объемлющий объект."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That hidden edge is what makes a small inner object retain a large outer one.",
+              "ru": "Из-за этой скрытой связи маленький внутренний объект удерживает большой внешний."
+            },
+            "incorrect": {
+              "en": "It does — only a static nested class has no enclosing instance.",
+              "ru": "Держит — объемлющего экземпляра нет только у static вложенного класса."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "lambda-p2-what-retained",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A long-lived executor holds a lambda that reads an instance field of the object which created it. What is retained?",
+            "ru": "Долгоживущий executor держит лямбду, читающую поле экземпляра создавшего её объекта. Что удерживается?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The enclosing object and its whole object graph.",
+              "ru": "Объемлющий объект и весь его граф объектов."
+            },
+            "incorrect": {
+              "en": "The lambda keeps the enclosing instance, so everything that instance references is retained too.",
+              "ru": "Лямбда держит объемлющий экземпляр, поэтому удерживается и всё, на что он ссылается."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The enclosing object and everything it references",
+                "ru": "Объемлющий объект и всё, на что он ссылается"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Only a copy of the field's value",
+                "ru": "Только копия значения поля"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Reading an instance field requires the instance itself, not a copy of the value.",
+                "ru": "Чтение поля экземпляра требует самого экземпляра, а не копии значения."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — lambdas are stateless",
+                "ru": "Ничего — лямбды не хранят состояние"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A capturing lambda does hold state: whatever it captured, including the outer instance.",
+                "ru": "Захватывающая лямбда хранит состояние: всё, что захватила, включая внешний экземпляр."
+              }
+            }
+          ]
+        },
+        {
+          "id": "lambda-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble what a capturing lambda does to the object that created it.",
+            "ru": "Собери, что захватывающая лямбда делает с объектом, который её создал."
+          },
+          "feedback": {
+            "correct": {
+              "en": "As long as the lambda lives, its enclosing object cannot be freed.",
+              "ru": "Пока жива лямбда, её объемлющий объект не может быть освобождён."
+            },
+            "incorrect": {
+              "en": "A capturing lambda keeps its enclosing object reachable for as long as the lambda lives.",
+              "ru": "Захватывающая лямбда держит объемлющий объект достижимым всё время своей жизни."
+            }
+          },
+          "tokens": {
+            "en": [
+              "a",
+              "capturing",
+              "lambda",
+              "keeps",
+              "its",
+              "enclosing",
+              "object",
+              "reachable"
+            ],
+            "ru": [
+              "захватывающая",
+              "лямбда",
+              "держит",
+              "объемлющий",
+              "объект",
+              "достижимым"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "unreachable",
+              "copies"
+            ],
+            "ru": [
+              "недостижимым",
+              "копирует"
+            ]
+          }
+        },
+        {
+          "id": "lambda-p4-fill-static",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing keyword.",
+            "ru": "Впиши пропущенное ключевое слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "No enclosing instance means no hidden reference to leak through.",
+              "ru": "Нет объемлющего экземпляра — нет и скрытой ссылки, через которую течёт память."
+            },
+            "incorrect": {
+              "en": "It is static: a static nested class has no reference to an enclosing instance.",
+              "ru": "Это static: у static вложенного класса нет ссылки на объемлющий экземпляр."
+            }
+          },
+          "text": {
+            "en": "A ___ nested class holds no reference to an enclosing instance.",
+            "ru": "___ вложенный класс не держит ссылку на объемлющий экземпляр."
+          },
+          "blanks": [
+            {
+              "en": [
+                "static"
+              ],
+              "ru": [
+                "static"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mutated-keys",
+      "title": {
+        "en": "Keys mutated after insertion",
+        "ru": "Ключи, изменённые после вставки"
+      },
+      "summary": {
+        "en": "If a key's hashCode changes after it goes into a HashSet/HashMap, the entry can no longer be found or removed.",
+        "ru": "Если hashCode ключа меняется после попадания в HashSet/HashMap, запись уже нельзя ни найти, ни удалить."
+      },
+      "discovery": [
+        {
+          "id": "keys-d1-predict-contains",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Predict what this prints.",
+            "ru": "Предскажи, что напечатает этот код."
+          },
+          "code": "Set<List<String>> set = new HashSet<>();\nList<String> key = new ArrayList<>(List.of(\"a\"));\nset.add(key);\nkey.add(\"b\");                 // the key is mutated after insertion\nSystem.out.println(set.contains(key) + \" \" + set.size());",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Prints `false 1`. A `HashSet`/`HashMap` files an entry by the key's `hashCode()` **at the moment of insertion**. Mutating a field that `hashCode()` is computed from — here adding an element to the list — changes the hash, so every later lookup searches in the wrong place.\n\n```mermaid\nflowchart LR\n  A[\"add(key): hash computed from the current fields\"] --> S[\"entry filed under that hash\"]\n  M[\"key.add(b): the hash changes\"] --> L[\"contains/remove use the NEW hash\"]\n  L --> X[\"entry is never found\"]\n```\n\nThe entry is not deleted — it is stranded. `size()` still reports 1, `contains()` says `false`, and `remove(key)` cannot delete it either. So the object stays reachable from the collection (the GC may never free it) while being invisible to your code: a leak you cannot even clean up through the normal API.\n\nRule: never mutate the fields that `hashCode()` and `equals()` depend on while the object is used as a key.",
+            "ru": "Напечатает `false 1`. `HashSet`/`HashMap` раскладывает запись по `hashCode()` ключа **в момент вставки**. Изменение поля, от которого зависит `hashCode()`, — здесь добавление элемента в список — меняет хэш, поэтому любой последующий поиск ищет не там.\n\n```mermaid\nflowchart LR\n  A[\"add(key): хэш посчитан по текущим полям\"] --> S[\"запись разложена по этому хэшу\"]\n  M[\"key.add(b): хэш изменился\"] --> L[\"contains/remove используют НОВЫЙ хэш\"]\n  L --> X[\"запись не находится\"]\n```\n\nЗапись не удалена — она застряла. `size()` по-прежнему показывает 1, `contains()` отвечает `false`, и `remove(key)` тоже не может её удалить. То есть объект остаётся достижимым из коллекции (GC может никогда его не освободить), но невидим для твоего кода: утечка, которую даже нельзя убрать обычным API.\n\nПравило: никогда не меняй поля, от которых зависят `hashCode()` и `equals()`, пока объект используется как ключ."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The lookup uses the new hash, so the stored entry is never found.",
+              "ru": "Поиск использует новый хэш, поэтому сохранённая запись не находится."
+            },
+            "incorrect": {
+              "en": "The mutation changed the key's hashCode: contains() returns false, yet the entry is still in the set.",
+              "ru": "Мутация изменила hashCode ключа: contains() вернёт false, но запись всё ещё в множестве."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "false 1",
+                "ru": "false 1"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "true 1",
+                "ru": "true 1"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "contains() computes the key's new hashCode and looks where the entry was never filed.",
+                "ru": "contains() считает новый hashCode ключа и ищет там, куда запись никогда не клали."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "false 0",
+                "ru": "false 0"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing was removed — the element is still in the set, you simply cannot find it.",
+                "ru": "Ничего не удалялось — элемент всё ещё в множестве, просто его не найти."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "keys-p1-remove-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "After mutating a key that is already stored in a HashMap, you can still delete its entry with remove(key).",
+            "ru": "После изменения ключа, уже лежащего в HashMap, его запись всё ещё можно удалить через remove(key)."
+          },
+          "feedback": {
+            "correct": {
+              "en": "remove() uses the new hash and looks in the wrong place, just like contains().",
+              "ru": "remove() использует новый хэш и ищет не там, как и contains()."
+            },
+            "incorrect": {
+              "en": "No — remove() cannot find the entry either, which is why it lingers.",
+              "ru": "Нет — remove() тоже не найдёт запись, поэтому она и остаётся."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "keys-p2-why-leak",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why is mutating a key stored in a HashMap a memory leak?",
+            "ru": "Почему изменение ключа, лежащего в HashMap, — это утечка памяти?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Reachable from the map, invisible to your code — the worst combination.",
+              "ru": "Достижима из мапы, невидима для кода — худшее сочетание."
+            },
+            "incorrect": {
+              "en": "The entry stays reachable from the collection but can no longer be found or removed.",
+              "ru": "Запись остаётся достижимой из коллекции, но её больше нельзя ни найти, ни удалить."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The entry stays in the collection but can no longer be found or removed",
+                "ru": "Запись остаётся в коллекции, но её больше нельзя ни найти, ни удалить"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The collection silently deletes the entry",
+                "ru": "Коллекция молча удаляет запись"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing is deleted — that is the problem; the entry lingers and still occupies memory.",
+                "ru": "Ничего не удаляется — в этом и проблема; запись остаётся и занимает память."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The key's memory is freed while the value's is not",
+                "ru": "Память ключа освобождается, а значения — нет"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Both stay reachable from the collection; nothing is freed at all.",
+                "ru": "Оба остаются достижимыми из коллекции; не освобождается ничего."
+              }
+            }
+          ]
+        },
+        {
+          "id": "keys-p3-sort-steps",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order how a mutated key strands its entry in a HashMap.",
+            "ru": "Расставь по порядку, как изменённый ключ «замуровывает» свою запись в HashMap."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Filed under the old hash, searched for under the new one.",
+              "ru": "Разложена по старому хэшу, а ищут по новому."
+            },
+            "incorrect": {
+              "en": "Insert, mutate a hashCode field, look up with the new hash, find nothing, and the entry stays forever.",
+              "ru": "Вставили, изменили поле из hashCode, ищем по новому хэшу, не находим — и запись остаётся навсегда."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "The object is put into the map as a key",
+                "ru": "Объект кладётся в мапу как ключ"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "A field that hashCode() is computed from is mutated",
+                "ru": "Изменяется поле, по которому считается hashCode()"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Lookups now compute a different hash for the same key",
+                "ru": "Теперь поиск считает для того же ключа другой хэш"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "contains() and remove() no longer find the entry",
+                "ru": "contains() и remove() больше не находят запись"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "The entry stays reachable from the map and is never freed",
+                "ru": "Запись остаётся достижимой из мапы и никогда не освобождается"
+              }
+            }
+          ]
+        },
+        {
+          "id": "keys-p4-fill-hashcode",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing method name.",
+            "ru": "Впиши имя пропущенного метода."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The collection filed the entry by the old hash; the new one points elsewhere.",
+              "ru": "Коллекция разложила запись по старому хэшу; новый указывает в другое место."
+            },
+            "incorrect": {
+              "en": "It is hashCode(): changing it after insertion makes the entry impossible to find or remove.",
+              "ru": "Это hashCode(): его изменение после вставки делает запись невозможной для поиска и удаления."
+            }
+          },
+          "text": {
+            "en": "Changing a key's ___() after it is stored in a HashSet or HashMap strands its entry there.",
+            "ru": "Изменение ___() ключа после его помещения в HashSet или HashMap «замуровывает» запись там."
+          },
+          "blanks": [
+            {
+              "en": [
+                "hashCode"
+              ],
+              "ru": [
+                "hashCode"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "unbounded-caches",
+      "title": {
+        "en": "Caches need a policy",
+        "ru": "Кэшу нужна политика"
+      },
+      "summary": {
+        "en": "A cache with no size cap or eviction is a leak; bound it or hold values through SoftReference.",
+        "ru": "Кэш без ограничения размера и вытеснения — это утечка; ограничь его или храни значения через SoftReference."
+      },
+      "discovery": [
+        {
+          "id": "cache-d1-is-it-a-leak",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A cache is only ever added to and nothing is ever evicted. Is that a memory leak?",
+            "ru": "В кэш только добавляют и ничего никогда не вытесняют. Это утечка памяти?"
+          },
+          "reveal": {
+            "en": "Yes. Calling a structure a \"cache\" changes nothing for the GC: while every entry is reachable, every entry is kept. An unbounded cache is a leak with good intentions.\n\nWhat makes it a real cache is a **policy** that bounds it:\n\n- a **size cap** with **LRU eviction** — when the cap is reached, the least recently used entry is dropped;\n- or a **memory-sensitive** cache built on **`SoftReference`** — a special reference type the GC is allowed to clear when memory runs low, unlike a normal (**strong**) reference, which never yields. A cleared entry is simply recomputed on the next miss.\n\n```mermaid\nflowchart TD\n  C[\"a cache\"] --> N[\"no cap and no eviction\"]\n  C --> B[\"size cap with LRU eviction\"]\n  C --> S[\"values held through SoftReference\"]\n  N --> L[\"leak: grows until OutOfMemoryError\"]\n  B --> K[\"bounded: memory stays predictable\"]\n  S --> G[\"the GC may reclaim entries under memory pressure\"]\n```\n\nThe question to ask about any cache in review is simply: *what removes entries from it?* If the answer is \"nothing\", it is a leak.",
+            "ru": "Да. Название «кэш» для GC ничего не меняет: пока каждая запись достижима, каждая запись сохраняется. Неограниченный кэш — это утечка с благими намерениями.\n\nНастоящим кэшем его делает **политика**, которая его ограничивает:\n\n- **ограничение размера** с **вытеснением LRU** — при достижении предела выбрасывается наименее недавно использованная запись;\n- или **чувствительный к памяти** кэш на **`SoftReference`** — это особый тип ссылки, который GC вправе очистить при нехватке памяти, в отличие от обычной (**сильной**) ссылки, которая не уступает никогда. Очищенная запись просто пересчитывается при следующем промахе.\n\n```mermaid\nflowchart TD\n  C[\"кэш\"] --> N[\"нет предела и нет вытеснения\"]\n  C --> B[\"предел размера с вытеснением LRU\"]\n  C --> S[\"значения через SoftReference\"]\n  N --> L[\"утечка: растёт до OutOfMemoryError\"]\n  B --> K[\"ограничен: память предсказуема\"]\n  S --> G[\"GC может освободить записи при нехватке памяти\"]\n```\n\nВопрос к любому кэшу на ревью простой: *что удаляет из него записи?* Если ответ «ничего» — это утечка."
+          },
+          "feedback": {
+            "correct": {
+              "en": "An unbounded cache is a leak with good intentions.",
+              "ru": "Неограниченный кэш — это утечка с благими намерениями."
+            },
+            "incorrect": {
+              "en": "It is — without a size cap or eviction, a cache only grows, and every entry stays reachable.",
+              "ru": "Да — без ограничения размера или вытеснения кэш только растёт, и каждая запись остаётся достижимой."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Yes — without a cap or eviction it is a leak with good intentions",
+                "ru": "Да — без предела и вытеснения это утечка с благими намерениями"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "No — a cache is supposed to hold everything it has seen",
+                "ru": "Нет — кэш и должен хранить всё, что видел"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A cache without a bound is indistinguishable from an ever-growing collection.",
+                "ru": "Кэш без ограничения ничем не отличается от постоянно растущей коллекции."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "No — the GC evicts cache entries when memory runs low",
+                "ru": "Нет — GC вытесняет записи кэша при нехватке памяти"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Only special reference types such as SoftReference let the GC reclaim entries; a normal reference never yields.",
+                "ru": "Дать GC освободить записи могут только особые ссылки вроде SoftReference; обычная ссылка не уступает."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cache-p1-no-policy-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A cache with no size cap and no eviction policy is effectively a memory leak.",
+            "ru": "Кэш без ограничения размера и без политики вытеснения — это фактически утечка памяти."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Nothing removes entries, so nothing ever becomes unreachable.",
+              "ru": "Записи ничто не удаляет, поэтому ничто не становится недостижимым."
+            },
+            "incorrect": {
+              "en": "It is — an unbounded cache only grows, and every entry stays reachable.",
+              "ru": "Да — неограниченный кэш только растёт, и каждая запись остаётся достижимой."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "cache-p2-which-reference",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which reference type lets the garbage collector reclaim cached values when memory runs low?",
+            "ru": "Какой тип ссылки позволяет сборщику мусора освобождать закэшированные значения при нехватке памяти?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "SoftReference is the basis of a memory-sensitive cache.",
+              "ru": "SoftReference — основа чувствительного к памяти кэша."
+            },
+            "incorrect": {
+              "en": "SoftReference — the GC is allowed to clear it under memory pressure.",
+              "ru": "SoftReference — GC вправе очистить её при нехватке памяти."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "SoftReference",
+                "ru": "SoftReference"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A normal (strong) reference",
+                "ru": "Обычная (сильная) ссылка"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A strong reference keeps the object reachable no matter how tight memory gets.",
+                "ru": "Сильная ссылка держит объект достижимым, как бы мало памяти ни оставалось."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A static field",
+                "ru": "Статическое поле"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A static field is a GC root — the exact opposite of reclaimable.",
+                "ru": "Статическое поле — это GC root, полная противоположность освобождаемому."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cache-p3-match-policies",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each caching mechanism to what it does.",
+            "ru": "Соотнеси механизм кэширования с тем, что он делает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A bound or a soft reference is what separates a cache from a leak.",
+              "ru": "Именно ограничение или мягкая ссылка отличают кэш от утечки."
+            },
+            "incorrect": {
+              "en": "LRU drops the least recently used entry, SoftReference may be cleared by the GC, a strong reference never is.",
+              "ru": "LRU выбрасывает наименее недавно использованную запись, SoftReference GC может очистить, сильную — никогда."
+            }
+          },
+          "pairs": [
+            {
+              "id": "lru",
+              "left": {
+                "en": "LRU eviction",
+                "ru": "Вытеснение LRU"
+              },
+              "right": {
+                "en": "Drops the least recently used entry once the size cap is reached",
+                "ru": "Выбрасывает наименее недавно использованную запись при достижении предела размера"
+              }
+            },
+            {
+              "id": "soft",
+              "left": {
+                "en": "SoftReference",
+                "ru": "SoftReference"
+              },
+              "right": {
+                "en": "Lets the GC clear the value when memory runs low",
+                "ru": "Позволяет GC очистить значение при нехватке памяти"
+              }
+            },
+            {
+              "id": "strong",
+              "left": {
+                "en": "Normal (strong) reference",
+                "ru": "Обычная (сильная) ссылка"
+              },
+              "right": {
+                "en": "Keeps the value alive as long as it is reachable",
+                "ru": "Держит значение живым, пока оно достижимо"
+              }
+            },
+            {
+              "id": "none",
+              "left": {
+                "en": "No cap and no eviction",
+                "ru": "Ни предела, ни вытеснения"
+              },
+              "right": {
+                "en": "A leak: the cache only ever grows",
+                "ru": "Утечка: кэш только растёт"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cache-p4-fill-lru-soft",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill in the two ways to bound a cache.",
+            "ru": "Впиши два способа ограничить кэш."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Either you decide what to drop, or you let the GC decide under pressure.",
+              "ru": "Либо ты решаешь, что выбросить, либо позволяешь решать GC при нехватке памяти."
+            },
+            "incorrect": {
+              "en": "Use a size cap with LRU eviction, or hold values through a SoftReference.",
+              "ru": "Используй ограничение размера с вытеснением LRU или храни значения через SoftReference."
+            }
+          },
+          "text": {
+            "en": "Bound a cache with a size cap and ___ eviction, or hold values through a ___ so the GC can reclaim them.",
+            "ru": "Ограничь кэш пределом размера и вытеснением ___ либо храни значения через ___, чтобы GC мог их освободить."
+          },
+          "blanks": [
+            {
+              "en": [
+                "LRU"
+              ],
+              "ru": [
+                "LRU"
+              ]
+            },
+            {
+              "en": [
+                "SoftReference",
+                "soft reference"
+              ],
+              "ru": [
+                "SoftReference",
+                "мягкую ссылку"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gc-cannot-fix-it",
+      "title": {
+        "en": "What cannot fix a leak",
+        "ru": "Что не чинит утечку"
+      },
+      "summary": {
+        "en": "System.gc(), finalize() and GC tuning cannot free a reachable object — only releasing the reference can.",
+        "ru": "System.gc(), finalize() и настройка GC не освободят достижимый объект — помогает только отпущенная ссылка."
+      },
+      "discovery": [
+        {
+          "id": "nofix-d1-system-gc",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The session was put into a static cache and never removed. Does the System.gc() call free it?",
+            "ru": "Сессию положили в статический кэш и никогда не удаляли. Освободит ли её вызов System.gc()?"
+          },
+          "code": "Registry.CACHE.put(id, session);   // static cache, entry never removed\nSystem.gc();",
+          "codeLang": "java",
+          "reveal": {
+            "en": "No — and this is the heart of the topic. A collection, however forceful, frees only **unreachable** objects. The session is reachable from a static field, so no collector on earth is allowed to touch it.\n\nThree popular non-fixes:\n\n- **`System.gc()`** only *suggests* a collection. Even when the JVM obeys, it cannot free something that is still referenced.\n- **`finalize()`** is deprecated, may never run at all, and delays collection of the objects that define it. Never rely on it to release resources — use try-with-resources.\n- **Tuning the collector or enlarging the heap** changes *when* you crash, not *whether* you crash. A real leak grows without bound; any fixed heap is eventually too small.\n\nThe one thing that works is releasing the reference: remove the entry, unregister the listener, call `ThreadLocal.remove()` in a `finally`, close the resource, or hold the value through a `SoftReference`. Reachability is the disease; the GC is not the cure.",
+            "ru": "Нет — и в этом суть темы. Сборка, какой бы принудительной она ни была, освобождает только **недостижимые** объекты. Сессия достижима от статического поля, поэтому её не вправе тронуть ни один сборщик на свете.\n\nТри популярных «не-решения»:\n\n- **`System.gc()`** лишь *предлагает* сборку. Даже если JVM послушается, освободить то, на что есть ссылка, она не может.\n- **`finalize()`** устарел, может вообще никогда не выполниться и задерживает сборку объектов, которые его определяют. Никогда не полагайся на него для освобождения ресурсов — используй try-with-resources.\n- **Настройка сборщика или увеличение кучи** меняет, *когда* ты упадёшь, а не *упадёшь ли*. Настоящая утечка растёт без предела; любая фиксированная куча рано или поздно окажется мала.\n\nРаботает только одно — отпустить ссылку: удалить запись, отписать listener, вызвать `ThreadLocal.remove()` в `finally`, закрыть ресурс или хранить значение через `SoftReference`. Болезнь — достижимость; GC — не лекарство."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A collection never frees a reachable object, however it is triggered.",
+              "ru": "Сборка никогда не освобождает достижимый объект, чем бы её ни запустили."
+            },
+            "incorrect": {
+              "en": "It cannot — System.gc() only suggests a collection, and collections free only unreachable objects.",
+              "ru": "Не освободит — System.gc() лишь предлагает сборку, а сборка освобождает только недостижимое."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "No — it is still reachable from the static cache",
+                "ru": "Нет — она всё ещё достижима из статического кэша"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Yes — System.gc() forces a full collection that frees it",
+                "ru": "Да — System.gc() принудительно запускает полную сборку и освобождает её"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "System.gc() only suggests a collection, and a collection never frees a reachable object.",
+                "ru": "System.gc() лишь предлагает сборку, а сборка никогда не освобождает достижимый объект."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Yes, provided the heap is under pressure",
+                "ru": "Да, если куча под давлением"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Memory pressure does not grant permission; reachable objects are kept no matter how full the heap is.",
+                "ru": "Нехватка памяти не даёт разрешения; достижимые объекты сохраняются, как бы полна ни была куча."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "nofix-p1-tuning-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Switching to another garbage collector or raising the maximum heap size fixes a real memory leak.",
+            "ru": "Переключение на другой сборщик мусора или увеличение максимального размера кучи чинит настоящую утечку памяти."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Tuning delays the crash; the reference still has to be released.",
+              "ru": "Настройка откладывает падение; ссылку всё равно нужно отпустить."
+            },
+            "incorrect": {
+              "en": "No — a leak grows without bound, so any heap fills eventually. Only releasing the reference fixes it.",
+              "ru": "Нет — утечка растёт без предела, поэтому любая куча однажды заполнится. Чинит только отпущенная ссылка."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "nofix-p2-finalize",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why should you never rely on finalize() to release resources?",
+            "ru": "Почему нельзя полагаться на finalize() для освобождения ресурсов?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Deprecated, unpredictable, and it slows collection down.",
+              "ru": "Устарел, непредсказуем и вдобавок замедляет сборку."
+            },
+            "incorrect": {
+              "en": "finalize() is deprecated, may never run, and delays collection — use try-with-resources instead.",
+              "ru": "finalize() устарел, может никогда не выполниться и задерживает сборку — используй try-with-resources."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It is deprecated, may never run at all, and delays collection",
+                "ru": "Он устарел, может вообще никогда не выполниться и задерживает сборку"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It runs too late but is at least guaranteed to run",
+                "ru": "Он выполняется слишком поздно, но хотя бы гарантированно выполняется"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no such guarantee — finalize() may never be called.",
+                "ru": "Такой гарантии нет — finalize() может не вызваться никогда."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It only works for objects on the stack",
+                "ru": "Он работает только для объектов в стеке"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Objects live on the heap; the problem with finalize() is that it is unreliable, not where objects live.",
+                "ru": "Объекты живут в куче; проблема finalize() в его ненадёжности, а не в месте хранения объектов."
+              }
+            }
+          ]
+        },
+        {
+          "id": "nofix-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the limit of System.gc().",
+            "ru": "Собери фразу об ограничении System.gc()."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Reachability, not the collector, decides what survives.",
+              "ru": "Что выживет, решает достижимость, а не сборщик."
+            },
+            "incorrect": {
+              "en": "System.gc() cannot free an object that is still reachable — the reference is the problem.",
+              "ru": "System.gc() не может освободить объект, который всё ещё достижим, — проблема в ссылке."
+            }
+          },
+          "tokens": {
+            "en": [
+              "System.gc()",
+              "cannot",
+              "free",
+              "an",
+              "object",
+              "that",
+              "is",
+              "still",
+              "reachable"
+            ],
+            "ru": [
+              "System.gc()",
+              "не",
+              "может",
+              "освободить",
+              "объект,",
+              "который",
+              "всё",
+              "ещё",
+              "достижим"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "always",
+              "unreachable"
+            ],
+            "ru": [
+              "всегда",
+              "недостижим"
+            ]
+          }
+        },
+        {
+          "id": "nofix-p4-fill-reference",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing word.",
+            "ru": "Впиши пропущенное слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Every real fix is a variation of releasing the reference.",
+              "ru": "Любое настоящее решение — это вариация «отпустить ссылку»."
+            },
+            "incorrect": {
+              "en": "The only real fix is to release the reference that keeps the object reachable.",
+              "ru": "Единственное настоящее решение — отпустить ссылку, которая держит объект достижимым."
+            }
+          },
+          "text": {
+            "en": "No collector setting fixes a leak; you have to release the ___ that keeps the object reachable.",
+            "ru": "Никакая настройка сборщика не чинит утечку; нужно отпустить ___, которая держит объект достижимым."
+          },
+          "blanks": [
+            {
+              "en": [
+                "reference"
+              ],
+              "ru": [
+                "ссылку",
+                "ссылка",
+                "reference"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "diagnosing-leaks",
+      "title": {
+        "en": "Detecting and diagnosing a leak",
+        "ru": "Обнаружение и диагностика утечки"
+      },
+      "summary": {
+        "en": "The old generation stops shrinking after full GCs; a heap dump then shows the GC-root path that retains the objects.",
+        "ru": "Old generation перестаёт уменьшаться после полных GC; heap dump показывает путь от GC root, который удерживает объекты."
+      },
+      "discovery": [
+        {
+          "id": "diag-d1-symptoms",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A service has run for hours: GC pauses are lengthening, throughput is dropping, and the old generation no longer shrinks after full GCs. What is the most likely diagnosis?",
+            "ru": "Сервис работает часами: паузы GC удлиняются, пропускная способность падает, а old generation перестал уменьшаться после полных GC. Какой диагноз наиболее вероятен?"
+          },
+          "reveal": {
+            "en": "That pattern is the signature of a leak. The **old generation** is where long-lived objects end up; a full GC is the collector's best effort. If the old generation does not shrink afterwards, the objects in it are genuinely reachable — retained garbage.\n\nLeaks rarely crash immediately, they crash slowly: hours of normal behaviour, then longer pauses, falling throughput, and finally `OutOfMemoryError: Java heap space` — usually under load, at the worst possible time.\n\nHow to confirm and find it:\n\n```mermaid\nflowchart LR\n  S[\"symptom: old gen never shrinks\"] --> D[\"take a heap dump\"]\n  D --> T[\"jmap / JFR / -XX:+HeapDumpOnOutOfMemoryError\"]\n  T --> A[\"analyze in Eclipse MAT\"]\n  A --> R[\"dominator tree + path to GC root\"]\n```\n\nA **heap dump** is a snapshot of every object on the heap. An analyzer such as Eclipse MAT shows the **dominator tree** (which objects retain the most memory) and the **path to a GC root** — the exact chain of references keeping a suspect alive. That chain names the reference you have to release.",
+            "ru": "Такая картина — характерная подпись утечки. **Old generation** — это область, куда попадают долгоживущие объекты; полный GC — максимум, что может сборщик. Если после него old generation не уменьшается, значит объекты в нём действительно достижимы — удержанный мусор.\n\nУтечки редко падают сразу, они падают медленно: часы нормальной работы, затем удлинение пауз, падение пропускной способности и наконец `OutOfMemoryError: Java heap space` — обычно под нагрузкой, в самый неподходящий момент.\n\nКак подтвердить и найти:\n\n```mermaid\nflowchart LR\n  S[\"симптом: old gen не уменьшается\"] --> D[\"снять heap dump\"]\n  D --> T[\"jmap / JFR / -XX:+HeapDumpOnOutOfMemoryError\"]\n  T --> A[\"открыть в Eclipse MAT\"]\n  A --> R[\"dominator tree + путь до GC root\"]\n```\n\n**Heap dump** — это снимок всех объектов кучи. Анализатор вроде Eclipse MAT показывает **dominator tree** (какие объекты удерживают больше всего памяти) и **путь до GC root** — точную цепочку ссылок, которая держит подозреваемого живым. Эта цепочка и называет ссылку, которую нужно отпустить."
+          },
+          "feedback": {
+            "correct": {
+              "en": "An old generation that never shrinks after a full GC means retained garbage.",
+              "ru": "Old generation, который не уменьшается после полного GC, означает удержанный мусор."
+            },
+            "incorrect": {
+              "en": "This is the classic leak signature: a full GC cannot shrink the old generation because the objects are reachable.",
+              "ru": "Это классическая подпись утечки: полный GC не может уменьшить old generation, потому что объекты достижимы."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A memory leak — retained objects the GC is not allowed to free",
+                "ru": "Утечка памяти — удержанные объекты, которые GC не вправе освободить"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The heap is simply too small for the working set",
+                "ru": "Куча просто мала для рабочего набора"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A too-small heap is under pressure from the first minutes; a leak grows steadily and never gives memory back.",
+                "ru": "Слишком маленькая куча под давлением с первых минут; утечка растёт постепенно и память не возвращает."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The machine's CPU is overloaded",
+                "ru": "Процессор машины перегружен"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "CPU load does not explain an old generation that stops shrinking after full GCs.",
+                "ru": "Нагрузка на CPU не объясняет, почему old generation перестал уменьшаться после полных GC."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "diag-p1-which-flag",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which JVM flag captures a heap dump automatically when the process runs out of memory?",
+            "ru": "Какой флаг JVM автоматически снимает heap dump, когда процессу не хватает памяти?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "It gives you the evidence exactly at the moment of failure.",
+              "ru": "Он даёт доказательства ровно в момент сбоя."
+            },
+            "incorrect": {
+              "en": "It is -XX:+HeapDumpOnOutOfMemoryError; jmap and JFR let you take a dump earlier.",
+              "ru": "Это -XX:+HeapDumpOnOutOfMemoryError; jmap и JFR позволяют снять дамп раньше."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "-XX:+HeapDumpOnOutOfMemoryError",
+                "ru": "-XX:+HeapDumpOnOutOfMemoryError"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "-Xmx",
+                "ru": "-Xmx"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That sets the maximum heap size — it changes when you crash, not what you learn.",
+                "ru": "Он задаёт максимальный размер кучи — меняет, когда ты упадёшь, а не что ты узнаешь."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "-XX:+UseG1GC",
+                "ru": "-XX:+UseG1GC"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That selects a collector; tuning the collector never fixes or diagnoses a leak.",
+                "ru": "Он выбирает сборщик; настройка сборщика не чинит и не диагностирует утечку."
+              }
+            }
+          ]
+        },
+        {
+          "id": "diag-p2-root-path-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In a heap-dump analyzer, the path from an object to a GC root shows what is keeping that object alive.",
+            "ru": "В анализаторе heap dump путь от объекта до GC root показывает, что держит этот объект живым."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That chain names the reference you have to release.",
+              "ru": "Эта цепочка и называет ссылку, которую нужно отпустить."
+            },
+            "incorrect": {
+              "en": "It does — the root path is the chain of references that makes the object reachable.",
+              "ru": "Показывает — путь до root это цепочка ссылок, делающая объект достижимым."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "diag-p3-sort-diagnosis",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the steps of diagnosing a memory leak in a running Java service.",
+            "ru": "Расставь по порядку шаги диагностики утечки памяти в работающем Java-сервисе."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Symptom, dump, analyzer, retention, root path, released reference.",
+              "ru": "Симптом, дамп, анализатор, удержание, путь до root, отпущенная ссылка."
+            },
+            "incorrect": {
+              "en": "Notice the old gen not shrinking, take a heap dump, analyze retention, follow the GC-root path, release the reference.",
+              "ru": "Заметить, что old gen не уменьшается, снять heap dump, изучить удержание, пройти путь до GC root, отпустить ссылку."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Notice the old generation stops shrinking after full GCs",
+                "ru": "Заметить, что old generation перестал уменьшаться после полных GC"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Take a heap dump (jmap, JFR or -XX:+HeapDumpOnOutOfMemoryError)",
+                "ru": "Снять heap dump (jmap, JFR или -XX:+HeapDumpOnOutOfMemoryError)"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Open it in an analyzer such as Eclipse MAT",
+                "ru": "Открыть его в анализаторе вроде Eclipse MAT"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Find what retains the most memory in the dominator tree",
+                "ru": "Найти в dominator tree то, что удерживает больше всего памяти"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "Follow the path from those objects to the GC root that holds them",
+                "ru": "Пройти путь от этих объектов до GC root, который их держит"
+              }
+            },
+            {
+              "id": "s6",
+              "text": {
+                "en": "Release that reference in the code",
+                "ru": "Отпустить эту ссылку в коде"
+              }
+            }
+          ]
+        },
+        {
+          "id": "diag-p4-fill-dump-tools",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill in the three diagnosis terms.",
+            "ru": "Впиши три термина диагностики."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Snapshot, retention ranking, and the chain that explains it.",
+              "ru": "Снимок, рейтинг удержания и цепочка, которая всё объясняет."
+            },
+            "incorrect": {
+              "en": "Take a heap dump, read the dominator tree, then follow the path to the GC root.",
+              "ru": "Сними heap dump, посмотри dominator tree, затем пройди путь до GC root."
+            }
+          },
+          "text": {
+            "en": "Take a heap ___, inspect the ___ tree to see what retains memory, then follow the path to the GC ___.",
+            "ru": "Сними heap ___, посмотри ___ tree, чтобы увидеть, что удерживает память, затем пройди путь до GC ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "dump"
+              ],
+              "ru": [
+                "dump",
+                "дамп"
+              ]
+            },
+            {
+              "en": [
+                "dominator"
+              ],
+              "ru": [
+                "dominator"
+              ]
+            },
+            {
+              "en": [
+                "root"
+              ],
+              "ru": [
+                "root"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "beyond-the-heap",
+      "title": {
+        "en": "Not every leak is on the heap",
+        "ru": "Не всякая утечка — в куче"
+      },
+      "summary": {
+        "en": "Native memory, metaspace (leaked classloaders) and direct ByteBuffers leak too; runaway stack growth is a different failure.",
+        "ru": "Нативная память, metaspace (утёкшие classloader) и прямые ByteBuffer тоже текут; неуправляемый рост стека — другой сбой."
+      },
+      "discovery": [
+        {
+          "id": "beyond-d1-clean-heap",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The heap dump shows nothing suspicious, yet the process keeps growing in memory. What could be leaking?",
+            "ru": "Heap dump не показывает ничего подозрительного, но процесс продолжает расти по памяти. Что может течь?"
+          },
+          "reveal": {
+            "en": "A Java process is bigger than its heap.\n\n- **Metaspace** holds class metadata. A leaked **classloader** keeps every class it loaded — and their static fields — alive; redeploying an application repeatedly in the same JVM is the classic way to fill metaspace.\n- **Native memory** is memory the JVM or a library allocates outside the heap; a **direct `ByteBuffer`** stores its bytes there, so the small Java object you see in a dump can be holding megabytes you do not see.\n- A heap dump does not show any of this clearly, which is why \"the dump looks clean\" never means \"no leak\".\n\n```mermaid\ngraph TD\n  P[\"Java process\"] --> H[\"Heap: objects reachable from roots\"]\n  P --> M[\"Metaspace: class metadata, leaked classloaders\"]\n  P --> N[\"Native memory: direct ByteBuffers, OS resources\"]\n  P --> S[\"Stack: frames and locals, nothing leaks here\"]\n```\n\nAnd one boundary worth keeping sharp: leaks live on the heap (or in native memory), never on the **stack**. Local variables die with their stack frame, so the stack cannot accumulate garbage. Unbounded growth there is `StackOverflowError` — a different failure with a different cause (usually runaway recursion).",
+            "ru": "Java-процесс больше, чем его куча.\n\n- **Metaspace** хранит метаданные классов. Утёкший **classloader** держит живыми все загруженные им классы — и их статические поля; многократный редеплой приложения в одной JVM — классический способ забить metaspace.\n- **Нативная память** — это память, которую JVM или библиотека выделяет вне кучи; **прямой `ByteBuffer`** хранит свои байты именно там, поэтому маленький Java-объект в дампе может удерживать мегабайты, которых ты не видишь.\n- Heap dump ничего из этого явно не показывает, поэтому «дамп чистый» никогда не означает «утечки нет».\n\n```mermaid\ngraph TD\n  P[\"Java-процесс\"] --> H[\"Куча: объекты, достижимые от root\"]\n  P --> M[\"Metaspace: метаданные классов, утёкшие classloader\"]\n  P --> N[\"Нативная память: прямые ByteBuffer, ресурсы ОС\"]\n  P --> S[\"Стек: фреймы и локальные переменные, здесь ничто не течёт\"]\n```\n\nИ одна граница, которую стоит держать чёткой: утечки живут в куче (или в нативной памяти), но никогда в **стеке**. Локальные переменные умирают вместе со своим stack frame, поэтому стек не может накапливать мусор. Неограниченный рост там — это `StackOverflowError`, другой сбой с другой причиной (обычно неуправляемая рекурсия)."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A clean heap dump does not rule out native memory or metaspace.",
+              "ru": "Чистый heap dump не исключает нативную память или metaspace."
+            },
+            "incorrect": {
+              "en": "Native memory, metaspace (leaked classloaders) and direct ByteBuffers leak outside the heap.",
+              "ru": "Нативная память, metaspace (утёкшие classloader) и прямые ByteBuffer текут вне кучи."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Native memory, metaspace (leaked classloaders) or direct ByteBuffers",
+                "ru": "Нативная память, metaspace (утёкшие classloader) или прямые ByteBuffer"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The stacks of the running threads",
+                "ru": "Стеки работающих потоков"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Stack frames die with their calls; runaway stack growth ends in StackOverflowError, not slow memory growth.",
+                "ru": "Stack frame умирают вместе с вызовами; неуправляемый рост стека кончается StackOverflowError, а не медленным ростом памяти."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — if the heap dump is clean there is no leak",
+                "ru": "Ничего — если heap dump чистый, утечки нет"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A heap dump shows the heap only; metaspace and native memory are not visible there.",
+                "ru": "Heap dump показывает только кучу; metaspace и нативная память там не видны."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "beyond-p1-stack-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Local variables can leak memory because they stay on the stack after their method returns.",
+            "ru": "Локальные переменные могут течь, потому что остаются в стеке после возврата из метода."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Locals die with their stack frame; leaks accumulate on the heap.",
+              "ru": "Локальные переменные умирают вместе со своим stack frame; утечки копятся в куче."
+            },
+            "incorrect": {
+              "en": "No — a stack frame is discarded when the method returns; unbounded stack growth is StackOverflowError instead.",
+              "ru": "Нет — stack frame отбрасывается при возврате из метода; неограниченный рост стека — это StackOverflowError."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "beyond-p2-match-areas",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each memory area to what can accumulate there.",
+            "ru": "Соотнеси область памяти с тем, что в ней может накапливаться."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Three places can grow without bound; the stack is not one of them.",
+              "ru": "Расти без предела могут три места; стек к ним не относится."
+            },
+            "incorrect": {
+              "en": "Heap holds reachable objects, metaspace class metadata, native memory direct buffers; the stack leaks nothing.",
+              "ru": "В куче — достижимые объекты, в metaspace — метаданные классов, в нативной памяти — прямые буферы; стек не течёт."
+            }
+          },
+          "pairs": [
+            {
+              "id": "heap",
+              "left": {
+                "en": "Heap",
+                "ru": "Куча"
+              },
+              "right": {
+                "en": "Objects still reachable from a GC root",
+                "ru": "Объекты, всё ещё достижимые от GC root"
+              }
+            },
+            {
+              "id": "metaspace",
+              "left": {
+                "en": "Metaspace",
+                "ru": "Metaspace"
+              },
+              "right": {
+                "en": "Class metadata held by a leaked classloader",
+                "ru": "Метаданные классов, удерживаемые утёкшим classloader"
+              }
+            },
+            {
+              "id": "native",
+              "left": {
+                "en": "Native memory",
+                "ru": "Нативная память"
+              },
+              "right": {
+                "en": "Direct ByteBuffers and OS resources",
+                "ru": "Прямые ByteBuffer и ресурсы ОС"
+              }
+            },
+            {
+              "id": "stack",
+              "left": {
+                "en": "Stack",
+                "ru": "Стек"
+              },
+              "right": {
+                "en": "Nothing leaks: frames die with the call, runaway growth is StackOverflowError",
+                "ru": "Ничто не течёт: фреймы умирают с вызовом, неуправляемый рост — это StackOverflowError"
+              }
+            }
+          ]
+        },
+        {
+          "id": "beyond-p3-fill-metaspace-native",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill in the two areas outside the heap.",
+            "ru": "Впиши две области вне кучи."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Neither is visible in a heap dump, which is what makes them tricky.",
+              "ru": "Ни одна из них не видна в heap dump — этим они и коварны."
+            },
+            "incorrect": {
+              "en": "Leaked classloaders fill metaspace; direct ByteBuffers consume native memory.",
+              "ru": "Утёкшие classloader заполняют metaspace; прямые ByteBuffer расходуют нативную память."
+            }
+          },
+          "text": {
+            "en": "Leaked classloaders fill ___, while direct ByteBuffers consume ___ memory outside the heap.",
+            "ru": "Утёкшие classloader заполняют ___, а прямые ByteBuffer расходуют ___ память вне кучи."
+          },
+          "blanks": [
+            {
+              "en": [
+                "metaspace"
+              ],
+              "ru": [
+                "metaspace"
+              ]
+            },
+            {
+              "en": [
+                "native"
+              ],
+              "ru": [
+                "нативную",
+                "native"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "putting-it-together",
+      "title": {
+        "en": "Putting it together",
+        "ru": "Собираем всё вместе"
+      },
+      "summary": {
+        "en": "One picture: what the GC frees, why a leak survives it, where leaks come from, how each is fixed, and how you diagnose one.",
+        "ru": "Одна картина: что освобождает GC, почему утечка это переживает, откуда утечки берутся, как чинится каждая и как её диагностируют."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "cap-d1-predict-handlers",
+          "type": "predict_output",
+          "prompt": {
+            "en": "register() is called on every reconnect, thousands of times, and nothing else keeps a handler. Predict what happens to the heap.",
+            "ru": "register() вызывается при каждом переподключении, тысячи раз, и больше ничто не держит handler. Предскажи, что произойдёт с кучей."
+          },
+          "code": "class Server {\n    static final List<Handler> HANDLERS = new ArrayList<>();   // never cleared\n\n    void register(EventBus bus) {\n        Handler h = new Handler(new byte[1_000_000]);\n        bus.addListener(h);      // the bus lives as long as the application\n        HANDLERS.add(h);\n    }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Two independent paths from a GC root reach every handler: the `static` list and the long-lived bus's subscriber list. Either one alone would be enough to keep it — and its 1 MB array — reachable forever.\n\nThe whole topic in one picture:\n\n```mermaid\nflowchart TD\n  R[\"GC root: static field, live thread stack, JNI handle\"] --> Ref[\"a reference that outlives its usefulness\"]\n  Ref --> O[\"object you no longer need\"]\n  O --> G[\"retained garbage accumulates\"]\n  G --> S[\"old gen stops shrinking, pauses grow\"]\n  S --> E[\"OutOfMemoryError\"]\n  G --> F[\"fix: release the reference\"]\n```\n\nThe classic sources are all the same shape — a long-lived holder keeping a short-lived object: a static collection, a publisher's listener list, a pooled thread's `ThreadLocal`, an unclosed resource, a capturing lambda, a mutated key, an unbounded cache. And so are the fixes: evict, unregister, `remove()` in a `finally`, try-with-resources, drop the capture, bound the cache, use a `SoftReference`.\n\nWhen it happens in production you confirm it with a heap dump and follow the path to the GC root — which tells you which of those references to release.",
+            "ru": "К каждому handler ведут два независимых пути от GC root: список `static` и список подписчиков долгоживущего bus. Любого из них по отдельности хватило бы, чтобы держать его — и его массив на 1 МБ — достижимым навсегда.\n\nВся тема в одной картине:\n\n```mermaid\nflowchart TD\n  R[\"GC root: статическое поле, стек живого потока, JNI-handle\"] --> Ref[\"ссылка, пережившая свою полезность\"]\n  Ref --> O[\"ненужный объект\"]\n  O --> G[\"копится удержанный мусор\"]\n  G --> S[\"old gen не уменьшается, паузы растут\"]\n  S --> E[\"OutOfMemoryError\"]\n  G --> F[\"лечение: отпустить ссылку\"]\n```\n\nКлассические источники устроены одинаково — долгоживущий держатель удерживает короткоживущий объект: статическая коллекция, список слушателей publisher, `ThreadLocal` на потоке пула, незакрытый ресурс, захватывающая лямбда, изменённый ключ, неограниченный кэш. И решения тоже: вытеснять, отписывать, `remove()` в `finally`, try-with-resources, не захватывать лишнего, ограничить кэш, использовать `SoftReference`.\n\nКогда это случается в проде, ты подтверждаешь диагноз через heap dump и идёшь по пути до GC root — он и подскажет, какую из этих ссылок отпустить."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two roots hold every handler; the local variable was never the issue.",
+              "ru": "Каждый handler держат два root; локальная переменная тут ни при чём."
+            },
+            "incorrect": {
+              "en": "The static list and the bus both keep every handler reachable, so the heap grows until OutOfMemoryError.",
+              "ru": "И статический список, и bus держат каждый handler достижимым, поэтому куча растёт до OutOfMemoryError."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Every handler stays reachable from both the static list and the bus, so the heap grows until OutOfMemoryError",
+                "ru": "Каждый handler остаётся достижимым и из статического списка, и из bus, поэтому куча растёт до OutOfMemoryError"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The handlers are freed when register() returns, because the local variable h disappears",
+                "ru": "Handler освобождаются при выходе из register(), потому что локальная переменная h исчезает"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The local reference is not the only one: the static list and the bus both still reference the handler.",
+                "ru": "Локальная ссылка не единственная: и статический список, и bus всё ещё ссылаются на handler."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Only the newest handler is retained; each registration replaces the previous one",
+                "ru": "Удерживается только новейший handler; каждая регистрация заменяет предыдущую"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Both the list and the subscriber list append — nothing replaces or removes earlier handlers.",
+                "ru": "И список, и список подписчиков только добавляют — прошлые handler ничем не заменяются и не удаляются."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cap-p1-spot-threadlocal",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This task does call remove(). What is still wrong?",
+            "ru": "Эта задача всё-таки вызывает remove(). Что всё равно не так?"
+          },
+          "code": "static final ThreadLocal<Context> CONTEXT = new ThreadLocal<>();\n\nexecutor.submit(() -> {\n    CONTEXT.set(new Context(userId));\n    handle();\n    CONTEXT.remove();\n});",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "Cleanup must be in a finally block to survive an exception.",
+              "ru": "Очистка должна быть в блоке finally, чтобы пережить исключение."
+            },
+            "incorrect": {
+              "en": "If handle() throws, remove() is skipped and the context stays on the long-lived pooled thread.",
+              "ru": "Если handle() бросит исключение, remove() пропускается, и контекст остаётся на долгоживущем потоке пула."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "If handle() throws, remove() is skipped and the context stays pinned to the pooled thread",
+                "ru": "Если handle() бросит исключение, remove() пропускается, и контекст остаётся закреплён за потоком пула"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A ThreadLocal must never be static",
+                "ru": "ThreadLocal никогда не должен быть static"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "static is fine here — it is the long-lived pooled thread that retains the value, not the field.",
+                "ru": "static здесь нормально — значение удерживает долгоживущий поток пула, а не поле."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing is wrong — the pool discards the thread after the task",
+                "ru": "Всё в порядке — пул выбрасывает поток после задачи"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Pools reuse their threads, which is exactly why a leftover value survives the task.",
+                "ru": "Пулы переиспользуют потоки, поэтому забытое значение и переживает задачу."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p2-spot-listener",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "The application drops its reference to the Widget in close(). Why does the Widget still leak?",
+            "ru": "В close() приложение сбрасывает свою ссылку на Widget. Почему Widget всё равно течёт?"
+          },
+          "code": "class Widget {\n    private final EventBus bus;\n    private final byte[] icon = new byte[5_000_000];\n\n    Widget(EventBus bus) {\n        this.bus = bus;                          // the bus lives for the whole app\n        bus.subscribe(event -> repaint(event));  // uses an instance method\n    }\n\n    void close() {\n        // the application drops its own reference to this Widget here\n    }\n}",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "The subscription is a second path from a GC root, and close() never removes it.",
+              "ru": "Подписка — второй путь от GC root, и close() его не убирает."
+            },
+            "incorrect": {
+              "en": "close() never unsubscribes, so the bus keeps the lambda, which keeps the Widget and its icon.",
+              "ru": "close() не отписывается, поэтому bus держит лямбду, а та — Widget вместе с иконкой."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "close() never unsubscribes, so the bus keeps the lambda, which keeps the Widget and its 5 MB icon",
+                "ru": "close() не отписывается, поэтому bus держит лямбду, а та — Widget с иконкой на 5 МБ"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The icon array is too big and should be a static field",
+                "ru": "Массив icon слишком большой и должен быть статическим полем"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A static field is a GC root — that would keep the array alive even longer.",
+                "ru": "Статическое поле — это GC root, так массив жил бы ещё дольше."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing leaks — dropping the application's reference makes the Widget unreachable",
+                "ru": "Ничего не течёт — сброс ссылки приложения делает Widget недостижимым"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The bus's subscriber list is still a path from a GC root to the Widget.",
+                "ru": "Список подписчиков bus — всё ещё путь от GC root к Widget."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p3-sort-lifecycle",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the complete life of a memory leak, from the mistake to the fix.",
+            "ru": "Расставь по порядку полную жизнь утечки памяти — от ошибки до исправления."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Retained, survives GC, symptoms, crash, dump, released reference.",
+              "ru": "Удержан, переживает GC, симптомы, падение, дамп, отпущенная ссылка."
+            },
+            "incorrect": {
+              "en": "A reference outlives its use, the object survives every GC, the old gen stops shrinking, OOM follows, a dump finds the root path.",
+              "ru": "Ссылка переживает свою нужность, объект переживает каждый GC, old gen не уменьшается, следует OOM, дамп находит путь до root."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "An object is stored behind a reference that outlives its usefulness",
+                "ru": "Объект сохраняется за ссылкой, которая переживает его полезность"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "The local reference disappears, but a GC root still reaches the object",
+                "ru": "Локальная ссылка исчезает, но GC root всё ещё дотягивается до объекта"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Every GC cycle leaves it in place: it is reachable garbage",
+                "ru": "Каждый цикл GC оставляет его на месте: это достижимый мусор"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "The old generation stops shrinking after full GCs and pauses lengthen",
+                "ru": "Old generation перестаёт уменьшаться после полных GC, а паузы удлиняются"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "The heap fills and the JVM throws OutOfMemoryError",
+                "ru": "Куча заполняется, и JVM бросает OutOfMemoryError"
+              }
+            },
+            {
+              "id": "s6",
+              "text": {
+                "en": "A heap dump reveals the GC-root path, and releasing that reference fixes it",
+                "ru": "Heap dump раскрывает путь до GC root, и утечка чинится отпусканием этой ссылки"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p4-match-fixes",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each classic leak source to the fix that releases its reference.",
+            "ru": "Соотнеси классический источник утечки с решением, которое отпускает его ссылку."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Every fix is the same move: bound the lifetime of the reference.",
+              "ru": "Каждое решение — один и тот же приём: ограничить время жизни ссылки."
+            },
+            "incorrect": {
+              "en": "Evict from the cache, unregister the listener, remove() in a finally, try-with-resources, never mutate a stored key.",
+              "ru": "Вытеснять из кэша, отписывать listener, remove() в finally, try-with-resources, не менять сохранённый ключ."
+            }
+          },
+          "pairs": [
+            {
+              "id": "cache",
+              "left": {
+                "en": "Ever-growing static cache",
+                "ru": "Постоянно растущий статический кэш"
+              },
+              "right": {
+                "en": "Cap its size and evict entries",
+                "ru": "Ограничить размер и вытеснять записи"
+              }
+            },
+            {
+              "id": "listener",
+              "left": {
+                "en": "Forgotten listener",
+                "ru": "Забытый listener"
+              },
+              "right": {
+                "en": "Unregister from the publisher when the work is done",
+                "ru": "Отписать от publisher, когда работа закончена"
+              }
+            },
+            {
+              "id": "threadlocal",
+              "left": {
+                "en": "ThreadLocal on a pooled thread",
+                "ru": "ThreadLocal на потоке из пула"
+              },
+              "right": {
+                "en": "Call remove() in a finally block",
+                "ru": "Вызвать remove() в блоке finally"
+              }
+            },
+            {
+              "id": "resource",
+              "left": {
+                "en": "Unclosed stream or connection",
+                "ru": "Незакрытый поток или соединение"
+              },
+              "right": {
+                "en": "Open it in a try-with-resources",
+                "ru": "Открывать его в try-with-resources"
+              }
+            },
+            {
+              "id": "key",
+              "left": {
+                "en": "Key mutated inside a HashMap",
+                "ru": "Ключ, изменённый внутри HashMap"
+              },
+              "right": {
+                "en": "Never change fields that hashCode() depends on",
+                "ru": "Никогда не менять поля, от которых зависит hashCode()"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p5-fill-answer",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill the key parts of the interview answer.",
+            "ru": "Впиши ключевые части ответа для собеседования."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Definition, one concrete fix, one diagnosis tool — the whole answer in a line.",
+              "ru": "Определение, одно конкретное решение, один инструмент диагностики — весь ответ в одну строку."
+            },
+            "incorrect": {
+              "en": "A leak is reachable garbage; clear a ThreadLocal with remove() in a finally; diagnose with a heap dump.",
+              "ru": "Утечка — это достижимый мусор; ThreadLocal чистят через remove() в finally; диагностируют heap dump."
+            }
+          },
+          "text": {
+            "en": "A leak is an object no longer needed but still ___ from a GC root; clear a ThreadLocal with ___() in a finally block; diagnose it with a heap ___.",
+            "ru": "Утечка — это ненужный объект, всё ещё ___ от GC root; ThreadLocal очищают через ___() в блоке finally; диагностируют через heap ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "reachable"
+              ],
+              "ru": [
+                "достижимый",
+                "достижим",
+                "reachable"
+              ]
+            },
+            {
+              "en": [
+                "remove"
+              ],
+              "ru": [
+                "remove"
+              ]
+            },
+            {
+              "en": [
+                "dump"
+              ],
+              "ru": [
+                "dump",
+                "дамп"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

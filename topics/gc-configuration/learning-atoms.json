@@ -1,0 +1,1331 @@
+{
+  "schemaVersion": 1,
+  "topicId": "gc-configuration",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "opus",
+  "atoms": [
+    {
+      "id": "tuning-goal",
+      "title": { "en": "Start from the goal", "ru": "Начинаем с цели" },
+      "summary": {
+        "en": "GC cannot optimize latency, throughput and footprint at once, so the goal is decided before any flag.",
+        "ru": "GC не может одновременно оптимизировать latency, throughput и footprint, поэтому цель определяют до любого флага."
+      },
+      "discovery": [
+        {
+          "id": "goal-d1-first-step",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A team is unhappy with GC behaviour in a service. What must be decided BEFORE any GC flag is changed?",
+            "ru": "Команду не устраивает поведение GC в сервисе. Что нужно определить ДО изменения любого GC-флага?"
+          },
+          "reveal": {
+            "en": "GC tuning starts with a **goal**, because no collector can maximize all three of these at the same time:\n\n- **Latency** — short GC pauses, so an individual request is served quickly.\n- **Throughput** — the application spends more time doing work and less time collecting.\n- **Footprint** — the process runs in less memory.\n\n```mermaid\nflowchart TD\n  Goal[\"Service goal\"] --> L[\"Latency: short pauses\"]\n  Goal --> T[\"Throughput: work per hour\"]\n  Goal --> F[\"Footprint: less memory\"]\n```\n\nThe goal is what makes a flag right or wrong. A payment API usually cares about tail latency; an offline report job cares about total work per hour. The same settings cannot be correct for both. Every later step — which collector, how big the heap, what pause target — is judged against this goal, and that is what separates tuning from guessing.",
+            "ru": "Настройка GC начинается с **цели**, потому что ни один collector не может одновременно максимизировать все три вещи:\n\n- **Latency** — короткие паузы GC, отдельный запрос обслуживается быстро.\n- **Throughput** — приложение больше времени работает и меньше времени тратит на сборку.\n- **Footprint** — процесс укладывается в меньший объём памяти.\n\n```mermaid\nflowchart TD\n  Goal[\"Цель сервиса\"] --> L[\"Latency: короткие паузы\"]\n  Goal --> T[\"Throughput: работа в час\"]\n  Goal --> F[\"Footprint: меньше памяти\"]\n```\n\nИменно цель делает флаг правильным или неправильным. Payment API обычно важна tail latency; offline report job важен общий объём работы в час. Одни и те же настройки не могут подходить обоим. Каждый следующий шаг — какой collector, какого размера heap, какой pause target — оценивается по этой цели, и именно это отличает настройку от угадывания."
+          },
+          "feedback": {
+            "correct": { "en": "The goal comes first: it decides which flags are even meaningful.", "ru": "Сначала цель: она решает, какие флаги вообще имеют смысл." },
+            "incorrect": { "en": "First name the goal — latency, throughput or footprint; flags follow from it.", "ru": "Сначала назовите цель — latency, throughput или footprint; флаги следуют из неё." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "The goal: latency, throughput or memory footprint", "ru": "Цель: latency, throughput или memory footprint" }, "correct": true },
+            { "id": "b", "text": { "en": "Which flag list another service uses", "ru": "Какой список флагов используется в другом сервисе" }, "correct": false,
+              "feedback": { "en": "Flags are workload-specific; a copied list is not a goal.", "ru": "Флаги зависят от workload; скопированный список — не цель." } },
+            { "id": "c", "text": { "en": "How much to raise -Xmx", "ru": "На сколько увеличить -Xmx" }, "correct": false,
+              "feedback": { "en": "Heap size is a later step, and only meaningful once the goal is known.", "ru": "Размер heap — более поздний шаг, и он осмыслен только когда цель известна." } }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "goal-p1-all-three-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "GC configuration can maximize latency, throughput and memory footprint all at the same time.",
+            "ru": "Настройка GC может одновременно максимизировать latency, throughput и memory footprint."
+          },
+          "feedback": {
+            "correct": { "en": "These three goals compete; you pick which one matters most.", "ru": "Эти три цели конкурируют; вы выбираете, какая важнее." },
+            "incorrect": { "en": "No — the three goals compete, so one of them is chosen as the priority.", "ru": "Нет — три цели конкурируют, поэтому одну выбирают приоритетной." }
+          },
+          "answer": false
+        },
+        {
+          "id": "goal-p2-batch-job",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "An offline batch report job must process as many records per hour as possible; occasional longer pauses are acceptable. Which GC goal is it optimizing for?",
+            "ru": "Offline batch report job должен обрабатывать максимум записей в час; редкие длинные паузы допустимы. Какую цель GC он оптимизирует?"
+          },
+          "feedback": {
+            "correct": { "en": "Work per hour is throughput; pause length is secondary here.", "ru": "Работа в час — это throughput; длина пауз здесь вторична." },
+            "incorrect": { "en": "Maximum work per hour is the definition of throughput.", "ru": "Максимум работы в час — это и есть throughput." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Throughput", "ru": "Throughput" }, "correct": true },
+            { "id": "b", "text": { "en": "Latency", "ru": "Latency" }, "correct": false,
+              "feedback": { "en": "Latency is about short individual pauses, which this job explicitly tolerates.", "ru": "Latency — про короткие отдельные паузы, а эта задача их явно допускает." } },
+            { "id": "c", "text": { "en": "Footprint", "ru": "Footprint" }, "correct": false,
+              "feedback": { "en": "Nothing in the requirement mentions using less memory.", "ru": "В требовании ничего не сказано о меньшем расходе памяти." } }
+          ]
+        },
+        {
+          "id": "goal-p3-match",
+          "type": "match_pairs",
+          "prompt": { "en": "Match each GC goal to what it means.", "ru": "Соотнеси каждую цель GC с её значением." },
+          "feedback": {
+            "correct": { "en": "Three different goals, three different sets of correct flags.", "ru": "Три разные цели — три разных набора правильных флагов." },
+            "incorrect": { "en": "Latency = short pauses, throughput = work per hour, footprint = less memory.", "ru": "Latency — короткие паузы, throughput — работа в час, footprint — меньше памяти." }
+          },
+          "pairs": [
+            { "id": "latency", "left": { "en": "Latency", "ru": "Latency" }, "right": { "en": "Short GC pauses", "ru": "Короткие паузы GC" } },
+            { "id": "throughput", "left": { "en": "Throughput", "ru": "Throughput" }, "right": { "en": "More application work per hour", "ru": "Больше работы приложения в час" } },
+            { "id": "footprint", "left": { "en": "Footprint", "ru": "Footprint" }, "right": { "en": "Less memory used by the process", "ru": "Меньше памяти, занятой процессом" } }
+          ]
+        },
+        {
+          "id": "goal-p4-fill",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the two missing goal names.", "ru": "Впиши два пропущенных названия целей." },
+          "feedback": {
+            "correct": { "en": "Latency, throughput, footprint — pick one before touching flags.", "ru": "Latency, throughput, footprint — выберите одну до работы с флагами." },
+            "incorrect": { "en": "The three competing goals are latency, throughput and footprint.", "ru": "Три конкурирующие цели — latency, throughput и footprint." }
+          },
+          "text": {
+            "en": "Before choosing a collector you name the goal: low latency, high ___, or low ___.",
+            "ru": "Перед выбором collector называют цель: низкая latency, высокий ___ или низкий ___."
+          },
+          "blanks": [
+            { "en": ["throughput"], "ru": ["throughput", "пропускная способность"] },
+            { "en": ["footprint"], "ru": ["footprint", "расход памяти"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "measure-first",
+      "title": { "en": "Measure before you change", "ru": "Измеряем до изменений" },
+      "summary": {
+        "en": "Tuning starts from data: allocation rate, pause times, full GC frequency and heap after GC under realistic load.",
+        "ru": "Настройка начинается с данных: allocation rate, pause times, частота full GC и heap after GC под реалистичной нагрузкой."
+      },
+      "discovery": [
+        {
+          "id": "measure-d1-no-data",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Users report slow responses and someone blames GC. No GC data has been collected yet. What is the next step?",
+            "ru": "Пользователи жалуются на медленные ответы, кто-то винит GC. Данных по GC ещё нет. Каков следующий шаг?"
+          },
+          "reveal": {
+            "en": "Tuning without data is guessing. Four measurements describe how a JVM actually behaves:\n\n- **Allocation rate** — how much memory the application allocates per second.\n- **Pause times** — how long the application is stopped while a collection runs.\n- **Full GC frequency** — how often a collection of the *whole* heap runs, including the **old generation**, where long-lived objects end up. Full GCs are meant to be rare.\n- **Heap after GC** — how much memory is still occupied once a collection finishes. This is the **live set**: the objects that are still reachable and therefore cannot be freed.\n\nAdd one more signal: whether the latency **SLO** — the agreed response-time target for the service — is being missed.\n\nAll of this must be measured under a **realistic load test**. GC behaviour follows the workload, so numbers from an idle JVM say nothing about production.",
+            "ru": "Настройка без данных — это угадывание. Поведение JVM описывают четыре измерения:\n\n- **Allocation rate** — сколько памяти приложение выделяет в секунду.\n- **Pause times** — как долго приложение остановлено, пока идёт сборка.\n- **Частота full GC** — как часто выполняется сборка *всего* heap, включая **old generation**, куда попадают долгоживущие объекты. Full GC должны быть редкими.\n- **Heap after GC** — сколько памяти остаётся занятой после завершения сборки. Это **live set**: объекты, которые всё ещё reachable и потому не могут быть освобождены.\n\nПлюс ещё один сигнал: нарушается ли **SLO** по latency — согласованная цель по времени ответа сервиса.\n\nВсё это нужно измерять под **реалистичным load test**. Поведение GC следует за нагрузкой, поэтому цифры простаивающей JVM ничего не говорят о production."
+          },
+          "feedback": {
+            "correct": { "en": "Data first: measure the real behaviour under load, then decide.", "ru": "Сначала данные: измерьте реальное поведение под нагрузкой, потом решайте." },
+            "incorrect": { "en": "Measure first — allocation rate, pauses, full GC frequency and heap after GC under load.", "ru": "Сначала измерьте — allocation rate, паузы, частоту full GC и heap after GC под нагрузкой." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Measure allocation rate, pauses, full GC frequency and heap after GC under a realistic load", "ru": "Измерить allocation rate, паузы, частоту full GC и heap after GC под реалистичной нагрузкой" }, "correct": true },
+            { "id": "b", "text": { "en": "Switch to the newest collector and see if it helps", "ru": "Переключиться на самый новый collector и посмотреть, поможет ли" }, "correct": false,
+              "feedback": { "en": "A collector helps only when it matches a measured problem.", "ru": "Collector помогает, только когда соответствует измеренной проблеме." } },
+            { "id": "c", "text": { "en": "Double -Xmx, since more heap means less GC", "ru": "Удвоить -Xmx, ведь больше heap — меньше GC" }, "correct": false,
+              "feedback": { "en": "Without data you do not even know GC is the cause.", "ru": "Без данных вы даже не знаете, что причина в GC." } }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "measure-p1-later-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "For GC configuration it is fine to pick flags first and collect GC measurements only if problems appear later.",
+            "ru": "При настройке GC нормально сначала выбрать флаги, а измерения GC собрать только если позже появятся проблемы."
+          },
+          "feedback": {
+            "correct": { "en": "Measurements come first; otherwise a flag change cannot be evaluated.", "ru": "Сначала измерения; иначе изменение флага невозможно оценить." },
+            "incorrect": { "en": "No — without a baseline measurement you cannot tell whether a flag helped.", "ru": "Нет — без базовых измерений нельзя понять, помог ли флаг." }
+          },
+          "answer": false
+        },
+        {
+          "id": "measure-p2-live-set",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which GC measurement shows how much memory is still occupied once a collection has finished?",
+            "ru": "Какое измерение GC показывает, сколько памяти остаётся занятой после завершения сборки?"
+          },
+          "feedback": {
+            "correct": { "en": "Heap after GC is the live set — what could not be freed.", "ru": "Heap after GC — это live set, то, что не удалось освободить." },
+            "incorrect": { "en": "It is heap after GC: the memory still held once the collection ends.", "ru": "Это heap after GC: память, занятая после окончания сборки." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Heap after GC", "ru": "Heap after GC" }, "correct": true },
+            { "id": "b", "text": { "en": "Allocation rate", "ru": "Allocation rate" }, "correct": false,
+              "feedback": { "en": "Allocation rate measures memory created per second, not memory left over.", "ru": "Allocation rate измеряет память, выделяемую в секунду, а не остаток." } },
+            { "id": "c", "text": { "en": "Pause time", "ru": "Pause time" }, "correct": false,
+              "feedback": { "en": "Pause time measures duration, not occupied memory.", "ru": "Pause time измеряет длительность, а не занятую память." } }
+          ]
+        },
+        {
+          "id": "measure-p3-word-bank",
+          "type": "word_bank",
+          "prompt": { "en": "Assemble the rule about where GC measurements must be taken.", "ru": "Собери правило о том, где нужно снимать измерения GC." },
+          "feedback": {
+            "correct": { "en": "GC behaviour follows the workload, so the load must be realistic.", "ru": "Поведение GC следует за нагрузкой, поэтому нагрузка должна быть реалистичной." },
+            "incorrect": { "en": "Measure under a realistic load — an idle JVM tells you nothing.", "ru": "Измеряйте под реалистичной нагрузкой — простаивающая JVM ничего не показывает." }
+          },
+          "tokens": {
+            "en": ["measure", "allocation", "rate", "and", "pauses", "under", "a", "realistic", "load"],
+            "ru": ["измеряй", "allocation", "rate", "и", "паузы", "под", "реалистичной", "нагрузкой"]
+          },
+          "distractors": { "en": ["idle"], "ru": ["простаивающей"] }
+        },
+        {
+          "id": "measure-p4-fill",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the two missing measurement names.", "ru": "Впиши два пропущенных названия измерений." },
+          "feedback": {
+            "correct": { "en": "Allocation rate and pause times are the first two numbers to collect.", "ru": "Allocation rate и pause times — первые два числа, которые собирают." },
+            "incorrect": { "en": "They are allocation rate and pause times.", "ru": "Это allocation rate и pause times." }
+          },
+          "text": {
+            "en": "Two numbers measured before any GC tuning: ___ rate and ___ times.",
+            "ru": "Два числа, которые измеряют до любой настройки GC: ___ rate и ___ times."
+          },
+          "blanks": [
+            { "en": ["allocation"], "ru": ["allocation"] },
+            { "en": ["pause"], "ru": ["pause"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "g1-default",
+      "title": { "en": "G1: the default starting point", "ru": "G1: стартовый выбор по умолчанию" },
+      "summary": {
+        "en": "G1 (-XX:+UseG1GC) splits the heap into regions and works toward a pause goal, which makes it the normal default for Java 21 services.",
+        "ru": "G1 (-XX:+UseG1GC) делит heap на регионы и стремится к pause goal, что делает его обычным выбором по умолчанию для сервисов на Java 21."
+      },
+      "discovery": [
+        {
+          "id": "g1-d1-which-collector",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A normal Java 21 backend service, no extreme latency or memory requirement, nothing measured yet. Which collector do you start with?",
+            "ru": "Обычный backend-сервис на Java 21, без экстремальных требований к latency или памяти, измерений ещё нет. С какого collector начать?"
+          },
+          "reveal": {
+            "en": "**G1** — the Garbage-First collector, enabled with `-XX:+UseG1GC` — is the normal starting point for a Java 21 server application.\n\nG1 splits the heap into many **regions** instead of a few large areas, and collects a subset of them per cycle. Because it chooses *how many* regions to collect, it can aim at a **pause goal**: a target pause length supplied with `-XX:MaxGCPauseMillis=...`.\n\n```mermaid\nflowchart LR\n  H[\"heap split into regions\"] --> P[\"collect a subset per cycle\"]\n  P --> G[\"stay near -XX:MaxGCPauseMillis\"]\n```\n\nThat balance — reasonable pause behaviour without giving up much throughput — is why G1 is the default rather than a specialist choice. Start there, measure, and move to another collector only when the measurements show the goal is not met.",
+            "ru": "**G1** — collector Garbage-First, включается через `-XX:+UseG1GC` — обычная стартовая точка для серверного приложения на Java 21.\n\nG1 делит heap на множество **регионов** вместо нескольких больших областей и собирает часть из них за цикл. Поскольку он сам выбирает, *сколько* регионов собрать, он может целиться в **pause goal**: желаемую длину паузы, заданную через `-XX:MaxGCPauseMillis=...`.\n\n```mermaid\nflowchart LR\n  H[\"heap разделён на регионы\"] --> P[\"собираем часть за цикл\"]\n  P --> G[\"держимся около -XX:MaxGCPauseMillis\"]\n```\n\nЭтот баланс — разумные паузы без больших потерь throughput — и делает G1 выбором по умолчанию, а не специализированным вариантом. Начните с него, измерьте и переходите на другой collector, только когда измерения показывают, что цель не достигнута."
+          },
+          "feedback": {
+            "correct": { "en": "G1 is the balanced default; specialists come later, driven by data.", "ru": "G1 — сбалансированный вариант по умолчанию; специализированные приходят позже, по данным." },
+            "incorrect": { "en": "Start with G1 — it is the normal default for Java 21 server applications.", "ru": "Начните с G1 — это обычный выбор по умолчанию для серверных приложений на Java 21." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "G1", "ru": "G1" }, "correct": true },
+            { "id": "b", "text": { "en": "ZGC, because it is newer", "ru": "ZGC, потому что он новее" }, "correct": false,
+              "feedback": { "en": "A newer collector helps only when the workload needs what it specializes in.", "ru": "Более новый collector помогает, только когда workload нужна именно его специализация." } },
+            { "id": "c", "text": { "en": "Serial GC, because it has the fewest moving parts", "ru": "Serial GC, потому что он самый простой" }, "correct": false,
+              "feedback": { "en": "Serial GC targets tiny heaps and small tools, not a normal server service.", "ru": "Serial GC рассчитан на tiny heap и маленькие утилиты, а не на обычный серверный сервис." } }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "g1-p1-regions-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "G1 splits the heap into regions and can collect only a subset of them in one cycle.",
+            "ru": "G1 делит heap на регионы и может собрать за один цикл только часть из них."
+          },
+          "feedback": {
+            "correct": { "en": "Choosing how many regions to collect is how G1 aims at a pause goal.", "ru": "Выбор числа собираемых регионов — то, как G1 целится в pause goal." },
+            "incorrect": { "en": "It does — region-by-region collection is what lets G1 target a pause goal.", "ru": "Делит — порегионная сборка и позволяет G1 целиться в pause goal." }
+          },
+          "answer": true
+        },
+        {
+          "id": "g1-p2-word-bank",
+          "type": "word_bank",
+          "prompt": { "en": "Assemble the rule about where GC configuration starts for a typical service.", "ru": "Собери правило о том, с чего начинается настройка GC для типового сервиса." },
+          "feedback": {
+            "correct": { "en": "G1 first, then change only if measurements demand it.", "ru": "Сначала G1, менять — только если этого требуют измерения." },
+            "incorrect": { "en": "G1 is the default starting collector for most services.", "ru": "G1 — стартовый collector по умолчанию для большинства сервисов." }
+          },
+          "tokens": {
+            "en": ["G1", "is", "the", "default", "starting", "collector", "for", "most", "services"],
+            "ru": ["G1", "подходит", "как", "стартовый", "collector", "для", "большинства", "сервисов"]
+          },
+          "distractors": { "en": ["Serial"], "ru": ["Serial"] }
+        },
+        {
+          "id": "g1-p3-fill-flag",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the missing flag name.", "ru": "Впиши пропущенное имя флага." },
+          "feedback": {
+            "correct": { "en": "-XX:+UseG1GC selects the Garbage-First collector.", "ru": "-XX:+UseG1GC выбирает collector Garbage-First." },
+            "incorrect": { "en": "It is -XX:+UseG1GC.", "ru": "Это -XX:+UseG1GC." }
+          },
+          "text": { "en": "Select the G1 collector with -XX:+___", "ru": "Выбрать collector G1 можно через -XX:+___" },
+          "answers": { "en": ["UseG1GC"], "ru": ["UseG1GC"] }
+        }
+      ]
+    },
+    {
+      "id": "zgc-low-pause",
+      "title": { "en": "ZGC for very low pauses", "ru": "ZGC для очень низких пауз" },
+      "summary": {
+        "en": "ZGC (-XX:+UseZGC) targets very low pause goals or large heaps by doing most of its work concurrently, at the cost of extra CPU and memory.",
+        "ru": "ZGC (-XX:+UseZGC) нацелен на очень низкие pause goal или большие heap: он делает большую часть работы concurrently ценой дополнительных CPU и памяти."
+      },
+      "discovery": [
+        {
+          "id": "zgc-d1-choose",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A trading API must keep GC pauses very short on a large heap, and it can spare extra CPU and memory. Which collector fits the goal?",
+            "ru": "Торговому API нужны очень короткие паузы GC на большом heap, и он может позволить себе дополнительные CPU и память. Какой collector подходит под цель?"
+          },
+          "reveal": {
+            "en": "**ZGC**, enabled with `-XX:+UseZGC`, is built for services where a long pause is worse than extra CPU or memory overhead — very low pause goals, or very large heaps.\n\nIts trick is doing much of the collection work **concurrently**: the collector threads run *while the application threads keep running*, instead of stopping them for the whole job.\n\n```mermaid\nflowchart LR\n  A[\"application keeps running\"] --> C[\"ZGC collects concurrently\"]\n  C --> P[\"only very short pauses remain\"]\n```\n\nThat concurrency is not free: doing work alongside the application costs CPU cycles and some extra memory. You choose ZGC when short pauses are worth more than those resources.\n\n**Shenandoah** (`-XX:+UseShenandoahGC`) is another low-pause collector, available when your JDK distribution ships it. Treat it like ZGC in the decision: verify it exists in your runtime, then test it with your own workload.",
+            "ru": "**ZGC**, включается через `-XX:+UseZGC`, создан для сервисов, где длинная пауза хуже, чем дополнительный CPU или memory overhead — то есть для очень низких pause goal или очень больших heap.\n\nЕго приём — делать большую часть сборки **concurrently**: потоки collector работают, *пока потоки приложения продолжают выполняться*, вместо остановки приложения на всю работу.\n\n```mermaid\nflowchart LR\n  A[\"приложение продолжает работать\"] --> C[\"ZGC собирает concurrently\"]\n  C --> P[\"остаются только очень короткие паузы\"]\n```\n\nЭта конкурентность не бесплатна: работа параллельно с приложением стоит тактов CPU и некоторого объёма памяти. ZGC выбирают, когда короткие паузы важнее этих ресурсов.\n\n**Shenandoah** (`-XX:+UseShenandoahGC`) — ещё один low-pause collector, доступный, если ваш JDK distribution его поставляет. В выборе относитесь к нему как к ZGC: убедитесь, что он есть в runtime, и протестируйте на своей нагрузке."
+          },
+          "feedback": {
+            "correct": { "en": "ZGC trades CPU and memory overhead for very short pauses.", "ru": "ZGC меняет overhead по CPU и памяти на очень короткие паузы." },
+            "incorrect": { "en": "ZGC is the low-pause choice: it works concurrently with the application.", "ru": "ZGC — вариант для низких пауз: он работает concurrently с приложением." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "ZGC", "ru": "ZGC" }, "correct": true },
+            { "id": "b", "text": { "en": "Parallel GC", "ru": "Parallel GC" }, "correct": false,
+              "feedback": { "en": "Parallel GC favours total throughput over pause predictability.", "ru": "Parallel GC предпочитает общий throughput предсказуемости пауз." } },
+            { "id": "c", "text": { "en": "Serial GC", "ru": "Serial GC" }, "correct": false,
+              "feedback": { "en": "Serial GC is for tiny heaps and small tools, not large low-latency services.", "ru": "Serial GC — для tiny heap и маленьких утилит, а не для больших low-latency сервисов." } }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "zgc-p1-concurrent-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "ZGC performs much of its collection work concurrently with the running application.",
+            "ru": "ZGC выполняет большую часть работы по сборке concurrently с работающим приложением."
+          },
+          "feedback": {
+            "correct": { "en": "Concurrent work is exactly how ZGC keeps pauses short.", "ru": "Именно конкурентная работа и позволяет ZGC держать паузы короткими." },
+            "incorrect": { "en": "It does — concurrent collection is what keeps ZGC pauses short.", "ru": "Выполняет — конкурентная сборка и делает паузы ZGC короткими." }
+          },
+          "answer": true
+        },
+        {
+          "id": "zgc-p2-tradeoff",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What do you pay for ZGC's short pauses?",
+            "ru": "Чем платят за короткие паузы ZGC?"
+          },
+          "feedback": {
+            "correct": { "en": "Concurrent work costs CPU cycles and extra memory.", "ru": "Конкурентная работа стоит тактов CPU и дополнительной памяти." },
+            "incorrect": { "en": "The price is extra CPU and memory overhead.", "ru": "Цена — дополнительный overhead по CPU и памяти." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Extra CPU and memory overhead", "ru": "Дополнительный overhead по CPU и памяти" }, "correct": true },
+            { "id": "b", "text": { "en": "The heap can no longer be sized with -Xmx", "ru": "Heap больше нельзя задать через -Xmx" }, "correct": false,
+              "feedback": { "en": "Heap boundaries are set the same way whichever collector you choose.", "ru": "Границы heap задаются одинаково при любом выбранном collector." } },
+            { "id": "c", "text": { "en": "GC logging stops working", "ru": "Перестаёт работать GC logging" }, "correct": false,
+              "feedback": { "en": "Logging is independent of the collector choice.", "ru": "Логирование не зависит от выбора collector." } }
+          ]
+        },
+        {
+          "id": "zgc-p3-fill-flags",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the missing flag and collector name.", "ru": "Впиши пропущенный флаг и имя collector." },
+          "feedback": {
+            "correct": { "en": "Both target low pauses; Shenandoah depends on the JDK distribution.", "ru": "Оба нацелены на низкие паузы; Shenandoah зависит от JDK distribution." },
+            "incorrect": { "en": "They are -XX:+UseZGC and Shenandoah.", "ru": "Это -XX:+UseZGC и Shenandoah." }
+          },
+          "text": {
+            "en": "-XX:+___ enables ZGC; ___ is the other low-pause collector, available when the JDK distribution ships it.",
+            "ru": "-XX:+___ включает ZGC; ___ — другой low-pause collector, доступный, если его поставляет JDK distribution."
+          },
+          "blanks": [
+            { "en": ["UseZGC"], "ru": ["UseZGC"] },
+            { "en": ["Shenandoah"], "ru": ["Shenandoah"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "parallel-and-serial",
+      "title": { "en": "Parallel GC and Serial GC", "ru": "Parallel GC и Serial GC" },
+      "summary": {
+        "en": "Parallel GC favours total throughput for batch work; Serial GC fits tiny heaps and small tools.",
+        "ru": "Parallel GC предпочитает общий throughput для batch-задач; Serial GC подходит для tiny heap и маленьких утилит."
+      },
+      "discovery": [
+        {
+          "id": "parallel-d1-batch",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A nightly batch job must finish as much work per hour as possible, and occasional long pauses do not matter. Which collector matches that goal?",
+            "ru": "Ночной batch job должен выполнить максимум работы в час, а редкие длинные паузы не важны. Какой collector соответствует этой цели?"
+          },
+          "reveal": {
+            "en": "Two collectors sit at the ends of the scale.\n\n**Parallel GC** (`-XX:+UseParallelGC`) uses many GC threads at once: it stops the application, clears everything quickly with a large crew, then resumes. That maximizes **total work per hour** but gives up pause predictability — exactly the right trade for batch jobs.\n\n**Serial GC** (`-XX:+UseSerialGC`) uses a single collector thread. It suits tiny heaps, command-line tools, tests and constrained environments: simple and cheap, but not for a large service.\n\n```mermaid\nflowchart LR\n  Need[\"Service goal\"] --> Latency[\"Low pause latency\"]\n  Need --> Balanced[\"Balanced backend default\"]\n  Need --> Throughput[\"Batch throughput\"]\n  Need --> Tiny[\"Tiny heap or tool\"]\n  Latency --> ZGC[\"-XX:+UseZGC\"]\n  Balanced --> G1[\"-XX:+UseG1GC\"]\n  Throughput --> Parallel[\"-XX:+UseParallelGC\"]\n  Tiny --> Serial[\"-XX:+UseSerialGC\"]\n```\n\nThe diagram is the whole decision: the goal picks the collector, not novelty or habit.",
+            "ru": "Два collector стоят на противоположных концах шкалы.\n\n**Parallel GC** (`-XX:+UseParallelGC`) использует сразу много GC-потоков: он останавливает приложение, быстро очищает всё большой бригадой потоков и возобновляет работу. Это максимизирует **общий объём работы в час**, но жертвует предсказуемостью пауз — ровно тот размен, который нужен batch-задачам.\n\n**Serial GC** (`-XX:+UseSerialGC`) использует один поток сборки. Он подходит для tiny heap, command-line tools, тестов и ограниченных окружений: просто и дёшево, но не для крупного сервиса.\n\n```mermaid\nflowchart LR\n  Need[\"Цель сервиса\"] --> Latency[\"Низкие pause latency\"]\n  Need --> Balanced[\"Сбалансированный backend default\"]\n  Need --> Throughput[\"Batch throughput\"]\n  Need --> Tiny[\"Tiny heap или утилита\"]\n  Latency --> ZGC[\"-XX:+UseZGC\"]\n  Balanced --> G1[\"-XX:+UseG1GC\"]\n  Throughput --> Parallel[\"-XX:+UseParallelGC\"]\n  Tiny --> Serial[\"-XX:+UseSerialGC\"]\n```\n\nЭта схема и есть всё решение: collector выбирает цель, а не новизна или привычка."
+          },
+          "feedback": {
+            "correct": { "en": "Maximum work per hour with tolerated pauses is Parallel GC's case.", "ru": "Максимум работы в час при допустимых паузах — случай Parallel GC." },
+            "incorrect": { "en": "Parallel GC: it trades pause predictability for total throughput.", "ru": "Parallel GC: он меняет предсказуемость пауз на общий throughput." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Parallel GC", "ru": "Parallel GC" }, "correct": true },
+            { "id": "b", "text": { "en": "ZGC", "ru": "ZGC" }, "correct": false,
+              "feedback": { "en": "ZGC spends CPU and memory to shorten pauses the job does not care about.", "ru": "ZGC тратит CPU и память на укорачивание пауз, которые этой задаче не важны." } },
+            { "id": "c", "text": { "en": "Serial GC", "ru": "Serial GC" }, "correct": false,
+              "feedback": { "en": "A single collector thread is aimed at tiny heaps, not maximum work per hour.", "ru": "Один поток сборки рассчитан на tiny heap, а не на максимум работы в час." } }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "serial-p1-tool",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which collector is a reasonable choice for a short-lived command-line tool with a tiny heap?",
+            "ru": "Какой collector — разумный выбор для короткоживущей command-line утилиты с tiny heap?"
+          },
+          "feedback": {
+            "correct": { "en": "Serial GC is simple and cheap, which is all a small tool needs.", "ru": "Serial GC прост и дёшев — это всё, что нужно маленькой утилите." },
+            "incorrect": { "en": "Serial GC: one collector thread, meant for tiny heaps and small tools.", "ru": "Serial GC: один поток сборки, рассчитанный на tiny heap и маленькие утилиты." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Serial GC", "ru": "Serial GC" }, "correct": true },
+            { "id": "b", "text": { "en": "ZGC", "ru": "ZGC" }, "correct": false,
+              "feedback": { "en": "ZGC's CPU and memory overhead buys low pauses a tiny tool does not need.", "ru": "Overhead ZGC по CPU и памяти покупает низкие паузы, которые маленькой утилите не нужны." } },
+            { "id": "c", "text": { "en": "G1", "ru": "G1" }, "correct": false,
+              "feedback": { "en": "G1 is the balanced default for services, not the cheapest option for a tiny heap.", "ru": "G1 — сбалансированный вариант для сервисов, а не самый дешёвый для tiny heap." } }
+          ]
+        },
+        {
+          "id": "parallel-p2-purpose-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Parallel GC is chosen for predictable short pauses rather than for total throughput.",
+            "ru": "Parallel GC выбирают ради предсказуемых коротких пауз, а не ради общего throughput."
+          },
+          "feedback": {
+            "correct": { "en": "It is the opposite: Parallel GC favours throughput over pause predictability.", "ru": "Наоборот: Parallel GC предпочитает throughput предсказуемости пауз." },
+            "incorrect": { "en": "No — Parallel GC trades pause predictability away for total throughput.", "ru": "Нет — Parallel GC жертвует предсказуемостью пауз ради общего throughput." }
+          },
+          "answer": false
+        },
+        {
+          "id": "collectors-p3-match",
+          "type": "match_pairs",
+          "prompt": { "en": "Match each collector to the case it is meant for.", "ru": "Соотнеси каждый collector со случаем, для которого он предназначен." },
+          "feedback": {
+            "correct": { "en": "The goal picks the collector — that is the whole decision.", "ru": "Collector выбирает цель — в этом всё решение." },
+            "incorrect": { "en": "G1 = balanced default, ZGC = very low pauses, Parallel = batch throughput, Serial = tiny heap.", "ru": "G1 — сбалансированный default, ZGC — очень низкие паузы, Parallel — batch throughput, Serial — tiny heap." }
+          },
+          "pairs": [
+            { "id": "g1", "left": { "en": "-XX:+UseG1GC", "ru": "-XX:+UseG1GC" }, "right": { "en": "Balanced default for most services", "ru": "Сбалансированный default для большинства сервисов" } },
+            { "id": "zgc", "left": { "en": "-XX:+UseZGC", "ru": "-XX:+UseZGC" }, "right": { "en": "Very low pause goals or large heaps", "ru": "Очень низкие pause goal или большие heap" } },
+            { "id": "parallel", "left": { "en": "-XX:+UseParallelGC", "ru": "-XX:+UseParallelGC" }, "right": { "en": "Batch jobs where work per hour matters most", "ru": "Batch-задачи, где важнее всего работа в час" } },
+            { "id": "serial", "left": { "en": "-XX:+UseSerialGC", "ru": "-XX:+UseSerialGC" }, "right": { "en": "Tiny heaps, tools and constrained environments", "ru": "Tiny heap, утилиты и ограниченные окружения" } }
+          ]
+        },
+        {
+          "id": "collectors-p4-fill",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the two missing flag names.", "ru": "Впиши два пропущенных имени флага." },
+          "feedback": {
+            "correct": { "en": "Throughput and tiny-heap cases have their own dedicated collectors.", "ru": "Для throughput и для tiny heap есть свои отдельные collector." },
+            "incorrect": { "en": "They are -XX:+UseParallelGC and -XX:+UseSerialGC.", "ru": "Это -XX:+UseParallelGC и -XX:+UseSerialGC." }
+          },
+          "text": {
+            "en": "Batch throughput: -XX:+___ . Tiny heap or small tool: -XX:+___ .",
+            "ru": "Batch throughput: -XX:+___ . Tiny heap или маленькая утилита: -XX:+___ ."
+          },
+          "blanks": [
+            { "en": ["UseParallelGC"], "ru": ["UseParallelGC"] },
+            { "en": ["UseSerialGC"], "ru": ["UseSerialGC"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "heap-bounds",
+      "title": { "en": "-Xms and -Xmx", "ru": "-Xms и -Xmx" },
+      "summary": {
+        "en": "-Xms sets the initial heap and -Xmx the maximum heap; equal values remove resizing noise but commit the capacity budget up front.",
+        "ru": "-Xms задаёт начальный heap, -Xmx — максимальный; равные значения убирают шум от resizing, но сразу резервируют бюджет ёмкости."
+      },
+      "discovery": [
+        {
+          "id": "heap-d1-equal-flags",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A service starts with these two flags. What do they do?",
+            "ru": "Сервис запускается с этими двумя флагами. Что они делают?"
+          },
+          "code": "-Xms512m -Xmx512m",
+          "codeLang": "text",
+          "reveal": {
+            "en": "`-Xms` sets the **initial** heap size and `-Xmx` sets the **maximum** heap size. With `-Xms512m -Xmx512m` the heap starts at 512 MB and never grows past 512 MB — a fixed heap.\n\n```mermaid\nflowchart LR\n  Xms[\"-Xms: initial heap\"] --> Heap[\"heap\"]\n  Xmx[\"-Xmx: maximum heap\"] --> Heap\n```\n\nWhy set them equal? In a stable service it removes **resizing noise**: the JVM never has to grow or shrink the heap while serving traffic. The cost is that the capacity budget is committed up front — the memory is claimed from the first request, whether or not it is needed yet, which is not always economical.\n\nOne thing `-Xmx` does **not** do: it does not bound the whole process. It is the ceiling for the heap only; other memory areas live outside it and are covered next.",
+            "ru": "`-Xms` задаёт **начальный** размер heap, а `-Xmx` — **максимальный**. При `-Xms512m -Xmx512m` heap стартует с 512 МБ и никогда не вырастает выше 512 МБ — фиксированный heap.\n\n```mermaid\nflowchart LR\n  Xms[\"-Xms: начальный heap\"] --> Heap[\"heap\"]\n  Xmx[\"-Xmx: максимальный heap\"] --> Heap\n```\n\nЗачем делать их равными? В стабильном сервисе это убирает **шум от resizing**: JVM не приходится увеличивать или уменьшать heap прямо во время обслуживания трафика. Плата — бюджет ёмкости резервируется сразу: память занимается с первого запроса, нужна она уже или нет, что не всегда экономно.\n\nЧего `-Xmx` **не** делает: он не ограничивает весь процесс. Это потолок только для heap; другие области памяти живут вне его — о них дальше."
+          },
+          "feedback": {
+            "correct": { "en": "Equal -Xms and -Xmx mean a fixed-size heap.", "ru": "Равные -Xms и -Xmx означают heap фиксированного размера." },
+            "incorrect": { "en": "-Xms is the initial heap and -Xmx the maximum; equal values fix the heap size.", "ru": "-Xms — начальный heap, -Xmx — максимальный; равные значения фиксируют размер heap." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "The heap starts at 512 MB and never grows beyond 512 MB", "ru": "Heap стартует с 512 МБ и никогда не растёт выше 512 МБ" }, "correct": true },
+            { "id": "b", "text": { "en": "The heap starts near zero and may grow up to 512 MB", "ru": "Heap стартует почти с нуля и может вырасти до 512 МБ" }, "correct": false,
+              "feedback": { "en": "That is what -Xmx alone would do; -Xms sets the starting size to 512 MB too.", "ru": "Так было бы с одним -Xmx; -Xms тоже задаёт стартовый размер в 512 МБ." } },
+            { "id": "c", "text": { "en": "The whole JVM process is limited to 512 MB of memory", "ru": "Весь процесс JVM ограничен 512 МБ памяти" }, "correct": false,
+              "feedback": { "en": "-Xmx bounds the heap only; the process also needs memory outside the heap.", "ru": "-Xmx ограничивает только heap; процессу нужна память и вне heap." } }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "heap-p1-process-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "-Xmx limits the total amount of memory a JVM process can use.",
+            "ru": "-Xmx ограничивает общий объём памяти, который может использовать процесс JVM."
+          },
+          "feedback": {
+            "correct": { "en": "-Xmx is the heap ceiling; the process uses more memory than the heap.", "ru": "-Xmx — потолок heap; процесс использует больше памяти, чем heap." },
+            "incorrect": { "en": "No — -Xmx bounds the heap only, not the whole process.", "ru": "Нет — -Xmx ограничивает только heap, а не весь процесс." }
+          },
+          "answer": false
+        },
+        {
+          "id": "heap-p2-why-equal",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why do some stable services set -Xms equal to -Xmx?",
+            "ru": "Почему некоторые стабильные сервисы задают -Xms равным -Xmx?"
+          },
+          "feedback": {
+            "correct": { "en": "No resizing during traffic, at the price of committing capacity up front.", "ru": "Никакого resizing под трафиком — ценой резервирования ёмкости заранее." },
+            "incorrect": { "en": "It removes heap resizing noise, but commits the capacity budget from the start.", "ru": "Это убирает шум от resizing heap, но резервирует бюджет ёмкости с самого начала." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "It removes heap resizing noise while the service runs", "ru": "Это убирает шум от resizing heap во время работы сервиса" }, "correct": true },
+            { "id": "b", "text": { "en": "It guarantees that GC pauses stay short", "ru": "Это гарантирует, что паузы GC останутся короткими" }, "correct": false,
+              "feedback": { "en": "Heap sizing does not guarantee any pause length.", "ru": "Размер heap не гарантирует никакой длины паузы." } },
+            { "id": "c", "text": { "en": "It prevents memory leaks", "ru": "Это предотвращает memory leak" }, "correct": false,
+              "feedback": { "en": "Heap flags cannot make reachable objects collectable.", "ru": "Флаги heap не делают reachable-объекты собираемыми." } }
+          ]
+        },
+        {
+          "id": "heap-p3-fill",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the two missing flag names.", "ru": "Впиши два пропущенных имени флага." },
+          "feedback": {
+            "correct": { "en": "Initial heap and maximum heap are two separate settings.", "ru": "Начальный heap и максимальный heap — две разные настройки." },
+            "incorrect": { "en": "They are -Xms (initial heap) and -Xmx (maximum heap).", "ru": "Это -Xms (начальный heap) и -Xmx (максимальный heap)." }
+          },
+          "text": {
+            "en": "___ sets the initial heap size and ___ sets the maximum heap size.",
+            "ru": "___ задаёт начальный размер heap, а ___ задаёт максимальный размер heap."
+          },
+          "blanks": [
+            { "en": ["-Xms", "Xms"], "ru": ["-Xms", "Xms"] },
+            { "en": ["-Xmx", "Xmx"], "ru": ["-Xmx", "Xmx"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "container-headroom",
+      "title": { "en": "Container limits and headroom", "ru": "Лимиты контейнера и запас памяти" },
+      "summary": {
+        "en": "In a container the heap must stay below the memory limit, because Metaspace, thread stacks, direct buffers, the JIT and native code live outside it.",
+        "ru": "В контейнере heap должен оставаться ниже лимита памяти, потому что вне его живут Metaspace, thread stacks, direct buffers, JIT и native code."
+      },
+      "discovery": [
+        {
+          "id": "container-d1-spot-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "A service runs in a container limited to 512Mi of memory, with this configuration. What is the defect?",
+            "ru": "Сервис работает в контейнере с лимитом 512Mi памяти и с этой конфигурацией. В чём дефект?"
+          },
+          "code": "# container memory limit: 512Mi\n-Xmx512m\n-XX:+UseG1GC",
+          "codeLang": "text",
+          "reveal": {
+            "en": "A container limit covers the **whole process**, while `-Xmx` covers only the **heap**. Several memory areas live outside the heap and still need room:\n\n- **Metaspace** — class metadata.\n- **Thread stacks** — one stack per thread.\n- **Direct buffers** — off-heap byte buffers.\n- The **JIT** compiler and other **native code**.\n\n```mermaid\nflowchart TD\n  Limit[\"container memory limit\"] --> Heap[\"heap: -Xmx\"]\n  Limit --> NonHeap[\"Metaspace, thread stacks, direct buffers, JIT, native\"]\n```\n\nSetting `-Xmx` to the full container limit leaves nothing for the second box, so the process can be killed for exceeding the limit even though the heap itself never overflowed. Always leave **headroom** outside the heap.\n\nWhen the same image runs under different limits, `-XX:InitialRAMPercentage` and `-XX:MaxRAMPercentage` are often better than fixed sizes: they express the heap as a share of the memory available to the container, so one image adapts to every limit.",
+            "ru": "Лимит контейнера покрывает **весь процесс**, а `-Xmx` — только **heap**. Вне heap живут ещё несколько областей памяти, и им тоже нужно место:\n\n- **Metaspace** — метаданные классов.\n- **Thread stacks** — по стеку на поток.\n- **Direct buffers** — off-heap байтовые буферы.\n- Компилятор **JIT** и прочий **native code**.\n\n```mermaid\nflowchart TD\n  Limit[\"лимит памяти контейнера\"] --> Heap[\"heap: -Xmx\"]\n  Limit --> NonHeap[\"Metaspace, thread stacks, direct buffers, JIT, native\"]\n```\n\nЕсли задать `-Xmx` равным всему лимиту контейнера, на второй блок не останется ничего, и процесс могут убить за превышение лимита, хотя сам heap не переполнялся. Всегда оставляйте **запас** вне heap.\n\nКогда один и тот же image запускается с разными лимитами, `-XX:InitialRAMPercentage` и `-XX:MaxRAMPercentage` часто удобнее фиксированных размеров: они задают heap как долю доступной контейнеру памяти, и один image подстраивается под любой лимит."
+          },
+          "feedback": {
+            "correct": { "en": "The heap takes the entire limit, leaving nothing for non-heap memory.", "ru": "Heap занимает весь лимит, не оставляя ничего для non-heap памяти." },
+            "incorrect": { "en": "-Xmx equal to the container limit leaves no room for Metaspace, stacks, buffers and native memory.", "ru": "-Xmx, равный лимиту контейнера, не оставляет места для Metaspace, стеков, буферов и native memory." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "The heap alone consumes the whole container limit, leaving no room for non-heap memory", "ru": "Один только heap съедает весь лимит контейнера, не оставляя места для non-heap памяти" }, "correct": true },
+            { "id": "b", "text": { "en": "G1 cannot be used inside a container", "ru": "G1 нельзя использовать внутри контейнера" }, "correct": false,
+              "feedback": { "en": "Collector choice is unrelated to containerization.", "ru": "Выбор collector не связан с контейнеризацией." } },
+            { "id": "c", "text": { "en": "-Xmx must always be accompanied by an equal -Xms", "ru": "-Xmx всегда должен сопровождаться равным -Xms" }, "correct": false,
+              "feedback": { "en": "Equal -Xms/-Xmx is an option for stable services, not a requirement.", "ru": "Равные -Xms/-Xmx — вариант для стабильных сервисов, а не требование." } }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "container-p1-full-limit-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In a container it is safe to set -Xmx to the full container memory limit, because the JVM only uses the heap.",
+            "ru": "В контейнере безопасно задавать -Xmx равным всему лимиту памяти контейнера, потому что JVM использует только heap."
+          },
+          "feedback": {
+            "correct": { "en": "Metaspace, thread stacks, direct buffers and native code also need room.", "ru": "Metaspace, thread stacks, direct buffers и native code тоже требуют места." },
+            "incorrect": { "en": "No — the JVM needs memory outside the heap, so headroom must be left.", "ru": "Нет — JVM нужна память вне heap, поэтому нужно оставлять запас." }
+          },
+          "answer": false
+        },
+        {
+          "id": "container-p2-percentage-flag",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which JVM option sizes the heap as a percentage of the memory available to the container?",
+            "ru": "Какая опция JVM задаёт heap как процент от памяти, доступной контейнеру?"
+          },
+          "feedback": {
+            "correct": { "en": "-XX:MaxRAMPercentage lets one image adapt to different limits.", "ru": "-XX:MaxRAMPercentage позволяет одному image подстраиваться под разные лимиты." },
+            "incorrect": { "en": "It is -XX:MaxRAMPercentage; -Xmx is a fixed size instead.", "ru": "Это -XX:MaxRAMPercentage; -Xmx задаёт вместо этого фиксированный размер." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "-XX:MaxRAMPercentage", "ru": "-XX:MaxRAMPercentage" }, "correct": true },
+            { "id": "b", "text": { "en": "-Xmx", "ru": "-Xmx" }, "correct": false,
+              "feedback": { "en": "-Xmx takes an absolute size, not a share of the container's memory.", "ru": "-Xmx принимает абсолютный размер, а не долю памяти контейнера." } },
+            { "id": "c", "text": { "en": "-XX:MaxGCPauseMillis", "ru": "-XX:MaxGCPauseMillis" }, "correct": false,
+              "feedback": { "en": "That is a pause target and has nothing to do with heap size.", "ru": "Это pause target, он не связан с размером heap." } }
+          ]
+        },
+        {
+          "id": "container-p3-word-bank",
+          "type": "word_bank",
+          "prompt": { "en": "Assemble the container memory rule.", "ru": "Собери правило о памяти в контейнере." },
+          "feedback": {
+            "correct": { "en": "The heap is only part of what the process needs.", "ru": "Heap — лишь часть того, что нужно процессу." },
+            "incorrect": { "en": "Leave headroom outside the heap for Metaspace, thread stacks and direct buffers.", "ru": "Оставляйте запас вне heap для Metaspace, thread stacks и direct buffers." }
+          },
+          "tokens": {
+            "en": ["leave", "headroom", "outside", "the", "heap", "for", "Metaspace", "thread", "stacks", "and", "direct", "buffers"],
+            "ru": ["оставь", "запас", "вне", "heap", "для", "Metaspace", "thread", "stacks", "и", "direct", "buffers"]
+          },
+          "distractors": { "en": ["inside"], "ru": ["внутри"] }
+        },
+        {
+          "id": "container-p4-fill",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the two missing option names.", "ru": "Впиши два пропущенных имени опции." },
+          "feedback": {
+            "correct": { "en": "Percentage sizing keeps one image correct under any container limit.", "ru": "Задание в процентах оставляет один image корректным при любом лимите контейнера." },
+            "incorrect": { "en": "They are -XX:InitialRAMPercentage and -XX:MaxRAMPercentage.", "ru": "Это -XX:InitialRAMPercentage и -XX:MaxRAMPercentage." }
+          },
+          "text": {
+            "en": "-XX:___ and -XX:___ size the heap as a share of the memory available to the container.",
+            "ru": "-XX:___ и -XX:___ задают heap как долю памяти, доступной контейнеру."
+          },
+          "blanks": [
+            { "en": ["InitialRAMPercentage"], "ru": ["InitialRAMPercentage"] },
+            { "en": ["MaxRAMPercentage"], "ru": ["MaxRAMPercentage"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gc-logging",
+      "title": { "en": "Unified GC logging", "ru": "Unified GC logging" },
+      "summary": {
+        "en": "On Java 9+ GC logging is enabled with -Xlog:gc*:file=gc.log:time,uptime,level,tags and records when GC ran, how long it paused and how much it reclaimed.",
+        "ru": "В Java 9+ GC logging включается через -Xlog:gc*:file=gc.log:time,uptime,level,tags и фиксирует, когда шёл GC, сколько длилась пауза и сколько памяти освободилось."
+      },
+      "discovery": [
+        {
+          "id": "logging-d1-which-option",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "You need evidence of how GC actually behaves in a Java 21 service. Which option do you add to the command line?",
+            "ru": "Нужны доказательства того, как GC на самом деле ведёт себя в сервисе на Java 21. Какую опцию вы добавите в командную строку?"
+          },
+          "reveal": {
+            "en": "Java 9 replaced the old scattered GC flags with **unified logging**, a single `-Xlog` option. A good starting line is:\n\n```\n-Xlog:gc*:file=gc.log:time,uptime,level,tags\n```\n\nIt reads as three parts:\n\n- `gc*` — which messages to log: every tag starting with `gc`.\n- `file=gc.log` — where to write them.\n- `time,uptime,level,tags` — the decorators stamped on each line, so you know wall-clock time, time since JVM start, severity and which subsystem produced the line.\n\nThe resulting log answers the questions measurement needs: when a collection ran, how long the application was paused, how much memory was reclaimed, and whether full GCs or promotion pressure show up. Without it you only learn about a problem from user complaints, after the fact.",
+            "ru": "Java 9 заменила старые разрозненные GC-флаги на **unified logging** — единую опцию `-Xlog`. Хорошая стартовая строка:\n\n```\n-Xlog:gc*:file=gc.log:time,uptime,level,tags\n```\n\nОна читается как три части:\n\n- `gc*` — какие сообщения логировать: все теги, начинающиеся с `gc`.\n- `file=gc.log` — куда их писать.\n- `time,uptime,level,tags` — декораторы, которыми помечается каждая строка: время по часам, время с запуска JVM, уровень и подсистема, породившая строку.\n\nПолученный лог отвечает на вопросы, нужные для измерений: когда шла сборка, как долго приложение было остановлено, сколько памяти освободилось, появляются ли full GC или promotion pressure. Без него о проблеме узнают только из жалоб пользователей, задним числом."
+          },
+          "feedback": {
+            "correct": { "en": "Unified logging is the Java 9+ way to record GC behaviour.", "ru": "Unified logging — способ фиксировать поведение GC в Java 9+." },
+            "incorrect": { "en": "GC logging on Java 9+ is -Xlog:gc*:file=gc.log:time,uptime,level,tags.", "ru": "GC logging в Java 9+ — это -Xlog:gc*:file=gc.log:time,uptime,level,tags." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "-Xlog:gc*:file=gc.log:time,uptime,level,tags", "ru": "-Xlog:gc*:file=gc.log:time,uptime,level,tags" }, "correct": true },
+            { "id": "b", "text": { "en": "-XX:+UseG1GC", "ru": "-XX:+UseG1GC" }, "correct": false,
+              "feedback": { "en": "That selects a collector; it records nothing.", "ru": "Это выбирает collector; он ничего не записывает." } },
+            { "id": "c", "text": { "en": "-XX:MaxGCPauseMillis=200", "ru": "-XX:MaxGCPauseMillis=200" }, "correct": false,
+              "feedback": { "en": "That states a pause target; it produces no log of what happened.", "ru": "Это задаёт pause target; лога о происходящем он не создаёт." } }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "logging-p1-what-it-shows",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does a gc.log produced by -Xlog:gc* let you see?",
+            "ru": "Что позволяет увидеть gc.log, созданный через -Xlog:gc*?"
+          },
+          "feedback": {
+            "correct": { "en": "When GC ran, how long it paused, how much it reclaimed.", "ru": "Когда шёл GC, сколько длилась пауза, сколько памяти освободилось." },
+            "incorrect": { "en": "It shows when GC ran, pause lengths and reclaimed memory — not individual leaking objects.", "ru": "Он показывает, когда шёл GC, длину пауз и освобождённую память — но не конкретные утекающие объекты." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "When collections ran, how long pauses lasted and how much memory was reclaimed", "ru": "Когда выполнялись сборки, сколько длились паузы и сколько памяти освободилось" }, "correct": true },
+            { "id": "b", "text": { "en": "Exactly which objects leaked and which line of code created them", "ru": "Какие именно объекты утекли и какая строка кода их создала" }, "correct": false,
+              "feedback": { "en": "The GC log reports collection events, not per-object origins.", "ru": "GC-лог сообщает о событиях сборки, а не о происхождении отдельных объектов." } },
+            { "id": "c", "text": { "en": "A guarantee that future pauses will stay under the pause target", "ru": "Гарантию, что будущие паузы не превысят pause target" }, "correct": false,
+              "feedback": { "en": "A log records the past; it guarantees nothing about the future.", "ru": "Лог фиксирует прошлое; он ничего не гарантирует про будущее." } }
+          ]
+        },
+        {
+          "id": "logging-p2-word-bank",
+          "type": "word_bank",
+          "prompt": { "en": "Assemble the Java 9+ GC logging option from its parts.", "ru": "Собери опцию GC logging для Java 9+ из её частей." },
+          "feedback": {
+            "correct": { "en": "Selection, destination, decorators — the three parts of -Xlog.", "ru": "Выбор, назначение, декораторы — три части -Xlog." },
+            "incorrect": { "en": "The order is -Xlog:gc* then :file=gc.log then :time,uptime,level,tags.", "ru": "Порядок такой: -Xlog:gc*, затем :file=gc.log, затем :time,uptime,level,tags." }
+          },
+          "tokens": {
+            "en": ["-Xlog:gc*", ":file=gc.log", ":time,uptime,level,tags"],
+            "ru": ["-Xlog:gc*", ":file=gc.log", ":time,uptime,level,tags"]
+          },
+          "distractors": { "en": [":verbose"], "ru": [":verbose"] }
+        },
+        {
+          "id": "logging-p3-fill",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the missing option name.", "ru": "Впиши пропущенное имя опции." },
+          "feedback": {
+            "correct": { "en": "-Xlog is the unified logging option introduced in Java 9.", "ru": "-Xlog — опция unified logging, появившаяся в Java 9." },
+            "incorrect": { "en": "It is -Xlog, for example -Xlog:gc*:file=gc.log:time,uptime,level,tags.", "ru": "Это -Xlog, например -Xlog:gc*:file=gc.log:time,uptime,level,tags." }
+          },
+          "text": {
+            "en": "On Java 9+, GC logging is enabled with the ___ option.",
+            "ru": "В Java 9+ GC logging включается опцией ___."
+          },
+          "answers": { "en": ["-Xlog", "Xlog", "-Xlog:gc*"], "ru": ["-Xlog", "Xlog", "-Xlog:gc*"] }
+        }
+      ]
+    },
+    {
+      "id": "reading-gc-logs",
+      "title": { "en": "Reading GC logs as patterns", "ru": "Чтение GC-логов как паттернов" },
+      "summary": {
+        "en": "GC logs are read as patterns: frequent small young GCs can be normal, while full GCs, growing heap after GC and promotion pressure are warnings.",
+        "ru": "GC-логи читают как паттерны: частые маленькие young GC могут быть нормой, а full GC, растущий heap after GC и promotion pressure — предупреждения."
+      },
+      "discovery": [
+        {
+          "id": "logs-d1-growing-heap",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Over several hours of a service's gc.log, the heap occupancy measured right after each collection keeps creeping up. What does that pattern suggest?",
+            "ru": "За несколько часов gc.log сервиса заполненность heap, измеренная сразу после каждой сборки, постепенно растёт. О чём говорит этот паттерн?"
+          },
+          "reveal": {
+            "en": "A GC log is read as **patterns over time**, never as a single line.\n\n- **Frequent young GC with small pauses.** A **young GC** collects only the area where new objects are created. Frequent short ones can be perfectly normal for allocation-heavy code.\n- **Full GC events** in a service are a warning: usually the old generation is filling up, promotion is too high, or the heap is too small.\n- **Heap after GC keeps growing.** Each collection frees less than the one before, so something is staying reachable: a memory leak, or a cache that is intentionally growing.\n- **Promotion pressure** — too many objects survive young collections and get moved into the old generation. Causes include undersized young regions, bursty allocation, or objects living slightly longer than expected.\n- **High allocation rate** is often a code or data-shape problem rather than a GC problem; a different collector will not fix code that creates far more objects than it needs.\n\n```mermaid\nflowchart LR\n  P1[\"heap after GC grows\"] --> C1[\"leak or growing cache\"]\n  P2[\"full GC events\"] --> C2[\"old generation filling or heap too small\"]\n  P3[\"high allocation rate\"] --> C3[\"code or data-shape problem\"]\n```",
+            "ru": "GC-лог читают как **паттерны во времени**, а не как одну строку.\n\n- **Частые young GC с маленькими паузами.** **Young GC** собирает только область, где создаются новые объекты. Частые короткие сборки вполне могут быть нормой для allocation-heavy кода.\n- **Full GC events** в сервисе — предупреждение: обычно заполняется old generation, слишком высок promotion или heap слишком мал.\n- **Heap after GC продолжает расти.** Каждая сборка освобождает меньше предыдущей, значит что-то остаётся reachable: memory leak или намеренно растущий cache.\n- **Promotion pressure** — слишком много объектов переживают young collections и переезжают в old generation. Причины: слишком маленькие young-регионы, всплески allocation или объекты, живущие чуть дольше ожидаемого.\n- **Высокий allocation rate** чаще проблема кода или формы данных, чем GC; другой collector не исправит код, создающий гораздо больше объектов, чем нужно.\n\n```mermaid\nflowchart LR\n  P1[\"heap after GC растёт\"] --> C1[\"leak или растущий cache\"]\n  P2[\"события full GC\"] --> C2[\"заполняется old generation или heap мал\"]\n  P3[\"высокий allocation rate\"] --> C3[\"проблема кода или формы данных\"]\n```"
+          },
+          "feedback": {
+            "correct": { "en": "Less is freed each time, so something stays reachable.", "ru": "Каждый раз освобождается меньше — значит, что-то остаётся reachable." },
+            "incorrect": { "en": "A rising heap after GC points to a leak or an intentionally growing cache.", "ru": "Растущий heap after GC указывает на leak или намеренно растущий cache." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "A memory leak, or a cache that is intentionally growing", "ru": "Memory leak или намеренно растущий cache" }, "correct": true },
+            { "id": "b", "text": { "en": "That the pause target is set too low", "ru": "Что pause target задан слишком низким" }, "correct": false,
+              "feedback": { "en": "A pause target affects pause length, not how much stays occupied.", "ru": "Pause target влияет на длину паузы, а не на объём остающейся занятой памяти." } },
+            { "id": "c", "text": { "en": "That the collector is failing to free unreachable objects", "ru": "Что collector не освобождает unreachable-объекты" }, "correct": false,
+              "feedback": { "en": "The collector frees what is unreachable; growth means objects stay reachable.", "ru": "Collector освобождает то, что unreachable; рост означает, что объекты остаются reachable." } }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "logs-p1-full-gc",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In a long-running service, repeated full GC events in the GC log most likely mean what?",
+            "ru": "В долгоживущем сервисе повторяющиеся события full GC в GC-логе, скорее всего, означают что?"
+          },
+          "feedback": {
+            "correct": { "en": "Full GCs in a service point at the old generation, promotion or heap size.", "ru": "Full GC в сервисе указывают на old generation, promotion или размер heap." },
+            "incorrect": { "en": "They usually mean the old generation is filling, promotion is too high, or the heap is too small.", "ru": "Обычно это значит, что заполняется old generation, слишком высок promotion или heap слишком мал." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "The old generation is filling up, promotion is too high, or the heap is too small", "ru": "Заполняется old generation, слишком высок promotion или heap слишком мал" }, "correct": true },
+            { "id": "b", "text": { "en": "GC logging is misconfigured", "ru": "GC logging настроен неверно" }, "correct": false,
+              "feedback": { "en": "The log is reporting real events; the events themselves are the warning.", "ru": "Лог сообщает о реальных событиях; сами события и есть предупреждение." } },
+            { "id": "c", "text": { "en": "The pause goal is being comfortably met", "ru": "Pause goal выполняется с запасом" }, "correct": false,
+              "feedback": { "en": "Full GCs are long collections — the opposite of a comfortable pause picture.", "ru": "Full GC — длинные сборки, это противоположность спокойной картины пауз." } }
+          ]
+        },
+        {
+          "id": "logs-p2-young-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Frequent young GCs with small pauses always mean the collector is misconfigured.",
+            "ru": "Частые young GC с маленькими паузами всегда означают, что collector настроен неправильно."
+          },
+          "feedback": {
+            "correct": { "en": "For allocation-heavy code that pattern can be entirely normal.", "ru": "Для allocation-heavy кода такой паттерн может быть совершенно нормальным." },
+            "incorrect": { "en": "No — frequent short young GCs can be normal for allocation-heavy code.", "ru": "Нет — частые короткие young GC могут быть нормой для allocation-heavy кода." }
+          },
+          "answer": false
+        },
+        {
+          "id": "logs-p3-match",
+          "type": "match_pairs",
+          "prompt": { "en": "Match each GC log pattern to what it usually indicates.", "ru": "Соотнеси каждый паттерн GC-лога с тем, на что он обычно указывает." },
+          "feedback": {
+            "correct": { "en": "Patterns, not single lines, are what a GC log is read for.", "ru": "GC-лог читают ради паттернов, а не отдельных строк." },
+            "incorrect": { "en": "Each pattern has its own typical cause — compare them side by side.", "ru": "У каждого паттерна своя типичная причина — сравните их рядом." }
+          },
+          "pairs": [
+            { "id": "young", "left": { "en": "Frequent young GC with small pauses", "ru": "Частые young GC с маленькими паузами" }, "right": { "en": "Often normal for allocation-heavy code", "ru": "Часто норма для allocation-heavy кода" } },
+            { "id": "full", "left": { "en": "Full GC events in a service", "ru": "События full GC в сервисе" }, "right": { "en": "Old generation filling, or heap too small", "ru": "Заполняется old generation или heap слишком мал" } },
+            { "id": "after", "left": { "en": "Heap after GC keeps growing", "ru": "Heap after GC продолжает расти" }, "right": { "en": "Memory leak or an intentionally growing cache", "ru": "Memory leak или намеренно растущий cache" } },
+            { "id": "alloc", "left": { "en": "High allocation rate", "ru": "Высокий allocation rate" }, "right": { "en": "Usually a code or data-shape problem", "ru": "Обычно проблема кода или формы данных" } }
+          ]
+        },
+        {
+          "id": "logs-p4-fill",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the missing term.", "ru": "Впиши пропущенный термин." },
+          "feedback": {
+            "correct": { "en": "Promotion pressure means the young area is not holding objects long enough.", "ru": "Promotion pressure означает, что молодая область не удерживает объекты достаточно долго." },
+            "incorrect": { "en": "The term is promotion pressure.", "ru": "Термин — promotion pressure." }
+          },
+          "text": {
+            "en": "When too many objects survive young collections and move into the old generation, the log shows ___ pressure.",
+            "ru": "Когда слишком много объектов переживают young collections и переезжают в old generation, лог показывает ___ pressure."
+          },
+          "answers": { "en": ["promotion"], "ru": ["promotion"] }
+        }
+      ]
+    },
+    {
+      "id": "pause-goal",
+      "title": { "en": "A pause goal is not a guarantee", "ru": "Pause goal — не гарантия" },
+      "summary": {
+        "en": "-XX:MaxGCPauseMillis tells G1 how much work to do per pause, but a large live set or an allocation spike can still exceed it.",
+        "ru": "-XX:MaxGCPauseMillis подсказывает G1, сколько работы делать за паузу, но большой live set или всплеск allocation всё равно могут её превысить."
+      },
+      "discovery": [
+        {
+          "id": "pause-d1-predict",
+          "type": "predict_output",
+          "prompt": {
+            "en": "A service runs with these flags and then hits a burst of allocation with a large live set. What can gc.log still show?",
+            "ru": "Сервис работает с этими флагами и попадает во всплеск allocation при большом live set. Что всё равно может показать gc.log?"
+          },
+          "code": "-XX:+UseG1GC\n-XX:MaxGCPauseMillis=50",
+          "codeLang": "text",
+          "reveal": {
+            "en": "`-XX:MaxGCPauseMillis` is a **goal, not a contract**.\n\nG1 uses the number as an input to a decision: given the target, how many regions can it afford to collect in the next pause? It then sizes the work accordingly. That is real steering — but it is planning based on estimates, and the JVM cannot stop the world for a fixed number of milliseconds by decree.\n\n```mermaid\nflowchart LR\n  Goal[\"-XX:MaxGCPauseMillis\"] --> Plan[\"G1 sizes the work per pause\"]\n  Plan --> Real[\"actual pause\"]\n  Spike[\"large live set or allocation spike\"] --> Real\n```\n\nWhen the live set is huge or allocation comes in bursts, the work simply cannot be squeezed into the target, and the log shows pauses above it. So `-XX:MaxGCPauseMillis=50` does not mean \"no pause will exceed 50 ms\"; it means \"aim for about 50 ms\". Treat any pause number as a target to verify in the log, never as a promise to rely on.",
+            "ru": "`-XX:MaxGCPauseMillis` — это **цель, а не контракт**.\n\nG1 использует это число как вход для решения: сколько регионов он может позволить себе собрать в следующую паузу при такой цели? После этого он подбирает объём работы. Это настоящее управление — но планирование по оценкам, а не приказ, ведь JVM не может остановить мир ровно на заданное число миллисекунд.\n\n```mermaid\nflowchart LR\n  Goal[\"-XX:MaxGCPauseMillis\"] --> Plan[\"G1 подбирает объём работы на паузу\"]\n  Plan --> Real[\"фактическая пауза\"]\n  Spike[\"большой live set или всплеск allocation\"] --> Real\n```\n\nКогда live set огромен или allocation идёт всплесками, работу просто не удаётся втиснуть в цель, и лог показывает паузы выше неё. Поэтому `-XX:MaxGCPauseMillis=50` означает не «ни одна пауза не превысит 50 мс», а «целься примерно в 50 мс». Любое число про паузы считайте целью, которую нужно проверить по логу, а не обещанием, на которое можно опереться."
+          },
+          "feedback": {
+            "correct": { "en": "The target steers G1's planning; it does not cap real pauses.", "ru": "Цель управляет планированием G1, но не ограничивает реальные паузы." },
+            "incorrect": { "en": "Pauses above the target are possible — it is a goal, not a guaranteed limit.", "ru": "Паузы выше цели возможны — это цель, а не гарантированный лимит." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Some pauses longer than 50 ms", "ru": "Отдельные паузы длиннее 50 мс" }, "correct": true },
+            { "id": "b", "text": { "en": "Pauses of exactly 50 ms, since the flag fixes the pause length", "ru": "Паузы ровно по 50 мс, ведь флаг фиксирует длину паузы" }, "correct": false,
+              "feedback": { "en": "The flag states a target; it does not fix any pause length.", "ru": "Флаг задаёт цель; он не фиксирует длину паузы." } },
+            { "id": "c", "text": { "en": "No pauses at all, because G1 works concurrently", "ru": "Полное отсутствие пауз, ведь G1 работает concurrently" }, "correct": false,
+              "feedback": { "en": "G1 still pauses the application to collect; the target only shapes how long.", "ru": "G1 всё равно останавливает приложение для сборки; цель лишь влияет на длительность." } }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "pause-p1-guarantee-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "-XX:MaxGCPauseMillis=50 guarantees that no GC pause will exceed 50 ms.",
+            "ru": "-XX:MaxGCPauseMillis=50 гарантирует, что ни одна пауза GC не превысит 50 мс."
+          },
+          "feedback": {
+            "correct": { "en": "It is a tuning goal; a large live set or allocation spike can exceed it.", "ru": "Это цель настройки; большой live set или всплеск allocation могут её превысить." },
+            "incorrect": { "en": "No — it is a goal, and the JVM can miss it under a large live set or bursty allocation.", "ru": "Нет — это цель, и JVM может её не выдержать при большом live set или всплесковом allocation." }
+          },
+          "answer": false
+        },
+        {
+          "id": "pause-p2-how-used",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "How does G1 actually use the -XX:MaxGCPauseMillis value?",
+            "ru": "Как G1 на самом деле использует значение -XX:MaxGCPauseMillis?"
+          },
+          "feedback": {
+            "correct": { "en": "The target sizes the work per pause; the outcome is still an estimate.", "ru": "Цель определяет объём работы на паузу; результат остаётся оценкой." },
+            "incorrect": { "en": "G1 uses it to decide how much work to do in each pause.", "ru": "G1 использует её, чтобы решить, сколько работы делать за каждую паузу." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "To decide how much work to do in each pause", "ru": "Чтобы решить, сколько работы выполнить за каждую паузу" }, "correct": true },
+            { "id": "b", "text": { "en": "To abort a collection as soon as the time runs out", "ru": "Чтобы прервать сборку, как только время вышло" }, "correct": false,
+              "feedback": { "en": "Collections are planned to fit the target, not cut off by a timer.", "ru": "Сборки планируются под цель, а не обрываются по таймеру." } },
+            { "id": "c", "text": { "en": "To compute the heap size", "ru": "Чтобы вычислить размер heap" }, "correct": false,
+              "feedback": { "en": "Heap size comes from -Xms/-Xmx or RAM percentages, not from a pause target.", "ru": "Размер heap задаётся -Xms/-Xmx или процентами от RAM, а не pause target." } }
+          ]
+        },
+        {
+          "id": "pause-p3-word-bank",
+          "type": "word_bank",
+          "prompt": { "en": "Assemble the rule about the JVM pause target.", "ru": "Собери правило о цели по паузам в JVM." },
+          "feedback": {
+            "correct": { "en": "Verify pause behaviour in the log rather than trusting the number.", "ru": "Проверяйте поведение пауз по логу, а не доверяйте числу." },
+            "incorrect": { "en": "-XX:MaxGCPauseMillis is a tuning goal, not a guarantee.", "ru": "-XX:MaxGCPauseMillis — цель настройки, а не гарантия." }
+          },
+          "tokens": {
+            "en": ["-XX:MaxGCPauseMillis", "is", "a", "tuning", "goal", "not", "a", "guarantee"],
+            "ru": ["-XX:MaxGCPauseMillis", "—", "цель", "настройки", "а", "не", "гарантия"]
+          },
+          "distractors": { "en": ["contract"], "ru": ["контракт"] }
+        },
+        {
+          "id": "pause-p4-fill",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the two missing words.", "ru": "Впиши два пропущенных слова." },
+          "feedback": {
+            "correct": { "en": "Aim, then confirm in the GC log.", "ru": "Сначала цель, потом проверка по GC-логу." },
+            "incorrect": { "en": "It sets a pause goal, not a guarantee.", "ru": "Он задаёт цель по паузе, а не гарантию." }
+          },
+          "text": {
+            "en": "-XX:MaxGCPauseMillis sets a pause ___, not a ___.",
+            "ru": "-XX:MaxGCPauseMillis задаёт ___ по паузе, а не ___."
+          },
+          "blanks": [
+            { "en": ["goal", "target"], "ru": ["цель"] },
+            { "en": ["guarantee", "contract"], "ru": ["гарантию", "контракт"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "advanced-knobs",
+      "title": { "en": "Advanced knobs are log-driven", "ru": "Продвинутые ручки — по данным логов" },
+      "summary": {
+        "en": "-XX:InitiatingHeapOccupancyPercent and -XX:+UseStringDeduplication are changed only when logs justify them, because each has a cost.",
+        "ru": "-XX:InitiatingHeapOccupancyPercent и -XX:+UseStringDeduplication меняют, только когда это оправдано логами, потому что у каждого есть цена."
+      },
+      "discovery": [
+        {
+          "id": "knobs-d1-ihop",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "When is it justified to change -XX:InitiatingHeapOccupancyPercent?",
+            "ru": "Когда оправдано менять -XX:InitiatingHeapOccupancyPercent?"
+          },
+          "reveal": {
+            "en": "Beyond the collector and the heap, a few advanced flags exist. They are not defaults to add — each one is a response to something a log actually showed.\n\n**`-XX:InitiatingHeapOccupancyPercent`** controls when G1 starts **concurrent marking**: the background scan, running alongside the application, that works out what is worth collecting. Starting it earlier or later only makes sense once the logs show marking starting too late (the heap fills before marking finishes) or too early (marking runs more often than needed).\n\n**`-XX:+UseStringDeduplication`**, used with G1, merges duplicate `String` objects and can help workloads that hold many identical strings — but it costs CPU. And if the pressure comes from repeatedly building strings, the code is the real fix; deduplicating afterwards only treats the symptom.\n\nThe rule for both: change them because a measurement pointed at them, not because they appeared in someone else's flag list.",
+            "ru": "Кроме collector и heap есть несколько продвинутых флагов. Их не добавляют по умолчанию — каждый является ответом на то, что реально показал лог.\n\n**`-XX:InitiatingHeapOccupancyPercent`** управляет тем, когда G1 начинает **concurrent marking**: фоновый обход, идущий параллельно приложению, который определяет, что стоит собирать. Начинать его раньше или позже имеет смысл, только когда логи показывают, что marking стартует слишком поздно (heap заполняется до его завершения) или слишком рано (marking идёт чаще, чем нужно).\n\n**`-XX:+UseStringDeduplication`** вместе с G1 объединяет одинаковые объекты `String` и может помочь нагрузкам, удерживающим множество идентичных строк, — но стоит CPU. А если давление создаётся повторной сборкой строк, настоящее исправление в коде; дедупликация постфактум лечит лишь симптом.\n\nПравило для обоих: менять их потому, что на них указало измерение, а не потому, что они встретились в чужом списке флагов."
+          },
+          "feedback": {
+            "correct": { "en": "Advanced knobs answer a measured problem, nothing else.", "ru": "Продвинутые ручки отвечают на измеренную проблему, и только." },
+            "incorrect": { "en": "Only when logs show concurrent marking starting too late or too early.", "ru": "Только когда логи показывают, что concurrent marking стартует слишком поздно или слишком рано." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "When GC logs show concurrent marking starting too late or too early", "ru": "Когда GC-логи показывают, что concurrent marking начинается слишком поздно или слишком рано" }, "correct": true },
+            { "id": "b", "text": { "en": "On every new service, as part of a standard profile", "ru": "На каждом новом сервисе, как часть стандартного профиля" }, "correct": false,
+              "feedback": { "en": "A first profile stays small; this flag is not part of it.", "ru": "Первый профиль остаётся маленьким; этого флага в нём нет." } },
+            { "id": "c", "text": { "en": "Whenever a pause exceeds -XX:MaxGCPauseMillis", "ru": "Каждый раз, когда пауза превышает -XX:MaxGCPauseMillis" }, "correct": false,
+              "feedback": { "en": "Exceeding a pause goal is expected sometimes; it does not point at this flag.", "ru": "Превышение pause goal иногда ожидаемо; на этот флаг оно не указывает." } }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "knobs-p1-dedup-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "-XX:+UseStringDeduplication reduces memory at no cost, so it is safe to enable everywhere.",
+            "ru": "-XX:+UseStringDeduplication снижает расход памяти бесплатно, поэтому его можно включать везде."
+          },
+          "feedback": {
+            "correct": { "en": "It costs CPU, and it helps only when many duplicate strings are held.", "ru": "Он стоит CPU и помогает, только когда удерживается много одинаковых строк." },
+            "incorrect": { "en": "No — it costs CPU and only helps workloads with many duplicate String objects.", "ru": "Нет — он стоит CPU и помогает только нагрузкам с множеством одинаковых объектов String." }
+          },
+          "answer": false
+        },
+        {
+          "id": "knobs-p2-match",
+          "type": "match_pairs",
+          "prompt": { "en": "Match each JVM option to what it controls.", "ru": "Соотнеси каждую опцию JVM с тем, чем она управляет." },
+          "feedback": {
+            "correct": { "en": "Three different knobs, three different jobs.", "ru": "Три разные ручки — три разные задачи." },
+            "incorrect": { "en": "One times concurrent marking, one merges duplicate strings, one states a pause target.", "ru": "Одна задаёт момент concurrent marking, другая объединяет одинаковые строки, третья задаёт pause target." }
+          },
+          "pairs": [
+            { "id": "ihop", "left": { "en": "-XX:InitiatingHeapOccupancyPercent", "ru": "-XX:InitiatingHeapOccupancyPercent" }, "right": { "en": "When G1 starts concurrent marking", "ru": "Когда G1 начинает concurrent marking" } },
+            { "id": "dedup", "left": { "en": "-XX:+UseStringDeduplication", "ru": "-XX:+UseStringDeduplication" }, "right": { "en": "Merges duplicate String objects, at a CPU cost", "ru": "Объединяет одинаковые объекты String ценой CPU" } },
+            { "id": "pause", "left": { "en": "-XX:MaxGCPauseMillis", "ru": "-XX:MaxGCPauseMillis" }, "right": { "en": "The pause target G1 works toward", "ru": "Pause target, к которому стремится G1" } }
+          ]
+        },
+        {
+          "id": "knobs-p3-fill",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the missing term.", "ru": "Впиши пропущенный термин." },
+          "feedback": {
+            "correct": { "en": "Concurrent marking runs alongside the application to plan collection.", "ru": "Concurrent marking идёт параллельно приложению и планирует сборку." },
+            "incorrect": { "en": "It is concurrent marking — G1's background scan.", "ru": "Это concurrent marking — фоновый обход G1." }
+          },
+          "text": {
+            "en": "-XX:InitiatingHeapOccupancyPercent changes when G1 starts ___ marking.",
+            "ru": "-XX:InitiatingHeapOccupancyPercent меняет момент, когда G1 начинает ___ marking."
+          },
+          "answers": { "en": ["concurrent"], "ru": ["concurrent", "конкурентный"] }
+        }
+      ]
+    },
+    {
+      "id": "one-change-at-a-time",
+      "title": { "en": "One change at a time", "ru": "По одному изменению за раз" },
+      "summary": {
+        "en": "Change one setting, rerun the same load and compare; several changes at once hide which one mattered.",
+        "ru": "Менять одну настройку, повторять ту же нагрузку и сравнивать; несколько изменений сразу скрывают, какое из них сработало."
+      },
+      "discovery": [
+        {
+          "id": "one-change-d1-three-changes",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A team switches the collector, doubles -Xmx and lowers the pause target, then reruns the load test. Latency improves. What do they now know?",
+            "ru": "Команда меняет collector, удваивает -Xmx и снижает pause target, затем повторяет load test. Latency улучшается. Что они теперь знают?"
+          },
+          "reveal": {
+            "en": "Tuning is a loop, and each turn of the loop changes exactly **one** thing: the collector, the heap size, the pause target, or one advanced flag. Then the **same** load runs again and the new measurements are compared with the old ones.\n\n```mermaid\nflowchart LR\n  Change[\"change one setting\"] --> Load[\"rerun the same load\"]\n  Load --> Compare[\"compare against the goal\"]\n  Compare --> Change\n```\n\nWhen several settings move together, the result is uninterpretable: the improvement might come from one change while another quietly made things worse. Worse, the flags stay in the configuration forever because nobody knows which one earned its place.\n\nThis is also why copying a long flag list from another service is not tuning. Flags are workload-specific — a list that fits a different application is a set of untested changes applied all at once. When the goal is met, keep the flag set as small as possible.",
+            "ru": "Настройка — это цикл, и на каждом витке меняется ровно **одна** вещь: collector, размер heap, pause target или один продвинутый флаг. После этого запускается **та же** нагрузка, и новые измерения сравниваются со старыми.\n\n```mermaid\nflowchart LR\n  Change[\"меняем одну настройку\"] --> Load[\"повторяем ту же нагрузку\"]\n  Load --> Compare[\"сравниваем с целью\"]\n  Compare --> Change\n```\n\nКогда несколько настроек меняются вместе, результат нельзя интерпретировать: улучшение могло дать одно изменение, пока другое незаметно ухудшало картину. Хуже того, флаги остаются в конфигурации навсегда, потому что никто не знает, какой из них заслужил своё место.\n\nПоэтому же копирование длинного списка флагов из другого сервиса — не настройка. Флаги зависят от workload: список, подходящий другому приложению, — это набор непроверенных изменений, применённых разом. Когда цель достигнута, держите набор флагов минимальным."
+          },
+          "feedback": {
+            "correct": { "en": "Three simultaneous changes leave the cause unknown.", "ru": "Три одновременных изменения оставляют причину неизвестной." },
+            "incorrect": { "en": "They know latency improved, but not which of the three changes did it.", "ru": "Они знают, что latency улучшилась, но не знают, какое из трёх изменений это дало." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "That latency improved, but not which change caused it", "ru": "Что latency улучшилась, но не то, какое изменение это вызвало" }, "correct": true },
+            { "id": "b", "text": { "en": "That all three changes helped", "ru": "Что помогли все три изменения" }, "correct": false,
+              "feedback": { "en": "One change may have helped while another made things worse.", "ru": "Одно изменение могло помочь, пока другое ухудшало картину." } },
+            { "id": "c", "text": { "en": "That the collector was the original problem", "ru": "Что исходной проблемой был collector" }, "correct": false,
+              "feedback": { "en": "Nothing in the experiment isolates the collector from the other two changes.", "ru": "Ничто в эксперименте не отделяет collector от двух других изменений." } }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "one-change-p1-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Changing the collector, the heap size and the pause target in a single run is an efficient way to find the cause of a GC problem.",
+            "ru": "Менять collector, размер heap и pause target за один прогон — эффективный способ найти причину проблемы с GC."
+          },
+          "feedback": {
+            "correct": { "en": "Simultaneous changes destroy cause and effect.", "ru": "Одновременные изменения уничтожают связь причины и следствия." },
+            "incorrect": { "en": "No — several changes at once hide which one produced the result.", "ru": "Нет — несколько изменений сразу скрывают, какое дало результат." }
+          },
+          "answer": false
+        },
+        {
+          "id": "one-change-p2-flag-set",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Once a service meets its SLO, what should its GC flag set look like?",
+            "ru": "Когда сервис укладывается в свой SLO, как должен выглядеть его набор GC-флагов?"
+          },
+          "feedback": {
+            "correct": { "en": "Every flag left in place should have earned its place in a test.", "ru": "Каждый оставшийся флаг должен был заслужить своё место в тесте." },
+            "incorrect": { "en": "Keep it minimal — only flags that a measurement justified.", "ru": "Держите его минимальным — только флаги, оправданные измерением." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "As small as possible — only what measurements justified", "ru": "Как можно меньше — только то, что оправдано измерениями" }, "correct": true },
+            { "id": "b", "text": { "en": "As long as possible, for maximum control", "ru": "Как можно длиннее, ради максимального контроля" }, "correct": false,
+              "feedback": { "en": "Untested flags add risk and hide which setting actually matters.", "ru": "Непроверенные флаги добавляют риск и скрывают, какая настройка действительно важна." } },
+            { "id": "c", "text": { "en": "Copied from a well-known high-load service", "ru": "Скопированным у известного высоконагруженного сервиса" }, "correct": false,
+              "feedback": { "en": "Flags are workload-specific; another service's list is untested here.", "ru": "Флаги зависят от workload; список другого сервиса здесь не проверен." } }
+          ]
+        },
+        {
+          "id": "one-change-p3-sort",
+          "type": "sort_steps",
+          "prompt": { "en": "Put one iteration of the GC tuning loop in order.", "ru": "Расставь один виток цикла настройки GC по порядку." },
+          "feedback": {
+            "correct": { "en": "Goal, data, one change, same load, comparison.", "ru": "Цель, данные, одно изменение, та же нагрузка, сравнение." },
+            "incorrect": { "en": "The goal and the baseline come first; only then one change and a rerun of the same load.", "ru": "Сначала цель и базовые измерения; только потом одно изменение и повтор той же нагрузки." }
+          },
+          "steps": [
+            { "id": "s1", "text": { "en": "Define the goal: latency, throughput or footprint", "ru": "Определить цель: latency, throughput или footprint" } },
+            { "id": "s2", "text": { "en": "Measure the current behaviour under a realistic load", "ru": "Измерить текущее поведение под реалистичной нагрузкой" } },
+            { "id": "s3", "text": { "en": "Change exactly one setting", "ru": "Изменить ровно одну настройку" } },
+            { "id": "s4", "text": { "en": "Rerun the same load test", "ru": "Повторить тот же load test" } },
+            { "id": "s5", "text": { "en": "Compare the new measurements against the goal", "ru": "Сравнить новые измерения с целью" } }
+          ]
+        },
+        {
+          "id": "one-change-p4-fill",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the two missing words.", "ru": "Впиши два пропущенных слова." },
+          "feedback": {
+            "correct": { "en": "One variable, one workload — that is how cause stays visible.", "ru": "Одна переменная, одна нагрузка — так причина остаётся видимой." },
+            "incorrect": { "en": "Change one setting at a time and rerun the same load.", "ru": "Меняйте по одной настройке за раз и повторяйте ту же нагрузку." }
+          },
+          "text": {
+            "en": "Change ___ setting at a time and rerun the ___ load test.",
+            "ru": "Меняй ___ настройку за раз и запускай ___ нагрузку."
+          },
+          "blanks": [
+            { "en": ["one"], "ru": ["одну"] },
+            { "en": ["same"], "ru": ["ту же", "ту же самую", "такую же"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gc-myths",
+      "title": { "en": "What tuning cannot fix", "ru": "Что настройка исправить не может" },
+      "summary": {
+        "en": "More heap, System.gc() and copied flag lists do not fix leaks: objects that stay reachable must be kept.",
+        "ru": "Больший heap, System.gc() и скопированные списки флагов не лечат leak: объекты, остающиеся reachable, приходится хранить."
+      },
+      "discovery": [
+        {
+          "id": "myths-d1-system-gc",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "A service caches every request and adds this call to \"free memory\" as the heap grows. What is the defect?",
+            "ru": "Сервис кэширует каждый запрос и добавляет этот вызов, чтобы «освободить память», пока heap растёт. В чём дефект?"
+          },
+          "code": "cache.put(key, value);\nSystem.gc(); // free memory after each request",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Two separate misconceptions collide here.\n\n**`System.gc()` is only a request.** It asks the JVM to collect; it does not command it. In services it is often disabled outright, and when it is not, calling it repeatedly forces expensive collections that slow the application down.\n\n**GC tuning cannot fix a leak.** A collector frees objects that are no longer **reachable**. If entries stay reachable from maps, caches, static fields, threads or queues, the collector is *correct* to keep them — that is not a GC bug, it is the program still holding on.\n\n```mermaid\nflowchart LR\n  Cache[\"cache holds the entry\"] --> Reach[\"entry stays reachable\"]\n  Reach --> Keep[\"GC must keep it\"]\n```\n\nThe same logic answers the neighbouring myths. Raising `-Xmx` cannot release reachable objects: it can reduce GC frequency, but it also increases memory cost and can make individual collections larger, so it only delays the symptom. And picking the newest collector helps only when the workload actually needs what that collector specializes in.",
+            "ru": "Здесь сталкиваются два разных заблуждения.\n\n**`System.gc()` — только request.** Он просит JVM выполнить сборку, но не приказывает. В сервисах его часто просто отключают, а если нет — регулярные вызовы вызывают дорогие сборки и замедляют приложение.\n\n**Настройка GC не лечит leak.** Collector освобождает объекты, которые больше не **reachable**. Если записи остаются reachable из maps, caches, static fields, потоков или очередей, collector *правильно* их хранит — это не баг GC, а программа, которая продолжает их удерживать.\n\n```mermaid\nflowchart LR\n  Cache[\"cache держит запись\"] --> Reach[\"запись остаётся reachable\"]\n  Reach --> Keep[\"GC обязан её хранить\"]\n```\n\nТа же логика отвечает и на соседние мифы. Увеличение `-Xmx` не освобождает reachable-объекты: оно может снизить частоту GC, но повышает стоимость памяти и делает отдельные сборки крупнее, то есть лишь откладывает симптом. А выбор самого нового collector помогает, только когда нагрузке действительно нужна его специализация."
+          },
+          "feedback": {
+            "correct": { "en": "The entries stay reachable, and System.gc() is only a request.", "ru": "Записи остаются reachable, а System.gc() — только request." },
+            "incorrect": { "en": "Cached entries stay reachable, so nothing can be freed — and System.gc() is only a request.", "ru": "Записи в cache остаются reachable, поэтому освободить нечего — а System.gc() лишь request." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "The cached entries stay reachable so nothing can be freed, and System.gc() is only a request", "ru": "Записи в cache остаются reachable, поэтому освободить нечего, а System.gc() — только request" }, "correct": true },
+            { "id": "b", "text": { "en": "System.gc() is called too often; calling it once per minute would free the memory", "ru": "System.gc() вызывается слишком часто; вызов раз в минуту освободил бы память" }, "correct": false,
+              "feedback": { "en": "Frequency is not the issue: reachable objects cannot be freed at any frequency.", "ru": "Дело не в частоте: reachable-объекты нельзя освободить ни при какой частоте." } },
+            { "id": "c", "text": { "en": "The heap is simply too small; raising -Xmx would fix it", "ru": "Heap просто слишком мал; увеличение -Xmx это исправит" }, "correct": false,
+              "feedback": { "en": "More heap delays the symptom; it never releases reachable objects.", "ru": "Больший heap откладывает симптом; он никогда не освобождает reachable-объекты." } }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "myths-p1-xmx-leak-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Increasing -Xmx fixes a memory leak.",
+            "ru": "Увеличение -Xmx исправляет memory leak."
+          },
+          "feedback": {
+            "correct": { "en": "Reachable objects must be kept no matter how large the heap is.", "ru": "Reachable-объекты приходится хранить при любом размере heap." },
+            "incorrect": { "en": "No — a bigger heap only delays the symptom; reachable objects still cannot be freed.", "ru": "Нет — больший heap лишь откладывает симптом; reachable-объекты по-прежнему нельзя освободить." }
+          },
+          "answer": false
+        },
+        {
+          "id": "myths-p2-system-gc",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does calling System.gc() in a service actually do?",
+            "ru": "Что на самом деле делает вызов System.gc() в сервисе?"
+          },
+          "feedback": {
+            "correct": { "en": "A request, frequently disabled, and often harmful when it is not.", "ru": "Это request, часто отключённый, а когда нет — нередко вредный." },
+            "incorrect": { "en": "It is only a request, often disabled in services and harmful when called repeatedly.", "ru": "Это только request, в сервисах часто отключённый и вредный при регулярных вызовах." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "It only requests a collection, and is often disabled or harmful in services", "ru": "Он лишь запрашивает сборку и в сервисах часто отключён или вреден" }, "correct": true },
+            { "id": "b", "text": { "en": "It immediately and reliably frees all unused memory", "ru": "Он немедленно и надёжно освобождает всю неиспользуемую память" }, "correct": false,
+              "feedback": { "en": "It cannot free anything that is still reachable, and it is not a command.", "ru": "Он не может освободить то, что остаётся reachable, и это не команда." } },
+            { "id": "c", "text": { "en": "It lowers the collector's pause target for the next collection", "ru": "Он снижает pause target collector для следующей сборки" }, "correct": false,
+              "feedback": { "en": "It has no relationship with the pause target at all.", "ru": "Он вообще никак не связан с pause target." } }
+          ]
+        },
+        {
+          "id": "myths-p3-word-bank",
+          "type": "word_bank",
+          "prompt": { "en": "Assemble the rule about what a collector is allowed to free.", "ru": "Собери правило о том, что collector имеет право освобождать." },
+          "feedback": {
+            "correct": { "en": "Reachability, not usefulness, decides what survives.", "ru": "Что выживет, решает reachability, а не полезность." },
+            "incorrect": { "en": "GC must keep every object that is still reachable.", "ru": "GC обязан хранить каждый объект, который всё ещё reachable." }
+          },
+          "tokens": {
+            "en": ["GC", "must", "keep", "every", "object", "that", "is", "still", "reachable"],
+            "ru": ["GC", "обязан", "хранить", "каждый", "объект", "который", "всё", "ещё", "reachable"]
+          },
+          "distractors": { "en": ["unused"], "ru": ["ненужный"] }
+        },
+        {
+          "id": "myths-p4-fill",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the two missing words.", "ru": "Впиши два пропущенных слова." },
+          "feedback": {
+            "correct": { "en": "Neither flags nor an explicit call can release held objects.", "ru": "Ни флаги, ни явный вызов не освобождают удерживаемые объекты." },
+            "incorrect": { "en": "GC tuning cannot fix a leak, and System.gc() is only a request.", "ru": "Настройка GC не лечит leak, а System.gc() — только request." }
+          },
+          "text": {
+            "en": "GC tuning cannot fix a memory ___, and System.gc() is only a ___.",
+            "ru": "Настройка GC не может исправить memory ___, а System.gc() — это только ___."
+          },
+          "blanks": [
+            { "en": ["leak"], "ru": ["leak", "утечку"] },
+            { "en": ["request"], "ru": ["request", "запрос"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tuning-loop-capstone",
+      "title": { "en": "Running the whole tuning loop", "ru": "Полный цикл настройки" },
+      "summary": {
+        "en": "Goal, measurement, collector, heap bounds, logging and one change at a time form a single repeatable loop.",
+        "ru": "Цель, измерения, collector, границы heap, логирование и одно изменение за раз образуют единый повторяемый цикл."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "capstone-d1-container-config",
+          "type": "predict_output",
+          "prompt": {
+            "en": "A latency-sensitive API runs in a container limited to 1Gi with this configuration. What will go wrong first?",
+            "ru": "Чувствительный к latency API работает в контейнере с лимитом 1Gi и с этой конфигурацией. Что пойдёт не так в первую очередь?"
+          },
+          "code": "# container memory limit: 1Gi\n-Xmx1g\n-XX:+UseParallelGC\n-XX:MaxGCPauseMillis=50",
+          "codeLang": "text",
+          "reveal": {
+            "en": "Two independent mistakes are visible without running anything.\n\n1. `-Xmx1g` equals the container limit, so Metaspace, thread stacks, direct buffers, the JIT and native code have no room. The process can be killed for exceeding the limit even though the heap never overflowed.\n2. The stated goal is latency, but Parallel GC is the throughput collector: it stops the application and clears everything with a large crew. `-XX:MaxGCPauseMillis` does not repair that mismatch — and it is a goal, not a guarantee, in any case.\n\nThe fix is not a longer flag list; it is running the loop:\n\n```mermaid\nflowchart TD\n  Goal[\"1. Define the goal\"] --> Measure[\"2. Measure under realistic load\"]\n  Measure --> Collector[\"3. Choose the collector\"]\n  Collector --> Heap[\"4. Set heap bounds, leave non-heap headroom\"]\n  Heap --> Logs[\"5. Enable GC logging\"]\n  Logs --> Load[\"6. Run the load test\"]\n  Load --> Check{\"Goal met?\"}\n  Check -->|yes| Keep[\"Keep the flag set minimal\"]\n  Check -->|no| One[\"Change one setting\"]\n  One --> Load\n```\n\nEvery atom of this lesson is one box of that diagram. The loop is what turns a pile of flags into an answer you can defend: the goal justifies the collector, the container justifies the heap bounds, the log supplies the evidence, and the one-change rule keeps cause and effect visible.",
+            "ru": "Две независимые ошибки видны ещё до запуска.\n\n1. `-Xmx1g` равен лимиту контейнера, поэтому Metaspace, thread stacks, direct buffers, JIT и native code остаются без места. Процесс могут убить за превышение лимита, хотя heap не переполнялся.\n2. Заявленная цель — latency, но Parallel GC — collector для throughput: он останавливает приложение и очищает всё большой бригадой потоков. `-XX:MaxGCPauseMillis` это несоответствие не исправляет — и он в любом случае цель, а не гарантия.\n\nЛечение не в более длинном списке флагов, а в прохождении цикла:\n\n```mermaid\nflowchart TD\n  Goal[\"1. Определить цель\"] --> Measure[\"2. Измерить под реалистичной нагрузкой\"]\n  Measure --> Collector[\"3. Выбрать collector\"]\n  Collector --> Heap[\"4. Задать границы heap, оставить запас вне heap\"]\n  Heap --> Logs[\"5. Включить GC logging\"]\n  Logs --> Load[\"6. Запустить load test\"]\n  Load --> Check{\"Цель достигнута?\"}\n  Check -->|да| Keep[\"Оставить минимум флагов\"]\n  Check -->|нет| One[\"Изменить одну настройку\"]\n  One --> Load\n```\n\nКаждый атом этого урока — один блок этой схемы. Именно цикл превращает груду флагов в ответ, который можно защитить: цель обосновывает collector, контейнер обосновывает границы heap, лог даёт доказательства, а правило одного изменения сохраняет видимой связь причины и следствия."
+          },
+          "feedback": {
+            "correct": { "en": "Heap eats the whole limit, and the collector contradicts the goal.", "ru": "Heap съедает весь лимит, а collector противоречит цели." },
+            "incorrect": { "en": "Two problems: the heap takes the entire container limit, and Parallel GC is a throughput collector.", "ru": "Две проблемы: heap занимает весь лимит контейнера, а Parallel GC — collector для throughput." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "The heap consumes the whole container limit, and Parallel GC targets throughput rather than short pauses", "ru": "Heap занимает весь лимит контейнера, а Parallel GC нацелен на throughput, а не на короткие паузы" }, "correct": true },
+            { "id": "b", "text": { "en": "Nothing: -XX:MaxGCPauseMillis=50 guarantees the latency goal", "ru": "Ничего: -XX:MaxGCPauseMillis=50 гарантирует цель по latency" }, "correct": false,
+              "feedback": { "en": "It is a goal, not a guarantee, and it cannot turn a throughput collector into a low-latency one.", "ru": "Это цель, а не гарантия, и она не превращает throughput-collector в low-latency." } },
+            { "id": "c", "text": { "en": "Only that GC logging is missing", "ru": "Только то, что не включён GC logging" }, "correct": false,
+              "feedback": { "en": "Logging is indeed missing, but the heap sizing and collector choice already contradict the goal.", "ru": "Логирование действительно отсутствует, но размер heap и выбор collector уже противоречат цели." } }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "capstone-p1-copied-flags",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "These flags were copied from another service into a latency-sensitive API that needs an 8 GB heap. What is the main defect?",
+            "ru": "Эти флаги скопированы из другого сервиса в чувствительный к latency API, которому нужен heap на 8 ГБ. В чём основной дефект?"
+          },
+          "code": "-Xms8g -Xmx8g\n-XX:+UseSerialGC\n-XX:MaxGCPauseMillis=20",
+          "codeLang": "text",
+          "feedback": {
+            "correct": { "en": "Serial GC is a tiny-heap collector; the flag list was never matched to this workload.", "ru": "Serial GC — collector для tiny heap; список флагов никогда не сопоставляли с этой нагрузкой." },
+            "incorrect": { "en": "Serial GC targets tiny heaps and small tools, which contradicts both the 8 GB heap and the latency goal.", "ru": "Serial GC рассчитан на tiny heap и маленькие утилиты, что противоречит и heap на 8 ГБ, и цели по latency." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Serial GC is meant for tiny heaps and small tools, so it contradicts both the 8 GB heap and the latency goal", "ru": "Serial GC предназначен для tiny heap и маленьких утилит, что противоречит и heap на 8 ГБ, и цели по latency" }, "correct": true },
+            { "id": "b", "text": { "en": "-Xms must never equal -Xmx", "ru": "-Xms никогда не должен равняться -Xmx" }, "correct": false,
+              "feedback": { "en": "Equal values are a legitimate choice for a stable service; they are not the defect here.", "ru": "Равные значения — законный выбор для стабильного сервиса; дефект не в них." } },
+            { "id": "c", "text": { "en": "-XX:MaxGCPauseMillis cannot be set below 50", "ru": "-XX:MaxGCPauseMillis нельзя задавать ниже 50" }, "correct": false,
+              "feedback": { "en": "There is no such lower bound; the value is a goal the JVM aims at.", "ru": "Такой нижней границы нет; это значение — цель, к которой стремится JVM." } }
+          ]
+        },
+        {
+          "id": "capstone-p2-predict-log",
+          "type": "predict_output",
+          "prompt": {
+            "en": "A service runs with these flags through a heavy allocation burst. What will gc.log most likely show?",
+            "ru": "Сервис работает с этими флагами во время сильного всплеска allocation. Что, скорее всего, покажет gc.log?"
+          },
+          "code": "-XX:+UseG1GC\n-XX:MaxGCPauseMillis=10\n-Xlog:gc*:file=gc.log:time,uptime,level,tags",
+          "codeLang": "text",
+          "feedback": {
+            "correct": { "en": "The log is the evidence; the pause target is only an aim.", "ru": "Лог — это доказательство; pause target — только стремление." },
+            "incorrect": { "en": "Expect some pauses above 10 ms: the pause target is a goal, and the log records what really happened.", "ru": "Ожидайте отдельные паузы выше 10 мс: pause target — цель, а лог фиксирует то, что произошло на самом деле." }
+          },
+          "options": [
+            { "id": "a", "text": { "en": "GC entries including some pauses above 10 ms", "ru": "Записи GC, включая отдельные паузы выше 10 мс" }, "correct": true },
+            { "id": "b", "text": { "en": "GC entries with every pause at exactly 10 ms", "ru": "Записи GC, где каждая пауза ровно 10 мс" }, "correct": false,
+              "feedback": { "en": "The target shapes how much work G1 plans per pause; it does not fix the duration.", "ru": "Цель определяет объём работы, планируемый G1 на паузу; длительность она не фиксирует." } },
+            { "id": "c", "text": { "en": "No GC entries, because -Xlog only records errors", "ru": "Никаких записей GC, потому что -Xlog пишет только ошибки" }, "correct": false,
+              "feedback": { "en": "-Xlog:gc* records every gc-tagged message, not only errors.", "ru": "-Xlog:gc* записывает все сообщения с тегом gc, а не только ошибки." } }
+          ]
+        },
+        {
+          "id": "capstone-p3-sort-loop",
+          "type": "sort_steps",
+          "prompt": { "en": "Put the full GC tuning loop in order, from an untuned service to a validated configuration.", "ru": "Расставь полный цикл настройки GC по порядку — от ненастроенного сервиса до проверенной конфигурации." },
+          "feedback": {
+            "correct": { "en": "Goal, data, collector, memory, evidence, one change — in that order.", "ru": "Цель, данные, collector, память, доказательства, одно изменение — именно в таком порядке." },
+            "incorrect": { "en": "The goal comes before the measurement, and both come before any collector or heap decision.", "ru": "Цель идёт до измерений, а обе — до любого решения по collector или heap." }
+          },
+          "steps": [
+            { "id": "s1", "text": { "en": "Define the goal: latency, throughput or footprint", "ru": "Определить цель: latency, throughput или footprint" } },
+            { "id": "s2", "text": { "en": "Measure allocation rate, pauses, full GC frequency and heap after GC", "ru": "Измерить allocation rate, паузы, частоту full GC и heap after GC" } },
+            { "id": "s3", "text": { "en": "Choose the collector that matches the goal", "ru": "Выбрать collector, соответствующий цели" } },
+            { "id": "s4", "text": { "en": "Set the heap bounds and leave headroom for non-heap memory", "ru": "Задать границы heap и оставить запас для non-heap памяти" } },
+            { "id": "s5", "text": { "en": "Enable GC logging with -Xlog:gc*", "ru": "Включить GC logging через -Xlog:gc*" } },
+            { "id": "s6", "text": { "en": "Change one setting, rerun the same load and compare", "ru": "Изменить одну настройку, повторить ту же нагрузку и сравнить" } }
+          ]
+        },
+        {
+          "id": "capstone-p4-match-roles",
+          "type": "match_pairs",
+          "prompt": { "en": "Match each JVM option to its role in GC configuration.", "ru": "Соотнеси каждую опцию JVM с её ролью в настройке GC." },
+          "feedback": {
+            "correct": { "en": "Each option answers a different question of the loop.", "ru": "Каждая опция отвечает на свой вопрос цикла." },
+            "incorrect": { "en": "Memory bounds, collector choice, evidence and pause target are four separate concerns.", "ru": "Границы памяти, выбор collector, доказательства и pause target — четыре разные задачи." }
+          },
+          "pairs": [
+            { "id": "xmx", "left": { "en": "-Xmx", "ru": "-Xmx" }, "right": { "en": "Upper bound of the heap", "ru": "Верхняя граница heap" } },
+            { "id": "rampct", "left": { "en": "-XX:MaxRAMPercentage", "ru": "-XX:MaxRAMPercentage" }, "right": { "en": "Heap as a share of container memory", "ru": "Heap как доля памяти контейнера" } },
+            { "id": "zgc", "left": { "en": "-XX:+UseZGC", "ru": "-XX:+UseZGC" }, "right": { "en": "Collector for very low pause goals", "ru": "Collector для очень низких pause goal" } },
+            { "id": "xlog", "left": { "en": "-Xlog:gc*", "ru": "-Xlog:gc*" }, "right": { "en": "Evidence of what GC actually did", "ru": "Доказательства того, что GC реально делал" } },
+            { "id": "maxpause", "left": { "en": "-XX:MaxGCPauseMillis", "ru": "-XX:MaxGCPauseMillis" }, "right": { "en": "Pause target G1 works toward", "ru": "Pause target, к которому стремится G1" } }
+          ]
+        },
+        {
+          "id": "capstone-p5-fill-profile",
+          "type": "fill_blank",
+          "prompt": { "en": "Complete a reasonable first production profile.", "ru": "Дополни разумный первый production-профиль." },
+          "feedback": {
+            "correct": { "en": "A small, defensible starting point: balanced collector plus a moderate pause goal.", "ru": "Маленькая защитимая стартовая точка: сбалансированный collector плюс умеренный pause goal." },
+            "incorrect": { "en": "A common first profile is -XX:+UseG1GC with -XX:MaxGCPauseMillis=200.", "ru": "Частый первый профиль — -XX:+UseG1GC вместе с -XX:MaxGCPauseMillis=200." }
+          },
+          "text": {
+            "en": "First profile: -Xms512m -Xmx512m, -XX:+___, -XX:MaxGCPauseMillis=___, plus -Xlog:gc*:file=gc.log:time,uptime,level,tags",
+            "ru": "Первый профиль: -Xms512m -Xmx512m, -XX:+___, -XX:MaxGCPauseMillis=___, плюс -Xlog:gc*:file=gc.log:time,uptime,level,tags"
+          },
+          "blanks": [
+            { "en": ["UseG1GC"], "ru": ["UseG1GC"] },
+            { "en": ["200"], "ru": ["200"] }
+          ]
+        }
+      ]
+    }
+  ]
+}

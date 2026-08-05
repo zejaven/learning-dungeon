@@ -1,0 +1,3386 @@
+{
+  "schemaVersion": 1,
+  "topicId": "why-kibana",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "why-central-logs",
+      "title": {
+        "en": "Why one grep stops working",
+        "ru": "Почему одного grep перестаёт хватать"
+      },
+      "summary": {
+        "en": "With many replicas in containers, ssh + grep fails: the instance that logged the error may be gone, one request spans services, and log readers should not have production shell access.",
+        "ru": "Когда реплик много и они в контейнерах, ssh + grep не работает: экземпляра, записавшего ошибку, может уже не быть, один запрос идёт через несколько сервисов, а читателям логов не положен shell в проде."
+      },
+      "discovery": [
+        {
+          "id": "central-d1-dead-pod",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A pod crashed and was replaced. You ssh to the node and look inside the new container for the stack trace the old one printed. What do you find?",
+            "ru": "Под упал и был заменён. Вы заходите по ssh на узел и ищете в новом контейнере стектрейс, который напечатал старый. Что вы найдёте?"
+          },
+          "reveal": {
+            "en": "On a single server a log is just a file: `ssh`, `tail -f app.log`, `grep ERROR`. That workflow is genuinely good — and it survives exactly until there is more than one machine.\n\nWith several services and many replicas it breaks in specific ways:\n\n- Twelve replicas are running. Which one handled *this* request?\n- A crashed pod was replaced, and the container's filesystem — with the stack trace in it — went away with it.\n- One failure crossed four services, so you would need four terminals and correctly synchronised clocks.\n- Support asks whether it also failed yesterday, but yesterday's file was rotated away.\n- The people who need the logs most (QA, support, an on-call developer) are exactly the people who should not have shell access to production.\n\n```mermaid\nflowchart LR\n  R1[\"orders replica 1\"] --> C[\"central log store\"]\n  R2[\"orders replica 2\"] --> C\n  P1[\"payments replica 1\"] --> C\n  C --> UI[\"one search over all of them\"]\n```\n\nCentralized logging exists because searching a distributed system is a different task from reading a file, and because production access and log access should not be the same permission.",
+            "ru": "На одном сервере лог — это просто файл: `ssh`, `tail -f app.log`, `grep ERROR`. Это по-настоящему хороший процесс — и он живёт ровно до момента, когда машина перестаёт быть одна.\n\nКогда сервисов несколько, а реплик много, он ломается вполне конкретно:\n\n- Запущено двенадцать реплик. Какая из них обработала *этот* запрос?\n- Упавший под заменили, и файловая система контейнера — вместе с нужным стектрейсом — ушла вместе с ним.\n- Один сбой прошёл через четыре сервиса, значит нужны четыре терминала и правильно синхронизированные часы.\n- Поддержка спрашивает, падало ли это вчера, но вчерашний файл уже ушёл по ротации.\n- Те, кому логи нужнее всего (QA, поддержка, дежурный разработчик), — как раз те, у кого не должно быть shell-доступа в прод.\n\n```mermaid\nflowchart LR\n  R1[\"реплика orders 1\"] --> C[\"центральное хранилище логов\"]\n  R2[\"реплика orders 2\"] --> C\n  P1[\"реплика payments 1\"] --> C\n  C --> UI[\"один поиск по всем сразу\"]\n```\n\nЦентрализованные логи существуют потому, что поиск по распределённой системе — другая задача, нежели чтение файла, и потому что доступ в прод и доступ к логам не должны быть одним и тем же правом."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the container's filesystem went away with the pod.",
+              "ru": "Верно — файловая система контейнера ушла вместе с подом."
+            },
+            "incorrect": {
+              "en": "The replaced container took its filesystem, and the log file, with it.",
+              "ru": "Заменённый контейнер унёс с собой файловую систему, а с ней и файл лога."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Nothing — the crashed container's filesystem is gone",
+                "ru": "Ничего — файловой системы упавшего контейнера больше нет"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The old log file, kept by the container runtime",
+                "ru": "Старый файл лога, сохранённый средой выполнения контейнеров"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The container's writable layer is discarded when the pod is replaced.",
+                "ru": "Записываемый слой контейнера выбрасывается при замене пода."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The file, but only if you read it as root",
+                "ru": "Файл, но только если читать его от root"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Permissions are not the problem: that filesystem no longer exists.",
+                "ru": "Дело не в правах: этой файловой системы больше не существует."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "central-p1-what-it-solves",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which problem does a centralized log search solve that ssh plus grep does not?",
+            "ru": "Какую задачу решает централизованный поиск по логам, но не решает ssh плюс grep?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The lines outlive the container that wrote them.",
+              "ru": "Строки живут дольше контейнера, который их записал."
+            },
+            "incorrect": {
+              "en": "Central search keeps lines from replicas that no longer exist.",
+              "ru": "Централизованный поиск сохраняет строки реплик, которых уже нет."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Finding lines from a replica that no longer exists",
+                "ru": "Поиск строк реплики, которой больше не существует"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Reducing how much the application logs",
+                "ru": "Уменьшение объёма того, что пишет приложение"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Centralizing changes nothing about what the application writes.",
+                "ru": "Централизация никак не меняет то, что пишет приложение."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Making the application respond faster",
+                "ru": "Ускорение ответов приложения"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It is a diagnosis tool, not a performance optimisation.",
+                "ru": "Это инструмент диагностики, а не оптимизация производительности."
+              }
+            }
+          ]
+        },
+        {
+          "id": "central-p2-shell-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Letting QA and support read production logs requires giving them shell access to production servers.",
+            "ru": "Чтобы QA и поддержка могли читать логи прода, им нужно выдать shell-доступ на продовые серверы."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Separating the two permissions is one of the reasons central logging exists.",
+              "ru": "Разделение этих двух прав — одна из причин, зачем нужны централизованные логи."
+            },
+            "incorrect": {
+              "en": "No — a log UI gives log access without production shell access.",
+              "ru": "Нет — интерфейс логов даёт доступ к логам без shell-доступа в прод."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "central-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the main reason ssh plus grep stops working on a container platform.",
+            "ru": "Собери главную причину, по которой ssh плюс grep перестаёт работать на контейнерной платформе."
+          },
+          "feedback": {
+            "correct": {
+              "en": "You cannot grep a machine that was thrown away.",
+              "ru": "Нельзя сделать grep по машине, которую выбросили."
+            },
+            "incorrect": {
+              "en": "The replica that logged the error may already be gone by the time you look.",
+              "ru": "Реплика, записавшая ошибку, может исчезнуть ещё до того, как вы посмотрите."
+            }
+          },
+          "tokens": {
+            "en": [
+              "the",
+              "replica",
+              "that",
+              "logged",
+              "the",
+              "error",
+              "may",
+              "already",
+              "be",
+              "gone"
+            ],
+            "ru": [
+              "реплика,",
+              "которая",
+              "записала",
+              "ошибку,",
+              "может",
+              "уже",
+              "исчезнуть"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "cheaper",
+              "faster"
+            ],
+            "ru": [
+              "дешевле",
+              "быстрее"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "kibana-is-a-window",
+      "title": {
+        "en": "Kibana is a window, not a warehouse",
+        "ru": "Kibana — окно, а не склад"
+      },
+      "summary": {
+        "en": "Kibana stores and collects nothing: it is a browser UI that queries Elasticsearch and draws the results as Discover, dashboards and alerts.",
+        "ru": "Kibana ничего не хранит и не собирает: это браузерный интерфейс, который делает запросы в Elasticsearch и рисует результат в Discover, дашбордах и алертах."
+      },
+      "discovery": [
+        {
+          "id": "window-d1-delete-kibana",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Your team deletes the Kibana instance and installs a fresh one. What happened to yesterday's logs?",
+            "ru": "Команда удаляет инстанс Kibana и ставит новый. Что стало со вчерашними логами?"
+          },
+          "reveal": {
+            "en": "The single most common mistake in this answer is \"the application sends its logs to Kibana\". It never does. **Kibana stores nothing and collects nothing.** It is a browser UI that issues queries to **Elasticsearch** — the search engine that actually stores and indexes the log documents — and draws the results.\n\n```mermaid\nflowchart LR\n  A[\"application\"] --> C[\"collector\"]\n  C --> ES[\"Elasticsearch: stores and indexes\"]\n  ES --> K[\"Kibana: queries and draws\"]\n```\n\nNote the arrow into Kibana: it only reads. Delete Kibana and no log data is lost; delete Elasticsearch and everything is. Kibana keeps only its own saved objects — saved searches, dashboards and alert rules.\n\nWhat you get through that window:\n\n- **Discover** — the ad-hoc query view: a time range, a query expression, field filters, and the matching documents. This is about 90% of incident work.\n- **Dashboards** — error rate per service, slow-request counts, deploy markers: something to open when the pager fires instead of composing a query under pressure.\n- **Alerts** — a saved query with a threshold, e.g. more than 50 `ERROR` from `payments` in 5 minutes.\n- **Shared links** — a URL that reproduces someone else's exact query and time window, so support and QA can answer their own questions.",
+            "ru": "Самая частая ошибка в этом ответе — сказать «приложение отправляет логи в Kibana». Оно никогда этого не делает. **Kibana ничего не хранит и ничего не собирает.** Это браузерный интерфейс, который шлёт запросы в **Elasticsearch** — поисковый движок, который и хранит, и индексирует документы логов, — и рисует результаты.\n\n```mermaid\nflowchart LR\n  A[\"приложение\"] --> C[\"коллектор\"]\n  C --> ES[\"Elasticsearch: хранит и индексирует\"]\n  ES --> K[\"Kibana: запрашивает и рисует\"]\n```\n\nОбратите внимание на стрелку в Kibana: она только читает. Удалите Kibana — данные логов не пропадут; удалите Elasticsearch — пропадёт всё. Kibana держит только свои собственные объекты: сохранённые запросы, дашборды и правила алертов.\n\nЧто даёт это окно:\n\n- **Discover** — представление для произвольных запросов: временной диапазон, выражение запроса, фильтры по полям и подходящие документы. Это примерно 90% работы на инциденте.\n- **Дашборды** — частота ошибок по сервисам, счётчики медленных запросов, отметки деплоев: то, что открываешь, когда сработал пейджер, вместо того чтобы сочинять запрос под давлением.\n- **Алерты** — сохранённый запрос с порогом, например больше 50 `ERROR` от `payments` за 5 минут.\n- **Ссылки** — URL, воспроизводящий чужой запрос и временное окно, благодаря чему поддержка и QA отвечают на свои вопросы сами."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Kibana holds no log data — the documents live in Elasticsearch.",
+              "ru": "Kibana не хранит данные логов — документы живут в Elasticsearch."
+            },
+            "incorrect": {
+              "en": "Nothing is lost: Kibana only queries Elasticsearch, which holds the documents.",
+              "ru": "Ничего не пропало: Kibana только запрашивает Elasticsearch, где и лежат документы."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "They are all still there — Kibana stored none of them",
+                "ru": "Все на месте — Kibana их не хранила"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "They are lost, because Kibana held them",
+                "ru": "Они потеряны, потому что их держала Kibana"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Kibana keeps only saved searches, dashboards and alert rules.",
+                "ru": "Kibana держит только сохранённые запросы, дашборды и правила алертов."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Only the last hour survived in the browser cache",
+                "ru": "Уцелел только последний час в кэше браузера"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The browser caches nothing durable; documents live in Elasticsearch.",
+                "ru": "Браузер ничего долговечного не кэширует; документы живут в Elasticsearch."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "window-p1-app-sends-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "An application sends its log lines directly to Kibana.",
+            "ru": "Приложение отправляет свои строки лога напрямую в Kibana."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Nothing ever writes to Kibana; it only reads from Elasticsearch.",
+              "ru": "В Kibana никто и никогда не пишет; она только читает из Elasticsearch."
+            },
+            "incorrect": {
+              "en": "No — the app writes to stdout, a collector ships to Elasticsearch, Kibana only reads.",
+              "ru": "Нет — приложение пишет в stdout, коллектор отправляет в Elasticsearch, Kibana только читает."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "window-p2-what-kibana-stores",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does Kibana itself store?",
+            "ru": "Что хранит сама Kibana?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Saved objects only — the log documents are Elasticsearch's.",
+              "ru": "Только свои сохранённые объекты — документы логов принадлежат Elasticsearch."
+            },
+            "incorrect": {
+              "en": "Kibana keeps saved searches, dashboards and alert rules, not log documents.",
+              "ru": "Kibana хранит сохранённые запросы, дашборды и правила алертов, а не документы логов."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Saved searches, dashboards and alert rules",
+                "ru": "Сохранённые запросы, дашборды и правила алертов"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The full log documents",
+                "ru": "Полные документы логов"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Documents live in Elasticsearch; Kibana only queries them.",
+                "ru": "Документы живут в Elasticsearch; Kibana лишь запрашивает их."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing at all, not even dashboards",
+                "ru": "Совсем ничего, даже дашбордов"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It does keep its own saved objects — that is why dashboards survive a reload.",
+                "ru": "Свои сохранённые объекты она держит — поэтому дашборды переживают перезагрузку."
+              }
+            }
+          ]
+        },
+        {
+          "id": "window-p3-match-features",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each Kibana feature to what it is for.",
+            "ru": "Соотнеси возможность Kibana с её назначением."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Discover for digging, dashboards for watching, alerts for being told, links for sharing.",
+              "ru": "Discover — копать, дашборды — смотреть, алерты — узнавать, ссылки — делиться."
+            },
+            "incorrect": {
+              "en": "Discover is the ad-hoc query view; dashboards are prepared; alerts are a query plus a threshold.",
+              "ru": "Discover — произвольные запросы; дашборды подготовлены заранее; алерт — запрос плюс порог."
+            }
+          },
+          "pairs": [
+            {
+              "id": "discover",
+              "left": {
+                "en": "Discover",
+                "ru": "Discover"
+              },
+              "right": {
+                "en": "Ad-hoc query over a time range during an incident",
+                "ru": "Произвольный запрос по временному окну во время инцидента"
+              }
+            },
+            {
+              "id": "dashboard",
+              "left": {
+                "en": "Dashboard",
+                "ru": "Дашборд"
+              },
+              "right": {
+                "en": "Prepared charts to open when the pager fires",
+                "ru": "Готовые графики, которые открываешь, когда сработал пейджер"
+              }
+            },
+            {
+              "id": "alert",
+              "left": {
+                "en": "Alert rule",
+                "ru": "Правило алерта"
+              },
+              "right": {
+                "en": "A saved query with a threshold that notifies you",
+                "ru": "Сохранённый запрос с порогом, который вас уведомляет"
+              }
+            },
+            {
+              "id": "share",
+              "left": {
+                "en": "Shared link",
+                "ru": "Ссылка для обмена"
+              },
+              "right": {
+                "en": "A URL reproducing someone's exact query and time window",
+                "ru": "URL, воспроизводящий чужой запрос и временное окно"
+              }
+            }
+          ]
+        },
+        {
+          "id": "window-p4-fill-elasticsearch",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the system Kibana queries.",
+            "ru": "Назови систему, которую запрашивает Kibana."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Kibana is one UI over one store; the store is Elasticsearch.",
+              "ru": "Kibana — один интерфейс над одним хранилищем; хранилище — Elasticsearch."
+            },
+            "incorrect": {
+              "en": "It is Elasticsearch: it stores and indexes the documents Kibana draws.",
+              "ru": "Это Elasticsearch: он хранит и индексирует документы, которые рисует Kibana."
+            }
+          },
+          "text": {
+            "en": "Kibana is a browser UI that runs its queries against ___.",
+            "ru": "Kibana — браузерный интерфейс, который выполняет свои запросы к ___."
+          },
+          "answers": {
+            "en": [
+              "Elasticsearch",
+              "elasticsearch"
+            ],
+            "ru": [
+              "Elasticsearch",
+              "elasticsearch"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "pipeline-roles",
+      "title": {
+        "en": "Four jobs, four pieces",
+        "ru": "Четыре задачи, четыре части"
+      },
+      "summary": {
+        "en": "A log pipeline splits into four jobs: the app produces the line, a collector ships and enriches it, Elasticsearch stores and indexes it, Kibana searches it.",
+        "ru": "Конвейер логов делится на четыре задачи: приложение порождает строку, коллектор отправляет и обогащает её, Elasticsearch хранит и индексирует, Kibana ищет."
+      },
+      "discovery": [
+        {
+          "id": "roles-d1-who-enriches",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In an ELK setup, which component parses a raw log line and attaches the pod name to it?",
+            "ru": "В связке ELK какой компонент разбирает сырую строку лога и добавляет к ней имя пода?"
+          },
+          "reveal": {
+            "en": "Four separate jobs are done by four separate pieces:\n\n| Job | Who does it |\n| --- | --- |\n| Produce the line | your application, nginx, the database, the ingress |\n| Collect, parse, enrich, ship | Filebeat, Fluent Bit, Fluentd, Vector, Logstash |\n| Store and index | Elasticsearch (or OpenSearch) |\n| Search and visualize | Kibana |\n\nA **collector** (also called a shipper or agent) is the process that reads log lines where they land, turns them into structured records and sends them onward. That is where parsing and enrichment happen — not in Elasticsearch, and certainly not in Kibana.\n\nThe first three initials give the **ELK stack** (Elasticsearch, Logstash, Kibana); today it is more often called the **Elastic Stack**, with lightweight Beats instead of a Logstash on every host.\n\n```mermaid\nflowchart LR\n  A[\"application writes a line\"] --> C[\"collector: Filebeat / Fluent Bit\"]\n  C --> D[\"Logstash or Kafka: parse, buffer\"]\n  C --> E[\"Elasticsearch: index and store\"]\n  D --> E\n  E --> F[\"Kibana: search, dashboards, alerts\"]\n```\n\nThe middle box is optional and worth knowing: a collector can ship straight to Elasticsearch, and many setups do. **Logstash** is added when you need heavier parsing or enrichment; **Kafka** is added as a buffer, so a burst of logs or an Elasticsearch upgrade does not lose data or push back on the nodes.",
+            "ru": "Четыре разные задачи делают четыре разные части:\n\n| Задача | Кто её делает |\n| --- | --- |\n| Породить строку | ваше приложение, nginx, база данных, ingress |\n| Собрать, разобрать, обогатить, отправить | Filebeat, Fluent Bit, Fluentd, Vector, Logstash |\n| Хранить и индексировать | Elasticsearch (или OpenSearch) |\n| Искать и визуализировать | Kibana |\n\n**Коллектор** (его же называют шиппером или агентом) — это процесс, который читает строки лога там, где они оказались, превращает их в структурированные записи и отправляет дальше. Именно там происходят разбор и обогащение — не в Elasticsearch и уж точно не в Kibana.\n\nПервые три буквы дают **стек ELK** (Elasticsearch, Logstash, Kibana); сегодня чаще говорят **Elastic Stack** — с лёгкими Beats вместо Logstash на каждом хосте.\n\n```mermaid\nflowchart LR\n  A[\"приложение пишет строку\"] --> C[\"коллектор: Filebeat / Fluent Bit\"]\n  C --> D[\"Logstash или Kafka: разбор, буфер\"]\n  C --> E[\"Elasticsearch: индексация и хранение\"]\n  D --> E\n  E --> F[\"Kibana: поиск, дашборды, алерты\"]\n```\n\nСредний блок необязателен, и о нём стоит знать: коллектор может отправлять прямо в Elasticsearch, и во многих установках так и сделано. **Logstash** добавляют, когда нужен более тяжёлый разбор или обогащение; **Kafka** добавляют как буфер, чтобы всплеск логов или обновление Elasticsearch не приводили к потере данных и не давили обратно на узлы."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Enrichment is the collector's job, before the record is shipped.",
+              "ru": "Обогащение — работа коллектора, до отправки записи."
+            },
+            "incorrect": {
+              "en": "The collector parses and enriches; Elasticsearch stores what it receives, Kibana only reads.",
+              "ru": "Коллектор разбирает и обогащает; Elasticsearch хранит то, что получил, Kibana только читает."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The collector, such as Filebeat or Fluent Bit",
+                "ru": "Коллектор, например Filebeat или Fluent Bit"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Elasticsearch, while indexing the document",
+                "ru": "Elasticsearch, во время индексации документа"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Elasticsearch stores and indexes what it is given; enrichment happens before that.",
+                "ru": "Elasticsearch хранит и индексирует то, что ему дали; обогащение происходит раньше."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Kibana, when the document is displayed",
+                "ru": "Kibana, когда документ отображается"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Kibana only reads; it can display no field that is not already in the document.",
+                "ru": "Kibana только читает; она не покажет поле, которого нет в документе."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "roles-p1-why-kafka",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why do some log pipelines put Kafka between the collector and Elasticsearch?",
+            "ru": "Зачем в некоторых конвейерах логов ставят Kafka между коллектором и Elasticsearch?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "A buffer absorbs bursts and downtime instead of dropping lines.",
+              "ru": "Буфер поглощает всплески и простои вместо того, чтобы терять строки."
+            },
+            "incorrect": {
+              "en": "Kafka is a buffer, so a burst of logs or an Elasticsearch upgrade does not lose data.",
+              "ru": "Kafka — это буфер, чтобы всплеск логов или обновление Elasticsearch не теряли данные."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "As a buffer, so a burst or an Elasticsearch upgrade does not lose data",
+                "ru": "Как буфер, чтобы всплеск или обновление Elasticsearch не теряли данные"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "To replace Elasticsearch as the searchable store",
+                "ru": "Чтобы заменить Elasticsearch как хранилище для поиска"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Kafka buffers; the searchable store is still Elasticsearch.",
+                "ru": "Kafka буферизует; хранилище для поиска — по-прежнему Elasticsearch."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Because a collector cannot send to Elasticsearch directly",
+                "ru": "Потому что коллектор не умеет отправлять прямо в Elasticsearch"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It can — many setups ship straight to Elasticsearch with no middle box.",
+                "ru": "Умеет — во многих установках отправляют прямо в Elasticsearch, без среднего блока."
+              }
+            }
+          ]
+        },
+        {
+          "id": "roles-p2-match-jobs",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each part of a log pipeline to its job.",
+            "ru": "Соотнеси каждую часть конвейера логов с её задачей."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Four jobs, four pieces — that separation is the whole answer.",
+              "ru": "Четыре задачи, четыре части — на этом разделении и строится весь ответ."
+            },
+            "incorrect": {
+              "en": "App produces, collector ships and enriches, Elasticsearch stores, Kibana searches.",
+              "ru": "Приложение порождает, коллектор отправляет и обогащает, Elasticsearch хранит, Kibana ищет."
+            }
+          },
+          "pairs": [
+            {
+              "id": "app",
+              "left": {
+                "en": "Application",
+                "ru": "Приложение"
+              },
+              "right": {
+                "en": "Produces the log line",
+                "ru": "Порождает строку лога"
+              }
+            },
+            {
+              "id": "collector",
+              "left": {
+                "en": "Filebeat / Fluent Bit",
+                "ru": "Filebeat / Fluent Bit"
+              },
+              "right": {
+                "en": "Collects, parses, enriches and ships it",
+                "ru": "Собирает, разбирает, обогащает и отправляет её"
+              }
+            },
+            {
+              "id": "es",
+              "left": {
+                "en": "Elasticsearch",
+                "ru": "Elasticsearch"
+              },
+              "right": {
+                "en": "Stores and indexes the documents",
+                "ru": "Хранит и индексирует документы"
+              }
+            },
+            {
+              "id": "kibana",
+              "left": {
+                "en": "Kibana",
+                "ru": "Kibana"
+              },
+              "right": {
+                "en": "Searches and visualizes them",
+                "ru": "Ищет по ним и визуализирует"
+              }
+            }
+          ]
+        },
+        {
+          "id": "roles-p3-sort-pipeline",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the parts a log line passes through, from where it is written to where you read it.",
+            "ru": "Расставь по порядку части, через которые проходит строка лога — от места записи до места чтения."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Produce, collect, store, search — always in that direction.",
+              "ru": "Породить, собрать, сохранить, найти — всегда в этом направлении."
+            },
+            "incorrect": {
+              "en": "The order is application, collector, Elasticsearch, Kibana; nothing flows backwards.",
+              "ru": "Порядок такой: приложение, коллектор, Elasticsearch, Kibana; назад ничего не течёт."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "The application produces the log line",
+                "ru": "Приложение порождает строку лога"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "A collector picks it up, parses and enriches it",
+                "ru": "Коллектор подхватывает её, разбирает и обогащает"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Elasticsearch stores and indexes the record",
+                "ru": "Elasticsearch хранит и индексирует запись"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Kibana queries it and draws the result",
+                "ru": "Kibana запрашивает её и рисует результат"
+              }
+            }
+          ]
+        },
+        {
+          "id": "roles-p4-fill-elk",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Expand the ELK acronym.",
+            "ru": "Расшифруй аббревиатуру ELK."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Today it is more often the Elastic Stack, with Beats instead of a Logstash per host.",
+              "ru": "Сегодня чаще говорят Elastic Stack — с Beats вместо Logstash на каждом хосте."
+            },
+            "incorrect": {
+              "en": "ELK is Elasticsearch, Logstash and Kibana.",
+              "ru": "ELK — это Elasticsearch, Logstash и Kibana."
+            }
+          },
+          "text": {
+            "en": "In ELK, the E is ___, the L is ___ and the K is Kibana.",
+            "ru": "В ELK буква E — это ___, L — это ___, а K — это Kibana."
+          },
+          "blanks": [
+            {
+              "en": [
+                "Elasticsearch",
+                "elasticsearch"
+              ],
+              "ru": [
+                "Elasticsearch",
+                "elasticsearch"
+              ]
+            },
+            {
+              "en": [
+                "Logstash",
+                "logstash"
+              ],
+              "ru": [
+                "Logstash",
+                "logstash"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stdout-not-file",
+      "title": {
+        "en": "Write to stdout, not to a file",
+        "ru": "Пиши в stdout, а не в файл"
+      },
+      "summary": {
+        "en": "A containerized application logs through a console appender to stdout, because a file inside the container is invisible from outside, dies with the pod and fills the writable layer.",
+        "ru": "Контейнеризованное приложение логирует через console appender в stdout, потому что файл внутри контейнера не виден снаружи, умирает вместе с подом и забивает записываемый слой."
+      },
+      "discovery": [
+        {
+          "id": "stdout-d1-file-appender",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This Logback configuration ships inside a container image. What is the defect?",
+            "ru": "Эта конфигурация Logback едет внутри образа контейнера. В чём дефект?"
+          },
+          "code": "<appender name=\"FILE\" class=\"ch.qos.logback.core.FileAppender\">\n  <file>/app/logs/orders.log</file>\n  <encoder><pattern>%d %-5level %msg%n</pattern></encoder>\n</appender>\n<root level=\"INFO\">\n  <appender-ref ref=\"FILE\"/>\n</root>",
+          "codeLang": "text",
+          "reveal": {
+            "en": "In a container, writing logs to stdout is the rule, not a preference. A file inside the container:\n\n- is invisible from outside the container,\n- disappears when the pod is replaced, taking your evidence with it,\n- quietly fills the container's **writable layer** — the thin read-write filesystem a container gets on top of its image.\n\nSo a containerized Spring Boot app configures Logback or Log4j2 with a **console appender** (an appender is the output destination of a logging framework), and the process's only job is to print a line:\n\n```mermaid\nflowchart LR\n  A[\"app: console appender\"] --> S[\"stdout\"]\n  S --> N[\"captured outside the container\"]\n  B[\"app: file appender\"] --> W[\"file in the writable layer\"]\n  W --> X[\"lost when the pod is replaced\"]\n```\n\nWriting to a file inside the container only works if you mount a volume and point an agent at it — extra machinery for no gain.\n\nTwo related traps. A **direct appender** (a Logstash TCP or HTTP appender) pushes from inside the JVM with no file involved; it is tempting, but it couples your request threads to the logging backend — when the socket blocks or the buffer fills you either block the application or drop logs, and anything not yet flushed dies with the process. And any **synchronous appender** that blocks on I/O sits on your request path, so use async appenders with a bounded queue.",
+            "ru": "В контейнере запись логов в stdout — это правило, а не предпочтение. Файл внутри контейнера:\n\n- не виден снаружи контейнера,\n- исчезает при замене пода, унося с собой ваши улики,\n- тихо забивает **записываемый слой** контейнера — тонкую файловую систему на запись поверх образа.\n\nПоэтому контейнеризованное Spring Boot приложение настраивает Logback или Log4j2 на **console appender** (appender — это приёмник вывода в фреймворке логирования), и единственная задача процесса — напечатать строку:\n\n```mermaid\nflowchart LR\n  A[\"приложение: console appender\"] --> S[\"stdout\"]\n  S --> N[\"перехватывается снаружи контейнера\"]\n  B[\"приложение: file appender\"] --> W[\"файл в записываемом слое\"]\n  W --> X[\"теряется при замене пода\"]\n```\n\nЗапись в файл внутри контейнера сработает, только если примонтировать том и нацелить на него агента, — лишняя машинерия без выигрыша.\n\nДве смежные ловушки. **Прямой appender** (Logstash TCP или HTTP appender) отправляет прямо из JVM, без всякого файла; это заманчиво, но связывает ваши запросные потоки с логовым бэкендом: когда сокет блокируется или переполняется буфер, вы либо блокируете приложение, либо теряете логи, а всё, что не успело уйти, умирает вместе с процессом. И любой **синхронный appender**, блокирующийся на I/O, находится на пути вашего запроса, поэтому используйте асинхронные appender'ы с ограниченной очередью."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The file is inside the container, so it is both invisible and temporary.",
+              "ru": "Файл лежит внутри контейнера, поэтому он и невидим, и временен."
+            },
+            "incorrect": {
+              "en": "The fatal issue is where the file lands: inside the container, invisible and lost with the pod.",
+              "ru": "Фатальная проблема — где оказывается файл: внутри контейнера, невидимый и теряемый вместе с подом."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The log file lives inside the container: invisible outside, gone with the pod",
+                "ru": "Файл лога живёт внутри контейнера: не виден снаружи, исчезает с подом"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "FileAppender does not exist in Logback",
+                "ru": "В Logback нет FileAppender"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It exists; the problem is the location of the file, not the class.",
+                "ru": "Он существует; проблема в расположении файла, а не в классе."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The pattern omits the logger name, so nothing can parse it",
+                "ru": "В паттерне нет имени логгера, поэтому его нельзя разобрать"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A weak pattern is a separate concern; the fatal issue is where the file lands.",
+                "ru": "Слабый паттерн — отдельная тема; фатальная проблема в том, куда попадает файл."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "stdout-p1-file-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "By default, a containerized application should write its logs to a file inside the container so a collector can find them.",
+            "ru": "По умолчанию контейнеризованное приложение должно писать логи в файл внутри контейнера, чтобы коллектор их нашёл."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That file is invisible outside the container and vanishes with the pod.",
+              "ru": "Этот файл не виден снаружи контейнера и исчезает вместе с подом."
+            },
+            "incorrect": {
+              "en": "No — the app prints to stdout; a file inside the container is invisible and temporary.",
+              "ru": "Нет — приложение печатает в stdout; файл внутри контейнера невидим и временен."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "stdout-p2-which-appender",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which appender does a containerized Spring Boot application normally use for its logs?",
+            "ru": "Какой appender обычно использует для логов контейнеризованное Spring Boot приложение?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Print the line and let the platform capture it.",
+              "ru": "Печатай строку, а платформа её перехватит."
+            },
+            "incorrect": {
+              "en": "A console appender: the process's only job is to print the line to stdout.",
+              "ru": "Console appender: единственная задача процесса — напечатать строку в stdout."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A console appender writing to stdout",
+                "ru": "Console appender, пишущий в stdout"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A rolling file appender inside the container",
+                "ru": "Rolling file appender внутри контейнера"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Rotation does not help: the whole file is invisible outside and dies with the pod.",
+                "ru": "Ротация не помогает: весь файл невидим снаружи и умирает вместе с подом."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A Logstash TCP appender, in every case",
+                "ru": "Logstash TCP appender, во всех случаях"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A direct appender couples request threads to the logging backend; stdout is the default.",
+                "ru": "Прямой appender связывает запросные потоки с логовым бэкендом; по умолчанию — stdout."
+              }
+            }
+          ]
+        },
+        {
+          "id": "stdout-p3-fill-stdout",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the stream a containerized application logs to.",
+            "ru": "Назови поток, в который логирует контейнеризованное приложение."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Print and forget — capturing the stream is the platform's job.",
+              "ru": "Напечатал и забыл — перехват потока это забота платформы."
+            },
+            "incorrect": {
+              "en": "It is stdout: the console appender prints there and the platform captures it.",
+              "ru": "Это stdout: console appender печатает туда, а платформа перехватывает."
+            }
+          },
+          "text": {
+            "en": "In a container the application prints its log lines to ___ instead of writing its own file.",
+            "ru": "В контейнере приложение печатает строки лога в ___ вместо записи собственного файла."
+          },
+          "answers": {
+            "en": [
+              "stdout",
+              "STDOUT"
+            ],
+            "ru": [
+              "stdout",
+              "STDOUT"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "node-log-file",
+      "title": {
+        "en": "The container runtime captures stdout",
+        "ru": "Среда выполнения контейнеров перехватывает stdout"
+      },
+      "summary": {
+        "en": "containerd or Docker writes each stdout line, wrapped in a JSON envelope with a timestamp and the stream, to a file on the node — the same file kubectl logs reads.",
+        "ru": "containerd или Docker пишет каждую строку stdout, обёрнутую в JSON-конверт с меткой времени и потоком, в файл на узле — тот самый файл, который читает kubectl logs."
+      },
+      "discovery": [
+        {
+          "id": "nodefile-d1-where-lands",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Your container only calls log.info(...) and writes no file at all. Where does that line physically land?",
+            "ru": "Ваш контейнер только вызывает log.info(...) и вообще не пишет файлов. Куда физически попадает эта строка?"
+          },
+          "code": "log.info(\"Order {} accepted\", orderId);",
+          "codeLang": "java",
+          "reveal": {
+            "en": "The container runtime — **containerd** or Docker, the process that actually runs containers on a machine — captures everything a container prints. It writes each line, wrapped in its own JSON envelope carrying a timestamp and the **stream** it came from (`stdout` or `stderr`), to a file on the **node** (the physical or virtual machine the pod runs on):\n\n```\n/var/log/pods/<namespace>_<pod>_<uid>/<container>/0.log\n```\n\n```mermaid\nflowchart LR\n  P[\"pod: prints to stdout\"] --> R[\"container runtime\"]\n  R --> F[\"/var/log/pods/.../0.log on the node\"]\n  F --> KL[\"kubectl logs\"]\n  F --> COL[\"log collector\"]\n```\n\nThis matters twice. First, the line survives outside the container even though the application wrote no file. Second, this is *exactly* what `kubectl logs` reads — which is why `kubectl logs` can only show you the current and previous container of a pod that still exists: once the pod is deleted, that file goes with it.",
+            "ru": "Среда выполнения контейнеров — **containerd** или Docker, процесс, который на самом деле запускает контейнеры на машине, — перехватывает всё, что печатает контейнер. Она пишет каждую строку, обёрнутую в собственный JSON-конверт с меткой времени и **потоком**, из которого строка пришла (`stdout` или `stderr`), в файл на **узле** (физической или виртуальной машине, где работает под):\n\n```\n/var/log/pods/<namespace>_<pod>_<uid>/<container>/0.log\n```\n\n```mermaid\nflowchart LR\n  P[\"под: печатает в stdout\"] --> R[\"среда выполнения контейнеров\"]\n  R --> F[\"/var/log/pods/.../0.log на узле\"]\n  F --> KL[\"kubectl logs\"]\n  F --> COL[\"коллектор логов\"]\n```\n\nЭто важно дважды. Во-первых, строка выживает за пределами контейнера, хотя приложение не писало никаких файлов. Во-вторых, ровно это читает `kubectl logs` — поэтому он может показать только текущий и предыдущий контейнер пода, который ещё существует: как только под удалён, файл уходит вместе с ним."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The runtime captures stdout to a file on the node.",
+              "ru": "Среда выполнения складывает stdout в файл на узле."
+            },
+            "incorrect": {
+              "en": "The container runtime writes it under /var/log/pods/... on the node.",
+              "ru": "Среда выполнения контейнеров пишет её в /var/log/pods/... на узле."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "In a file under /var/log/pods/... written by the container runtime",
+                "ru": "В файл в /var/log/pods/..., записанный средой выполнения контейнеров"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nowhere — it exists only for whoever is attached to the terminal",
+                "ru": "Никуда — она существует только для того, кто подключён к терминалу"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The runtime always captures stdout, whether or not anyone is watching.",
+                "ru": "Среда выполнения перехватывает stdout всегда, смотрит на него кто-то или нет."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Directly in Elasticsearch",
+                "ru": "Прямо в Elasticsearch"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing reaches Elasticsearch until a collector reads that node file and ships it.",
+                "ru": "В Elasticsearch ничего не попадёт, пока коллектор не прочитает этот файл на узле и не отправит его."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "nodefile-p1-kubectl-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "kubectl logs reads the same node file that the container runtime wrote from the container's stdout.",
+            "ru": "kubectl logs читает тот же файл на узле, который среда выполнения записала из stdout контейнера."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That shared source is why kubectl logs is limited to pods that still exist.",
+              "ru": "Из-за общего источника kubectl logs ограничен подами, которые ещё существуют."
+            },
+            "incorrect": {
+              "en": "It does — and that is why a deleted pod leaves kubectl logs with nothing to read.",
+              "ru": "Читает — и поэтому у удалённого пода kubectl logs нечего читать."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "nodefile-p2-envelope",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does the container runtime add around each stdout line it writes to the node file?",
+            "ru": "Что среда выполнения контейнеров добавляет вокруг каждой строки stdout, записываемой в файл на узле?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The envelope records when the line appeared and which stream produced it.",
+              "ru": "Конверт фиксирует, когда появилась строка и из какого потока она пришла."
+            },
+            "incorrect": {
+              "en": "A JSON envelope with a timestamp and the stream, stdout or stderr.",
+              "ru": "JSON-конверт с меткой времени и потоком — stdout или stderr."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A JSON envelope with a timestamp and the stream (stdout or stderr)",
+                "ru": "JSON-конверт с меткой времени и потоком (stdout или stderr)"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The pod's name, namespace and labels",
+                "ru": "Имя пода, namespace и метки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Those are added later by the collector, not by the container runtime.",
+                "ru": "Их добавляет позже коллектор, а не среда выполнения контейнеров."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — the line is stored byte for byte",
+                "ru": "Ничего — строка сохраняется байт в байт"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It is wrapped, so the time and the originating stream are recorded.",
+                "ru": "Она оборачивается, чтобы зафиксировать время и исходный поток."
+              }
+            }
+          ]
+        },
+        {
+          "id": "nodefile-p3-fill-envelope",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the description of what the container runtime does with stdout.",
+            "ru": "Дополни описание того, что среда выполнения контейнеров делает со stdout."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The line leaves the container without the application writing any file.",
+              "ru": "Строка покидает контейнер, а приложение не пишет никакого файла."
+            },
+            "incorrect": {
+              "en": "It writes each line to a file on the node, wrapped with a timestamp and the stream.",
+              "ru": "Она пишет каждую строку в файл на узле, обернув её меткой времени и потоком."
+            }
+          },
+          "text": {
+            "en": "The container runtime writes each line to a file on the ___, wrapped in a JSON envelope with a timestamp and the ___ it came from.",
+            "ru": "Среда выполнения контейнеров пишет каждую строку в файл на ___, обернув её в JSON-конверт с меткой времени и ___, из которого строка пришла."
+          },
+          "blanks": [
+            {
+              "en": [
+                "node"
+              ],
+              "ru": [
+                "узле",
+                "ноде",
+                "node"
+              ]
+            },
+            {
+              "en": [
+                "stream"
+              ],
+              "ru": [
+                "потоком",
+                "поток",
+                "stream"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "collector-daemonset",
+      "title": {
+        "en": "The collector DaemonSet",
+        "ru": "Коллектор как DaemonSet"
+      },
+      "summary": {
+        "en": "In Kubernetes the collector runs as a DaemonSet — one agent per node — tailing the node's log files and enriching every record with pod, namespace, container, node and labels.",
+        "ru": "В Kubernetes коллектор работает как DaemonSet — один агент на узел — читает файлы логов узла и обогащает каждую запись подом, namespace, контейнером, узлом и метками."
+      },
+      "discovery": [
+        {
+          "id": "daemon-d1-who-added-labels",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Your application never imports a Kubernetes library, yet in Kibana you can filter its lines by kubernetes.labels.app: orders. Who put that field there?",
+            "ru": "Ваше приложение не подключает ни одной библиотеки Kubernetes, но в Kibana вы фильтруете его строки по kubernetes.labels.app: orders. Кто добавил это поле?"
+          },
+          "reveal": {
+            "en": "In Kubernetes the collector runs as a **DaemonSet** — a workload type that guarantees exactly one pod on every node. That agent mounts the host's log directory and tails the files the container runtime writes there.\n\n```mermaid\nflowchart TD\n  subgraph N[\"one Kubernetes node\"]\n    P1[\"pod orders-a\"] --> F[\"/var/log/pods/**/*.log\"]\n    P2[\"pod orders-b\"] --> F\n    P3[\"pod payments-a\"] --> F\n    F --> DS[\"collector DaemonSet\"]\n  end\n  DS --> ES[\"Elasticsearch\"]\n```\n\nThe agent does the work that turns a text line into a searchable document:\n\n- parses the runtime's JSON envelope,\n- optionally parses your own JSON message,\n- stitches **multiline** events — such as a stack trace printed over many lines — back into one record,\n- **enriches** each record with pod name, namespace, container, node and the pod's labels.\n\nThat last step is why you can later filter by `kubernetes.labels.app: orders` while the application knows nothing about Kubernetes. It also explains why an ingress access log and an application error end up side by side: the same node agent picks up *everything* on the node — your services, the ingress controller, sidecars. Sources outside the cluster (a managed database, a cloud load balancer, journald on a VM) reach the same Elasticsearch through their own shippers.",
+            "ru": "В Kubernetes коллектор работает как **DaemonSet** — тип нагрузки, который гарантирует ровно один под на каждом узле. Этот агент монтирует каталог логов хоста и читает файлы, которые туда пишет среда выполнения контейнеров.\n\n```mermaid\nflowchart TD\n  subgraph N[\"один узел Kubernetes\"]\n    P1[\"под orders-a\"] --> F[\"/var/log/pods/**/*.log\"]\n    P2[\"под orders-b\"] --> F\n    P3[\"под payments-a\"] --> F\n    F --> DS[\"коллектор DaemonSet\"]\n  end\n  DS --> ES[\"Elasticsearch\"]\n```\n\nАгент делает ту работу, которая превращает текстовую строку в документ, пригодный для поиска:\n\n- разбирает JSON-конверт среды выполнения,\n- при необходимости разбирает ваше собственное JSON-сообщение,\n- склеивает **многострочные** события — например, стектрейс, напечатанный многими строками, — обратно в одну запись,\n- **обогащает** каждую запись именем пода, namespace, контейнером, узлом и метками пода.\n\nИменно последний шаг позволяет потом фильтровать по `kubernetes.labels.app: orders`, хотя приложение ничего не знает про Kubernetes. Это же объясняет, почему access-лог ingress и ошибка приложения оказываются рядом: один и тот же агент узла подхватывает *всё* на узле — ваши сервисы, ingress-контроллер, сайдкары. Источники за пределами кластера (управляемая база, облачный балансировщик, journald на виртуалке) попадают в тот же Elasticsearch через свои отправители."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Enrichment happens on the node, after the line has left the application.",
+              "ru": "Обогащение происходит на узле, после того как строка покинула приложение."
+            },
+            "incorrect": {
+              "en": "The collector adds pod, namespace and labels when it reads the line on the node.",
+              "ru": "Коллектор добавляет под, namespace и метки, когда читает строку на узле."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The collector, when it read the line from the node's log file",
+                "ru": "Коллектор, когда прочитал строку из файла логов узла"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The application, through its logging framework",
+                "ru": "Приложение, через свой фреймворк логирования"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The app knows nothing about Kubernetes; the field is added after the line leaves it.",
+                "ru": "Приложение ничего не знает про Kubernetes; поле добавляется после того, как строка ушла."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Kibana, when you typed the filter",
+                "ru": "Kibana, когда вы набрали фильтр"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Kibana can only filter fields that already exist in the stored document.",
+                "ru": "Kibana может фильтровать только поля, которые уже есть в сохранённом документе."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "daemon-p1-how-it-reaches",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "How does a log collector in Kubernetes reach the logs of every pod on a node?",
+            "ru": "Как коллектор логов в Kubernetes добирается до логов каждого пода на узле?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "One agent per node, reading local files — no cooperation from the app needed.",
+              "ru": "Один агент на узел читает локальные файлы — участие приложения не требуется."
+            },
+            "incorrect": {
+              "en": "It runs as a DaemonSet with the host's log directory mounted and tails those files.",
+              "ru": "Он работает как DaemonSet с примонтированным каталогом логов хоста и читает эти файлы."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "As a DaemonSet — one agent per node with the host log directory mounted",
+                "ru": "Как DaemonSet — один агент на узел с примонтированным каталогом логов хоста"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Every application pod pushes its lines to the collector over HTTP",
+                "ru": "Каждый под приложения отправляет свои строки коллектору по HTTP"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The file-tail path needs no cooperation from the application at all.",
+                "ru": "Путь через чтение файлов вообще не требует участия приложения."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "One central collector pod connects to every other pod in the cluster",
+                "ru": "Один центральный под-коллектор подключается ко всем остальным подам кластера"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The standard shape is one agent per node reading files locally.",
+                "ru": "Стандартная схема — один агент на узел, читающий файлы локально."
+              }
+            }
+          ]
+        },
+        {
+          "id": "daemon-p2-match-work",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each step a log collector performs to its result.",
+            "ru": "Соотнеси каждый шаг работы коллектора логов с его результатом."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Parse, join, enrich, ship — that is what turns a text line into a document.",
+              "ru": "Разобрать, склеить, обогатить, отправить — так текстовая строка становится документом."
+            },
+            "incorrect": {
+              "en": "The collector parses the envelope, joins multiline events, enriches and then ships.",
+              "ru": "Коллектор разбирает конверт, склеивает многострочные события, обогащает и затем отправляет."
+            }
+          },
+          "pairs": [
+            {
+              "id": "parse",
+              "left": {
+                "en": "Parse the runtime's JSON envelope",
+                "ru": "Разобрать JSON-конверт среды выполнения"
+              },
+              "right": {
+                "en": "Recovers the timestamp and the stream",
+                "ru": "Восстанавливает метку времени и поток"
+              }
+            },
+            {
+              "id": "multiline",
+              "left": {
+                "en": "Apply the multiline rule",
+                "ru": "Применить правило multiline"
+              },
+              "right": {
+                "en": "Joins a stack trace into one event",
+                "ru": "Склеивает стектрейс в одно событие"
+              }
+            },
+            {
+              "id": "enrich",
+              "left": {
+                "en": "Enrich the record",
+                "ru": "Обогатить запись"
+              },
+              "right": {
+                "en": "Adds pod, namespace, node and labels",
+                "ru": "Добавляет под, namespace, узел и метки"
+              }
+            },
+            {
+              "id": "ship",
+              "left": {
+                "en": "Ship the record",
+                "ru": "Отправить запись"
+              },
+              "right": {
+                "en": "Sends it to Elasticsearch, directly or via Logstash or Kafka",
+                "ru": "Отсылает её в Elasticsearch — напрямую или через Logstash либо Kafka"
+              }
+            }
+          ]
+        },
+        {
+          "id": "daemon-p3-fill-daemonset",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the Kubernetes workload type a log collector uses.",
+            "ru": "Назови тип нагрузки Kubernetes, в котором работает коллектор логов."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One agent per node is what makes every pod's file reachable.",
+              "ru": "Один агент на узел — это и делает файл каждого пода доступным."
+            },
+            "incorrect": {
+              "en": "It is a DaemonSet: exactly one collector pod on every node.",
+              "ru": "Это DaemonSet: ровно один под-коллектор на каждом узле."
+            }
+          },
+          "text": {
+            "en": "In Kubernetes a log collector runs as a ___, which puts one agent on every node.",
+            "ru": "В Kubernetes коллектор логов работает как ___, что даёт по одному агенту на каждом узле."
+          },
+          "answers": {
+            "en": [
+              "DaemonSet",
+              "daemonset"
+            ],
+            "ru": [
+              "DaemonSet",
+              "daemonset"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "elasticsearch-index",
+      "title": {
+        "en": "How Elasticsearch makes it searchable",
+        "ru": "Как Elasticsearch делает это доступным для поиска"
+      },
+      "summary": {
+        "en": "Elasticsearch indexes each record into a time-based index or data stream and builds an inverted index over its fields, so a query over a day of logs answers in milliseconds instead of scanning.",
+        "ru": "Elasticsearch индексирует каждую запись в индекс или data stream с привязкой ко времени и строит инвертированный индекс по её полям, поэтому запрос по суткам логов отвечает за миллисекунды, а не сканирует всё."
+      },
+      "discovery": [
+        {
+          "id": "esindex-d1-fast-search",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A day of logs is hundreds of gigabytes, yet a Kibana search over that whole day returns in under a second. How?",
+            "ru": "Сутки логов — сотни гигабайт, но поиск в Kibana по всем этим суткам возвращается меньше чем за секунду. Как?"
+          },
+          "reveal": {
+            "en": "Elasticsearch does not scan anything at query time. When a record arrives it builds an **inverted index**: instead of \"document 5 contains the word `TimeoutException`\", it stores \"the word `TimeoutException` appears in documents 5, 91, 402\". A search is then a lookup, not a scan — which is why a full-text query over a day of logs returns in milliseconds.\n\nRecords land in a **time-based index** or **data stream** — a set of indices named by date, such as `logs-orders-2026.07.28`:\n\n```mermaid\nflowchart LR\n  R[\"enriched records\"] --> I[\"index logs-orders-2026.07.28\"]\n  I --> DV[\"data view in Kibana\"]\n  DV --> D[\"Discover\"]\n```\n\nSplitting by time matters because logs are queried by time window and retired by age: an old day is a whole index you can drop in one operation, instead of deleting rows.\n\nKibana points at those indices through a **data view** — a named pattern, e.g. `logs-*`, that tells Kibana which indices a query should cover. One data view can span many indices, which is how a single search covers several services and several days.",
+            "ru": "Elasticsearch ничего не сканирует во время запроса. Когда запись приходит, он строит **инвертированный индекс**: вместо «документ 5 содержит слово `TimeoutException`» он хранит «слово `TimeoutException` встречается в документах 5, 91, 402». Поиск тогда — это обращение по ключу, а не сканирование; поэтому полнотекстовый запрос по суткам логов возвращается за миллисекунды.\n\nЗаписи попадают в **индекс с привязкой ко времени** или **data stream** — набор индексов, названных по дате, например `logs-orders-2026.07.28`:\n\n```mermaid\nflowchart LR\n  R[\"обогащённые записи\"] --> I[\"индекс logs-orders-2026.07.28\"]\n  I --> DV[\"data view в Kibana\"]\n  DV --> D[\"Discover\"]\n```\n\nРазбиение по времени важно потому, что логи запрашивают по временному окну и удаляют по возрасту: старые сутки — это целый индекс, который удаляется одной операцией, а не построчно.\n\nKibana смотрит на эти индексы через **data view** — именованный шаблон вроде `logs-*`, который говорит Kibana, какие индексы должен охватить запрос. Один data view может покрывать много индексов — так один поиск охватывает несколько сервисов и несколько дней."
+          },
+          "feedback": {
+            "correct": {
+              "en": "An index turns search into a lookup instead of a scan.",
+              "ru": "Индекс превращает поиск в обращение по ключу вместо сканирования."
+            },
+            "incorrect": {
+              "en": "Elasticsearch built an inverted index over the fields, so nothing is scanned at query time.",
+              "ru": "Elasticsearch построил инвертированный индекс по полям, поэтому во время запроса ничего не сканируется."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Elasticsearch built an inverted index over the fields, so it looks up instead of scanning",
+                "ru": "Elasticsearch построил инвертированный индекс по полям и обращается по нему вместо сканирования"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Kibana caches every line in the browser",
+                "ru": "Kibana кэширует каждую строку в браузере"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Kibana holds no log data at all; it asks Elasticsearch every time.",
+                "ru": "Kibana вообще не держит данные логов; она каждый раз спрашивает Elasticsearch."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It scans the raw files quickly because they sit on SSDs",
+                "ru": "Он быстро сканирует сырые файлы, потому что они на SSD"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "No scan happens: the query hits an index built when the record was stored.",
+                "ru": "Сканирования нет: запрос попадает в индекс, построенный при сохранении записи."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "esindex-p1-scan-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Elasticsearch answers a Kibana query by scanning the raw log files on the cluster nodes.",
+            "ru": "Elasticsearch отвечает на запрос Kibana, сканируя сырые файлы логов на узлах кластера."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It queries the index it built at ingest time.",
+              "ru": "Он обращается к индексу, построенному во время приёма записи."
+            },
+            "incorrect": {
+              "en": "No — it queries an inverted index built when the document was stored.",
+              "ru": "Нет — он обращается к инвертированному индексу, построенному при сохранении документа."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "esindex-p2-why-time-based",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why are log indices in Elasticsearch usually time-based, like logs-orders-2026.07.28?",
+            "ru": "Почему индексы логов в Elasticsearch обычно привязаны ко времени, как logs-orders-2026.07.28?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Time is how logs are both queried and retired.",
+              "ru": "По времени логи и запрашивают, и списывают."
+            },
+            "incorrect": {
+              "en": "Queries and retention are both scoped by time, so a whole old index can be dropped.",
+              "ru": "И запросы, и хранение привязаны ко времени, поэтому старый индекс удаляется целиком."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Queries and retention are both scoped by time, so whole old indices can be dropped",
+                "ru": "Запросы и хранение привязаны ко времени, поэтому старые индексы удаляются целиком"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Because an index cannot hold more than one day of data",
+                "ru": "Потому что индекс не может хранить больше суток данных"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no such limit; the daily split follows how logs are queried and retired.",
+                "ru": "Такого ограничения нет; посуточное деление следует за тем, как логи ищут и списывают."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Because Kibana can only read one index at a time",
+                "ru": "Потому что Kibana может читать только один индекс за раз"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A data view can span many indices in a single query.",
+                "ru": "Data view может охватывать много индексов в одном запросе."
+              }
+            }
+          ]
+        },
+        {
+          "id": "esindex-p3-fill-inverted",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the index structure that makes log search fast.",
+            "ru": "Назови структуру индекса, которая делает поиск по логам быстрым."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It maps a term to the documents containing it, so lookups replace scans.",
+              "ru": "Он отображает термин на документы, где тот встречается, и поиск заменяет сканирование."
+            },
+            "incorrect": {
+              "en": "It is the inverted index: term to documents, so a query is a lookup, not a scan.",
+              "ru": "Это инвертированный индекс: термин к документам, поэтому запрос — обращение, а не сканирование."
+            }
+          },
+          "text": {
+            "en": "Elasticsearch makes search fast by building an ___ index over the fields of each document.",
+            "ru": "Elasticsearch делает поиск быстрым, строя ___ индекс по полям каждого документа."
+          },
+          "answers": {
+            "en": [
+              "inverted"
+            ],
+            "ru": [
+              "инвертированный",
+              "inverted"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "structured-json",
+      "title": {
+        "en": "Structured JSON logging",
+        "ru": "Структурированное JSON-логирование"
+      },
+      "summary": {
+        "en": "Logging JSON turns each line into fields such as log.level and service.name, so filters are exact and cheap instead of relying on a brittle regex over one message string.",
+        "ru": "Логирование JSON превращает каждую строку в поля вроде log.level и service.name, поэтому фильтры точные и дешёвые, а не зависят от хрупкой регулярки по одной строке message."
+      },
+      "discovery": [
+        {
+          "id": "json-d1-plain-line",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Your application logs this plain text line. You want a Kibana filter for all ERROR lines of the orders service. What has to happen first?",
+            "ru": "Ваше приложение пишет вот такую простую текстовую строку. Вы хотите фильтр в Kibana по всем ERROR-строкам сервиса orders. Что должно произойти сначала?"
+          },
+          "code": "2026-07-28 14:03:11 ERROR Order 42 failed for user 7",
+          "codeLang": "text",
+          "reveal": {
+            "en": "That line is fine for a human and poor for a search engine: everything is one `message` string, so \"all errors of the orders service\" means a brittle **grok** pattern (a regex-based parser) somewhere in the pipeline, which breaks the day someone changes the log format.\n\nLog JSON instead — with `logstash-logback-encoder`, or an **ECS** layout (Elastic Common Schema, Elastic's standard field names) — and each line arrives already split into fields:\n\n```json\n{\"@timestamp\":\"2026-07-28T14:03:11.412Z\",\"log.level\":\"ERROR\",\"service.name\":\"orders\",\n \"trace.id\":\"4bf92f3577b34da6\",\"message\":\"Order 42 failed\",\"error.type\":\"TimeoutException\",\n \"error.stack_trace\":\"...\"}\n```\n\nNow Kibana filters are exact and cheap, written in **KQL** (Kibana Query Language):\n\n```\nlog.level: ERROR and service.name: orders\n```\n\nAnything you put in the **MDC** (Mapped Diagnostic Context — per-request key/value pairs your logging framework attaches to every line) becomes a field you can pivot on: user id, tenant, order id.\n\nTwo details worth getting right. `@timestamp` should be **when the event happened**, not when it was ingested — clock skew and ingest-time stamping are the usual reasons a trace looks like it ran backwards. And keep the field names stable: every distinct JSON key becomes a mapping in the index, so putting a unique id in a *key* instead of a value gives you thousands of fields and a cluster in trouble.",
+            "ru": "Такая строка хороша для человека и плоха для поисковой системы: всё это одна строка `message`, поэтому «все ошибки сервиса orders» превращаются в хрупкий **grok**-шаблон (парсер на регулярках) где-то в конвейере, который сломается в день, когда кто-то поменяет формат лога.\n\nЛогируйте вместо этого JSON — через `logstash-logback-encoder` или **ECS**-layout (Elastic Common Schema, стандартные имена полей от Elastic) — и каждая строка приходит уже разложенной по полям:\n\n```json\n{\"@timestamp\":\"2026-07-28T14:03:11.412Z\",\"log.level\":\"ERROR\",\"service.name\":\"orders\",\n \"trace.id\":\"4bf92f3577b34da6\",\"message\":\"Order 42 failed\",\"error.type\":\"TimeoutException\",\n \"error.stack_trace\":\"...\"}\n```\n\nТеперь фильтры в Kibana точные и дешёвые, они пишутся на **KQL** (Kibana Query Language):\n\n```\nlog.level: ERROR and service.name: orders\n```\n\nВсё, что вы положили в **MDC** (Mapped Diagnostic Context — пары ключ/значение на запрос, которые фреймворк логирования подставляет в каждую строку), становится полем, по которому можно разворачивать выборку: id пользователя, тенант, номер заказа.\n\nДве детали, которые важно сделать правильно. `@timestamp` должен означать **момент события**, а не момент приёма — расхождение часов и простановка времени приёма это обычные причины того, что трасса выглядит идущей назад. И держите имена полей стабильными: каждый новый JSON-ключ становится маппингом в индексе, поэтому уникальный id в *ключе* вместо значения даёт тысячи полей и кластер в беде."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Unstructured means one message string, so something must parse it.",
+              "ru": "Неструктурированный формат — это одна строка message, значит её кто-то должен разобрать."
+            },
+            "incorrect": {
+              "en": "The whole line arrives as one message field, so a regex in the pipeline has to split it.",
+              "ru": "Вся строка приходит одним полем message, поэтому её должна разобрать регулярка в конвейере."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Something in the pipeline must parse it with a regex, because it is all one message string",
+                "ru": "Что-то в конвейере должно разобрать её регуляркой, ведь это всё одна строка message"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing — Elasticsearch recognises the level automatically",
+                "ru": "Ничего — Elasticsearch распознаёт уровень автоматически"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing infers structure; the whole line arrives as one unparsed field.",
+                "ru": "Структура ниоткуда не берётся; вся строка приходит одним неразобранным полем."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — Kibana can split the line at query time",
+                "ru": "Ничего — Kibana может разобрать строку во время запроса"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Kibana filters existing fields; it does not parse an unstructured message.",
+                "ru": "Kibana фильтрует существующие поля; она не разбирает неструктурированное сообщение."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "json-p1-what-it-gives",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does structured JSON logging give you that a plain text log line does not?",
+            "ru": "Что даёт структурированное JSON-логирование по сравнению с простой текстовой строкой лога?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Fields make the filter exact instead of a guess over free text.",
+              "ru": "Поля делают фильтр точным вместо угадывания по свободному тексту."
+            },
+            "incorrect": {
+              "en": "It gives exact filters on typed fields such as log.level and service.name.",
+              "ru": "Оно даёт точные фильтры по типизированным полям вроде log.level и service.name."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Exact filters on named fields such as log.level and service.name",
+                "ru": "Точные фильтры по именованным полям вроде log.level и service.name"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A smaller volume of log data",
+                "ru": "Меньший объём данных логов"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "JSON lines are usually larger, not smaller; the gain is searchability.",
+                "ru": "JSON-строки обычно больше, а не меньше; выигрыш — в удобстве поиска."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A guarantee that no log line is lost on the way",
+                "ru": "Гарантию, что ни одна строка лога не потеряется по дороге"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Delivery is a pipeline property; the format changes nothing about it.",
+                "ru": "Доставка — свойство конвейера; формат на неё никак не влияет."
+              }
+            }
+          ]
+        },
+        {
+          "id": "json-p2-match-fields",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each field of a structured JSON log document to what it holds.",
+            "ru": "Соотнеси поле структурированного JSON-документа лога с тем, что в нём лежит."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Stable field names are exactly what makes a filter cheap.",
+              "ru": "Стабильные имена полей и делают фильтр дешёвым."
+            },
+            "incorrect": {
+              "en": "@timestamp is event time, log.level the severity, service.name the writer, error.stack_trace the trace.",
+              "ru": "@timestamp — время события, log.level — уровень, service.name — кто записал, error.stack_trace — стектрейс."
+            }
+          },
+          "pairs": [
+            {
+              "id": "ts",
+              "left": {
+                "en": "@timestamp",
+                "ru": "@timestamp"
+              },
+              "right": {
+                "en": "When the event happened",
+                "ru": "Когда произошло событие"
+              }
+            },
+            {
+              "id": "level",
+              "left": {
+                "en": "log.level",
+                "ru": "log.level"
+              },
+              "right": {
+                "en": "The severity of the line, e.g. ERROR",
+                "ru": "Уровень строки, например ERROR"
+              }
+            },
+            {
+              "id": "service",
+              "left": {
+                "en": "service.name",
+                "ru": "service.name"
+              },
+              "right": {
+                "en": "Which service wrote the line",
+                "ru": "Какой сервис записал строку"
+              }
+            },
+            {
+              "id": "stack",
+              "left": {
+                "en": "error.stack_trace",
+                "ru": "error.stack_trace"
+              },
+              "right": {
+                "en": "The whole stack trace as one field",
+                "ru": "Весь стектрейс одним полем"
+              }
+            }
+          ]
+        },
+        {
+          "id": "json-p3-fill-kql",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the Kibana filter for all errors of the orders service.",
+            "ru": "Дополни фильтр Kibana для всех ошибок сервиса orders."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two field comparisons, no regex anywhere.",
+              "ru": "Два сравнения по полям и никаких регулярок."
+            },
+            "incorrect": {
+              "en": "log.level: ERROR and service.name: orders — exact fields, not free-text matching.",
+              "ru": "log.level: ERROR and service.name: orders — точные поля, а не поиск по свободному тексту."
+            }
+          },
+          "text": {
+            "en": "log.___: ERROR and service.___: orders",
+            "ru": "log.___: ERROR and service.___: orders"
+          },
+          "blanks": [
+            {
+              "en": [
+                "level"
+              ],
+              "ru": [
+                "level"
+              ]
+            },
+            {
+              "en": [
+                "name"
+              ],
+              "ru": [
+                "name"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "multiline-stack-trace",
+      "title": {
+        "en": "The multiline stack trace trap",
+        "ru": "Ловушка многострочного стектрейса"
+      },
+      "summary": {
+        "en": "A stack trace is many stdout lines, so an unconfigured collector turns one exception into many documents; a multiline rule or a single JSON field prevents it.",
+        "ru": "Стектрейс — это много строк stdout, поэтому ненастроенный коллектор превращает одно исключение во множество документов; спасает правило multiline или один JSON-поле."
+      },
+      "discovery": [
+        {
+          "id": "multiline-d1-count-docs",
+          "type": "predict_output",
+          "prompt": {
+            "en": "A collector with no multiline rule reads these four stdout lines. How many documents reach Elasticsearch?",
+            "ru": "Коллектор без правила multiline читает эти четыре строки stdout. Сколько документов дойдёт до Elasticsearch?"
+          },
+          "code": "2026-07-28T14:03:11.412Z ERROR orders - Order 42 failed\njava.util.concurrent.TimeoutException: payments did not answer\n\tat com.shop.PaymentClient.charge(PaymentClient.java:41)\n\tat com.shop.OrderService.place(OrderService.java:88)",
+          "codeLang": "text",
+          "reveal": {
+            "en": "Every newline is a separate line on stdout, and the container runtime wraps each one separately. A collector that does not know they belong together treats each as its own event, so a forty-line exception becomes **forty documents** — thirty-nine of which have no level, no service name and no timestamp of their own, because those were only on the first line.\n\n```mermaid\nflowchart LR\n  E[\"one exception, 40 stdout lines\"] --> C[\"collector without a multiline rule\"]\n  C --> D1[\"doc 1: has level and service\"]\n  C --> D2[\"docs 2-40: orphan lines\"]\n```\n\nThere are two fixes:\n\n1. Configure the collector's **multiline rule** — a pattern that says which lines continue the previous event (for Java, lines starting with whitespace or `at `). It works, but it lives in the pipeline and must keep matching your format.\n2. Better: log the stack trace as a **single JSON field** (`error.stack_trace`). Then it never becomes separate stdout lines in the first place, and the problem cannot arise.\n\nNothing downstream will repair this for you: Elasticsearch stores what it is given, and Kibana displays documents — neither re-assembles an event.",
+            "ru": "Каждый перевод строки — отдельная строка в stdout, и среда выполнения контейнеров оборачивает каждую отдельно. Коллектор, который не знает, что они относятся друг к другу, считает каждую самостоятельным событием, поэтому исключение на сорок строк превращается в **сорок документов** — у тридцати девяти из них нет ни уровня, ни имени сервиса, ни собственной метки времени, потому что всё это было только в первой строке.\n\n```mermaid\nflowchart LR\n  E[\"одно исключение, 40 строк stdout\"] --> C[\"коллектор без правила multiline\"]\n  C --> D1[\"документ 1: есть уровень и сервис\"]\n  C --> D2[\"документы 2-40: осиротевшие строки\"]\n```\n\nЛечится это двумя способами:\n\n1. Настроить у коллектора **правило multiline** — шаблон, указывающий, какие строки продолжают предыдущее событие (для Java — строки, начинающиеся с пробела или с `at `). Способ рабочий, но он живёт в конвейере и должен продолжать совпадать с вашим форматом.\n2. Лучше: логировать стектрейс **одним JSON-полем** (`error.stack_trace`). Тогда он вообще не превращается в отдельные строки stdout, и проблема просто не возникает.\n\nНиже по течению это никто не починит: Elasticsearch хранит то, что дали, а Kibana показывает документы — ни тот, ни другая не собирают событие обратно."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One document per stdout line, and only the first carries the metadata.",
+              "ru": "По документу на строку stdout, и метаданные несёт только первая."
+            },
+            "incorrect": {
+              "en": "Four — nothing joins them, so three orphan lines arrive without level, service or timestamp.",
+              "ru": "Четыре — их ничто не склеивает, поэтому три осиротевшие строки приходят без уровня, сервиса и времени."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Four, and three of them have no level, service or timestamp",
+                "ru": "Четыре, и у трёх из них нет ни уровня, ни сервиса, ни метки времени"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "One — Elasticsearch joins the lines of the same exception",
+                "ru": "Один — Elasticsearch склеивает строки одного исключения"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Elasticsearch stores what it is given; joining lines is the collector's job.",
+                "ru": "Elasticsearch хранит то, что ему дали; склейка строк — работа коллектора."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Four, but Kibana groups them back into one event",
+                "ru": "Четыре, но Kibana сгруппирует их обратно в одно событие"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Kibana displays documents; it does not re-assemble them.",
+                "ru": "Kibana показывает документы; собирать их обратно она не умеет."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "multiline-p1-auto-join-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Elasticsearch automatically joins the lines of a Java stack trace into one document.",
+            "ru": "Elasticsearch автоматически склеивает строки Java-стектрейса в один документ."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Joining happens in the collector, or not at all.",
+              "ru": "Склейка происходит в коллекторе — или не происходит вовсе."
+            },
+            "incorrect": {
+              "en": "No — a multiline rule in the collector, or single-field JSON logging, has to do it.",
+              "ru": "Нет — это должно сделать правило multiline в коллекторе или JSON-логирование одним полем."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "multiline-p2-best-fix",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which approach removes the multiline stack trace problem at its source rather than patching it downstream?",
+            "ru": "Какой подход устраняет проблему многострочного стектрейса в источнике, а не латает её ниже по течению?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "If it is never split into lines, nothing has to join it back.",
+              "ru": "Если он никогда не разбивался на строки, то и склеивать нечего."
+            },
+            "incorrect": {
+              "en": "Logging the stack trace as one JSON field means it never becomes separate stdout lines.",
+              "ru": "Стектрейс одним JSON-полем никогда не превращается в отдельные строки stdout."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Log the stack trace as a single JSON field",
+                "ru": "Логировать стектрейс одним JSON-полем"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Configure a multiline rule in the collector",
+                "ru": "Настроить правило multiline в коллекторе"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It works, but it is a pipeline-side rule that must keep matching your log format.",
+                "ru": "Способ рабочий, но это правило на стороне конвейера, и оно должно совпадать с вашим форматом."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Stop printing stack traces in production",
+                "ru": "Перестать печатать стектрейсы в проде"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That throws away the diagnostic content you are logging for.",
+                "ru": "Так вы выбрасываете ровно ту диагностику, ради которой и логируете."
+              }
+            }
+          ]
+        },
+        {
+          "id": "multiline-p3-fill-rule",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the collector rule that joins a stack trace back into one event.",
+            "ru": "Назови правило коллектора, которое склеивает стектрейс обратно в одно событие."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Without it, one exception becomes dozens of orphan documents.",
+              "ru": "Без него одно исключение становится десятками осиротевших документов."
+            },
+            "incorrect": {
+              "en": "It is the multiline rule: it marks which lines continue the previous event.",
+              "ru": "Это правило multiline: оно помечает, какие строки продолжают предыдущее событие."
+            }
+          },
+          "text": {
+            "en": "A collector splits one exception into many documents unless a ___ rule joins the lines.",
+            "ru": "Коллектор разбивает одно исключение на много документов, пока строки не склеит правило ___."
+          },
+          "answers": {
+            "en": [
+              "multiline"
+            ],
+            "ru": [
+              "multiline",
+              "многострочности"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "correlation-id",
+      "title": {
+        "en": "Correlation id across services",
+        "ru": "Correlation id через все сервисы"
+      },
+      "summary": {
+        "en": "A correlation id generated at the edge and propagated on every call puts the same trace.id on every log line of one request, so a single filter returns the whole story.",
+        "ru": "Correlation id, созданный на границе и переданный в каждом вызове, ставит один и тот же trace.id в каждую строку лога одного запроса, поэтому один фильтр возвращает всю историю."
+      },
+      "discovery": [
+        {
+          "id": "corr-d1-four-services",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A request fails after passing through four services, and all four ship their logs to the same Elasticsearch. What still stops you from seeing exactly that request's lines?",
+            "ru": "Запрос падает, пройдя через четыре сервиса, и все четыре шлют логи в один Elasticsearch. Что всё ещё мешает увидеть строки именно этого запроса?"
+          },
+          "reveal": {
+            "en": "Centralized search alone is not enough: you still have to know *which* lines belong together. That is what a **correlation id** (also called a trace id) is for.\n\nIt is generated at the **edge** — typically the API gateway or the first service that receives the request — propagated on every outgoing call in a `traceparent` header, and put into the MDC so every log line of every service carries the same `trace.id`.\n\n```mermaid\nsequenceDiagram\n  participant C as Client\n  participant G as Gateway\n  participant O as orders\n  participant P as payments\n  C->>G: POST /orders\n  G->>O: traceparent, trace.id=4bf9\n  O->>P: same trace.id\n  P-->>O: timeout\n  O-->>G: 502\n  Note over G,P: every logged line carries trace.id=4bf9\n```\n\nOne filter — `trace.id: \"4bf9...\"` — then returns the whole story across all three services in timestamp order.\n\nWithout it, distributed logs are centralized but **not correlated**, and you are back to guessing from timestamps. That is also why \"we have all the logs in one place\" is not the same as observability.",
+            "ru": "Одного централизованного поиска мало: нужно ещё понимать, *какие* строки относятся друг к другу. Для этого и нужен **correlation id** (его же называют trace id).\n\nОн создаётся на **границе** — обычно это API-шлюз или первый сервис, принявший запрос, — передаётся в каждом исходящем вызове заголовком `traceparent` и кладётся в MDC, чтобы каждая строка лога каждого сервиса несла один и тот же `trace.id`.\n\n```mermaid\nsequenceDiagram\n  participant C as Клиент\n  participant G as Шлюз\n  participant O as orders\n  participant P as payments\n  C->>G: POST /orders\n  G->>O: traceparent, trace.id=4bf9\n  O->>P: тот же trace.id\n  P-->>O: таймаут\n  O-->>G: 502\n  Note over G,P: каждая записанная строка несёт trace.id=4bf9\n```\n\nОдин фильтр — `trace.id: \"4bf9...\"` — возвращает всю историю по трём сервисам в порядке времени.\n\nБез него распределённые логи централизованы, но **не скоррелированы**, и вы снова гадаете по меткам времени. Поэтому «все логи в одном месте» — это ещё не observability."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Centralized is not the same as correlated.",
+              "ru": "Централизованные — это ещё не скоррелированные."
+            },
+            "incorrect": {
+              "en": "Nothing links the four services' lines: they need a shared correlation id.",
+              "ru": "Строки четырёх сервисов ничем не связаны: им нужен общий correlation id."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Nothing links the four services' lines to each other",
+                "ru": "Строки четырёх сервисов ничем не связаны друг с другом"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Elasticsearch cannot query more than one service's index",
+                "ru": "Elasticsearch не может запрашивать индексы больше чем одного сервиса"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A data view can span many indices; the missing piece is a shared identifier.",
+                "ru": "Data view может охватывать много индексов; не хватает именно общего идентификатора."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The time range filter is not precise enough",
+                "ru": "Фильтр по времени недостаточно точен"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Even a perfect time window mixes in every other concurrent request.",
+                "ru": "Даже идеальное временное окно подмешает все другие одновременные запросы."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "corr-p1-where-created",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Where is a request's correlation id normally created?",
+            "ru": "Где обычно создаётся correlation id запроса?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "One id per request, minted once and carried everywhere.",
+              "ru": "Один id на запрос, созданный однажды и передаваемый везде."
+            },
+            "incorrect": {
+              "en": "At the edge — the API gateway or the first service that receives the request.",
+              "ru": "На границе — в API-шлюзе или первом сервисе, принявшем запрос."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "At the edge: the API gateway or the first service handling the request",
+                "ru": "На границе: в API-шлюзе или первом обрабатывающем запрос сервисе"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "In each service independently, when it starts handling the call",
+                "ru": "В каждом сервисе независимо, когда он начинает обработку вызова"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Then every service would have a different id and nothing would join up.",
+                "ru": "Тогда у каждого сервиса был бы свой id и ничего бы не связалось."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "In Elasticsearch, when the document is indexed",
+                "ru": "В Elasticsearch, при индексации документа"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The id must exist while the line is written, not after it is stored.",
+                "ru": "Id должен существовать в момент записи строки, а не после её сохранения."
+              }
+            }
+          ]
+        },
+        {
+          "id": "corr-p2-sort-propagation",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the life of a correlation id, from creation to a single Kibana filter.",
+            "ru": "Расставь по порядку жизнь correlation id — от создания до одного фильтра в Kibana."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Generate once, propagate on every hop, log it everywhere, filter by it once.",
+              "ru": "Создать однажды, передать на каждом шаге, логировать везде, отфильтровать один раз."
+            },
+            "incorrect": {
+              "en": "The gateway generates it, the traceparent header carries it, the MDC logs it, one filter finds it.",
+              "ru": "Шлюз его создаёт, заголовок traceparent несёт, MDC логирует, один фильтр находит."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "The gateway generates a trace id for the incoming request",
+                "ru": "Шлюз создаёт trace id для входящего запроса"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "It is passed on every outgoing call in a traceparent header",
+                "ru": "Он передаётся в каждом исходящем вызове заголовком traceparent"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Each service puts it into its MDC, so every line carries trace.id",
+                "ru": "Каждый сервис кладёт его в свой MDC, и каждая строка несёт trace.id"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "One Kibana filter on trace.id returns the whole request in time order",
+                "ru": "Один фильтр в Kibana по trace.id возвращает весь запрос в порядке времени"
+              }
+            }
+          ]
+        },
+        {
+          "id": "corr-p3-fill-header-mdc",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete how a correlation id travels and gets logged.",
+            "ru": "Дополни, как correlation id путешествует и попадает в лог."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The header moves it between services; the MDC gets it onto every line.",
+              "ru": "Заголовок переносит его между сервисами; MDC ставит его в каждую строку."
+            },
+            "incorrect": {
+              "en": "It travels in the traceparent header and is put into the MDC.",
+              "ru": "Он путешествует в заголовке traceparent и кладётся в MDC."
+            }
+          },
+          "text": {
+            "en": "A correlation id travels between services in the ___ header and is put into the ___ so every log line carries it.",
+            "ru": "Correlation id путешествует между сервисами в заголовке ___ и кладётся в ___, чтобы его несла каждая строка лога."
+          },
+          "blanks": [
+            {
+              "en": [
+                "traceparent"
+              ],
+              "ru": [
+                "traceparent"
+              ]
+            },
+            {
+              "en": [
+                "MDC",
+                "mdc"
+              ],
+              "ru": [
+                "MDC",
+                "mdc"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "kibana-vs-kubectl",
+      "title": {
+        "en": "Kibana vs kubectl logs",
+        "ru": "Kibana против kubectl logs"
+      },
+      "summary": {
+        "en": "kubectl logs reads the node file of a pod that still exists (current or previous container), while Kibana holds the searchable history — but only of what was actually shipped.",
+        "ru": "kubectl logs читает файл на узле для ещё существующего пода (текущий или предыдущий контейнер), а Kibana хранит историю с поиском — но только то, что реально было отправлено."
+      },
+      "discovery": [
+        {
+          "id": "vs-d1-deleted-pod",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "You deleted a failing pod an hour ago. Where can you still read the lines it printed?",
+            "ru": "Час назад вы удалили падающий под. Где ещё можно прочитать строки, которые он напечатал?"
+          },
+          "reveal": {
+            "en": "The two tools read different places, so neither is a superset of the other.\n\n- **`kubectl logs`** reads the node file for a pod that **still exists**, and only its current or previous container. No search, no history, no cross-service view. Once the pod is deleted, that file is gone with it.\n- **Kibana** has the history and can search across services — but only over what was actually shipped and indexed.\n\nSo `kubectl logs` can show lines Kibana never received (a broken or lagging shipper), and Kibana can show lines `kubectl logs` cannot (the pod is gone).\n\nThat is why \"if it is not in Kibana, it did not happen\" is wrong. When you find nothing at 14:03, walk the pipeline backwards:\n\n```mermaid\nflowchart TD\n  Q[\"nothing found at 14:03\"] --> A[\"wrong time range or timezone?\"]\n  A --> B[\"wrong data view or index pattern?\"]\n  B --> C[\"aged out of retention?\"]\n  C --> D[\"collector down or buffer overflowed?\"]\n  D --> E[\"document rejected on a mapping conflict?\"]\n  E --> F[\"did the app log it at all?\"]\n```\n\nComparing with `kubectl logs` on a live pod is the fastest way to tell a *pipeline* problem from an *application* problem.",
+            "ru": "Эти два инструмента читают разные места, поэтому ни один не является надмножеством другого.\n\n- **`kubectl logs`** читает файл на узле для пода, который **ещё существует**, и только его текущий или предыдущий контейнер. Ни поиска, ни истории, ни взгляда через сервисы. Как только под удалён, файл исчезает вместе с ним.\n- **Kibana** держит историю и умеет искать по всем сервисам — но только по тому, что реально было отправлено и проиндексировано.\n\nПоэтому `kubectl logs` может показать строки, которых Kibana никогда не получала (сломанный или отстающий отправитель), а Kibana — строки, которых `kubectl logs` уже не покажет (пода нет).\n\nИменно поэтому «если этого нет в Kibana, значит, этого не было» — неверно. Когда в 14:03 ничего не нашлось, идите по конвейеру назад:\n\n```mermaid\nflowchart TD\n  Q[\"в 14:03 ничего не найдено\"] --> A[\"не тот диапазон времени или таймзона?\"]\n  A --> B[\"не тот data view или шаблон индекса?\"]\n  B --> C[\"ушло по сроку хранения?\"]\n  C --> D[\"коллектор лежал или переполнился буфер?\"]\n  D --> E[\"документ отклонён из-за конфликта маппинга?\"]\n  E --> F[\"а приложение вообще это залогировало?\"]\n```\n\nСравнение с `kubectl logs` на живом поде — самый быстрый способ отличить проблему *конвейера* от проблемы *приложения*."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The documents in Elasticsearch outlive the pod that produced them.",
+              "ru": "Документы в Elasticsearch живут дольше пода, который их породил."
+            },
+            "incorrect": {
+              "en": "In Kibana, provided the collector shipped them before the pod went away.",
+              "ru": "В Kibana — при условии, что коллектор отправил их до исчезновения пода."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "In Kibana, if the collector shipped them before the pod was deleted",
+                "ru": "В Kibana, если коллектор отправил их до удаления пода"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "With kubectl logs --previous on that pod",
+                "ru": "Командой kubectl logs --previous на этом поде"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The pod is gone, and with it the node file kubectl logs reads.",
+                "ru": "Пода нет, а вместе с ним нет и файла на узле, который читает kubectl logs."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nowhere — deleting a pod deletes its documents in Elasticsearch too",
+                "ru": "Нигде — удаление пода удаляет и его документы в Elasticsearch"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Documents in Elasticsearch are independent of the pod's lifetime.",
+                "ru": "Документы в Elasticsearch не зависят от времени жизни пода."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "vs-p1-kubectl-wins",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "When can kubectl logs show you a line that Kibana does not have?",
+            "ru": "Когда kubectl logs может показать строку, которой нет в Kibana?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The node file is written whether or not the shipper is healthy.",
+              "ru": "Файл на узле пишется независимо от того, жив ли отправитель."
+            },
+            "incorrect": {
+              "en": "When the shipper is broken or lagging, so the line was never sent onward.",
+              "ru": "Когда отправитель сломан или отстаёт, и строка так и не ушла дальше."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "When the shipper is broken or lagging, so the line was never sent",
+                "ru": "Когда отправитель сломан или отстаёт, и строка не была отправлена"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Never — Kibana is always a superset of kubectl logs",
+                "ru": "Никогда — Kibana всегда надмножество kubectl logs"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "They read different places; a broken shipper breaks only Kibana's copy.",
+                "ru": "Они читают разные места; сломанный отправитель ломает только копию для Kibana."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "When the line is below INFO level",
+                "ru": "Когда уровень строки ниже INFO"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Level filtering happens in the application, before either path sees the line.",
+                "ru": "Фильтрация по уровню происходит в приложении, до обоих путей."
+              }
+            }
+          ]
+        },
+        {
+          "id": "vs-p2-not-there-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "If a line is not in Kibana, the application definitely never logged it.",
+            "ru": "Если строки нет в Kibana, значит приложение точно её не записывало."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It may have been dropped, rejected, aged out, or simply outside your query.",
+              "ru": "Её могли потерять, отклонить, удалить по сроку — или она просто вне вашего запроса."
+            },
+            "incorrect": {
+              "en": "No — absence in Kibana can come from any step of the pipeline, or from the query itself.",
+              "ru": "Нет — отсутствие в Kibana может идти от любого шага конвейера или от самого запроса."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "vs-p3-match-causes",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "You find nothing in Kibana for the minute a user reported. Match each possible cause to what it means.",
+            "ru": "В Kibana ничего нет за минуту, о которой сообщил пользователь. Соотнеси возможную причину с тем, что она означает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Check the query first, then the pipeline, then the application.",
+              "ru": "Сначала проверь запрос, потом конвейер, потом приложение."
+            },
+            "incorrect": {
+              "en": "A miss can come from the query, from retention, from the collector or from a rejected document.",
+              "ru": "Промах может идти от запроса, от срока хранения, от коллектора или от отклонённого документа."
+            }
+          },
+          "pairs": [
+            {
+              "id": "range",
+              "left": {
+                "en": "Wrong time range or timezone",
+                "ru": "Не тот диапазон времени или таймзона"
+              },
+              "right": {
+                "en": "The documents exist, your query just misses them",
+                "ru": "Документы есть, просто ваш запрос их не захватывает"
+              }
+            },
+            {
+              "id": "retention",
+              "left": {
+                "en": "Retention aged the day out",
+                "ru": "Сутки ушли по сроку хранения"
+              },
+              "right": {
+                "en": "The index was deleted by the lifecycle policy",
+                "ru": "Индекс удалён политикой жизненного цикла"
+              }
+            },
+            {
+              "id": "collector",
+              "left": {
+                "en": "The collector was down",
+                "ru": "Коллектор лежал"
+              },
+              "right": {
+                "en": "The lines are still on the node but were never shipped",
+                "ru": "Строки ещё на узле, но их так и не отправили"
+              }
+            },
+            {
+              "id": "mapping",
+              "left": {
+                "en": "Mapping conflict on a field",
+                "ru": "Конфликт маппинга по полю"
+              },
+              "right": {
+                "en": "Elasticsearch rejected the document at index time",
+                "ru": "Elasticsearch отклонил документ при индексации"
+              }
+            }
+          ]
+        },
+        {
+          "id": "vs-p4-fill-previous",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the limits of kubectl logs.",
+            "ru": "Дополни ограничения kubectl logs."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That is exactly the gap central logging fills.",
+              "ru": "Именно этот пробел и закрывают централизованные логи."
+            },
+            "incorrect": {
+              "en": "It shows the current and previous container of a pod that still exists.",
+              "ru": "Он показывает текущий и предыдущий контейнер пода, который ещё существует."
+            }
+          },
+          "text": {
+            "en": "kubectl logs can only show the current and ___ container of a pod that still ___.",
+            "ru": "kubectl logs может показать только текущий и ___ контейнер пода, который ещё ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "previous"
+              ],
+              "ru": [
+                "предыдущий"
+              ]
+            },
+            {
+              "en": [
+                "exists"
+              ],
+              "ru": [
+                "существует"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "logs-metrics-traces",
+      "title": {
+        "en": "Logs, metrics and traces",
+        "ru": "Логи, метрики и трейсы"
+      },
+      "summary": {
+        "en": "Logs answer what happened in one specific case; rates, latencies and saturation belong to metrics, and per-request timing to traces.",
+        "ru": "Логи отвечают на вопрос, что случилось в конкретном случае; частоты, задержки и насыщение — это метрики, а тайминги по запросу — трейсы."
+      },
+      "discovery": [
+        {
+          "id": "signals-d1-memory",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Your service's memory usage keeps growing over days until it is restarted. Which signal diagnoses that?",
+            "ru": "Потребление памяти вашим сервисом растёт день за днём, пока его не перезапустят. Какой сигнал это диагностирует?"
+          },
+          "reveal": {
+            "en": "Three signals answer three different kinds of question, and they complement rather than replace each other:\n\n```mermaid\nflowchart LR\n  L[\"logs: discrete events\"] --> Q1[\"what happened in this case?\"]\n  M[\"metrics: numbers over time\"] --> Q2[\"what is the rate, latency, saturation?\"]\n  T[\"traces: one request's spans\"] --> Q3[\"where did the time go?\"]\n```\n\n- **Logs** are individual events. They are high-cardinality and expensive to store, and they tell you what happened to *this* order, *this* request.\n- **Metrics** (Prometheus, Grafana) are numbers sampled over time: error rate, p99 latency, memory and CPU saturation. A curve is a metric question, not a log question — which is why a memory problem is diagnosed with metrics plus a heap dump, not by reading log lines.\n- **Traces** show where the time went inside one request, span by span.\n\nSo \"we have centralized logs\" is not the same as observability: without a correlation id you have all the lines and no story, and without metrics and traces you have events but no rates and no latencies.",
+            "ru": "Три сигнала отвечают на три разных типа вопросов и дополняют, а не заменяют друг друга:\n\n```mermaid\nflowchart LR\n  L[\"логи: отдельные события\"] --> Q1[\"что случилось в этом случае?\"]\n  M[\"метрики: числа во времени\"] --> Q2[\"какая частота, задержка, насыщение?\"]\n  T[\"трейсы: спаны одного запроса\"] --> Q3[\"куда ушло время?\"]\n```\n\n- **Логи** — это отдельные события. У них высокая кардинальность и высокая стоимость хранения, и они рассказывают, что произошло с *этим* заказом, *этим* запросом.\n- **Метрики** (Prometheus, Grafana) — числа, снимаемые во времени: частота ошибок, задержка p99, насыщение по памяти и CPU. Кривая — это вопрос к метрикам, а не к логам; поэтому проблему с памятью диагностируют метриками и heap dump, а не чтением строк лога.\n- **Трейсы** показывают, куда ушло время внутри одного запроса, спан за спаном.\n\nПоэтому «у нас централизованные логи» — это ещё не observability: без correlation id у вас все строки и ни одной истории, а без метрик и трейсов — события, но ни частот, ни задержек."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A resource curve over time is a metrics question.",
+              "ru": "Кривая ресурса во времени — вопрос к метрикам."
+            },
+            "incorrect": {
+              "en": "Memory growth is diagnosed with metrics and a heap dump, not by reading log lines.",
+              "ru": "Рост памяти диагностируют метриками и heap dump, а не чтением строк лога."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Metrics, plus a heap dump",
+                "ru": "Метрики плюс heap dump"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A Kibana search for lines mentioning memory",
+                "ru": "Поиск в Kibana по строкам со словом memory"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Logs record events, not the process's resource curve over time.",
+                "ru": "Логи записывают события, а не кривую ресурсов процесса во времени."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A Kibana dashboard of ERROR counts",
+                "ru": "Дашборд в Kibana со счётчиками ERROR"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Error counts can stay perfectly flat while memory climbs.",
+                "ru": "Счётчики ошибок могут быть идеально ровными, пока память растёт."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "signals-p1-which-question",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which question should you answer with metrics rather than with logs?",
+            "ru": "На какой вопрос нужно отвечать метриками, а не логами?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "An aggregate over many requests is a metric; a single case is a log line.",
+              "ru": "Агрегат по многим запросам — это метрика; отдельный случай — строка лога."
+            },
+            "incorrect": {
+              "en": "Latency percentiles are an aggregate over time — a metrics question, not a log search.",
+              "ru": "Перцентили задержки — агрегат во времени: вопрос к метрикам, а не поиск по логам."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "What is the 99th percentile latency of the checkout endpoint?",
+                "ru": "Какова задержка p99 у эндпоинта оформления заказа?"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Which exception did order 42 fail with?",
+                "ru": "С каким исключением упал заказ 42?"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is one specific event — exactly what a log line is for.",
+                "ru": "Это одно конкретное событие — ровно то, для чего нужна строка лога."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Which trace id did the failing request carry?",
+                "ru": "Какой trace id нёс упавший запрос?"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Also a property of a single event, found in logs or traces.",
+                "ru": "Это тоже свойство одного события, его находят в логах или трейсах."
+              }
+            }
+          ]
+        },
+        {
+          "id": "signals-p2-match-signals",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each observability signal to the question it answers.",
+            "ru": "Соотнеси каждый сигнал observability с вопросом, на который он отвечает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Three signals, three questions — they complement, not substitute.",
+              "ru": "Три сигнала, три вопроса — они дополняют, а не заменяют друг друга."
+            },
+            "incorrect": {
+              "en": "Logs are events, metrics are rates and latencies, traces show where the time went.",
+              "ru": "Логи — события, метрики — частоты и задержки, трейсы — куда ушло время."
+            }
+          },
+          "pairs": [
+            {
+              "id": "logs",
+              "left": {
+                "en": "Logs",
+                "ru": "Логи"
+              },
+              "right": {
+                "en": "What exactly happened in this one case",
+                "ru": "Что именно произошло в этом конкретном случае"
+              }
+            },
+            {
+              "id": "metrics",
+              "left": {
+                "en": "Metrics",
+                "ru": "Метрики"
+              },
+              "right": {
+                "en": "Rates, latencies and saturation over time",
+                "ru": "Частоты, задержки и насыщение во времени"
+              }
+            },
+            {
+              "id": "traces",
+              "left": {
+                "en": "Traces",
+                "ru": "Трейсы"
+              },
+              "right": {
+                "en": "Where the time went inside one request",
+                "ru": "Куда ушло время внутри одного запроса"
+              }
+            }
+          ]
+        },
+        {
+          "id": "signals-p3-fill-metrics",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the signal that owns rates and latencies.",
+            "ru": "Назови сигнал, которому принадлежат частоты и задержки."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Storing one log document per request just to count them is the expensive way.",
+              "ru": "Хранить по документу лога на запрос ради подсчёта — дорогой путь."
+            },
+            "incorrect": {
+              "en": "Rates, latencies and saturation belong in metrics, such as Prometheus and Grafana.",
+              "ru": "Частоты, задержки и насыщение — это метрики, например Prometheus и Grafana."
+            }
+          },
+          "text": {
+            "en": "Rates, latencies and saturation belong in ___, not in logs.",
+            "ru": "Частоты, задержки и насыщение — это ___, а не логи."
+          },
+          "answers": {
+            "en": [
+              "metrics"
+            ],
+            "ru": [
+              "метрики",
+              "метриках",
+              "metrics"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "logging-cost-and-secrets",
+      "title": {
+        "en": "Cost, secrets and injection",
+        "ru": "Стоимость, секреты и инъекции"
+      },
+      "summary": {
+        "en": "Every stored line is indexed and paid for, and logs are read by more people than the database — so log level and retention are design decisions, and secrets, personal data and raw user input must never go in.",
+        "ru": "Каждая сохранённая строка индексируется и оплачивается, а логи читает больше людей, чем базу, — поэтому уровень логирования и хранение это проектные решения, а секретам, персональным данным и сырому пользовательскому вводу там не место."
+      },
+      "discovery": [
+        {
+          "id": "cost-d1-headers",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "This line runs on every request of a production service. What is the worst consequence?",
+            "ru": "Эта строка выполняется на каждом запросе продового сервиса. Каково худшее последствие?"
+          },
+          "code": "log.debug(\"Incoming request {} headers={}\", uri, request.getHeaders());",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Two costs are paid for every line you log.\n\n**Volume and retention.** Every DEBUG line is stored, indexed and billed — forever, unless you say otherwise. Two things keep the cluster from becoming the most expensive component you own: a sane production log level, and **Index Lifecycle Management** (ILM), the policy that moves an index hot → warm → cold → delete as it ages. Log levels are a design decision, not a leftover.\n\n**Secrets and personal data.** Logs are read by more people than your database and are retained for months. A logged `Authorization` header hands a session token or JWT to everyone with Kibana access; logged card numbers or personal data create a compliance problem. Masking belongs in the **application, before the line is written** — a pipeline-side filter is a second line of defence, not the first. This is the \"Security Logging and Monitoring Failures\" corner of the OWASP Top 10.\n\n**Log injection.** Concatenating unescaped user input into a log message lets an attacker embed newlines and forge entries, or inject markup that a viewer renders. Structured logging, with the value in its own field, removes the whole category.\n\nOne more cost trap: every distinct JSON key becomes a mapping in the index. Put a unique id in a *key* rather than a value and you get thousands of fields and a cluster in trouble — keep the schema stable and put variability in values.",
+            "ru": "За каждую записанную строку платят дважды.\n\n**Объём и хранение.** Каждая DEBUG-строка хранится, индексируется и оплачивается — вечно, пока вы не скажете иначе. Не дают кластеру стать самым дорогим вашим компонентом две вещи: вменяемый уровень логирования в проде и **Index Lifecycle Management** (ILM) — политика, которая по мере старения переводит индекс hot → warm → cold → delete. Уровни логирования — проектное решение, а не остаточное явление.\n\n**Секреты и персональные данные.** Логи читает больше людей, чем вашу базу, и хранятся они месяцами. Записанный в лог заголовок `Authorization` вручает сессионный токен или JWT всем, у кого есть доступ в Kibana; записанные номера карт или персональные данные создают проблему с регуляторикой. Маскирование должно быть **в приложении, до записи строки**, — фильтр на стороне конвейера это вторая линия обороны, а не первая. Это тот самый угол «Security Logging and Monitoring Failures» из OWASP Top 10.\n\n**Log injection.** Склеивание неэкранированного пользовательского ввода со строкой лога позволяет атакующему вставить переводы строк и подделать записи или подсунуть разметку, которую отрисует просмотрщик. Структурированное логирование, где значение лежит в отдельном поле, убирает всю категорию целиком.\n\nЕщё одна ловушка со стоимостью: каждый новый JSON-ключ становится маппингом в индексе. Положите уникальный id в *ключ* вместо значения — получите тысячи полей и кластер в беде; держите схему стабильной, а изменчивость — в значениях."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A credential in a log line is readable by everyone with log access, for months.",
+              "ru": "Учётные данные в строке лога месяцами доступны всем, у кого есть доступ к логам."
+            },
+            "incorrect": {
+              "en": "Headers include Authorization, so this leaks a token to everyone with Kibana access.",
+              "ru": "Среди заголовков есть Authorization, поэтому это утекает токеном всем с доступом в Kibana."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The Authorization header ends up in the logs, readable by everyone with access",
+                "ru": "Заголовок Authorization попадает в логи, доступные всем, у кого есть доступ"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The line is too long for Elasticsearch to index",
+                "ru": "Строка слишком длинная, чтобы Elasticsearch её проиндексировал"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Length is not the fatal issue here; the leaked credential is.",
+                "ru": "Дело не в длине; фатальна утечка учётных данных."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing, because DEBUG is disabled in production",
+                "ru": "Ничего, ведь DEBUG в проде выключен"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "DEBUG is one config change away from being on; the risk lives in the code.",
+                "ru": "До включения DEBUG — одна правка конфига; риск живёт в коде."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cost-p1-never-log",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which of these must never end up in a log line?",
+            "ru": "Что из этого никогда не должно оказаться в строке лога?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "A credential in a log is a credential shared with everyone who can read logs.",
+              "ru": "Учётные данные в логе — это учётные данные для всех, кто может читать логи."
+            },
+            "incorrect": {
+              "en": "The Authorization header carries a session token or JWT — never log it.",
+              "ru": "Заголовок Authorization несёт сессионный токен или JWT — его нельзя логировать."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The value of the Authorization header",
+                "ru": "Значение заголовка Authorization"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The HTTP status code of the response",
+                "ru": "HTTP-код ответа"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Harmless and useful — a good field to filter on.",
+                "ru": "Безобидно и полезно — хорошее поле для фильтрации."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The name of the service that handled the request",
+                "ru": "Имя сервиса, обработавшего запрос"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is service.name — exactly the field you want on every line.",
+                "ru": "Это service.name — ровно то поле, которое нужно в каждой строке."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cost-p2-masking-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Masking a card number is best done in the log pipeline, so the application does not have to care.",
+            "ru": "Маскировать номер карты лучше в конвейере логов, чтобы приложению не нужно было об этом думать."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Masking belongs in the application, before the line is written.",
+              "ru": "Маскирование должно быть в приложении, до записи строки."
+            },
+            "incorrect": {
+              "en": "No — mask before the line is written; a pipeline filter is a second line of defence.",
+              "ru": "Нет — маскируйте до записи строки; фильтр в конвейере это вторая линия обороны."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "cost-p3-injection",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "An attacker sends a username containing newline characters, and it is concatenated into a log message. What is the risk?",
+            "ru": "Атакующий присылает имя пользователя с переводами строк, и оно склеивается со строкой лога. В чём риск?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Put the value in its own field and the whole category disappears.",
+              "ru": "Положите значение в отдельное поле — и вся категория исчезает."
+            },
+            "incorrect": {
+              "en": "Embedded newlines let them forge extra log entries; structured logging prevents it.",
+              "ru": "Вставленные переводы строк позволяют подделать записи; структурированное логирование это предотвращает."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "They can forge extra log entries that look genuine",
+                "ru": "Они могут подделать дополнительные записи, выглядящие настоящими"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Elasticsearch will reject the document",
+                "ru": "Elasticsearch отклонит документ"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Rejection comes from mapping conflicts, not from newlines in a message.",
+                "ru": "Отклонение происходит из-за конфликтов маппинга, а не из-за переводов строк в сообщении."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — the viewer escapes everything on display",
+                "ru": "Ничего — просмотрщик всё экранирует при показе"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A viewer may render injected markup, and the forged lines are already stored.",
+                "ru": "Просмотрщик может отрисовать вставленную разметку, а поддельные строки уже сохранены."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cost-p4-fill-ilm",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the policy that ages log indices out and complete its stages.",
+            "ru": "Назови политику, которая списывает индексы логов по возрасту, и дополни её стадии."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Without it, every DEBUG line is stored and billed forever.",
+              "ru": "Без неё каждая DEBUG-строка хранится и оплачивается вечно."
+            },
+            "incorrect": {
+              "en": "Index Lifecycle Management moves an index hot, warm, cold, then delete.",
+              "ru": "Index Lifecycle Management переводит индекс hot, warm, cold, затем delete."
+            }
+          },
+          "text": {
+            "en": "Index ___ Management moves an index hot -> warm -> cold -> ___ as it ages.",
+            "ru": "Index ___ Management с возрастом переводит индекс hot -> warm -> cold -> ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "Lifecycle",
+                "lifecycle"
+              ],
+              "ru": [
+                "Lifecycle",
+                "lifecycle"
+              ]
+            },
+            {
+              "en": [
+                "delete"
+              ],
+              "ru": [
+                "delete"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "best-effort-delivery",
+      "title": {
+        "en": "Delivery is best-effort",
+        "ru": "Доставка — best-effort"
+      },
+      "summary": {
+        "en": "A log pipeline can drop, delay or reject a line, so logs are for diagnosis and never a system of record for anything that must not be lost.",
+        "ru": "Конвейер логов может потерять, задержать или отклонить строку, поэтому логи нужны для диагностики и никогда не служат источником истины для того, что нельзя терять."
+      },
+      "discovery": [
+        {
+          "id": "besteffort-d1-business-event",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Another team counts paid orders by searching Kibana for this line. What is wrong with that design?",
+            "ru": "Другая команда считает оплаченные заказы, ища в Kibana эту строку. Что не так с таким решением?"
+          },
+          "code": "log.info(\"ORDER_PAID orderId={} amount={}\", order.getId(), order.getAmount());",
+          "codeLang": "java",
+          "reveal": {
+            "en": "A log pipeline is **best-effort**, and every stage can lose a line:\n\n```mermaid\nflowchart LR\n  A[\"app writes the line\"] --> N[\"node file\"]\n  N --> C[\"collector: may be down\"]\n  C --> B[\"buffer: may overflow\"]\n  B --> E[\"Elasticsearch: may reject the document\"]\n  E --> R[\"retention: eventually deletes it\"]\n```\n\nThe collector can be down; a buffer can overflow during a burst; a node can die before the last lines are read; a **mapping conflict** — a field arriving with a type the index does not expect — makes Elasticsearch reject the document outright; and retention deletes it in the end anyway.\n\nSo logs are for diagnosis, never a system of record. Anything that must not be lost belongs in a database, and if it must reach another system, it goes through an **outbox** — a table written in the same transaction as the business change, from which a separate process reliably publishes the event. A log line has none of those guarantees.",
+            "ru": "Конвейер логов работает по принципу **best-effort**, и потерять строку может любой этап:\n\n```mermaid\nflowchart LR\n  A[\"приложение пишет строку\"] --> N[\"файл на узле\"]\n  N --> C[\"коллектор: может лежать\"]\n  C --> B[\"буфер: может переполниться\"]\n  B --> E[\"Elasticsearch: может отклонить документ\"]\n  E --> R[\"хранение: в итоге удалит её\"]\n```\n\nКоллектор может лежать; буфер может переполниться на всплеске; узел может умереть до того, как последние строки прочитаны; **конфликт маппинга** — поле пришло с типом, которого индекс не ожидает — заставит Elasticsearch отклонить документ целиком; а хранение в конце концов всё равно его удалит.\n\nПоэтому логи нужны для диагностики и никогда не являются источником истины. То, что нельзя терять, должно жить в базе данных, а если оно должно дойти до другой системы — идти через **outbox**: таблицу, записываемую в той же транзакции, что и бизнес-изменение, из которой отдельный процесс надёжно публикует событие. У строки лога нет ни одной такой гарантии."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A dropped line silently becomes a missing order.",
+              "ru": "Потерянная строка молча превращается в потерянный заказ."
+            },
+            "incorrect": {
+              "en": "The pipeline is best-effort: a dropped or rejected line silently loses an order.",
+              "ru": "Конвейер работает по best-effort: потерянная или отклонённая строка молча теряет заказ."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The pipeline is best-effort, so a dropped or rejected line silently loses an order",
+                "ru": "Конвейер это best-effort, поэтому потерянная или отклонённая строка молча теряет заказ"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing, as long as the level stays INFO and is never filtered out",
+                "ru": "Ничего, пока уровень остаётся INFO и его не отфильтровывают"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The log level says nothing about whether the line is delivered.",
+                "ru": "Уровень логирования ничего не говорит о том, будет ли строка доставлена."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It works but is slow: Elasticsearch adds a few seconds of delay",
+                "ru": "Работает, но медленно: Elasticsearch добавляет несколько секунд задержки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Delay is the smaller issue; some lines may never arrive at all.",
+                "ru": "Задержка — меньшая беда; часть строк может вообще не дойти."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "besteffort-p1-where-to-put",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "An event must reach another system and must not be lost. Where should it be written?",
+            "ru": "Событие должно дойти до другой системы и не может быть потеряно. Куда его записывать?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Durable storage first, reliable publication second — never a log line.",
+              "ru": "Сначала надёжное хранение, потом надёжная публикация — и точно не строка лога."
+            },
+            "incorrect": {
+              "en": "Into the database, and out to the other system through an outbox.",
+              "ru": "В базу данных, а наружу к другой системе — через outbox."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Into the database, and to the other system through an outbox",
+                "ru": "В базу данных, а к другой системе — через outbox"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Into a log line at WARN, so it is never filtered out",
+                "ru": "В строку лога на уровне WARN, чтобы её не отфильтровали"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The level does not change the delivery guarantees of the pipeline.",
+                "ru": "Уровень не меняет гарантий доставки в конвейере."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Into both a log line and a metric, for redundancy",
+                "ru": "И в строку лога, и в метрику — для надёжности"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Neither is a durable channel, and a metric is an aggregate, not an event.",
+                "ru": "Ни то ни другое не является надёжным каналом, а метрика это агрегат, а не событие."
+              }
+            }
+          ]
+        },
+        {
+          "id": "besteffort-p2-match-failures",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each failure in a log pipeline to what it costs you.",
+            "ru": "Соотнеси каждый сбой в конвейере логов с тем, чего он вам стоит."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Four independent ways a line never becomes a searchable document.",
+              "ru": "Четыре независимых способа, которыми строка не становится документом для поиска."
+            },
+            "incorrect": {
+              "en": "A down collector, an overflowing buffer, a dead node and a mapping conflict all lose lines.",
+              "ru": "Лежащий коллектор, переполненный буфер, умерший узел и конфликт маппинга — все теряют строки."
+            }
+          },
+          "pairs": [
+            {
+              "id": "down",
+              "left": {
+                "en": "The collector is down",
+                "ru": "Коллектор лежит"
+              },
+              "right": {
+                "en": "Lines are never read from the node file",
+                "ru": "Строки так и не читаются из файла на узле"
+              }
+            },
+            {
+              "id": "overflow",
+              "left": {
+                "en": "The buffer overflows during a burst",
+                "ru": "Буфер переполняется на всплеске"
+              },
+              "right": {
+                "en": "Records are dropped to keep up",
+                "ru": "Записи отбрасываются, чтобы успевать"
+              }
+            },
+            {
+              "id": "node",
+              "left": {
+                "en": "The node dies",
+                "ru": "Узел умирает"
+              },
+              "right": {
+                "en": "The last unread lines go with it",
+                "ru": "Последние непрочитанные строки уходят вместе с ним"
+              }
+            },
+            {
+              "id": "conflict",
+              "left": {
+                "en": "A mapping conflict on a field",
+                "ru": "Конфликт маппинга по полю"
+              },
+              "right": {
+                "en": "Elasticsearch rejects the whole document",
+                "ru": "Elasticsearch отклоняет документ целиком"
+              }
+            }
+          ]
+        },
+        {
+          "id": "besteffort-p3-fill-outbox",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the pattern for events that must reach another system reliably.",
+            "ru": "Назови паттерн для событий, которые должны надёжно дойти до другой системы."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Logs diagnose; an outbox delivers.",
+              "ru": "Логи диагностируют; outbox доставляет."
+            },
+            "incorrect": {
+              "en": "It is the outbox: written in the same transaction and published reliably.",
+              "ru": "Это outbox: записывается в той же транзакции и надёжно публикуется."
+            }
+          },
+          "text": {
+            "en": "Anything that must reach another system reliably belongs in an ___, not in a log line.",
+            "ru": "То, что должно надёжно дойти до другой системы, должно жить в ___, а не в строке лога."
+          },
+          "answers": {
+            "en": [
+              "outbox"
+            ],
+            "ru": [
+              "outbox"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "whole-log-journey",
+      "title": {
+        "en": "One line's whole journey",
+        "ru": "Весь путь одной строки"
+      },
+      "summary": {
+        "en": "From log.error() to a document in Kibana: stdout, node file, collector, Elasticsearch, Kibana — plus what makes the line findable and what can lose it.",
+        "ru": "От log.error() до документа в Kibana: stdout, файл на узле, коллектор, Elasticsearch, Kibana — плюс то, что делает строку находимой, и то, что может её потерять."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "cap-d1-deleted-after-3s",
+          "type": "predict_output",
+          "prompt": {
+            "en": "A containerized service with a console appender logs this, and the pod is deleted three seconds later. Which statement is true?",
+            "ru": "Контейнеризованный сервис с console appender пишет это, и через три секунды под удаляют. Какое утверждение верно?"
+          },
+          "code": "log.error(\"Order 42 failed\", new TimeoutException(\"payments\"));\n// 3 seconds later: kubectl delete pod orders-a",
+          "codeLang": "java",
+          "reveal": {
+            "en": "The whole pipeline in one picture:\n\n```mermaid\nflowchart LR\n  A[\"app: JSON to stdout\"] --> N[\"runtime: file on the node\"]\n  N --> C[\"collector DaemonSet: parse, join, enrich\"]\n  C --> E[\"Elasticsearch: index by time\"]\n  E --> K[\"Kibana: KQL over a data view\"]\n```\n\nNothing is ever sent to Kibana; the line walks that chain. Three things decide whether you can find it afterwards:\n\n- **Structure** — JSON fields (`log.level`, `service.name`) make the filter exact; the collector's enrichment adds pod, namespace and labels.\n- **Correlation** — a `trace.id` in the MDC is what joins this line to the other services' lines of the same request.\n- **Timing and luck** — the pod's node file dies with the pod, so the answer depends on whether the collector had already read it. Delivery is best-effort at every hop.\n\nThat is also the shape of the debugging answer: when a line is missing, walk this chain backwards from the query to the application.",
+            "ru": "Весь конвейер одной картинкой:\n\n```mermaid\nflowchart LR\n  A[\"приложение: JSON в stdout\"] --> N[\"среда выполнения: файл на узле\"]\n  N --> C[\"коллектор DaemonSet: разбор, склейка, обогащение\"]\n  C --> E[\"Elasticsearch: индекс по времени\"]\n  E --> K[\"Kibana: KQL по data view\"]\n```\n\nВ Kibana никогда ничего не отправляют; строка идёт по этой цепочке. Найдёте вы её потом или нет, решают три вещи:\n\n- **Структура** — JSON-поля (`log.level`, `service.name`) делают фильтр точным; обогащение коллектора добавляет под, namespace и метки.\n- **Корреляция** — `trace.id` в MDC связывает эту строку со строками других сервисов того же запроса.\n- **Время и везение** — файл пода на узле умирает вместе с подом, поэтому ответ зависит от того, успел ли коллектор его прочитать. Доставка на каждом шаге best-effort.\n\nТакова же и форма ответа при отладке: когда строки нет, идите по этой цепочке назад — от запроса к приложению."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The document survives the pod, if it was shipped in time.",
+              "ru": "Документ переживает под — если его успели отправить."
+            },
+            "incorrect": {
+              "en": "It travels stdout, node file, collector, Elasticsearch — and only then is it in Kibana.",
+              "ru": "Она идёт через stdout, файл на узле, коллектор, Elasticsearch — и только потом попадает в Kibana."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Kibana can still show it if the collector read the node file before the pod went away",
+                "ru": "Kibana всё ещё покажет её, если коллектор прочитал файл на узле до исчезновения пода"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It is certainly in Kibana: the application sent it there directly",
+                "ru": "Она точно в Kibana: приложение отправило её туда напрямую"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing is sent to Kibana; the line goes stdout, node file, collector, Elasticsearch.",
+                "ru": "В Kibana ничего не отправляют; строка идёт через stdout, файл на узле, коллектор, Elasticsearch."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It is certainly lost: the pod's file is deleted with the pod",
+                "ru": "Она точно потеряна: файл пода удаляется вместе с подом"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The node file goes, but the collector may already have shipped the record.",
+                "ru": "Файл на узле уходит, но коллектор мог уже отправить запись."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cap-p1-spot-secret",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This runs in production and its output is shipped to Elasticsearch. What is the most serious defect?",
+            "ru": "Это работает в проде, и вывод отправляется в Elasticsearch. Какой дефект самый серьёзный?"
+          },
+          "code": "MDC.put(\"orderId\", order.getId());\nlog.info(\"charging card \" + card.getNumber() + \" for \" + user.getEmail());",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Two atoms meet here. The card number and the email are **personal data written into a store that many people can read for months** — masking belongs in the application, before the line is written. And the message is built by concatenation, so the values sit inside one free-text `message` field instead of their own fields: that is both unsearchable and the opening for log injection, since unescaped user input can embed newlines.\n\nThe structured version keeps the diagnostic value without either problem:\n\n```json\n{\"log.level\":\"INFO\",\"service.name\":\"orders\",\"message\":\"charging card\",\n \"card.last4\":\"4242\",\"user.id\":\"7\",\"orderId\":\"42\"}\n```\n\nNote what stayed: the order id is in the MDC, so it becomes its own field on every line of the request — that is the part you want.",
+            "ru": "Здесь встречаются два атома. Номер карты и почта — это **персональные данные, записанные в хранилище, которое месяцами читают много людей**; маскирование должно быть в приложении, до записи строки. А сообщение собрано конкатенацией, поэтому значения лежат внутри одного свободного поля `message` вместо собственных полей: по ним нельзя искать, и это же открывает дорогу log injection, ведь неэкранированный ввод может содержать переводы строк.\n\nСтруктурированный вариант сохраняет диагностическую ценность без обеих проблем:\n\n```json\n{\"log.level\":\"INFO\",\"service.name\":\"orders\",\"message\":\"charging card\",\n \"card.last4\":\"4242\",\"user.id\":\"7\",\"orderId\":\"42\"}\n```\n\nОбратите внимание, что осталось: номер заказа лежит в MDC, поэтому он становится отдельным полем в каждой строке запроса — вот это как раз и нужно."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Personal data in a log is personal data shared with every log reader.",
+              "ru": "Персональные данные в логе — это персональные данные для каждого читателя логов."
+            },
+            "incorrect": {
+              "en": "It writes a card number and an email into a store many people read for months.",
+              "ru": "Оно пишет номер карты и почту в хранилище, которое месяцами читают много людей."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It writes a card number and an email into a log many people can read",
+                "ru": "Оно пишет номер карты и почту в лог, доступный многим людям"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "String concatenation is slower than a parameterized message",
+                "ru": "Конкатенация строк медленнее параметризованного сообщения"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A fair style point, but not the serious defect on this line.",
+                "ru": "Справедливое замечание по стилю, но не главный дефект этой строки."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The message is not JSON, so nothing will ship it",
+                "ru": "Сообщение не в JSON, поэтому его никто не отправит"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The collector ships it anyway; it just stays one unstructured field.",
+                "ru": "Коллектор всё равно его отправит; оно просто останется одним неструктурированным полем."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p2-predict-docs",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Three stdout lines from a pod labelled app=orders. The node's collector enriches records but has no multiline rule. What reaches Elasticsearch?",
+            "ru": "Три строки stdout из пода с меткой app=orders. Коллектор узла обогащает записи, но правила multiline у него нет. Что дойдёт до Elasticsearch?"
+          },
+          "code": "2026-07-28T14:03:11Z ERROR orders - Order 42 failed\njava.util.concurrent.TimeoutException: payments did not answer\n\tat com.shop.PaymentClient.charge(PaymentClient.java:41)",
+          "codeLang": "text",
+          "feedback": {
+            "correct": {
+              "en": "Enrichment applies per record, so even orphan lines get the pod labels.",
+              "ru": "Обогащение применяется к каждой записи, поэтому метки пода получают даже осиротевшие строки."
+            },
+            "incorrect": {
+              "en": "Three documents, all enriched with pod labels, but only the first has a level.",
+              "ru": "Три документа, все обогащены метками пода, но уровень есть только у первого."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Three documents, all carrying the pod labels, but only the first with a level",
+                "ru": "Три документа, все с метками пода, но уровень есть только у первого"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "One document with the full stack trace and the pod labels",
+                "ru": "Один документ с полным стектрейсом и метками пода"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Only a multiline rule or single-field JSON logging would join those lines.",
+                "ru": "Склеить эти строки могло бы только правило multiline или JSON-логирование одним полем."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Three documents with no Kubernetes fields, since the app produced only the first line",
+                "ru": "Три документа без полей Kubernetes, ведь приложение породило только первую строку"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The collector enriches every record it reads from the node file, orphans included.",
+                "ru": "Коллектор обогащает каждую запись, прочитанную из файла на узле, включая осиротевшие."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p3-sort-journey",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the complete journey of one log line, from the application to the Kibana screen.",
+            "ru": "Расставь по порядку полный путь одной строки лога — от приложения до экрана Kibana."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Six steps, and nothing in them writes to Kibana.",
+              "ru": "Шесть шагов, и ни на одном из них никто не пишет в Kibana."
+            },
+            "incorrect": {
+              "en": "stdout, node file, collector, ship, index, then Kibana queries it.",
+              "ru": "stdout, файл на узле, коллектор, отправка, индексация, затем запрос из Kibana."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "The application prints a JSON line to stdout",
+                "ru": "Приложение печатает JSON-строку в stdout"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "The container runtime writes it to a file on the node, in its own envelope",
+                "ru": "Среда выполнения контейнеров пишет её в файл на узле, в собственном конверте"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "The collector DaemonSet tails the file, joins multiline events and enriches the record",
+                "ru": "Коллектор DaemonSet читает файл, склеивает многострочные события и обогащает запись"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "The record is shipped to Elasticsearch, sometimes via Logstash or Kafka",
+                "ru": "Запись отправляется в Elasticsearch, иногда через Logstash или Kafka"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "Elasticsearch indexes it into a time-based index",
+                "ru": "Elasticsearch индексирует её в индекс с привязкой ко времени"
+              }
+            },
+            {
+              "id": "s6",
+              "text": {
+                "en": "Kibana queries that index through a data view and shows it in Discover",
+                "ru": "Kibana запрашивает этот индекс через data view и показывает её в Discover"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p4-match-mechanisms",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each mechanism to its role in getting a log line from a container to a Kibana search.",
+            "ru": "Соотнеси каждый механизм с его ролью в пути строки лога от контейнера до поиска в Kibana."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Five pieces, five distinct jobs — that separation is the whole answer.",
+              "ru": "Пять частей, пять разных задач — на этом разделении и строится весь ответ."
+            },
+            "incorrect": {
+              "en": "stdout gets the line out, the collector enriches, Elasticsearch stores, trace.id correlates, Kibana queries.",
+              "ru": "stdout выпускает строку, коллектор обогащает, Elasticsearch хранит, trace.id связывает, Kibana запрашивает."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "Console appender to stdout",
+                "ru": "Console appender в stdout"
+              },
+              "right": {
+                "en": "Gets the line out of the container",
+                "ru": "Выпускает строку за пределы контейнера"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "Collector DaemonSet",
+                "ru": "Коллектор DaemonSet"
+              },
+              "right": {
+                "en": "Adds pod, namespace and labels to every record",
+                "ru": "Добавляет под, namespace и метки к каждой записи"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "Elasticsearch",
+                "ru": "Elasticsearch"
+              },
+              "right": {
+                "en": "Stores and indexes the documents",
+                "ru": "Хранит и индексирует документы"
+              }
+            },
+            {
+              "id": "m4",
+              "left": {
+                "en": "trace.id in the MDC",
+                "ru": "trace.id в MDC"
+              },
+              "right": {
+                "en": "Joins one request's lines across services",
+                "ru": "Связывает строки одного запроса через сервисы"
+              }
+            },
+            {
+              "id": "m5",
+              "left": {
+                "en": "Kibana Discover",
+                "ru": "Kibana Discover"
+              },
+              "right": {
+                "en": "Runs the ad-hoc query over a time range",
+                "ru": "Выполняет произвольный запрос по временному окну"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p5-fill-summary",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill the key parts of the 60-second answer.",
+            "ru": "Впиши ключевые части 60-секундного ответа."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Print, ship, store, query — and one field to join a request together.",
+              "ru": "Напечатать, отправить, сохранить, запросить — и одно поле, связывающее запрос."
+            },
+            "incorrect": {
+              "en": "The app writes to stdout, a collector ships to Elasticsearch, Kibana only queries, trace.id correlates.",
+              "ru": "Приложение пишет в stdout, коллектор отправляет в Elasticsearch, Kibana только запрашивает, связывает trace.id."
+            }
+          },
+          "text": {
+            "en": "The application writes to ___; a collector such as Filebeat ships the record to ___; Kibana only ___ it. One request's lines across services are joined by the ___ field.",
+            "ru": "Приложение пишет в ___; коллектор вроде Filebeat отправляет запись в ___; Kibana только ___ её. Строки одного запроса через сервисы связывает поле ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "stdout"
+              ],
+              "ru": [
+                "stdout"
+              ]
+            },
+            {
+              "en": [
+                "Elasticsearch",
+                "elasticsearch"
+              ],
+              "ru": [
+                "Elasticsearch",
+                "elasticsearch"
+              ]
+            },
+            {
+              "en": [
+                "queries",
+                "reads"
+              ],
+              "ru": [
+                "запрашивает",
+                "читает"
+              ]
+            },
+            {
+              "en": [
+                "trace.id"
+              ],
+              "ru": [
+                "trace.id"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

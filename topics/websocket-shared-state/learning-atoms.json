@@ -1,0 +1,3651 @@
+{
+  "schemaVersion": 1,
+  "topicId": "websocket-shared-state",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "thread-per-connection",
+      "title": {
+        "en": "A thread per connection",
+        "ru": "Поток на соединение"
+      },
+      "summary": {
+        "en": "The container runs the handler on one thread per open socket, so anything they all touch is shared mutable state.",
+        "ru": "Контейнер выполняет обработчик отдельным потоком на каждый открытый сокет, поэтому всё, к чему они прикасаются, — общее изменяемое состояние."
+      },
+      "discovery": [
+        {
+          "id": "tpc-d1-how-many-threads",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "200 clients are connected to your WebSocket server. How many threads can be inside your handler method at the same moment?",
+            "ru": "К вашему WebSocket-серверу подключены 200 клиентов. Сколько потоков может одновременно находиться внутри метода обработчика?"
+          },
+          "reveal": {
+            "en": "A WebSocket container runs **a thread per connection, not a thread per application**. Your handler method is being executed by as many threads as you have open sockets.\n\n```mermaid\nflowchart LR\n  T1[\"thread ws-1\"] --> H[\"your handler method\"]\n  T2[\"thread ws-2\"] --> H\n  T3[\"thread ws-3\"] --> H\n  H --> F[\"a field they all reach: shared mutable state\"]\n```\n\nThat splits everything the handler touches into two groups:\n\n- **Safe** — local variables (a fresh copy per call) and the **session**, the object representing this one connection.\n- **Shared mutable state** — anything else: a field of the handler, a `static` field, a collection reached through either. It is shared whether you designed it that way or not, and every conclusion in this topic follows from that one fact.",
+            "ru": "WebSocket-контейнер запускает **поток на соединение, а не поток на приложение**. Метод вашего обработчика выполняют столько потоков, сколько у вас открытых сокетов.\n\n```mermaid\nflowchart LR\n  T1[\"поток ws-1\"] --> H[\"метод вашего обработчика\"]\n  T2[\"поток ws-2\"] --> H\n  T3[\"поток ws-3\"] --> H\n  H --> F[\"поле, до которого дотягиваются все: общее изменяемое состояние\"]\n```\n\nЭто делит всё, к чему прикасается обработчик, на две группы:\n\n- **Безопасное** — локальные переменные (свежая копия на каждый вызов) и **сессия**, объект этого одного соединения.\n- **Общее изменяемое состояние** — всё остальное: поле обработчика, поле `static`, коллекция, доступная через них. Оно общее независимо от того, проектировали вы его таким или нет, и все выводы этой темы следуют из этого одного факта."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One thread per open socket — up to 200 at once.",
+              "ru": "Один поток на открытый сокет — до 200 одновременно."
+            },
+            "incorrect": {
+              "en": "The container runs a thread per connection, so up to 200 threads can be inside the handler.",
+              "ru": "Контейнер запускает поток на соединение, поэтому внутри обработчика может быть до 200 потоков."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Up to 200 — one per open connection",
+                "ru": "До 200 — по одному на открытое соединение"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "One — the container serialises the callbacks",
+                "ru": "Один — контейнер выстраивает вызовы в очередь"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no global lock: the container runs a thread per connection, not per application.",
+                "ru": "Никакой общей блокировки нет: контейнер запускает поток на соединение, а не на приложение."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Two — a reader and a writer for the whole application",
+                "ru": "Два — читатель и писатель на всё приложение"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Threads are allocated per connection, not as a fixed pair for the application.",
+                "ru": "Потоки выделяются на соединение, а не фиксированной парой на приложение."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "tpc-p1-not-shared",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In a WebSocket handler method, which of these is NOT shared between connections?",
+            "ru": "Что из этого в методе WebSocket-обработчика НЕ является общим для соединений?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "A local variable is a fresh copy per call, so no other connection can reach it.",
+              "ru": "Локальная переменная — своя копия на каждый вызов, до неё не дотянется другое соединение."
+            },
+            "incorrect": {
+              "en": "Only local variables are private to a call; fields are reachable by every connection's thread.",
+              "ru": "Приватны для вызова только локальные переменные; до полей дотягивается поток каждого соединения."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A local variable declared inside the handler method",
+                "ru": "Локальная переменная, объявленная внутри метода обработчика"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A static field of the handler class",
+                "ru": "Поле static класса обработчика"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A static field is one per process, so every connection thread touches the same one.",
+                "ru": "Поле static одно на процесс, поэтому его трогает поток каждого соединения."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A collection held in a field that all connections reach",
+                "ru": "Коллекция в поле, до которого дотягиваются все соединения"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "If every connection reaches it, it is shared mutable state by definition.",
+                "ru": "Если до неё дотягивается каждое соединение, это по определению общее изменяемое состояние."
+              }
+            }
+          ]
+        },
+        {
+          "id": "tpc-p2-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the rule about how a WebSocket container allocates threads.",
+            "ru": "Собери правило о том, как WebSocket-контейнер выделяет потоки."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That single fact is why a plain field on a shared handler is a concurrency bug.",
+              "ru": "Именно из этого факта следует, что обычное поле общего обработчика — ошибка конкурентности."
+            },
+            "incorrect": {
+              "en": "It is a thread per connection, not a thread per application.",
+              "ru": "Это поток на соединение, а не поток на приложение."
+            }
+          },
+          "tokens": {
+            "en": [
+              "a",
+              "thread",
+              "per",
+              "connection,",
+              "not",
+              "a",
+              "thread",
+              "per",
+              "application"
+            ],
+            "ru": [
+              "поток",
+              "на",
+              "соединение,",
+              "а",
+              "не",
+              "поток",
+              "на",
+              "приложение"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "request"
+            ],
+            "ru": [
+              "запрос"
+            ]
+          }
+        },
+        {
+          "id": "tpc-p3-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing word.",
+            "ru": "Впиши пропущенное слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One thread per socket is what turns an ordinary field into shared mutable state.",
+              "ru": "Один поток на сокет — это и превращает обычное поле в общее изменяемое состояние."
+            },
+            "incorrect": {
+              "en": "It is a thread: the container runs one per connection, so shared fields are touched concurrently.",
+              "ru": "Это поток: контейнер запускает по одному на соединение, поэтому общие поля трогают одновременно."
+            }
+          },
+          "text": {
+            "en": "A WebSocket container runs one ___ per connection, so any field they all reach is shared mutable state.",
+            "ru": "WebSocket-контейнер запускает один ___ на соединение, поэтому любое общее для них поле — это общее изменяемое состояние."
+          },
+          "answers": {
+            "en": [
+              "thread"
+            ],
+            "ru": [
+              "поток",
+              "thread"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "state-scopes",
+      "title": {
+        "en": "Three scopes for state",
+        "ru": "Три области видимости состояния"
+      },
+      "summary": {
+        "en": "State belongs to one connection, to one process, or to the whole cluster — pick the scope before you pick the collection.",
+        "ru": "Состояние принадлежит одному соединению, одному процессу или всему кластеру — область выбирают раньше коллекции."
+      },
+      "discovery": [
+        {
+          "id": "scopes-d1-subscriptions",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "You must keep the list of symbols that THIS user subscribed to. Where does it belong?",
+            "ru": "Нужно хранить список тикеров, на которые подписался ЭТОТ пользователь. Где ему место?"
+          },
+          "reveal": {
+            "en": "State on a WebSocket server lives in exactly one of three scopes, and choosing the wrong one is the mistake that no amount of `synchronized` repairs.\n\n```mermaid\nflowchart TB\n  Q[\"what has to see this state?\"] --> C{\"which scope?\"}\n  C -->|\"one connection\"| S[\"the Session and its attributes\"]\n  C -->|\"every connection here\"| R[\"a singleton bean holding the registry and a counter\"]\n  C -->|\"every connection anywhere\"| X[\"outside the JVM: Redis, a DB sequence, a broker\"]\n```\n\n- **Per connection** — the user, the subscribed symbols, the last id sent. This belongs on the **session**: `session.getAttributes()` in Spring, `getUserProperties()` in Jakarta. Never in a field of a shared handler.\n- **Per process** — the **registry** (the map of currently open sessions), a counter, a cache. This belongs on one object every connection reaches: a Spring singleton bean or a `static` field. Those two are the *same* scope; the bean is testable and injectable, so prefer it.\n- **Per cluster** — anything that must still hold when the app runs twice. Nothing inside the JVM can provide this. Ever.\n\nA **broadcast** — one message delivered to everybody — is simply a loop over that registry, inside one process. It is code you write, not a protocol feature.",
+            "ru": "Состояние на WebSocket-сервере живёт ровно в одной из трёх областей, и неправильный выбор — та ошибка, которую не чинит никакое количество `synchronized`.\n\n```mermaid\nflowchart TB\n  Q[\"кто должен видеть это состояние?\"] --> C{\"какая область?\"}\n  C -->|\"одно соединение\"| S[\"Session и её атрибуты\"]\n  C -->|\"все соединения здесь\"| R[\"singleton-бин с реестром и счётчиком\"]\n  C -->|\"все соединения где угодно\"| X[\"вне JVM: Redis, последовательность в БД, брокер\"]\n```\n\n- **На соединение** — пользователь, набор подписок, последний отправленный id. Этому место в **сессии**: `session.getAttributes()` в Spring, `getUserProperties()` в Jakarta. Но никогда не в поле общего обработчика.\n- **На процесс** — **реестр** (карта открытых сессий), счётчик, кэш. Этому место на одном объекте, до которого дотягивается каждое соединение: singleton-бин Spring или поле `static`. Это одна и та же область; бин тестируем и внедряем, поэтому выбирают его.\n- **На кластер** — всё, что должно оставаться верным, когда приложение запущено дважды. Ничто внутри JVM этого дать не может. Никогда.\n\n**Рассылка** (broadcast) — одно сообщение всем — это просто цикл по этому реестру внутри одного процесса. Это ваш код, а не возможность протокола."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Data about one connection belongs to that connection's session.",
+              "ru": "Данные об одном соединении принадлежат сессии этого соединения."
+            },
+            "incorrect": {
+              "en": "Per-connection data belongs on the session, not on any object other connections share.",
+              "ru": "Данные на соединение живут в сессии, а не на объекте, общем с другими соединениями."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "On this connection's session, in its attributes",
+                "ru": "В сессии этого соединения, в её атрибутах"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "In a field of the shared handler object",
+                "ru": "В поле общего объекта-обработчика"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That field is reached by every connection, so one user would see another user's subscriptions.",
+                "ru": "До этого поля дотягивается каждое соединение, и один пользователь увидит подписки другого."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "In Redis, so that every instance can see it",
+                "ru": "В Redis, чтобы это видел каждый экземпляр"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Per-connection data needs no cluster-wide storage; it lives and dies with the socket.",
+                "ru": "Данным на соединение не нужно кластерное хранилище; они живут и умирают вместе с сокетом."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "scopes-p1-everyone-sees",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In a WebSocket server, where does state that EVERY open connection must see belong?",
+            "ru": "Где в WebSocket-сервере место состоянию, которое должно видеть КАЖДОЕ открытое соединение?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "One object every connection reaches — a singleton bean — is the per-process scope.",
+              "ru": "Один объект, до которого дотягиваются все, — singleton-бин — это область на процесс."
+            },
+            "incorrect": {
+              "en": "It belongs on one object every connection reaches: a singleton bean (or a static field).",
+              "ru": "Ему место на одном объекте, до которого дотягиваются все: singleton-бин (или поле static)."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "On one object every connection reaches, such as a singleton bean",
+                "ru": "На одном объекте, до которого дотягиваются все, например singleton-бине"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "On each connection's own session",
+                "ru": "В собственной сессии каждого соединения"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Session attributes are visible only to that one connection.",
+                "ru": "Атрибуты сессии видны только этому одному соединению."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "In a local variable of the handler method",
+                "ru": "В локальной переменной метода обработчика"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A local variable dies when the call returns and is never visible to anybody else.",
+                "ru": "Локальная переменная умирает с возвратом из метода и никому больше не видна."
+              }
+            }
+          ]
+        },
+        {
+          "id": "scopes-p2-static-vs-bean",
+          "type": "true_false",
+          "prompt": {
+            "en": "A static field and a Spring singleton bean give state the same scope.",
+            "ru": "Поле static и singleton-бин Spring дают состоянию одну и ту же область видимости."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Both are exactly one instance per process; the bean is simply testable and injectable.",
+              "ru": "И то и другое — ровно один экземпляр на процесс; бин просто тестируем и внедряем."
+            },
+            "incorrect": {
+              "en": "They do: one instance per process either way. The practical difference is testability and injection.",
+              "ru": "Дают: в обоих случаях один экземпляр на процесс. Практическая разница — тестируемость и внедрение."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "scopes-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each piece of WebSocket server state to the scope it belongs in.",
+            "ru": "Соотнеси каждый кусок состояния WebSocket-сервера с областью, которой он принадлежит."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Scope first, collection second — the wrong scope is a bug no locking repairs.",
+              "ru": "Сначала область, потом коллекция — неверную область не чинит никакая блокировка."
+            },
+            "incorrect": {
+              "en": "One connection means the session; every connection here means a singleton; every instance means outside the JVM.",
+              "ru": "Одно соединение — сессия; все соединения здесь — синглтон; все экземпляры — вне JVM."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "The symbols this user subscribed to",
+                "ru": "Тикеры, на которые подписан этот пользователь"
+              },
+              "right": {
+                "en": "The session's attributes",
+                "ru": "Атрибуты сессии"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "The map of all currently open sessions",
+                "ru": "Карта всех открытых сейчас сессий"
+              },
+              "right": {
+                "en": "A singleton bean in this process",
+                "ru": "Singleton-бин в этом процессе"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "An id that must not repeat on any instance",
+                "ru": "Id, который не должен повториться ни на одном экземпляре"
+              },
+              "right": {
+                "en": "Outside the JVM",
+                "ru": "Вне JVM"
+              }
+            },
+            {
+              "id": "m4",
+              "left": {
+                "en": "A value used only inside one handler call",
+                "ru": "Значение, нужное только внутри одного вызова обработчика"
+              },
+              "right": {
+                "en": "A local variable",
+                "ru": "Локальная переменная"
+              }
+            }
+          ]
+        },
+        {
+          "id": "scopes-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the two homes for state inside one process.",
+            "ru": "Назови два места для состояния внутри одного процесса."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Per connection goes on the session; per process goes on one object everybody reaches.",
+              "ru": "На соединение — в сессию; на процесс — на один объект, доступный всем."
+            },
+            "incorrect": {
+              "en": "Per-connection state lives on the session; per-process state lives on a singleton bean.",
+              "ru": "Состояние на соединение живёт в сессии; состояние на процесс — в singleton-бине."
+            }
+          },
+          "text": {
+            "en": "Per-connection state lives on the ___; per-process state lives on a singleton ___.",
+            "ru": "Состояние на соединение живёт в ___; состояние на процесс — в singleton-___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "session"
+              ],
+              "ru": [
+                "сессии",
+                "сессия",
+                "session"
+              ]
+            },
+            {
+              "en": [
+                "bean"
+              ],
+              "ru": [
+                "бине",
+                "бин",
+                "bean"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "handler-instance-trap",
+      "title": {
+        "en": "Where the registry must not live",
+        "ru": "Где реестр жить не должен"
+      },
+      "summary": {
+        "en": "A Jakarta @ServerEndpoint class is instantiated once per connection, while a Spring WebSocketHandler is a singleton — identical code, opposite bugs.",
+        "ru": "Класс с Jakarta @ServerEndpoint создаётся по экземпляру на соединение, а Spring WebSocketHandler — синглтон: код одинаковый, ошибки противоположные."
+      },
+      "discovery": [
+        {
+          "id": "trap-d1-jakarta-broadcast",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Three clients connect to this Jakarta endpoint and one of them sends a message. How many clients does the broadcast reach?",
+            "ru": "К этому Jakarta-эндпоинту подключены три клиента, и один отправляет сообщение. До скольких клиентов дойдёт рассылка?"
+          },
+          "code": "@ServerEndpoint(\"/chat\")\npublic class ChatEndpoint {\n\n    private final Map<String, Session> sessions = new HashMap<>();\n\n    @OnOpen\n    public void onOpen(Session s) {\n        sessions.put(s.getId(), s);\n    }\n\n    @OnMessage\n    public void onMessage(String text) {\n        sessions.values().forEach(s -> send(s, text));\n    }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "A Jakarta `@ServerEndpoint` class is instantiated **once per connection**. Each connection therefore gets its own private copy of the \"registry\", holding exactly one session — its own — so the broadcast reaches one person: the sender.\n\n```mermaid\nflowchart LR\n  C1[\"client 1\"] --> E1[\"ChatEndpoint instance 1: sessions holds only client 1\"]\n  C2[\"client 2\"] --> E2[\"ChatEndpoint instance 2: sessions holds only client 2\"]\n  C3[\"client 3\"] --> E3[\"ChatEndpoint instance 3: sessions holds only client 3\"]\n```\n\nNote the symmetry with the opposite bug: in Spring, a `WebSocketHandler` bean is a **singleton**, so a field on it is shared by everybody — and per-connection data stored there leaks one user's state into another user's replies.\n\nThe two classes look almost identical on the screen. Check how yours is instantiated instead of assuming.",
+            "ru": "Класс с Jakarta `@ServerEndpoint` создаётся **по экземпляру на соединение**. Поэтому у каждого соединения своя приватная копия «реестра», в которой ровно одна сессия — его собственная, — и рассылка доходит до одного человека: отправителя.\n\n```mermaid\nflowchart LR\n  C1[\"клиент 1\"] --> E1[\"экземпляр ChatEndpoint 1: в sessions только клиент 1\"]\n  C2[\"клиент 2\"] --> E2[\"экземпляр ChatEndpoint 2: в sessions только клиент 2\"]\n  C3[\"клиент 3\"] --> E3[\"экземпляр ChatEndpoint 3: в sessions только клиент 3\"]\n```\n\nОбратите внимание на симметрию с противоположной ошибкой: в Spring бин `WebSocketHandler` — **синглтон**, поэтому поле на нём общее для всех, и сохранённые там данные одного соединения утекают в ответы другому пользователю.\n\nНа экране эти два класса выглядят почти одинаково. Проверьте, как создаётся именно ваш, вместо того чтобы предполагать."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Each connection got its own endpoint instance, so each map holds one session.",
+              "ru": "У каждого соединения свой экземпляр эндпоинта, поэтому в каждой карте одна сессия."
+            },
+            "incorrect": {
+              "en": "Jakarta creates one @ServerEndpoint instance per connection, so the map holds only the sender.",
+              "ru": "Jakarta создаёт по экземпляру @ServerEndpoint на соединение, поэтому в карте только отправитель."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "One — the sender",
+                "ru": "Одного — отправителя"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Three — every connected client",
+                "ru": "Троих — всех подключённых клиентов"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That would need one shared registry; here each connection has its own instance and its own map.",
+                "ru": "Для этого нужен один общий реестр; здесь у каждого соединения свой экземпляр и своя карта."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "None — the map is empty",
+                "ru": "Ни до кого — карта пуста"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The map is not empty: onOpen did put this connection's own session into it.",
+                "ru": "Карта не пуста: onOpen положил в неё собственную сессию этого соединения."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "trap-p1-spring-singleton",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In Spring, a WebSocketHandler bean is a singleton. What does that mean for a plain field on it?",
+            "ru": "В Spring бин WebSocketHandler — синглтон. Что это означает для обычного поля на нём?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "One instance for the whole application means one field shared by every connection thread.",
+              "ru": "Один экземпляр на всё приложение означает одно поле, общее для потока каждого соединения."
+            },
+            "incorrect": {
+              "en": "A singleton has one instance per application, so every connection shares that field.",
+              "ru": "У синглтона один экземпляр на приложение, поэтому это поле общее для всех соединений."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Every connection shares that one field",
+                "ru": "Это одно поле общее для всех соединений"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Each connection gets its own copy of it",
+                "ru": "У каждого соединения своя копия"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the Jakarta @ServerEndpoint behaviour, not Spring's singleton handler.",
+                "ru": "Так ведёт себя Jakarta @ServerEndpoint, а не singleton-обработчик Spring."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The container confines the field to one thread at a time",
+                "ru": "Контейнер удерживает поле в одном потоке за раз"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing confines it: many connection threads run the handler concurrently.",
+                "ru": "Ничто его не удерживает: обработчик одновременно выполняют много потоков соединений."
+              }
+            }
+          ]
+        },
+        {
+          "id": "trap-p2-spot-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This Spring handler is a singleton bean. What is the defect?",
+            "ru": "Этот обработчик Spring — singleton-бин. В чём дефект?"
+          },
+          "code": "@Component\npublic class ChatHandler extends TextWebSocketHandler {\n\n    private String currentUser;\n\n    @Override\n    protected void handleTextMessage(WebSocketSession session, TextMessage message) {\n        currentUser = (String) session.getAttributes().get(\"user\");\n        reply(session, \"hello \" + currentUser);\n    }\n}",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "Per-connection data in a singleton's field: connections overwrite each other between the two lines.",
+              "ru": "Данные соединения в поле синглтона: между двумя строками соединения затирают друг друга."
+            },
+            "incorrect": {
+              "en": "currentUser is per-connection state kept on a shared singleton, so one user can be greeted with another's name.",
+              "ru": "currentUser — состояние соединения на общем синглтоне, поэтому одного пользователя поприветствуют чужим именем."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "currentUser is per-connection data kept in shared state, so connections overwrite each other",
+                "ru": "currentUser — данные соединения в общем состоянии, поэтому соединения затирают друг друга"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "session.getAttributes() is not safe to call from a handler",
+                "ru": "session.getAttributes() нельзя вызывать из обработчика"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The attributes belong to that one session; the defect is the shared field, not the lookup.",
+                "ru": "Атрибуты принадлежат этой одной сессии; дефект в общем поле, а не в чтении."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The class should not extend TextWebSocketHandler",
+                "ru": "Класс не должен наследовать TextWebSocketHandler"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The base class is the normal choice; the problem is that one field is shared by every connection.",
+                "ru": "Базовый класс здесь обычный выбор; проблема в том, что одно поле общее для всех соединений."
+              }
+            }
+          ]
+        },
+        {
+          "id": "trap-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each WebSocket class or field to what it actually means at runtime.",
+            "ru": "Соотнеси каждый WebSocket-класс или поле с тем, что это означает во время работы."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The instantiation model decides whether a field is private to a socket or shared by all of them.",
+              "ru": "Модель создания решает, будет ли поле приватным для сокета или общим для всех."
+            },
+            "incorrect": {
+              "en": "Jakarta @ServerEndpoint is per connection; a Spring WebSocketHandler bean is one per application.",
+              "ru": "Jakarta @ServerEndpoint — на соединение; бин Spring WebSocketHandler — один на приложение."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "A Jakarta @ServerEndpoint class",
+                "ru": "Класс с Jakarta @ServerEndpoint"
+              },
+              "right": {
+                "en": "One instance per connection",
+                "ru": "По экземпляру на соединение"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "A Spring WebSocketHandler bean",
+                "ru": "Бин Spring WebSocketHandler"
+              },
+              "right": {
+                "en": "One instance for the whole application",
+                "ru": "Один экземпляр на всё приложение"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "A registry field on a per-connection endpoint",
+                "ru": "Поле-реестр на эндпоинте, создаваемом на соединение"
+              },
+              "right": {
+                "en": "Private to that one socket, so a broadcast reaches one person",
+                "ru": "Приватно для этого сокета, поэтому рассылка доходит до одного"
+              }
+            },
+            {
+              "id": "m4",
+              "left": {
+                "en": "A per-connection value on a singleton handler",
+                "ru": "Значение соединения на singleton-обработчике"
+              },
+              "right": {
+                "en": "Shared by everybody, so one user sees another user's data",
+                "ru": "Общее для всех, поэтому один пользователь видит данные другого"
+              }
+            }
+          ]
+        },
+        {
+          "id": "trap-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type how often each class is instantiated.",
+            "ru": "Впиши, как часто создаётся каждый класс."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Opposite instantiation models, near-identical code — always check which one you have.",
+              "ru": "Противоположные модели создания при почти одинаковом коде — всегда проверяйте, какая у вас."
+            },
+            "incorrect": {
+              "en": "Jakarta creates one @ServerEndpoint per connection; Spring creates one handler bean per application.",
+              "ru": "Jakarta создаёт @ServerEndpoint на соединение; Spring создаёт бин обработчика на приложение."
+            }
+          },
+          "text": {
+            "en": "A Jakarta @ServerEndpoint class is created once per ___, while a Spring WebSocketHandler bean is created once per ___.",
+            "ru": "Класс с Jakarta @ServerEndpoint создаётся один раз на ___, а бин Spring WebSocketHandler — один раз на ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "connection",
+                "socket"
+              ],
+              "ru": [
+                "соединение",
+                "сокет",
+                "connection"
+              ]
+            },
+            {
+              "en": [
+                "application",
+                "process"
+              ],
+              "ru": [
+                "приложение",
+                "процесс",
+                "application"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "registry-collection",
+      "title": {
+        "en": "Choosing the registry collection",
+        "ru": "Выбор коллекции для реестра"
+      },
+      "summary": {
+        "en": "The registry is written by every connection thread and read while broadcasting, so it has to be a ConcurrentHashMap.",
+        "ru": "В реестр пишет поток каждого соединения, а читают его во время рассылки, поэтому это должен быть ConcurrentHashMap."
+      },
+      "discovery": [
+        {
+          "id": "coll-d1-two-puts",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Two connection threads call put on the same plain HashMap registry at the same instant. What can happen?",
+            "ru": "Два потока соединений одновременно вызывают put на одном обычном HashMap-реестре. Что может произойти?"
+          },
+          "code": "private final Map<String, Session> sessions = new HashMap<>();\n\n// thread ws-1 and thread ws-2, at the same instant\nsessions.put(id, session);",
+          "codeLang": "java",
+          "reveal": {
+            "en": "The registry is written by every connection's thread on open and on close, and read by whichever thread is broadcasting. Four candidates, three of them wrong:\n\n| choice | what actually happens |\n| --- | --- |\n| `HashMap` | Two concurrent `put`s can drop an entry; a concurrent resize can leave the table circular, and a later `get` then spins forever at 100% CPU. |\n| `Collections.synchronizedMap` | Each *call* is atomic; **iteration is not**, and its javadoc tells you to synchronize on the map yourself while traversing it. |\n| `CopyOnWriteArrayList` | Safe, but every registration copies the whole array — fine for 50 sockets, quadratic pain for 50 000. |\n| `ConcurrentHashMap` | Writes lock one bin, reads never block, and the iterator is **weakly consistent** — it never throws, and may or may not observe changes made after it started. This is the answer. |\n\nNote that the `HashMap` failures are silent: nothing throws, and nothing tells you an entry vanished.",
+            "ru": "В реестр пишет поток каждого соединения при открытии и закрытии, а читает тот поток, который делает рассылку. Кандидатов четыре, три из них неверные:\n\n| вариант | что происходит на самом деле |\n| --- | --- |\n| `HashMap` | Два одновременных `put` могут выбросить запись; конкурентный resize способен замкнуть таблицу в кольцо, и последующий `get` будет вечно крутиться на 100% CPU. |\n| `Collections.synchronizedMap` | Атомарен каждый *вызов*; **обход — нет**, и в javadoc сказано синхронизироваться по карте самому во время обхода. |\n| `CopyOnWriteArrayList` | Безопасен, но каждая регистрация копирует весь массив: нормально для 50 сокетов, квадратичная боль для 50 000. |\n| `ConcurrentHashMap` | Запись блокирует одну корзину, чтения не ждут никогда, а итератор **слабо согласован** — он не бросает исключение и может как увидеть, так и не увидеть изменения, сделанные после его создания. Это и есть ответ. |\n\nЗаметьте, что отказы `HashMap` молчаливые: ничего не бросается, и никто не сообщит, что запись исчезла."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Both failures are silent: a dropped entry, or a corrupted table that later spins forever.",
+              "ru": "Оба отказа молчаливые: потерянная запись или испорченная таблица, которая потом крутится вечно."
+            },
+            "incorrect": {
+              "en": "A concurrent put can drop an entry, and a concurrent resize can leave the table circular.",
+              "ru": "Конкурентный put может выбросить запись, а конкурентный resize — замкнуть таблицу в кольцо."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "An entry can be lost, and a concurrent resize can leave the table circular so a later get spins at 100% CPU",
+                "ru": "Запись может потеряться, а конкурентный resize замкнёт таблицу в кольцо, и потом get будет крутиться на 100% CPU"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing — put is a single method call, so it is atomic",
+                "ru": "Ничего — put это один вызов метода, значит он атомарен"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A method call is not atomic; put reads and writes several fields of the internal table.",
+                "ru": "Вызов метода не атомарен; put читает и пишет несколько полей внутренней таблицы."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The second thread waits for the first to finish",
+                "ru": "Второй поток подождёт, пока закончит первый"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "HashMap has no locks at all, so nobody waits for anybody.",
+                "ru": "В HashMap вообще нет блокировок, поэтому никто никого не ждёт."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "put throws ConcurrentModificationException",
+                "ru": "put бросит ConcurrentModificationException"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That exception comes from iteration; two concurrent puts corrupt the map silently.",
+                "ru": "Это исключение приходит из обхода; два одновременных put портят карту молча."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "coll-p1-which",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which collection should hold the registry of open WebSocket sessions?",
+            "ru": "В какой коллекции держать реестр открытых WebSocket-сессий?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Per-bin write locks, non-blocking reads, and an iterator that a broadcast can never break.",
+              "ru": "Блокировка одной корзины на запись, неблокирующие чтения и итератор, который не сломает рассылка."
+            },
+            "incorrect": {
+              "en": "ConcurrentHashMap: writes lock one bin, reads never block, and iteration never throws.",
+              "ru": "ConcurrentHashMap: запись блокирует одну корзину, чтения не ждут, обход не бросает исключений."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "ConcurrentHashMap",
+                "ru": "ConcurrentHashMap"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Collections.synchronizedMap(new HashMap<>())",
+                "ru": "Collections.synchronizedMap(new HashMap<>())"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Each call is atomic, but broadcasting iterates it, and iteration is not covered.",
+                "ru": "Каждый вызов атомарен, но рассылка обходит карту, а обход не защищён."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "HashMap",
+                "ru": "HashMap"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Concurrent puts can silently drop entries and corrupt the internal table.",
+                "ru": "Одновременные put могут молча терять записи и портить внутреннюю таблицу."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "CopyOnWriteArrayList",
+                "ru": "CopyOnWriteArrayList"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Safe, but every registration copies the whole array — quadratic pain at 50 000 sockets.",
+                "ru": "Безопасно, но каждая регистрация копирует весь массив — квадратичная боль на 50 000 сокетов."
+              }
+            }
+          ]
+        },
+        {
+          "id": "coll-p2-cow-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "CopyOnWriteArrayList is unsafe for concurrent writes.",
+            "ru": "CopyOnWriteArrayList небезопасен для конкурентной записи."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It is safe; its cost is that every write copies the whole array, which does not scale to 50 000 sockets.",
+              "ru": "Он безопасен; его цена в том, что каждая запись копирует весь массив, и это не масштабируется на 50 000 сокетов."
+            },
+            "incorrect": {
+              "en": "It is safe — the reason to reject it is cost, not correctness: every write copies the whole array.",
+              "ru": "Он безопасен — отказываются от него из-за цены, а не корректности: каждая запись копирует весь массив."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "coll-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each collection to what actually happens when it holds a WebSocket session registry.",
+            "ru": "Соотнеси каждую коллекцию с тем, что на самом деле произойдёт, если в ней держать реестр WebSocket-сессий."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Three of the four are wrong for a different reason each — that is the point of the comparison.",
+              "ru": "Три варианта из четырёх неверны каждый по своей причине — в этом и смысл сравнения."
+            },
+            "incorrect": {
+              "en": "HashMap corrupts, synchronizedMap breaks on iteration, CopyOnWriteArrayList copies, ConcurrentHashMap fits.",
+              "ru": "HashMap портится, synchronizedMap ломается на обходе, CopyOnWriteArrayList копирует, ConcurrentHashMap подходит."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "HashMap",
+                "ru": "HashMap"
+              },
+              "right": {
+                "en": "Can lose an entry and can spin at 100% CPU after a concurrent resize",
+                "ru": "Может потерять запись и крутиться на 100% CPU после конкурентного resize"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "Collections.synchronizedMap",
+                "ru": "Collections.synchronizedMap"
+              },
+              "right": {
+                "en": "Each call is atomic, iteration is not",
+                "ru": "Каждый вызов атомарен, обход — нет"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "CopyOnWriteArrayList",
+                "ru": "CopyOnWriteArrayList"
+              },
+              "right": {
+                "en": "Safe, but every write copies the whole array",
+                "ru": "Безопасен, но каждая запись копирует весь массив"
+              }
+            },
+            {
+              "id": "m4",
+              "left": {
+                "en": "ConcurrentHashMap",
+                "ru": "ConcurrentHashMap"
+              },
+              "right": {
+                "en": "Per-bin write lock, non-blocking reads, weakly consistent iterator",
+                "ru": "Блокировка одной корзины на запись, неблокирующие чтения, слабо согласованный итератор"
+              }
+            }
+          ]
+        },
+        {
+          "id": "coll-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the class name.",
+            "ru": "Впиши имя класса."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It is the only one of the four that survives both concurrent writes and a broadcast.",
+              "ru": "Это единственный из четырёх, кто переживает и конкурентную запись, и рассылку."
+            },
+            "incorrect": {
+              "en": "It is ConcurrentHashMap — the only candidate safe for both writing and iterating.",
+              "ru": "Это ConcurrentHashMap — единственный кандидат, безопасный и для записи, и для обхода."
+            }
+          },
+          "text": {
+            "en": "The registry of open WebSocket sessions should be a ___.",
+            "ru": "Реестр открытых WebSocket-сессий должен быть ___."
+          },
+          "answers": {
+            "en": [
+              "ConcurrentHashMap"
+            ],
+            "ru": [
+              "ConcurrentHashMap"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "broadcast-is-iteration",
+      "title": {
+        "en": "Broadcasting is iteration",
+        "ru": "Рассылка — это обход"
+      },
+      "summary": {
+        "en": "A broadcast is a loop over the registry you maintain yourself, so how the registry behaves during traversal is what matters.",
+        "ru": "Рассылка — это цикл по реестру, который вы ведёте сами, поэтому важно поведение реестра во время обхода."
+      },
+      "discovery": [
+        {
+          "id": "bcast-d1-cme",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "This broadcast runs while other clients are connecting and disconnecting. What is the risk?",
+            "ru": "Эта рассылка выполняется, пока другие клиенты подключаются и отключаются. В чём риск?"
+          },
+          "code": "Map<String, Session> sessions =\n        Collections.synchronizedMap(new HashMap<>());\n\nfor (Session s : sessions.values()) {\n    s.getBasicRemote().sendText(text);\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "**A broadcast is iteration.** That is why a collection whose *calls* are atomic is still the wrong choice: `Collections.synchronizedMap` locks each `put`, `get` and `remove`, but the loop above is a sequence of separate calls on an iterator, and its javadoc explicitly tells you to synchronize on the map yourself while traversing it. Without that, the fail-fast iterator of the backing `HashMap` can throw `ConcurrentModificationException` mid-broadcast.\n\n```mermaid\nflowchart LR\n  B[\"broadcast thread: iterating\"] --> REG[\"the registry\"]\n  O[\"ws-7 opening: put\"] --> REG\n  C[\"ws-3 closing: remove\"] --> REG\n```\n\nA `ConcurrentHashMap` avoids this because its iterator is **weakly consistent**: it never throws, it just may or may not see entries added or removed after the loop started — which is exactly right for a broadcast, where a socket that appeared half a millisecond ago can wait for the next message.\n\nAnd the brute-force alternative is worse than it looks: holding one lock for the whole broadcast to 10 000 sockets serialises the entire server behind the slowest client.",
+            "ru": "**Рассылка — это обход.** Именно поэтому коллекция, у которой атомарны *вызовы*, всё равно не подходит: `Collections.synchronizedMap` блокирует каждый `put`, `get` и `remove`, но цикл выше — это последовательность отдельных вызовов итератора, и javadoc прямо велит синхронизироваться по карте самому во время обхода. Без этого fail-fast итератор нижележащего `HashMap` может бросить `ConcurrentModificationException` посреди рассылки.\n\n```mermaid\nflowchart LR\n  B[\"поток рассылки: идёт обход\"] --> REG[\"реестр\"]\n  O[\"ws-7 открывается: put\"] --> REG\n  C[\"ws-3 закрывается: remove\"] --> REG\n```\n\n`ConcurrentHashMap` этого избегает, потому что его итератор **слабо согласован**: он не бросает исключений, а лишь может как увидеть, так и не увидеть записи, добавленные или удалённые после начала цикла — и для рассылки это ровно то, что нужно: сокет, появившийся полмиллисекунды назад, подождёт следующего сообщения.\n\nА лобовая альтернатива хуже, чем кажется: удержание одной блокировки на всю рассылку по 10 000 сокетов выстраивает весь сервер в очередь за самым медленным клиентом."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Per-call locking does not cover a loop; the fail-fast iterator can throw.",
+              "ru": "Блокировка на вызов не покрывает цикл; fail-fast итератор может бросить исключение."
+            },
+            "incorrect": {
+              "en": "synchronizedMap synchronizes each call, not the traversal, so the loop can throw ConcurrentModificationException.",
+              "ru": "synchronizedMap синхронизирует каждый вызов, но не обход, поэтому цикл может бросить ConcurrentModificationException."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The loop can throw ConcurrentModificationException, because iteration of a synchronizedMap is not synchronized for you",
+                "ru": "Цикл может бросить ConcurrentModificationException, потому что обход synchronizedMap за вас не синхронизируют"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "No risk — synchronizedMap makes everything done with it thread-safe",
+                "ru": "Никакого риска — synchronizedMap делает потокобезопасным всё, что с ним делают"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It makes each call atomic; its javadoc tells you to synchronize on the map yourself while traversing.",
+                "ru": "Он делает атомарным каждый вызов; javadoc велит при обходе синхронизироваться по карте самому."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The loop silently skips some sessions but never throws",
+                "ru": "Цикл молча пропустит часть сессий, но исключение не бросит"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It can throw: the backing HashMap's iterator is fail-fast.",
+                "ru": "Может бросить: итератор нижележащего HashMap — fail-fast."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "bcast-p1-why-not-syncmap",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why is Collections.synchronizedMap a poor choice for a WebSocket session registry?",
+            "ru": "Почему Collections.synchronizedMap — плохой выбор для реестра WebSocket-сессий?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Broadcasting is a traversal, and traversal is the one thing its locking does not cover.",
+              "ru": "Рассылка — это обход, а обход — единственное, что его блокировка не покрывает."
+            },
+            "incorrect": {
+              "en": "Because broadcasting iterates it, and iteration is not covered by its per-call locking.",
+              "ru": "Потому что рассылка его обходит, а обход не покрыт блокировкой отдельных вызовов."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Broadcasting iterates it, and iteration is not covered by its per-call locking",
+                "ru": "Рассылка его обходит, а обход не покрыт его блокировкой на каждый вызов"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Its put is not atomic",
+                "ru": "Его put не атомарен"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "put IS atomic on it; the gap is traversal, not the individual call.",
+                "ru": "put у него КАК РАЗ атомарен; дыра в обходе, а не в отдельном вызове."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It cannot store Session objects as values",
+                "ru": "Он не может хранить объекты Session в значениях"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It can store anything; the problem is what happens while you traverse it.",
+                "ru": "Он может хранить что угодно; проблема в том, что происходит во время обхода."
+              }
+            }
+          ]
+        },
+        {
+          "id": "bcast-p2-lock-cost",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "You hold one lock for the entire duration of a broadcast to 10 000 WebSocket sockets. What is the consequence?",
+            "ru": "Вы держите одну блокировку всё время рассылки по 10 000 WebSocket-сокетам. Каково последствие?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Correct but serialised: every other connection queues behind the slowest client.",
+              "ru": "Корректно, но последовательно: все остальные соединения стоят в очереди за самым медленным клиентом."
+            },
+            "incorrect": {
+              "en": "It serialises the whole server: nobody else can register or broadcast until the slowest send finishes.",
+              "ru": "Это выстраивает весь сервер в очередь: никто не зарегистрируется и не разошлёт, пока не закончится самая медленная отправка."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The whole server queues behind the slowest client",
+                "ru": "Весь сервер выстраивается в очередь за самым медленным клиентом"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing — the lock is released between individual sends",
+                "ru": "Ничего — блокировка отпускается между отдельными отправками"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Holding it across the loop means holding it through every send, including the slowest.",
+                "ru": "Удержание на весь цикл означает удержание на каждую отправку, включая самую медленную."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The registry can still lose entries",
+                "ru": "Реестр всё равно может терять записи"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Under one lock nothing is lost; the cost here is throughput, not correctness.",
+                "ru": "Под одной блокировкой ничего не теряется; цена здесь — пропускная способность, а не корректность."
+              }
+            }
+          ]
+        },
+        {
+          "id": "bcast-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble what a WebSocket broadcast actually is.",
+            "ru": "Собери, чем на самом деле является WebSocket-рассылка."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Not a protocol feature — code you write, over a collection you maintain.",
+              "ru": "Не возможность протокола, а ваш код по коллекции, которую вы ведёте сами."
+            },
+            "incorrect": {
+              "en": "A broadcast is a loop over a collection you maintain yourself, inside one process.",
+              "ru": "Рассылка — это цикл по коллекции, которую вы ведёте сами, внутри одного процесса."
+            }
+          },
+          "tokens": {
+            "en": [
+              "a",
+              "broadcast",
+              "is",
+              "a",
+              "loop",
+              "over",
+              "a",
+              "collection",
+              "you",
+              "maintain",
+              "yourself"
+            ],
+            "ru": [
+              "рассылка",
+              "это",
+              "цикл",
+              "по",
+              "коллекции,",
+              "которую",
+              "вы",
+              "ведёте",
+              "сами"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "protocol",
+              "feature"
+            ],
+            "ru": [
+              "возможность",
+              "протокола"
+            ]
+          }
+        },
+        {
+          "id": "bcast-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing word.",
+            "ru": "Впиши пропущенное слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Weakly consistent means it never throws; it may simply miss entries changed after the loop started.",
+              "ru": "Слабая согласованность означает, что он не бросает исключений, а лишь может не увидеть изменения после начала цикла."
+            },
+            "incorrect": {
+              "en": "It is weakly consistent — that is why a broadcast over a ConcurrentHashMap can never throw.",
+              "ru": "Он слабо согласован — поэтому рассылка по ConcurrentHashMap никогда не бросит исключение."
+            }
+          },
+          "text": {
+            "en": "A ConcurrentHashMap's iterator is ___ consistent, so a broadcast over it can never throw ConcurrentModificationException.",
+            "ru": "Итератор ConcurrentHashMap ___ согласован, поэтому рассылка по нему никогда не бросит ConcurrentModificationException."
+          },
+          "answers": {
+            "en": [
+              "weakly"
+            ],
+            "ru": [
+              "слабо"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "read-then-write",
+      "title": {
+        "en": "nextId++ and size() + 1",
+        "ru": "nextId++ и size() + 1"
+      },
+      "summary": {
+        "en": "Both are read-then-write: two threads can read the same value, and size() + 1 reissues numbers even with a single thread.",
+        "ru": "Обе формы — «прочитать, потом записать»: два потока могут прочитать одно значение, а size() + 1 переиспользует номера даже в один поток."
+      },
+      "discovery": [
+        {
+          "id": "rmw-d1-increment",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Two connection threads execute this line on the shared field at the same instant. What ids can they end up with?",
+            "ru": "Два потока соединений одновременно выполняют эту строку на общем поле. Какие id они могут получить?"
+          },
+          "code": "long nextId;                        // shared field\n\n// thread ws-1 and thread ws-2, at the same instant\nlong id = ++nextId;",
+          "codeLang": "java",
+          "reveal": {
+            "en": "`++nextId` looks like one action and is three: **read, add, write**. Two threads can be inside the gap at once, and both come out holding the same number.\n\n```mermaid\nsequenceDiagram\n  participant T1 as thread ws-1\n  participant N as nextId\n  participant T2 as thread ws-2\n  T1->>N: read 0\n  T2->>N: read 0\n  T1->>N: write 1\n  T2->>N: write 1\n  Note over T1,T2: both connections registered as 1\n```\n\nThe other shape that looks correct is `long id = sessions.size() + 1;`. It is the same read-then-write pattern — it reads a number that nothing reserved — but it is worse, because it is broken **even with one thread**: the map shrinks when somebody disconnects, so the scheme starts reissuing numbers it already gave away.",
+            "ru": "`++nextId` выглядит одним действием, а на деле их три: **прочитать, сложить, записать**. Два потока могут одновременно оказаться в этом промежутке, и оба выйдут из него с одним и тем же числом.\n\n```mermaid\nsequenceDiagram\n  participant T1 as поток ws-1\n  participant N as nextId\n  participant T2 as поток ws-2\n  T1->>N: читает 0\n  T2->>N: читает 0\n  T1->>N: пишет 1\n  T2->>N: пишет 1\n  Note over T1,T2: оба соединения зарегистрированы как 1\n```\n\nВторая форма, которая выглядит правильной, — `long id = sessions.size() + 1;`. Это тот же шаблон «прочитать, потом записать»: читается число, которое никто не резервировал. Но она хуже, потому что сломана **даже в один поток**: карта уменьшается, когда кто-то отключается, и схема начинает заново выдавать уже розданные номера."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Read, add, write — two threads can read the same value before either writes.",
+              "ru": "Прочитать, сложить, записать — оба потока могут прочитать одно значение до того, как кто-то запишет."
+            },
+            "incorrect": {
+              "en": "++ on a field is read, add and write, so both threads can read 0 and both write 1.",
+              "ru": "++ на поле — это чтение, сложение и запись, поэтому оба потока могут прочитать 0 и оба записать 1."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Both can get 1 — the increment is three steps: read, add, write",
+                "ru": "Оба могут получить 1 — инкремент это три шага: прочитать, сложить, записать"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "1 and 2 always — ++ is a single instruction",
+                "ru": "Всегда 1 и 2 — ++ это одна инструкция"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "++ on a field compiles to read, add and write; another thread can run between them.",
+                "ru": "++ на поле компилируется в чтение, сложение и запись; между ними может выполниться другой поток."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "One of them gets 0",
+                "ru": "Один из них получит 0"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Neither writes 0; the failure is a duplicate, not a missing increment.",
+                "ru": "Ноль не запишет никто; отказ — это дубликат, а не пропущенный инкремент."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "rmw-p1-size-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Using sessions.size() + 1 as the id for a new WebSocket connection is safe as long as only one thread ever creates connections.",
+            "ru": "Использовать sessions.size() + 1 как id нового WebSocket-соединения безопасно, если соединения создаёт только один поток."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The map shrinks on disconnect, so it starts handing out numbers it already gave away.",
+              "ru": "Карта уменьшается при отключении, поэтому она начинает выдавать уже розданные номера."
+            },
+            "incorrect": {
+              "en": "No — the map shrinks when somebody disconnects, so the scheme reissues ids with one thread too.",
+              "ru": "Нет — карта уменьшается при отключении, поэтому схема переиспользует id и в один поток."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "rmw-p2-no-concurrency",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which failure of long id = sessions.size() + 1; needs no concurrency at all?",
+            "ru": "Какой отказ у long id = sessions.size() + 1; вообще не требует конкурентности?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "One disconnect is enough: the size drops and the next connection gets an id already in use.",
+              "ru": "Достаточно одного отключения: размер падает, и следующее соединение получает уже занятый id."
+            },
+            "incorrect": {
+              "en": "After a disconnect the size drops, so the next connection is handed an id that is already in use.",
+              "ru": "После отключения размер падает, и следующее соединение получает уже занятый id."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "After a disconnect the size drops, so the next connection is handed an id already in use",
+                "ru": "После отключения размер падает, и следующее соединение получает уже занятый id"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "size() can return a stale value",
+                "ru": "size() может вернуть устаревшее значение"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Staleness is a concurrency problem; the reissue happens with a single thread as well.",
+                "ru": "Устаревание — проблема конкурентности; переиспользование происходит и в один поток."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "size() is an O(n) scan of the map",
+                "ru": "size() — это обход карты за O(n)"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The cost of size() is not the issue; the defect is reissuing numbers after a disconnect.",
+                "ru": "Дело не в цене size(); дефект в переиспользовании номеров после отключения."
+              }
+            }
+          ]
+        },
+        {
+          "id": "rmw-p3-sort",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the interleaving that turns nextId++ into a duplicate connection id.",
+            "ru": "Расставь по порядку переплетение, которое превращает nextId++ в дубликат id соединения."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Both reads happen before either write — that is the whole race in four steps.",
+              "ru": "Оба чтения происходят раньше любой записи — вот и вся гонка в четыре шага."
+            },
+            "incorrect": {
+              "en": "Both threads read the old value first, then both write the same new value.",
+              "ru": "Сначала оба потока читают старое значение, затем оба записывают одно и то же новое."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Thread ws-1 reads nextId and sees 0",
+                "ru": "Поток ws-1 читает nextId и видит 0"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Thread ws-2 reads nextId and also sees 0",
+                "ru": "Поток ws-2 читает nextId и тоже видит 0"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Thread ws-1 writes 1",
+                "ru": "Поток ws-1 записывает 1"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Thread ws-2 writes 1 as well",
+                "ru": "Поток ws-2 тоже записывает 1"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "Both connections are registered under id 1",
+                "ru": "Оба соединения зарегистрированы под id 1"
+              }
+            }
+          ]
+        },
+        {
+          "id": "rmw-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the first and last of the three steps.",
+            "ru": "Назови первый и последний из трёх шагов."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Any read-then-write has a gap another thread can slip into.",
+              "ru": "У любого «прочитать, потом записать» есть промежуток, в который проскакивает другой поток."
+            },
+            "incorrect": {
+              "en": "The three steps are read, add and write — that is why the increment is not atomic.",
+              "ru": "Три шага — прочитать, сложить и записать; именно поэтому инкремент не атомарен."
+            }
+          },
+          "text": {
+            "en": "nextId++ is not atomic because it is three steps: ___, add and ___.",
+            "ru": "nextId++ не атомарен, потому что это три шага: ___, сложить и ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "read"
+              ],
+              "ru": [
+                "прочитать",
+                "чтение",
+                "read"
+              ]
+            },
+            {
+              "en": [
+                "write"
+              ],
+              "ru": [
+                "записать",
+                "запись",
+                "write"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "atomic-vs-volatile",
+      "title": {
+        "en": "volatile, synchronized and AtomicLong",
+        "ru": "volatile, synchronized и AtomicLong"
+      },
+      "summary": {
+        "en": "volatile gives visibility but not atomicity; a synchronized block or AtomicLong.incrementAndGet() makes read-modify-write indivisible.",
+        "ru": "volatile даёт видимость, но не атомарность; блок synchronized или AtomicLong.incrementAndGet() делает «прочитать-изменить-записать» неделимым."
+      },
+      "discovery": [
+        {
+          "id": "atom-d1-volatile",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The shared counter field is now volatile. Is the duplicate connection id fixed?",
+            "ru": "Общее поле-счётчик теперь volatile. Починен ли дубликат id соединения?"
+          },
+          "code": "volatile long nextId;\n\n// thread ws-1 and thread ws-2, at the same instant\nlong id = ++nextId;",
+          "codeLang": "java",
+          "reveal": {
+            "en": "`volatile` gives **visibility**, not **atomicity**. It guarantees that once a thread writes the field, other threads see that write instead of a stale cached copy — but the read-add-write is still three separate steps, and two threads still fit inside the gap.\n\n```mermaid\nflowchart LR\n  V[\"volatile\"] --> VIS[\"visibility: other threads see the write\"]\n  A[\"synchronized block or AtomicLong\"] --> VIS\n  A --> AT[\"atomicity: read-modify-write is indivisible\"]\n```\n\nTwo repairs actually work, and they differ in how:\n\n- A **`synchronized` block** makes the three steps a critical section: one thread at a time, and it can guard several fields together.\n- **`AtomicLong.incrementAndGet()`** is one hardware **compare-and-set**: the CPU reads and writes in a single indivisible operation, with no lock and no waiting. For a single counter this is the better fit.\n\nBoth also solve visibility, and that matters beyond mutual exclusion: a thread only sees another thread's write if there is a **happens-before** edge between them — a lock release and acquire, a volatile write and read, or an atomic operation. Mutual exclusion without such an edge would still let a thread read a stale value.",
+            "ru": "`volatile` даёт **видимость**, а не **атомарность**. Он гарантирует, что после записи поля другие потоки увидят эту запись, а не устаревшую копию из кэша, — но «прочитать-сложить-записать» по-прежнему три отдельных шага, и два потока по-прежнему помещаются в промежуток.\n\n```mermaid\nflowchart LR\n  V[\"volatile\"] --> VIS[\"видимость: другие потоки видят запись\"]\n  A[\"блок synchronized или AtomicLong\"] --> VIS\n  A --> AT[\"атомарность: прочитать-изменить-записать неделимо\"]\n```\n\nРаботают две починки, и различаются они тем, как именно:\n\n- **Блок `synchronized`** делает три шага критической секцией: один поток за раз, и можно защитить сразу несколько полей.\n- **`AtomicLong.incrementAndGet()`** — это один аппаратный **compare-and-set**: процессор читает и пишет одной неделимой операцией, без блокировки и без ожидания. Для одного счётчика это подходит лучше.\n\nОбе также решают видимость, и это важно помимо взаимного исключения: поток видит запись другого потока, только если между ними есть отношение **happens-before** — освобождение и захват блокировки, запись и чтение volatile или атомарная операция. Взаимное исключение без такого отношения всё равно позволило бы прочитать устаревшее значение."
+          },
+          "feedback": {
+            "correct": {
+              "en": "volatile controls what others see, never how many steps the operation takes.",
+              "ru": "volatile управляет тем, что видят другие, но не количеством шагов операции."
+            },
+            "incorrect": {
+              "en": "No — volatile gives visibility, not atomicity; ++ is still read, add and write.",
+              "ru": "Нет — volatile даёт видимость, а не атомарность; ++ по-прежнему чтение, сложение и запись."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "No — volatile gives visibility, not atomicity, so the read-modify-write is still split",
+                "ru": "Нет — volatile даёт видимость, а не атомарность, поэтому «прочитать-изменить-записать» по-прежнему разделено"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Yes — volatile makes the increment atomic",
+                "ru": "Да — volatile делает инкремент атомарным"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "volatile never makes a compound operation atomic; it only controls what other threads see.",
+                "ru": "volatile никогда не делает составную операцию атомарной; он лишь управляет тем, что видят другие потоки."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Yes, but only on 64-bit hardware",
+                "ru": "Да, но только на 64-битном железе"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "This is not a hardware question: the memory model gives volatile visibility, not atomicity.",
+                "ru": "Дело не в железе: модель памяти даёт volatile видимость, а не атомарность."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "atom-p1-volatile-gives",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does volatile on a shared long field guarantee?",
+            "ru": "Что гарантирует volatile на общем поле типа long?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Visibility: a write is published to other threads instead of sitting in a cache.",
+              "ru": "Видимость: запись публикуется другим потокам, а не остаётся в кэше."
+            },
+            "incorrect": {
+              "en": "It guarantees visibility of a write — not atomicity, and not exclusion.",
+              "ru": "Он гарантирует видимость записи — не атомарность и не исключение."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "That a write to it becomes visible to other threads",
+                "ru": "Что запись в него станет видна другим потокам"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "That n++ on it is atomic",
+                "ru": "Что n++ на нём атомарен"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "n++ stays a read-modify-write; volatile does not merge the three steps into one.",
+                "ru": "n++ остаётся «прочитать-изменить-записать»; volatile не сливает три шага в один."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "That only one thread at a time can touch it",
+                "ru": "Что его может трогать только один поток за раз"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "volatile is not a lock; it excludes nobody.",
+                "ru": "volatile — не блокировка; он никого не исключает."
+              }
+            }
+          ]
+        },
+        {
+          "id": "atom-p2-atomic-vs-sync",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "AtomicLong.incrementAndGet() versus a synchronized block around nextId++ — how do they differ?",
+            "ru": "AtomicLong.incrementAndGet() против блока synchronized вокруг nextId++ — в чём разница?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Both are correct here; the atomic is lock-free, the block can guard more than one field.",
+              "ru": "Здесь верны оба; атомик работает без блокировки, а блок может защитить не одно поле."
+            },
+            "incorrect": {
+              "en": "The atomic is a lock-free compare-and-set; the synchronized block takes a monitor and can guard several fields.",
+              "ru": "Атомик — это compare-and-set без блокировки; блок synchronized берёт монитор и может защитить несколько полей."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The atomic is one hardware compare-and-set with no lock; the synchronized block takes a monitor and can guard several fields at once",
+                "ru": "Атомик — это один аппаратный compare-and-set без блокировки; блок synchronized берёт монитор и может защитить сразу несколько полей"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Only the synchronized block is actually thread-safe",
+                "ru": "Потокобезопасен на самом деле только блок synchronized"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Both are correct for a counter; they differ in cost and in how much they can guard.",
+                "ru": "Для счётчика верны оба; различаются они ценой и объёмом того, что могут защитить."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Only the atomic makes the new value visible to other threads",
+                "ru": "Только атомик делает новое значение видимым другим потокам"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Both establish a happens-before edge, so the other thread sees the write either way.",
+                "ru": "Оба создают отношение happens-before, поэтому другой поток увидит запись в любом случае."
+              }
+            }
+          ]
+        },
+        {
+          "id": "atom-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each mechanism to what it gives a shared counter in Java.",
+            "ru": "Соотнеси каждый механизм с тем, что он даёт общему счётчику в Java."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Visibility and atomicity are separate properties; only two of these give both.",
+              "ru": "Видимость и атомарность — разные свойства; и то и другое дают лишь два из них."
+            },
+            "incorrect": {
+              "en": "volatile is visibility only; synchronized is exclusion; AtomicLong is a lock-free atomic update.",
+              "ru": "volatile — только видимость; synchronized — исключение; AtomicLong — атомарное обновление без блокировки."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "volatile",
+                "ru": "volatile"
+              },
+              "right": {
+                "en": "Visibility, but no atomicity",
+                "ru": "Видимость, но не атомарность"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "A synchronized block",
+                "ru": "Блок synchronized"
+              },
+              "right": {
+                "en": "Mutual exclusion over several statements",
+                "ru": "Взаимное исключение на несколько операторов"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "AtomicLong.incrementAndGet()",
+                "ru": "AtomicLong.incrementAndGet()"
+              },
+              "right": {
+                "en": "A lock-free atomic read-modify-write",
+                "ru": "Атомарное «прочитать-изменить-записать» без блокировки"
+              }
+            },
+            {
+              "id": "m4",
+              "left": {
+                "en": "A plain long field",
+                "ru": "Обычное поле long"
+              },
+              "right": {
+                "en": "Neither visibility nor atomicity",
+                "ru": "Ни видимости, ни атомарности"
+              }
+            }
+          ]
+        },
+        {
+          "id": "atom-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the class and the property.",
+            "ru": "Впиши класс и свойство."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One compare-and-set replaces the three-step increment; volatile alone would not.",
+              "ru": "Один compare-and-set заменяет трёхшаговый инкремент; один volatile этого не сделает."
+            },
+            "incorrect": {
+              "en": "Use AtomicLong.incrementAndGet(); volatile on its own would give only visibility.",
+              "ru": "Используйте AtomicLong.incrementAndGet(); volatile сам по себе дал бы только видимость."
+            }
+          },
+          "text": {
+            "en": "Inside one JVM, replace nextId++ with ___.incrementAndGet(), because volatile alone would give only ___.",
+            "ru": "Внутри одной JVM замените nextId++ на ___.incrementAndGet(), потому что volatile сам по себе даёт только ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "AtomicLong"
+              ],
+              "ru": [
+                "AtomicLong"
+              ]
+            },
+            {
+              "en": [
+                "visibility"
+              ],
+              "ru": [
+                "видимость",
+                "visibility"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "check-then-act",
+      "title": {
+        "en": "One call is atomic, a sequence is not",
+        "ru": "Атомарен один вызов, а не последовательность"
+      },
+      "summary": {
+        "en": "A thread-safe collection makes each call atomic, so containsKey-then-put is still a race; the fix is one atomic call such as putIfAbsent.",
+        "ru": "Потокобезопасная коллекция делает атомарным каждый вызов, поэтому containsKey, а затем put — по-прежнему гонка; лечится одним атомарным вызовом вроде putIfAbsent."
+      },
+      "discovery": [
+        {
+          "id": "cta-d1-spot",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "The registry is a ConcurrentHashMap. Where is the race?",
+            "ru": "Реестр — это ConcurrentHashMap. Где здесь гонка?"
+          },
+          "code": "private final ConcurrentMap<String, Session> sessions = new ConcurrentHashMap<>();\n\nvoid register(String id, Session session) {\n    if (!sessions.containsKey(id)) {\n        sessions.put(id, session);\n    }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "A thread-safe collection promises that **one call** is atomic. It never promises that **your sequence of calls** is. `containsKey` and `put` are two calls with a gap between them, and another thread can do anything it likes inside that gap — this shape is called **check-then-act**.\n\n```mermaid\nsequenceDiagram\n  participant T1 as thread ws-1\n  participant M as sessions\n  participant T2 as thread ws-2\n  T1->>M: containsKey(id) is false\n  T2->>M: containsKey(id) is false\n  T1->>M: put(id, s1)\n  T2->>M: put(id, s2)\n```\n\nThe fix is not a bigger lock — it is **one atomic operation** that performs the check and the write together: `putIfAbsent`, `computeIfAbsent` or `merge`. A lock would also work, but only if *every* writer agrees to take the same one; the atomic call needs no agreement from anybody.",
+            "ru": "Потокобезопасная коллекция обещает атомарность **одного вызова**. Она никогда не обещает атомарность **вашей последовательности вызовов**. `containsKey` и `put` — это два вызова с промежутком между ними, и в этом промежутке другой поток может сделать что угодно; такая форма называется **check-then-act** («проверить, потом действовать»).\n\n```mermaid\nsequenceDiagram\n  participant T1 as поток ws-1\n  participant M as sessions\n  participant T2 as поток ws-2\n  T1->>M: containsKey(id) даёт false\n  T2->>M: containsKey(id) даёт false\n  T1->>M: put(id, s1)\n  T2->>M: put(id, s2)\n```\n\nЛечится это не блокировкой побольше, а **одной атомарной операцией**, которая делает проверку и запись вместе: `putIfAbsent`, `computeIfAbsent` или `merge`. Блокировка тоже сработала бы, но лишь если *каждый* пишущий согласится брать именно её; атомарному вызову ничьё согласие не нужно."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two atomic calls with a gap between them are not one atomic operation.",
+              "ru": "Два атомарных вызова с промежутком между ними — это не одна атомарная операция."
+            },
+            "incorrect": {
+              "en": "The race is between containsKey and put: another thread can insert the same id in that gap.",
+              "ru": "Гонка между containsKey и put: в этот промежуток другой поток может вставить тот же id."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Between containsKey and put — another thread can insert the same id in the gap",
+                "ru": "Между containsKey и put — в промежуток другой поток может вставить тот же id"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "There is none: ConcurrentHashMap is thread-safe",
+                "ru": "Её нет: ConcurrentHashMap потокобезопасен"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It makes each call atomic, never your sequence of calls.",
+                "ru": "Он делает атомарным каждый вызов, но не вашу последовательность вызовов."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "put throws when the key is already present",
+                "ru": "put бросает исключение, если ключ уже есть"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "put simply replaces the value; the defect is the check-then-act gap.",
+                "ru": "put просто заменяет значение; дефект — в промежутке check-then-act."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cta-p1-replacement",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which single call safely replaces if (!map.containsKey(k)) map.put(k, v); on a ConcurrentHashMap?",
+            "ru": "Какой один вызов безопасно заменяет if (!map.containsKey(k)) map.put(k, v); на ConcurrentHashMap?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "putIfAbsent performs the check and the write as one atomic operation.",
+              "ru": "putIfAbsent выполняет проверку и запись одной атомарной операцией."
+            },
+            "incorrect": {
+              "en": "putIfAbsent — it does the check and the write in one atomic step, closing the gap.",
+              "ru": "putIfAbsent — он делает проверку и запись одним атомарным шагом, закрывая промежуток."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "map.putIfAbsent(k, v)",
+                "ru": "map.putIfAbsent(k, v)"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "map.get(k) first, then map.put(k, v)",
+                "ru": "Сначала map.get(k), затем map.put(k, v)"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the same check-then-act gap with different method names.",
+                "ru": "Это тот же промежуток check-then-act, только методы называются иначе."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "synchronized (map) { map.put(k, v); }",
+                "ru": "synchronized (map) { map.put(k, v); }"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A lock only helps if every writer takes the same one; the atomic call needs no agreement.",
+                "ru": "Блокировка помогает, только если её берут все пишущие; атомарному вызову согласие не нужно."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cta-p2-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble what a thread-safe collection actually promises.",
+            "ru": "Собери, что на самом деле обещает потокобезопасная коллекция."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That one sentence explains why containsKey-then-put is still broken on a ConcurrentHashMap.",
+              "ru": "Эта одна фраза объясняет, почему containsKey, а затем put сломан и на ConcurrentHashMap."
+            },
+            "incorrect": {
+              "en": "It makes one call atomic, not a sequence of calls.",
+              "ru": "Она делает атомарным один вызов, а не последовательность вызовов."
+            }
+          },
+          "tokens": {
+            "en": [
+              "a",
+              "thread-safe",
+              "collection",
+              "makes",
+              "one",
+              "call",
+              "atomic,",
+              "not",
+              "a",
+              "sequence",
+              "of",
+              "calls"
+            ],
+            "ru": [
+              "потокобезопасная",
+              "коллекция",
+              "делает",
+              "атомарным",
+              "один",
+              "вызов,",
+              "а",
+              "не",
+              "последовательность",
+              "вызовов"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "lock"
+            ],
+            "ru": [
+              "блокировку"
+            ]
+          }
+        },
+        {
+          "id": "cta-p3-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the atomic method that closes the gap.",
+            "ru": "Впиши атомарный метод, закрывающий промежуток."
+          },
+          "feedback": {
+            "correct": {
+              "en": "computeIfAbsent and merge close the same gap when you need to build the value too.",
+              "ru": "computeIfAbsent и merge закрывают тот же промежуток, когда значение ещё нужно построить."
+            },
+            "incorrect": {
+              "en": "It is putIfAbsent — one atomic operation instead of a check followed by a write.",
+              "ru": "Это putIfAbsent — одна атомарная операция вместо проверки и последующей записи."
+            }
+          },
+          "text": {
+            "en": "Replace if (!sessions.containsKey(id)) sessions.put(id, s); with the single atomic call sessions.___(id, s).",
+            "ru": "Замените if (!sessions.containsKey(id)) sessions.put(id, s); одним атомарным вызовом sessions.___(id, s)."
+          },
+          "answers": {
+            "en": [
+              "putIfAbsent"
+            ],
+            "ru": [
+              "putIfAbsent"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "jvm-boundary",
+      "title": {
+        "en": "The edge of the JVM",
+        "ru": "Граница JVM"
+      },
+      "summary": {
+        "en": "A lock or a CAS coordinates only threads that share one memory, so two instances each hand out 1 and neither can write to the other's sockets.",
+        "ru": "Блокировка или CAS координируют только потоки в общей памяти, поэтому два экземпляра оба выдают 1 и ни один не может писать в сокеты другого."
+      },
+      "discovery": [
+        {
+          "id": "edge-d1-two-instances",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Your counter is a correct AtomicLong. You deploy the same build to two instances behind a load balancer. What id does each instance give its first connection?",
+            "ru": "Ваш счётчик — корректный AtomicLong. Вы разворачиваете одну и ту же сборку на двух экземплярах за балансировщиком. Какой id каждый экземпляр выдаст своему первому соединению?"
+          },
+          "reveal": {
+            "en": "`AtomicLong` is correct — and its correctness stops precisely at the edge of the JVM, because a lock or a compare-and-set only coordinates threads that share the same memory. Deploy the same faultless code twice and both processes hand out `1`. Nothing raced; each counter is right; the value is still duplicated.\n\n```mermaid\nflowchart LR\n  LB[\"load balancer\"] --> A[\"instance A: counter = 1, registry A\"]\n  LB --> B[\"instance B: counter = 1, registry B\"]\n```\n\nThe registry splits the same way. Each instance holds only the sockets connected to it, so instance A physically cannot write into a socket held by instance B. A broadcast that must reach everybody has to travel through something **outside the JVM** — Redis or a message broker — which every instance subscribes to and then loops over its own registry.\n\n**Sticky sessions do not fix either half.** They keep one *client* pinned to one node, which is useful, but they give two nodes no shared counter and no way to write into each other's sockets.",
+            "ru": "`AtomicLong` верен — и его верность заканчивается ровно на границе JVM, потому что блокировка или compare-and-set координируют только потоки, разделяющие одну память. Разверните тот же безупречный код дважды, и оба процесса выдадут `1`. Никакой гонки не было, каждый счётчик прав, а значение всё равно продублировано.\n\n```mermaid\nflowchart LR\n  LB[\"балансировщик\"] --> A[\"экземпляр A: счётчик = 1, реестр A\"]\n  LB --> B[\"экземпляр B: счётчик = 1, реестр B\"]\n```\n\nРеестр разделяется точно так же. Каждый экземпляр держит только подключённые к нему сокеты, поэтому экземпляр A физически не может писать в сокет экземпляра B. Рассылка, которая должна дойти до всех, обязана пройти через что-то **вне JVM** — Redis или брокер сообщений, — на что подписан каждый экземпляр, после чего каждый обходит свой собственный реестр.\n\n**Sticky sessions не чинят ни ту, ни другую половину.** Они закрепляют одного *клиента* за одним узлом, и это полезно, но они не дают двум узлам ни общего счётчика, ни возможности писать в чужие сокеты."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Each process has its own counter, so both start at 1 without any race.",
+              "ru": "У каждого процесса свой счётчик, поэтому оба начинают с 1 безо всякой гонки."
+            },
+            "incorrect": {
+              "en": "Both give 1: a CAS coordinates threads sharing memory, and two processes share none.",
+              "ru": "Оба выдадут 1: CAS координирует потоки в общей памяти, а два процесса не делят ничего."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Both give 1 — each process has its own counter",
+                "ru": "Оба выдадут 1 — у каждого процесса свой счётчик"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "1 and 2 — the two JVMs coordinate through the load balancer",
+                "ru": "1 и 2 — две JVM координируются через балансировщик"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A load balancer routes traffic; it shares no memory and holds no counter.",
+                "ru": "Балансировщик распределяет трафик; он не делит память и не хранит счётчик."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "1 and 1, but only if the code still has a race in it",
+                "ru": "1 и 1, но только если в коде осталась гонка"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no race: each counter is right, and the value is duplicated anyway.",
+                "ru": "Гонки нет: каждый счётчик прав, а значение всё равно продублировано."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "edge-p1-sticky-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Sticky sessions let one instance push a message into a WebSocket connection held by another instance.",
+            "ru": "Sticky sessions позволяют одному экземпляру отправить сообщение в WebSocket-соединение, которое держит другой экземпляр."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A socket can only be written by the process that holds it; routing changes nothing about that.",
+              "ru": "В сокет может писать только процесс, который его держит; маршрутизация этого не меняет."
+            },
+            "incorrect": {
+              "en": "No — sticky routing keeps a client on a node; it does not move a message between nodes.",
+              "ru": "Нет — sticky-маршрутизация удерживает клиента на узле, но не переносит сообщение между узлами."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "edge-p2-cluster-broadcast",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "How do you broadcast to every connected user when the WebSocket connections are spread across several instances?",
+            "ru": "Как разослать сообщение всем подключённым пользователям, если WebSocket-соединения распределены по нескольким экземплярам?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The message crosses the process boundary outside the JVM; each instance then serves its own sockets.",
+              "ru": "Сообщение пересекает границу процесса вне JVM; дальше каждый экземпляр обслуживает свои сокеты."
+            },
+            "incorrect": {
+              "en": "Publish it through something outside the JVM — a broker or Redis — and let each instance loop over its own registry.",
+              "ru": "Опубликуйте его через что-то вне JVM — брокер или Redis — и пусть каждый экземпляр обойдёт свой реестр."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Publish the message through something outside the JVM, such as a broker or Redis, and let each instance loop over its own registry",
+                "ru": "Опубликовать сообщение через что-то вне JVM, например брокер или Redis, и пусть каждый экземпляр обойдёт свой реестр"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Keep the registry in a static field so every instance shares it",
+                "ru": "Держать реестр в поле static, чтобы его разделяли все экземпляры"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A static field is one per process; two processes never share one.",
+                "ru": "Поле static одно на процесс; два процесса никогда его не разделяют."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Turn on sticky sessions at the load balancer",
+                "ru": "Включить sticky sessions на балансировщике"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Sticky routing keeps a client on a node; it moves no message between nodes.",
+                "ru": "Sticky-маршрутизация удерживает клиента на узле, но не переносит сообщения между узлами."
+              }
+            }
+          ]
+        },
+        {
+          "id": "edge-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each piece of a multi-instance WebSocket deployment to what it actually does.",
+            "ru": "Соотнеси каждый элемент многоэкземплярного WebSocket-развёртывания с тем, что он реально делает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Only the thing outside the JVM crosses the process boundary.",
+              "ru": "Границу процесса пересекает только то, что находится вне JVM."
+            },
+            "incorrect": {
+              "en": "Sticky sessions pin a client, a balancer routes, AtomicLong is per process, a broker crosses instances.",
+              "ru": "Sticky sessions закрепляют клиента, балансировщик маршрутизирует, AtomicLong живёт в процессе, брокер соединяет экземпляры."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "Sticky sessions",
+                "ru": "Sticky sessions"
+              },
+              "right": {
+                "en": "Keep one client pinned to one node",
+                "ru": "Закрепляют одного клиента за одним узлом"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "A load balancer",
+                "ru": "Балансировщик нагрузки"
+              },
+              "right": {
+                "en": "Routes traffic and shares no memory",
+                "ru": "Распределяет трафик и не делит память"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "AtomicLong.incrementAndGet()",
+                "ru": "AtomicLong.incrementAndGet()"
+              },
+              "right": {
+                "en": "Unique inside one process only",
+                "ru": "Уникален только внутри одного процесса"
+              }
+            },
+            {
+              "id": "m4",
+              "left": {
+                "en": "Redis or a message broker",
+                "ru": "Redis или брокер сообщений"
+              },
+              "right": {
+                "en": "Carries a message from one instance to another",
+                "ru": "Переносит сообщение от одного экземпляра к другому"
+              }
+            }
+          ]
+        },
+        {
+          "id": "edge-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type what a lock coordinates and what it cannot cross.",
+            "ru": "Впиши, что координирует блокировка и чего она не пересекает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "No in-process mechanism reaches past the process that runs it.",
+              "ru": "Ни один внутрипроцессный механизм не выходит за пределы своего процесса."
+            },
+            "incorrect": {
+              "en": "They coordinate threads sharing the same memory, so cluster-wide uniqueness must come from outside the JVM.",
+              "ru": "Они координируют потоки в одной памяти, поэтому уникальность на кластер обязана приходить извне JVM."
+            }
+          },
+          "text": {
+            "en": "A lock or a CAS coordinates only threads that share the same ___, so uniqueness across instances must come from outside the ___.",
+            "ru": "Блокировка или CAS координируют только потоки, разделяющие одну ___, поэтому уникальность между экземплярами обязана приходить извне ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "memory"
+              ],
+              "ru": [
+                "память",
+                "памяти",
+                "memory"
+              ]
+            },
+            {
+              "en": [
+                "JVM",
+                "process"
+              ],
+              "ru": [
+                "JVM",
+                "процесса",
+                "процесс"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "unique-value-menu",
+      "title": {
+        "en": "Where a globally unique value comes from",
+        "ru": "Откуда берётся глобально уникальное значение"
+      },
+      "summary": {
+        "en": "Past the JVM there are two shapes: generate a value so wide nobody has to be asked, or ask the one authority every instance shares.",
+        "ru": "За границей JVM форм всего две: сгенерировать значение настолько широкое, что спрашивать не у кого, либо спросить единственный авторитет, общий для всех экземпляров."
+      },
+      "discovery": [
+        {
+          "id": "menu-d1-no-dependency",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "You need a connection id that is unique across all instances, and at runtime you cannot depend on any other service. Which value do you use?",
+            "ru": "Нужен id соединения, уникальный на всех экземплярах, и во время работы нельзя зависеть ни от какого другого сервиса. Какое значение выбрать?"
+          },
+          "reveal": {
+            "en": "Past the edge of the JVM there are only two shapes: **generate** a value so wide that nobody has to be asked, or **ask** the one authority everybody shares.\n\n```mermaid\nflowchart LR\n  A{\"one JVM only?\"} -->|\"yes\"| B[\"AtomicLong.incrementAndGet\"]\n  A -->|\"no\"| C{\"must it sort by creation?\"}\n  C -->|\"no\"| D[\"UUID.randomUUID\"]\n  C -->|\"yes\"| E{\"may it depend on a service?\"}\n  E -->|\"yes\"| F[\"DB sequence or Redis INCR\"]\n  E -->|\"no\"| G[\"Snowflake: node id + timestamp\"]\n```\n\n- **`UUID.randomUUID()`** — no coordination with anybody, at the cost of 16 unordered bytes.\n- **A database sequence or `Redis INCR`** — small, ordered and unique for the whole cluster, at the cost of a round trip per connection and a dependency that can be down. If it is down, no new connection can be given an id: that is the trade you accepted when you chose it.\n- **Snowflake-style ids** — a timestamp plus a *unique node id* plus a per-node counter. There is no coordination at runtime; the coordination moved to **deployment**, where each process must be given an id that is genuinely its own.\n\nAnd if the value must be unique in a way you can still prove after a crash, the last word belongs to a **unique constraint in the database**, not to anything in memory: in-memory uniqueness dies with the process.",
+            "ru": "За границей JVM форм всего две: **сгенерировать** значение настолько широкое, что спрашивать не у кого, либо **спросить** единственный авторитет, общий для всех.\n\n```mermaid\nflowchart LR\n  A{\"только одна JVM?\"} -->|\"да\"| B[\"AtomicLong.incrementAndGet\"]\n  A -->|\"нет\"| C{\"нужна сортировка по времени?\"}\n  C -->|\"нет\"| D[\"UUID.randomUUID\"]\n  C -->|\"да\"| E{\"можно зависеть от сервиса?\"}\n  E -->|\"да\"| F[\"последовательность в БД или Redis INCR\"]\n  E -->|\"нет\"| G[\"Snowflake: номер узла + время\"]\n```\n\n- **`UUID.randomUUID()`** — никакой координации ни с кем ценой 16 неупорядоченных байт.\n- **Последовательность в базе или `Redis INCR`** — компактно, упорядоченно и уникально для всего кластера ценой сетевого похода на каждое соединение и зависимости, которая может быть недоступна. Если она недоступна, ни одно новое соединение не получит id: это и есть та сделка, на которую вы пошли при выборе.\n- **Идентификаторы в стиле Snowflake** — время плюс *уникальный номер узла* плюс счётчик внутри узла. Во время работы координации нет; она переехала на **развёртывание**, где каждому процессу обязаны выдать действительно свой номер.\n\nА если значение должно быть уникальным так, чтобы это можно было доказать после падения, последнее слово остаётся за **уникальным индексом в базе**, а не за чем-либо в памяти: уникальность в памяти умирает вместе с процессом."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A wide random value needs no coordination with anybody at runtime.",
+              "ru": "Широкое случайное значение не требует во время работы никакой координации."
+            },
+            "incorrect": {
+              "en": "UUID.randomUUID(): 122 random bits generated locally, with no service to ask.",
+              "ru": "UUID.randomUUID(): 122 случайных бита, сгенерированных локально, спрашивать не у кого."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "UUID.randomUUID() — generated locally, with no coordination",
+                "ru": "UUID.randomUUID() — генерируется локально, без координации"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A database sequence",
+                "ru": "Последовательность в базе данных"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It is unique cluster-wide, but it is exactly the runtime dependency you said you cannot have.",
+                "ru": "Она уникальна на весь кластер, но это ровно та зависимость времени работы, которой быть не может."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "AtomicLong.incrementAndGet()",
+                "ru": "AtomicLong.incrementAndGet()"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Correct inside one process only; every instance would start at 1.",
+                "ru": "Верно только внутри одного процесса; каждый экземпляр начал бы с 1."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "menu-p1-sequence-cost",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does taking connection ids from a database sequence or Redis INCR cost you, compared with generating a UUID locally?",
+            "ru": "Чего стоит брать id соединений из последовательности в БД или Redis INCR по сравнению с локальной генерацией UUID?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "You buy small ordered ids and pay in latency and availability.",
+              "ru": "Вы покупаете компактные упорядоченные id и платите задержкой и доступностью."
+            },
+            "incorrect": {
+              "en": "A round trip per connection and a dependency that can be down.",
+              "ru": "Сетевым походом на каждое соединение и зависимостью, которая может быть недоступна."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A round trip per connection and a dependency that can be down",
+                "ru": "Сетевой поход на каждое соединение и зависимость, которая может быть недоступна"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing — it is a local call like any other",
+                "ru": "Ничего — это такой же локальный вызов, как любой другой"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It is a call to another service across the network, not a local one.",
+                "ru": "Это вызов другого сервиса по сети, а не локальный."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The values stop being ordered",
+                "ru": "Значения перестают быть упорядоченными"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The opposite: those values are ordered, which is why you would pay for them at all.",
+                "ru": "Наоборот: эти значения упорядочены, ради этого за них и платят."
+              }
+            }
+          ]
+        },
+        {
+          "id": "menu-p2-db-down",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Connection ids come from a database sequence and the database is briefly unavailable. What follows from that design?",
+            "ru": "Id соединений берутся из последовательности в БД, и база ненадолго недоступна. Что следует из такой схемы?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The dependency is the price of cluster-wide ordered ids; new connections wait for it.",
+              "ru": "Зависимость — это цена упорядоченных id на весь кластер; новые соединения её ждут."
+            },
+            "incorrect": {
+              "en": "New connections cannot be given an id until it returns — that dependency is what you accepted.",
+              "ru": "Новым соединениям нельзя выдать id, пока она не вернётся, — эту зависимость вы и приняли."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "New connections cannot be given an id until it comes back — that dependency is part of the design you chose",
+                "ru": "Новым соединениям нельзя выдать id, пока она не вернётся, — эта зависимость заложена в выбранную схему"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing — the application falls back to a local counter automatically",
+                "ru": "Ничего — приложение автоматически переключится на локальный счётчик"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no automatic fallback, and a local counter would not be cluster-unique anyway.",
+                "ru": "Автоматического отката нет, да и локальный счётчик всё равно не уникален на кластер."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "All existing WebSocket connections drop",
+                "ru": "Все существующие WebSocket-соединения оборвутся"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Open sockets are unaffected; only new connections need a fresh id.",
+                "ru": "Открытые сокеты не затронуты; новый id нужен только новым соединениям."
+              }
+            }
+          ]
+        },
+        {
+          "id": "menu-p3-snowflake-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A Snowflake-style id requires a call to a shared service every time one is generated.",
+            "ru": "Идентификатор в стиле Snowflake требует обращения к общему сервису при каждой генерации."
+          },
+          "feedback": {
+            "correct": {
+              "en": "There is no coordination at runtime; it moved to deployment, where each node is given its own node id.",
+              "ru": "Во время работы координации нет; она переехала на развёртывание, где каждому узлу выдают свой номер."
+            },
+            "incorrect": {
+              "en": "No — it is generated locally from a timestamp, a node id and a counter; only the node id is assigned at deployment.",
+              "ru": "Нет — он генерируется локально из времени, номера узла и счётчика; на развёртывании выдают только номер узла."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "menu-p4-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each source of a unique value to its main cost.",
+            "ru": "Соотнеси каждый источник уникального значения с его главной ценой."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Every option buys uniqueness with something: scope, size, a round trip, or deployment discipline.",
+              "ru": "Каждый вариант покупает уникальность чем-то: областью, размером, сетевым походом или дисциплиной развёртывания."
+            },
+            "incorrect": {
+              "en": "AtomicLong is per process, a UUID is big and unordered, a sequence costs a round trip, Snowflake costs node ids.",
+              "ru": "AtomicLong — на процесс, UUID велик и неупорядочен, последовательность стоит похода по сети, Snowflake — номеров узлов."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "AtomicLong.incrementAndGet()",
+                "ru": "AtomicLong.incrementAndGet()"
+              },
+              "right": {
+                "en": "Unique inside one process only",
+                "ru": "Уникален только внутри одного процесса"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "UUID.randomUUID()",
+                "ru": "UUID.randomUUID()"
+              },
+              "right": {
+                "en": "16 unordered bytes",
+                "ru": "16 неупорядоченных байт"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "A DB sequence or Redis INCR",
+                "ru": "Последовательность в БД или Redis INCR"
+              },
+              "right": {
+                "en": "A round trip and a dependency that can be down",
+                "ru": "Сетевой поход и зависимость, которая может быть недоступна"
+              }
+            },
+            {
+              "id": "m4",
+              "left": {
+                "en": "A Snowflake-style id",
+                "ru": "Идентификатор в стиле Snowflake"
+              },
+              "right": {
+                "en": "Every node must be given its own node id at deployment",
+                "ru": "Каждому узлу при развёртывании должны выдать свой номер"
+              }
+            }
+          ]
+        },
+        {
+          "id": "menu-p5-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type where provable uniqueness lives and what kills the in-memory kind.",
+            "ru": "Впиши, где живёт доказуемая уникальность и что убивает уникальность в памяти."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Memory forgets on restart; a constraint in the database still holds afterwards.",
+              "ru": "Память забывает при перезапуске; ограничение в базе продолжает действовать и после."
+            },
+            "incorrect": {
+              "en": "A unique constraint in the database is the last word, because in-memory uniqueness dies with the process.",
+              "ru": "Последнее слово за уникальным ограничением в базе, потому что уникальность в памяти умирает вместе с процессом."
+            }
+          },
+          "text": {
+            "en": "Uniqueness you can still prove after a crash belongs to a unique ___ in the database, because in-memory uniqueness dies with the ___.",
+            "ru": "Уникальность, которую можно доказать после падения, обеспечивает уникальное ___ в базе, потому что уникальность в памяти умирает вместе с ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "constraint",
+                "index"
+              ],
+              "ru": [
+                "ограничение",
+                "индекс",
+                "constraint"
+              ]
+            },
+            {
+              "en": [
+                "process",
+                "JVM"
+              ],
+              "ru": [
+                "процессом",
+                "процесс",
+                "JVM"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "uuid-tradeoffs",
+      "title": {
+        "en": "What a UUID costs",
+        "ru": "Чего стоит UUID"
+      },
+      "summary": {
+        "en": "UUID.randomUUID() is 122 random bits, safe from any number of threads; the real trade-off is 16 unordered bytes, which UUID v7 fixes.",
+        "ru": "UUID.randomUUID() — это 122 случайных бита, безопасных из любого числа потоков; настоящий компромисс — 16 неупорядоченных байт, что чинит UUID v7."
+      },
+      "discovery": [
+        {
+          "id": "uuid-d1-threads",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Several connection threads call UUID.randomUUID() at the same moment. What must you do to keep the values unique?",
+            "ru": "Несколько потоков соединений одновременно вызывают UUID.randomUUID(). Что нужно сделать, чтобы значения остались уникальными?"
+          },
+          "reveal": {
+            "en": "Nothing. `UUID.randomUUID()` produces **122 random bits** with no coordination with anybody — no shared counter to race over, and it is safe to call from any number of threads at once.\n\n```\nUUID.randomUUID(): 16 bytes, 122 random bits, no ordering\nUUID v7:           [ timestamp | random ]  -> sorts by creation time\n```\n\nAnd \"what if two collide?\" is the wrong worry: at 122 random bits this is not a risk you manage or write retry code for.\n\nThe real trade-off is **size and ordering**. 16 bytes with no relationship to time make a poor clustered primary key: consecutive inserts scatter instead of landing near each other. `UUID` **v7** addresses exactly that by putting a timestamp in the high bits, which gets the ordering back while keeping the \"no coordination\" property.",
+            "ru": "Ничего. `UUID.randomUUID()` даёт **122 случайных бита** без всякой координации: нет общего счётчика, за который можно бороться, и вызывать его можно из любого числа потоков одновременно.\n\n```\nUUID.randomUUID(): 16 байт, 122 случайных бита, без порядка\nUUID v7:           [ время | случайное ]  -> сортируется по времени создания\n```\n\nА вопрос «а вдруг два совпадут?» — не та тревога: при 122 случайных битах это не тот риск, которым управляют и под который пишут повторные попытки.\n\nНастоящий компромисс — **размер и порядок**. 16 байт, никак не связанных со временем, плохо годятся в кластерный первичный ключ: подряд идущие вставки разлетаются вместо того, чтобы ложиться рядом. `UUID` **v7** решает именно это, кладя время в старшие биты: порядок возвращается, а свойство «без координации» сохраняется."
+          },
+          "feedback": {
+            "correct": {
+              "en": "There is no shared state to guard — each call produces an independent random value.",
+              "ru": "Защищать нечего — каждый вызов даёт независимое случайное значение."
+            },
+            "incorrect": {
+              "en": "Nothing: it needs no coordination and is safe to call from any number of threads.",
+              "ru": "Ничего: координация не нужна, и вызывать его можно из любого числа потоков."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Nothing — it needs no coordination and is safe from any number of threads",
+                "ru": "Ничего — координация не нужна, и он безопасен из любого числа потоков"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Guard the call with a synchronized block",
+                "ru": "Обернуть вызов блоком synchronized"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no shared state to guard; each call produces an independent random value.",
+                "ru": "Защищать нечего; каждый вызов даёт независимое случайное значение."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Keep a set of issued UUIDs and retry on a collision",
+                "ru": "Хранить множество выданных UUID и повторять генерацию при совпадении"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "At 122 random bits a collision is not a risk you manage, and the set would be pure overhead.",
+                "ru": "При 122 случайных битах совпадение — не тот риск, которым управляют, а множество было бы чистыми накладными расходами."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "uuid-p1-collision-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "The main drawback of a random UUID is that two of them are likely to collide.",
+            "ru": "Главный недостаток случайного UUID в том, что два таких значения вероятно совпадут."
+          },
+          "feedback": {
+            "correct": {
+              "en": "At 122 random bits collisions are not a risk you plan for; size and ordering are the real cost.",
+              "ru": "При 122 случайных битах совпадения не планируют; настоящая цена — размер и отсутствие порядка."
+            },
+            "incorrect": {
+              "en": "No — the real trade-off is 16 unordered bytes, not collisions.",
+              "ru": "Нет — настоящий компромисс это 16 неупорядоченных байт, а не совпадения."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "uuid-p2-primary-key",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What is the downside of a random UUID as a database primary key?",
+            "ru": "В чём недостаток случайного UUID в роли первичного ключа базы данных?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "16 bytes with no ordering; UUID v7 puts a timestamp in the high bits and gets the ordering back.",
+              "ru": "16 байт без порядка; UUID v7 кладёт время в старшие биты и возвращает порядок."
+            },
+            "incorrect": {
+              "en": "It is size and lack of ordering — 16 unordered bytes make a poor clustered primary key.",
+              "ru": "Это размер и отсутствие порядка — 16 неупорядоченных байт плохи как кластерный первичный ключ."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "16 bytes with no ordering, so rows created one after another do not land near each other",
+                "ru": "16 байт без порядка, поэтому строки, созданные одна за другой, не ложатся рядом"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It cannot be indexed",
+                "ru": "Его нельзя проиндексировать"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It can be indexed; the cost is its size and its random order.",
+                "ru": "Его можно проиндексировать; цена — размер и случайный порядок."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It is not unique across instances",
+                "ru": "Он не уникален между экземплярами"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is exactly what it is good at — no coordination between instances is needed.",
+                "ru": "Как раз в этом он и хорош — координация между экземплярами не нужна."
+              }
+            }
+          ]
+        },
+        {
+          "id": "uuid-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble how UUID v7 restores ordering.",
+            "ru": "Собери, как UUID v7 возвращает порядок."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A timestamp in the high bits makes the values sort by creation time.",
+              "ru": "Время в старших битах заставляет значения сортироваться по моменту создания."
+            },
+            "incorrect": {
+              "en": "UUID v7 puts a timestamp in the high bits, which restores the ordering.",
+              "ru": "UUID v7 кладёт время в старшие биты, и это возвращает порядок."
+            }
+          },
+          "tokens": {
+            "en": [
+              "UUID",
+              "v7",
+              "puts",
+              "a",
+              "timestamp",
+              "in",
+              "the",
+              "high",
+              "bits"
+            ],
+            "ru": [
+              "UUID",
+              "v7",
+              "кладёт",
+              "время",
+              "в",
+              "старшие",
+              "биты"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "low"
+            ],
+            "ru": [
+              "младшие"
+            ]
+          }
+        },
+        {
+          "id": "uuid-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the bit count and the version number.",
+            "ru": "Впиши количество бит и номер версии."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Enough random bits that collisions need no plan; v7 fixes the ordering complaint.",
+              "ru": "Случайных бит столько, что план на совпадения не нужен; v7 закрывает претензию к порядку."
+            },
+            "incorrect": {
+              "en": "122 random bits, and UUID v7 is the version that restores ordering.",
+              "ru": "122 случайных бита, а порядок возвращает версия UUID v7."
+            }
+          },
+          "text": {
+            "en": "UUID.randomUUID() carries ___ random bits, and the version that restores ordering is UUID v___.",
+            "ru": "UUID.randomUUID() несёт ___ случайных бит, а порядок возвращает версия UUID v___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "122"
+              ],
+              "ru": [
+                "122"
+              ]
+            },
+            {
+              "en": [
+                "7"
+              ],
+              "ru": [
+                "7"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "per-session-writes",
+      "title": {
+        "en": "One session, two writers",
+        "ru": "Одна сессия, два писателя"
+      },
+      "summary": {
+        "en": "A concurrent registry does not make a session safe: two threads calling sendMessage on one session interleave frames or hit IllegalStateException.",
+        "ru": "Конкурентный реестр не делает сессию безопасной: два потока, вызывающие sendMessage на одной сессии, перемешивают фреймы или получают IllegalStateException."
+      },
+      "discovery": [
+        {
+          "id": "pss-d1-two-writers",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The registry is a ConcurrentHashMap. Two threads write to the SAME session at this instant. What can happen?",
+            "ru": "Реестр — это ConcurrentHashMap. Два потока в этот момент пишут в ОДНУ И ТУ ЖЕ сессию. Что может произойти?"
+          },
+          "code": "// scheduled push thread\nsession.sendMessage(new TextMessage(quote));\n\n// at the same instant, the message-handling thread\nsession.sendMessage(new TextMessage(reply));",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Make the registry a `ConcurrentHashMap` and the counter an `AtomicLong`, and one bug is still waiting: **two threads writing into the same session**. A scheduled push and a reply to an incoming message do it constantly.\n\nA WebSocket message is a **sequence of frames**, not one indivisible write. So the two writes either interleave into a message nobody sent, or the container refuses the second one with `IllegalStateException: TEXT_PARTIAL_WRITING`.\n\n```mermaid\nflowchart LR\n  REG[\"the registry: needs concurrency\"] --> S[\"one session: needs mutual exclusion\"]\n  T1[\"scheduled push thread\"] --> S\n  T2[\"message-handling thread\"] --> S\n```\n\nThe two objects need opposite things, and this is why a concurrent registry does not make the sessions inside it safe: a concurrent collection protects **the collection**, never the objects stored in it. Give a session mutual exclusion by wrapping it — Spring's `ConcurrentWebSocketSessionDecorator`, or your own lock per session.",
+            "ru": "Сделайте реестр `ConcurrentHashMap`, а счётчик `AtomicLong` — и одна ошибка всё ещё ждёт: **два потока пишут в одну и ту же сессию**. Запланированная отправка и ответ на входящее сообщение делают это постоянно.\n\nСообщение WebSocket — это **последовательность фреймов**, а не одна неделимая запись. Поэтому две записи либо перемешаются в сообщение, которого никто не отправлял, либо контейнер откажет второй с `IllegalStateException: TEXT_PARTIAL_WRITING`.\n\n```mermaid\nflowchart LR\n  REG[\"реестр: нужна конкурентность\"] --> S[\"одна сессия: нужно взаимное исключение\"]\n  T1[\"поток запланированной отправки\"] --> S\n  T2[\"поток обработки сообщений\"] --> S\n```\n\nЭтим двум объектам нужно противоположное, и поэтому конкурентный реестр не делает безопасными лежащие в нём сессии: конкурентная коллекция защищает **саму коллекцию**, но никогда объекты внутри неё. Взаимное исключение сессии дают обёрткой — `ConcurrentWebSocketSessionDecorator` из Spring или собственная блокировка на сессию."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A message is a sequence of frames, so two writers either interleave or are refused.",
+              "ru": "Сообщение — это последовательность фреймов, поэтому два писателя либо перемешаются, либо получат отказ."
+            },
+            "incorrect": {
+              "en": "The frames interleave into a message nobody sent, or the container throws IllegalStateException.",
+              "ru": "Фреймы перемешаются в сообщение, которого никто не отправлял, или контейнер бросит IllegalStateException."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The frames interleave into a message nobody sent, or the container throws IllegalStateException: TEXT_PARTIAL_WRITING",
+                "ru": "Фреймы перемешаются в сообщение, которого никто не отправлял, или контейнер бросит IllegalStateException: TEXT_PARTIAL_WRITING"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing — the registry is concurrent, so the sessions in it are safe too",
+                "ru": "Ничего — реестр конкурентный, значит и сессии в нём безопасны"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A concurrent collection protects the collection, never the objects stored inside it.",
+                "ru": "Конкурентная коллекция защищает саму коллекцию, но никогда объекты внутри неё."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The second call is queued by the container until the first finishes",
+                "ru": "Контейнер поставит второй вызов в очередь, пока не закончится первый"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no queue: the container refuses a write while a partial one is in progress.",
+                "ru": "Очереди нет: контейнер отказывает в записи, пока идёт незавершённая."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "pss-p1-registry-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Storing WebSocket sessions in a ConcurrentHashMap makes it safe for two threads to write to the same session.",
+            "ru": "Хранение WebSocket-сессий в ConcurrentHashMap делает безопасной запись двух потоков в одну сессию."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A concurrent collection protects the collection, not the objects inside it.",
+              "ru": "Конкурентная коллекция защищает коллекцию, а не объекты внутри неё."
+            },
+            "incorrect": {
+              "en": "No — the map's thread safety says nothing about the Session objects it holds.",
+              "ru": "Нет — потокобезопасность карты ничего не говорит об объектах Session внутри неё."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "pss-p2-fix",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "How do you make writes to a single WebSocket session safe when several threads can send to it?",
+            "ru": "Как сделать безопасной запись в одну WebSocket-сессию, если в неё могут отправлять несколько потоков?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Mutual exclusion belongs at the session, so only one writer is inside a message at a time.",
+              "ru": "Взаимное исключение принадлежит сессии, чтобы внутри сообщения был только один писатель."
+            },
+            "incorrect": {
+              "en": "Wrap the session: ConcurrentWebSocketSessionDecorator, or your own lock per session.",
+              "ru": "Обернуть сессию: ConcurrentWebSocketSessionDecorator или собственная блокировка на сессию."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Wrap the session — ConcurrentWebSocketSessionDecorator, or your own lock per session",
+                "ru": "Обернуть сессию — ConcurrentWebSocketSessionDecorator или своя блокировка на сессию"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Replace the registry with a ConcurrentHashMap",
+                "ru": "Заменить реестр на ConcurrentHashMap"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The registry is already concurrent; the session is a different object with a different need.",
+                "ru": "Реестр уже конкурентный; сессия — другой объект с другой потребностью."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Take one application-wide lock around every send",
+                "ru": "Брать одну блокировку на всё приложение вокруг каждой отправки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is correct but serialises the whole server; the exclusion belongs per session.",
+                "ru": "Это корректно, но выстраивает весь сервер в очередь; исключение нужно на сессию."
+              }
+            }
+          ]
+        },
+        {
+          "id": "pss-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each piece of WebSocket server state to the kind of protection it needs.",
+            "ru": "Соотнеси каждый элемент состояния WebSocket-сервера с нужным ему видом защиты."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Concurrency for the container, exclusion for the individual object, nothing for what is not shared.",
+              "ru": "Конкурентность — контейнеру, исключение — отдельному объекту, ничего — тому, что не является общим."
+            },
+            "incorrect": {
+              "en": "The registry needs concurrency, a session needs mutual exclusion, a counter needs an atomic update.",
+              "ru": "Реестру нужна конкурентность, сессии — взаимное исключение, счётчику — атомарное обновление."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "The session registry",
+                "ru": "Реестр сессий"
+              },
+              "right": {
+                "en": "Concurrency: many threads touching different entries",
+                "ru": "Конкурентность: много потоков трогают разные записи"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "One WebSocket session",
+                "ru": "Одна WebSocket-сессия"
+              },
+              "right": {
+                "en": "Mutual exclusion: one writer at a time",
+                "ru": "Взаимное исключение: один писатель за раз"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "The connection id counter",
+                "ru": "Счётчик id соединений"
+              },
+              "right": {
+                "en": "An atomic read-modify-write",
+                "ru": "Атомарное «прочитать-изменить-записать»"
+              }
+            },
+            {
+              "id": "m4",
+              "left": {
+                "en": "A local variable in the handler method",
+                "ru": "Локальная переменная в методе обработчика"
+              },
+              "right": {
+                "en": "Nothing: it is not shared",
+                "ru": "Ничего: она не является общей"
+              }
+            }
+          ]
+        },
+        {
+          "id": "pss-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type what each of the two objects needs.",
+            "ru": "Впиши, что нужно каждому из двух объектов."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Opposite requirements, which is why fixing one never fixes the other.",
+              "ru": "Противоположные требования — поэтому починка одного никогда не чинит другое."
+            },
+            "incorrect": {
+              "en": "The registry needs concurrency; an individual session needs mutual exclusion.",
+              "ru": "Реестру нужна конкурентность; отдельной сессии нужно взаимное исключение."
+            }
+          },
+          "text": {
+            "en": "The session registry needs ___; an individual WebSocket session needs ___ exclusion.",
+            "ru": "Реестру сессий нужна ___; отдельной WebSocket-сессии нужно ___ исключение."
+          },
+          "blanks": [
+            {
+              "en": [
+                "concurrency"
+              ],
+              "ru": [
+                "конкурентность",
+                "параллельность",
+                "concurrency"
+              ]
+            },
+            {
+              "en": [
+                "mutual"
+              ],
+              "ru": [
+                "взаимное"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "remove-on-close",
+      "title": {
+        "en": "Removal on close",
+        "ru": "Удаление при закрытии"
+      },
+      "summary": {
+        "en": "The registry is a GC root that shrinks only when your code shrinks it, so a missing remove on close is a textbook memory leak.",
+        "ru": "Реестр — это GC root, который уменьшается только тогда, когда его уменьшает ваш код, поэтому пропущенное удаление при закрытии — хрестоматийная утечка памяти."
+      },
+      "discovery": [
+        {
+          "id": "close-d1-week",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A service registers every session on open but never removes it on close. It runs for a week. What does a heap dump show?",
+            "ru": "Сервис регистрирует каждую сессию при открытии, но никогда не удаляет её при закрытии. Он работает неделю. Что покажет дамп кучи?"
+          },
+          "reveal": {
+            "en": "Registration has a mirror image: **removal on close**. A registry is a **GC root** — a reference chain the collector starts from — so everything it holds stays reachable and can never be collected, however dead the socket behind it is. The map only shrinks when your code shrinks it.\n\n```mermaid\nflowchart LR\n  R[\"the registry: a GC root\"] --> S1[\"session 1: open\"]\n  R --> S2[\"session 2: closed, never removed\"]\n  R --> S3[\"session 3: closed, never removed\"]\n```\n\nOver a week the symptom is a heap that grows steadily and never comes back down after a collection, plus broadcasts that get slower and slower because each one iterates more dead sockets. A heap dump shows one huge map of sessions, most of them closed — which is the diagnosis and the fix in one picture.\n\nThe removal must also run for **abnormal closes (1006)**, because that is how most connections actually end: a client closes the laptop, a network drops. Handling only the polite close path leaks almost everything.",
+            "ru": "У регистрации есть зеркальная половина: **удаление при закрытии**. Реестр — это **GC root**, цепочка ссылок, с которой начинает сборщик, поэтому всё, что он держит, остаётся достижимым и никогда не будет собрано, каким бы мёртвым ни был сокет за ним. Карта уменьшается только тогда, когда её уменьшает ваш код.\n\n```mermaid\nflowchart LR\n  R[\"реестр: GC root\"] --> S1[\"сессия 1: открыта\"]\n  R --> S2[\"сессия 2: закрыта, не удалена\"]\n  R --> S3[\"сессия 3: закрыта, не удалена\"]\n```\n\nЗа неделю симптом такой: куча растёт постоянно и не возвращается вниз после сборки, а рассылки становятся всё медленнее, потому что каждая обходит всё больше мёртвых сокетов. Дамп кучи показывает одну огромную карту сессий, большинство из которых закрыты, — и это диагноз и лечение на одной картинке.\n\nУдаление обязано срабатывать и при **аварийных закрытиях (1006)**, потому что именно так заканчивается большинство соединений: клиент закрыл ноутбук, пропала сеть. Обработка только вежливого закрытия утекает почти всё."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The map keeps them reachable, so nothing about them can be collected.",
+              "ru": "Карта держит их достижимыми, поэтому ничего из них не может быть собрано."
+            },
+            "incorrect": {
+              "en": "A huge map of sessions, most long dead: the registry is a GC root that only your code shrinks.",
+              "ru": "Огромную карту сессий, большинство давно мертвы: реестр — это GC root, который уменьшает только ваш код."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A huge map of sessions, most of them long closed",
+                "ru": "Огромную карту сессий, большинство из которых давно закрыты"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing unusual — the garbage collector reclaims closed sessions",
+                "ru": "Ничего необычного — сборщик мусора освобождает закрытые сессии"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The map still references them, so they stay reachable and can never be collected.",
+                "ru": "Карта всё ещё ссылается на них, поэтому они остаются достижимыми и не будут собраны."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "An empty map, because the container clears it when connections end",
+                "ru": "Пустую карту, потому что контейнер очищает её при завершении соединений"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The container knows nothing about your map; only your code ever touches it.",
+                "ru": "Контейнер ничего не знает о вашей карте; её трогает только ваш код."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "close-p1-gc-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A closed WebSocket session is garbage-collected even while your session registry still holds a reference to it.",
+            "ru": "Закрытая WebSocket-сессия будет собрана сборщиком мусора, даже пока ваш реестр сессий держит на неё ссылку."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Reachable from a GC root means not collectable, no matter what state the socket is in.",
+              "ru": "Достижимость от GC root означает несобираемость, в каком бы состоянии ни был сокет."
+            },
+            "incorrect": {
+              "en": "No — the registry keeps it reachable, so \"closed\" and \"collectable\" are not the same thing.",
+              "ru": "Нет — реестр держит её достижимой, поэтому «закрыта» и «может быть собрана» — не одно и то же."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "close-p2-fix",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A WebSocket service's heap grows steadily and a dump shows a huge map of sessions. What is the fix?",
+            "ru": "Куча WebSocket-сервиса постоянно растёт, а дамп показывает огромную карту сессий. Что чинить?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Every registration needs a matching removal, and abnormal closes are most of them.",
+              "ru": "У каждой регистрации должно быть парное удаление, а аварийных закрытий большинство."
+            },
+            "incorrect": {
+              "en": "Remove the session from the registry in the close callback, including abnormal closes.",
+              "ru": "Удалять сессию из реестра в обработчике закрытия, включая аварийные закрытия."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Remove the session from the registry in the close callback, including abnormal closes",
+                "ru": "Удалять сессию из реестра в обработчике закрытия, включая аварийные закрытия"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Give the JVM a bigger heap",
+                "ru": "Выдать JVM больше кучи"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That only delays the crash; the map still grows without bound.",
+                "ru": "Это лишь отодвигает падение; карта всё равно растёт без ограничения."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Switch the registry to a ConcurrentHashMap",
+                "ru": "Перевести реестр на ConcurrentHashMap"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Concurrency is a different problem; a concurrent map leaks just as well.",
+                "ru": "Конкурентность — другая проблема; конкурентная карта течёт точно так же."
+              }
+            }
+          ]
+        },
+        {
+          "id": "close-p3-sort",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the diagnosis of a WebSocket service whose heap grows steadily.",
+            "ru": "Расставь по порядку диагностику WebSocket-сервиса, у которого постоянно растёт куча."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Symptom, dump, culprit, fix — and the fix must cover abnormal closes too.",
+              "ru": "Симптом, дамп, виновник, починка — и починка обязана покрывать аварийные закрытия."
+            },
+            "incorrect": {
+              "en": "Notice the growth, take a heap dump, find the session map, then add the missing removal.",
+              "ru": "Заметить рост, снять дамп кучи, найти карту сессий, затем добавить недостающее удаление."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Notice the heap grows steadily and does not come back down after a collection",
+                "ru": "Заметить, что куча постоянно растёт и не опускается после сборки"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Take a heap dump of the running service",
+                "ru": "Снять дамп кучи работающего сервиса"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Find one huge map of sessions, most of them already closed",
+                "ru": "Найти одну огромную карту сессий, большинство из которых уже закрыты"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Add the matching removal to the close callback, including abnormal 1006 closes",
+                "ru": "Добавить парное удаление в обработчик закрытия, включая аварийные закрытия 1006"
+              }
+            }
+          ]
+        },
+        {
+          "id": "close-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing operation and the consequence.",
+            "ru": "Впиши пропущенную операцию и последствие."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The registry only ever shrinks when your code shrinks it.",
+              "ru": "Реестр уменьшается только тогда, когда его уменьшает ваш код."
+            },
+            "incorrect": {
+              "en": "Every registration needs a matching remove in the close callback, or the registry becomes a memory leak.",
+              "ru": "У каждой регистрации должно быть парное remove в обработчике закрытия, иначе реестр становится утечкой памяти."
+            }
+          },
+          "text": {
+            "en": "Every registration needs a matching ___ in the close callback, or the registry becomes a memory ___.",
+            "ru": "У каждой регистрации должно быть парное ___ в обработчике закрытия, иначе реестр становится ___ памяти."
+          },
+          "blanks": [
+            {
+              "en": [
+                "remove",
+                "removal"
+              ],
+              "ru": [
+                "удаление",
+                "remove"
+              ]
+            },
+            {
+              "en": [
+                "leak"
+              ],
+              "ru": [
+                "утечкой",
+                "утечка",
+                "leak"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "whole-picture",
+      "title": {
+        "en": "Putting it together",
+        "ru": "Собираем всё вместе"
+      },
+      "summary": {
+        "en": "One connection's whole path: the scope, the registry, the unique id, safe writes to a session, and removal on close.",
+        "ru": "Весь путь одного соединения: область видимости, реестр, уникальный id, безопасная запись в сессию и удаление при закрытии."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "cap-d1-both-bugs",
+          "type": "predict_output",
+          "prompt": {
+            "en": "This Spring handler is a singleton bean and 500 clients connect at once. Which problems does this code have?",
+            "ru": "Этот обработчик Spring — singleton-бин, и 500 клиентов подключаются одновременно. Какие проблемы у этого кода?"
+          },
+          "code": "@Component\npublic class ChatHandler extends TextWebSocketHandler {\n\n    private final Map<String, WebSocketSession> sessions = new HashMap<>();\n    private long nextId;\n\n    @Override\n    public void afterConnectionEstablished(WebSocketSession session) {\n        long id = ++nextId;\n        sessions.put(String.valueOf(id), session);\n    }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "The scope here is right — a Spring singleton is exactly where per-process state belongs — but both things stored in it are wrong, and for two independent reasons: the `HashMap` is not safe for concurrent writes, and `++nextId` is a read-then-write that two threads can share.\n\n```mermaid\nflowchart TB\n  OPEN[\"connection opens on its own thread\"] --> ID[\"unique id: AtomicLong in one JVM, UUID or a shared authority across instances\"]\n  ID --> REG[\"registry: ConcurrentHashMap in a singleton bean\"]\n  REG --> BC[\"broadcast: iterate the registry, one lock per session while writing\"]\n  BC --> CLOSE[\"close, including 1006: remove from the registry\"]\n```\n\nThat pipeline is the whole answer. Per-connection state goes on the session; state everybody must see goes on one object they all reach; the registry is a `ConcurrentHashMap` because a broadcast iterates it; the id comes from an `AtomicLong` inside one JVM and from a UUID or a shared authority once there are two; a session still needs its own lock; and every registration needs a matching removal on close.",
+            "ru": "Область видимости здесь верная — singleton в Spring это ровно то место, где живёт состояние на процесс, — но оба хранимых в ней объекта неверны, причём по двум независимым причинам: `HashMap` небезопасен для конкурентной записи, а `++nextId` — это «прочитать, потом записать», и два потока могут разделить одно значение.\n\n```mermaid\nflowchart TB\n  OPEN[\"соединение открывается своим потоком\"] --> ID[\"уникальный id: AtomicLong в одной JVM, UUID или общий авторитет между экземплярами\"]\n  ID --> REG[\"реестр: ConcurrentHashMap в singleton-бине\"]\n  REG --> BC[\"рассылка: обход реестра, на запись — блокировка на сессию\"]\n  BC --> CLOSE[\"закрытие, включая 1006: удалить из реестра\"]\n```\n\nЭтот конвейер и есть весь ответ. Состояние соединения — в сессию; состояние, видимое всем, — на один объект, до которого дотягиваются все; реестр — `ConcurrentHashMap`, потому что рассылка его обходит; id берётся из `AtomicLong` внутри одной JVM и из UUID или общего авторитета, как только экземпляров два; сессии всё равно нужна своя блокировка; и у каждой регистрации должно быть парное удаление при закрытии."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two independent bugs in four lines: an unsafe map and a non-atomic increment.",
+              "ru": "Две независимые ошибки в четырёх строках: небезопасная карта и неатомарный инкремент."
+            },
+            "incorrect": {
+              "en": "Both: concurrent puts on a HashMap can lose or corrupt entries, and ++nextId can hand two connections the same id.",
+              "ru": "Обе: конкурентные put на HashMap могут потерять или испортить записи, а ++nextId может выдать двум соединениям один id."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Both: the HashMap can lose or corrupt entries, and ++nextId can hand two connections the same id",
+                "ru": "Обе: HashMap может потерять или испортить записи, а ++nextId может выдать двум соединениям один id"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Only the id — the map is fine because put is a single call",
+                "ru": "Только id — с картой всё нормально, ведь put это один вызов"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A single method call is not atomic; concurrent puts on a HashMap can drop an entry or corrupt the table.",
+                "ru": "Один вызов метода не атомарен; конкурентные put на HashMap могут выбросить запись или испортить таблицу."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Only the map — ++ on a long is atomic on a 64-bit JVM",
+                "ru": "Только карта — ++ на long атомарен в 64-битной JVM"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "++ is read, add and write regardless of word size, so two threads can produce the same id.",
+                "ru": "++ — это чтение, сложение и запись независимо от разрядности, поэтому два потока могут дать один id."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "Neither — Spring serialises handler callbacks per bean",
+                "ru": "Ни одной — Spring выполняет вызовы обработчика по очереди на бин"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The container runs a thread per connection; nothing serialises the callbacks of a singleton handler.",
+                "ru": "Контейнер запускает поток на соединение; вызовы singleton-обработчика никто не выстраивает в очередь."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cap-p1-still-broken",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "The registry and the id counter are already correct here. What can still break?",
+            "ru": "Реестр и счётчик id здесь уже корректны. Что всё ещё может сломаться?"
+          },
+          "code": "private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();\nprivate final AtomicLong nextId = new AtomicLong();\n\n@Scheduled(fixedRate = 1000)\npublic void pushTick() throws IOException {\n    for (WebSocketSession s : sessions.values()) {\n        s.sendMessage(new TextMessage(\"tick\"));\n    }\n}\n\n@Override\nprotected void handleTextMessage(WebSocketSession s, TextMessage m) throws IOException {\n    s.sendMessage(new TextMessage(\"echo\"));\n}",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "A concurrent registry says nothing about the objects stored inside it.",
+              "ru": "Конкурентный реестр ничего не говорит об объектах, лежащих внутри него."
+            },
+            "incorrect": {
+              "en": "The scheduler and the message thread can write the same session at once — interleaved frames or IllegalStateException.",
+              "ru": "Планировщик и поток сообщений могут писать в одну сессию одновременно — перемешанные фреймы или IllegalStateException."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The scheduler and the message-handling thread can write to the same session at once, interleaving frames or throwing IllegalStateException",
+                "ru": "Планировщик и поток обработки сообщений могут одновременно писать в одну сессию, перемешивая фреймы или бросая IllegalStateException"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The for loop can throw ConcurrentModificationException while clients connect",
+                "ru": "Цикл for может бросить ConcurrentModificationException, пока подключаются клиенты"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A ConcurrentHashMap's iterator is weakly consistent, so that loop never throws.",
+                "ru": "Итератор ConcurrentHashMap слабо согласован, поэтому этот цикл не бросает исключений."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — sendMessage is safe because the registry is concurrent",
+                "ru": "Ничего — sendMessage безопасен, потому что реестр конкурентный"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A concurrent collection protects the collection, never the objects stored in it.",
+                "ru": "Конкурентная коллекция защищает саму коллекцию, но никогда объекты внутри неё."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p2-two-instances",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The first client reaches instance A and the second reaches instance B. What ids do they get?",
+            "ru": "Первый клиент попадает на экземпляр A, второй — на экземпляр B. Какие id они получат?"
+          },
+          "code": "// the same build, deployed to instance A and instance B\nprivate final AtomicLong nextId = new AtomicLong();\n\n// the first connection on each instance\nlong id = nextId.incrementAndGet();",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "Correct code, duplicated value: a CAS coordinates threads, not processes.",
+              "ru": "Код верен, значение продублировано: CAS координирует потоки, а не процессы."
+            },
+            "incorrect": {
+              "en": "Both get 1 — each JVM has its own AtomicLong, and neither knows about the other.",
+              "ru": "Оба получат 1 — у каждой JVM свой AtomicLong, и они не знают друг о друге."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "1 and 1",
+                "ru": "1 и 1"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "1 and 2",
+                "ru": "1 и 2"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Each JVM has its own AtomicLong; a compare-and-set coordinates threads, not processes.",
+                "ru": "У каждой JVM свой AtomicLong; compare-and-set координирует потоки, а не процессы."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "1 and an unpredictable value",
+                "ru": "1 и непредсказуемое значение"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing is unpredictable here: both counters start at 0 and both increment to 1.",
+                "ru": "Ничего непредсказуемого: оба счётчика начинают с 0 и оба увеличиваются до 1."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p3-lifecycle",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the full lifecycle of one WebSocket connection on a correctly written server.",
+            "ru": "Расставь по порядку полный жизненный цикл одного WebSocket-соединения на корректно написанном сервере."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Id, register, broadcast, remove — and the last step is the one people forget.",
+              "ru": "Id, регистрация, рассылка, удаление — и забывают обычно последний шаг."
+            },
+            "incorrect": {
+              "en": "Open, take a unique id, store the session in the registry, broadcast under a per-session lock, remove on close.",
+              "ru": "Открыть, взять уникальный id, положить сессию в реестр, рассылать под блокировкой на сессию, удалить при закрытии."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "The connection opens on its own container thread",
+                "ru": "Соединение открывается своим потоком контейнера"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "A unique id is taken from an AtomicLong, or from a UUID or shared authority across instances",
+                "ru": "Уникальный id берётся из AtomicLong либо из UUID или общего авторитета между экземплярами"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "The session is stored under that id in the singleton bean's ConcurrentHashMap",
+                "ru": "Сессия кладётся под этим id в ConcurrentHashMap singleton-бина"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Broadcasts iterate the registry and write to each session under its own lock",
+                "ru": "Рассылки обходят реестр и пишут в каждую сессию под её собственной блокировкой"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "On close, including an abnormal 1006, the session is removed from the registry",
+                "ru": "При закрытии, включая аварийное 1006, сессия удаляется из реестра"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p4-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each mechanism to the failure it prevents on a WebSocket server.",
+            "ru": "Соотнеси каждый механизм с отказом, который он предотвращает на WebSocket-сервере."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Five different failures, five different mechanisms — none of them substitutes for another.",
+              "ru": "Пять разных отказов, пять разных механизмов — ни один не заменяет другой."
+            },
+            "incorrect": {
+              "en": "Concurrent map for lost entries, AtomicLong for duplicate ids in one JVM, a shared source across instances, a session lock for frames, removal for the leak.",
+              "ru": "Конкурентная карта — от потери записей, AtomicLong — от дубликатов в одной JVM, общий источник — между экземплярами, блокировка сессии — от фреймов, удаление — от утечки."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "A ConcurrentHashMap for the registry",
+                "ru": "ConcurrentHashMap для реестра"
+              },
+              "right": {
+                "en": "A lost or corrupted entry under concurrent puts",
+                "ru": "Потерянная или испорченная запись при конкурентных put"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "AtomicLong.incrementAndGet()",
+                "ru": "AtomicLong.incrementAndGet()"
+              },
+              "right": {
+                "en": "Two connections handed the same id inside one JVM",
+                "ru": "Два соединения с одним id внутри одной JVM"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "A UUID or a shared authority",
+                "ru": "UUID или общий авторитет"
+              },
+              "right": {
+                "en": "Two instances handing out the same value",
+                "ru": "Два экземпляра выдают одно и то же значение"
+              }
+            },
+            {
+              "id": "m4",
+              "left": {
+                "en": "A lock per session",
+                "ru": "Блокировка на сессию"
+              },
+              "right": {
+                "en": "Interleaved frames inside one message",
+                "ru": "Перемешанные фреймы внутри одного сообщения"
+              }
+            },
+            {
+              "id": "m5",
+              "left": {
+                "en": "Removal in the close callback",
+                "ru": "Удаление в обработчике закрытия"
+              },
+              "right": {
+                "en": "A registry that grows for days",
+                "ru": "Реестр, который растёт сутками"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p5-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill in the key parts of the 60-second answer.",
+            "ru": "Впиши ключевые части 60-секундного ответа."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Registry, id source, and the matching removal — the three things an interviewer listens for.",
+              "ru": "Реестр, источник id и парное удаление — три вещи, которые слушает интервьюер."
+            },
+            "incorrect": {
+              "en": "A ConcurrentHashMap in a singleton bean, an AtomicLong for the id in one JVM, and a remove on close.",
+              "ru": "ConcurrentHashMap в singleton-бине, AtomicLong для id в одной JVM и remove при закрытии."
+            }
+          },
+          "text": {
+            "en": "Keep the sessions in a ___ inside a singleton bean; inside one JVM take the id from an ___; on close, ___ the session from the registry.",
+            "ru": "Держите сессии в ___ внутри singleton-бина; внутри одной JVM берите id из ___; при закрытии ___ сессию из реестра."
+          },
+          "blanks": [
+            {
+              "en": [
+                "ConcurrentHashMap"
+              ],
+              "ru": [
+                "ConcurrentHashMap"
+              ]
+            },
+            {
+              "en": [
+                "AtomicLong"
+              ],
+              "ru": [
+                "AtomicLong"
+              ]
+            },
+            {
+              "en": [
+                "remove"
+              ],
+              "ru": [
+                "удалите",
+                "удалить",
+                "remove"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

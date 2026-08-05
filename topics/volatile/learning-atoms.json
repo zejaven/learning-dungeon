@@ -1,0 +1,2838 @@
+{
+  "schemaVersion": 1,
+  "topicId": "volatile",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "stale-reads",
+      "title": {
+        "en": "Stale reads without coordination",
+        "ru": "Устаревшие чтения без координации"
+      },
+      "summary": {
+        "en": "Without coordination the Java Memory Model does not promise that a plain read in one thread sees a plain write from another thread.",
+        "ru": "Без координации Java Memory Model не обещает, что обычное чтение в одном потоке увидит обычную запись из другого потока."
+      },
+      "discovery": [
+        {
+          "id": "stale-d1-plain-flag",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Thread A runs run(). Thread B later calls stop(). What can happen to the loop?",
+            "ru": "Поток A выполняет run(). Поток B позже вызывает stop(). Что может произойти с циклом?"
+          },
+          "code": "class Worker implements Runnable {\n    private boolean running = true;   // plain field, no volatile\n\n    public void run() {\n        while (running) {\n            // do work\n        }\n    }\n\n    public void stop() {              // called from another thread\n        running = false;\n    }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Threads do not automatically share a fresh view of every field. The **Java Memory Model** (JMM) is the set of rules that says *when* a write made by one thread must become visible to another. For a **plain** field — one without `volatile` and not touched under any lock — it promises nothing here: the reader may keep using a **stale** value, a value that was correct earlier but is out of date now.\n\n```mermaid\nflowchart LR\n  W[\"writer thread: running = false\"] --> F[\"shared field running\"]\n  F -.->|\"no promise of a fresh read\"| R[\"reader thread: while (running)\"]\n```\n\nSo the loop above may spin forever: the worker keeps reading its own older view of `running`, and nothing forces it to refresh. Note what this is *not* — the code compiles cleanly and often even stops correctly on the first test run. That is exactly what makes the bug easy to miss.",
+            "ru": "Потоки не получают автоматически свежий вид каждого field. **Java Memory Model** (JMM) — это набор правил, который говорит, *когда* запись одного потока обязана стать видимой другому. Для **обычного** field — без `volatile` и вне какого-либо lock — здесь не обещано ничего: читатель может продолжать пользоваться **устаревшим** значением, которое было верным раньше, но уже неактуально.\n\n```mermaid\nflowchart LR\n  W[\"поток-писатель: running = false\"] --> F[\"общий field running\"]\n  F -.->|\"нет обещания свежего чтения\"| R[\"поток-читатель: while (running)\"]\n```\n\nПоэтому цикл выше может крутиться бесконечно: воркер читает свой прежний вид `running`, и ничто не заставляет его обновиться. Обрати внимание, чем это *не* является — код компилируется без ошибок и часто даже корректно останавливается на первом запуске. Именно поэтому такую ошибку легко пропустить."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — a plain shared field gives the reader no promise of a fresh value.",
+              "ru": "Верно — обычный общий field не даёт читателю никакого обещания свежего значения."
+            },
+            "incorrect": {
+              "en": "A plain shared field can be read stale — see below.",
+              "ru": "Обычный общий field может читаться устаревшим — смотри ниже."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The loop may keep spinning forever",
+                "ru": "Цикл может крутиться бесконечно"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The loop always exits right after stop() returns",
+                "ru": "Цикл всегда выходит сразу после возврата из stop()"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing promises that a plain field write is seen by another thread.",
+                "ru": "Ничто не обещает, что запись в обычный field увидит другой поток."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The code does not compile without volatile",
+                "ru": "Код не компилируется без volatile"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It compiles fine; this is a runtime visibility problem, not a compile error.",
+                "ru": "Он компилируется; это проблема видимости во время выполнения, а не ошибка компиляции."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "stale-p1-jmm-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In Java, the Java Memory Model guarantees that a plain (non-volatile) field written by one thread is immediately visible to every other thread.",
+            "ru": "В Java Java Memory Model гарантирует, что обычный (не-volatile) field, записанный одним потоком, сразу видим всем остальным потокам."
+          },
+          "feedback": {
+            "correct": {
+              "en": "No such promise exists for plain fields — a reader may stay stale.",
+              "ru": "Для обычных fields такого обещания нет — читатель может остаться с устаревшим значением."
+            },
+            "incorrect": {
+              "en": "It does not — for a plain field a reader may keep a stale value.",
+              "ru": "Не гарантирует — для обычного field читатель может держать устаревшее значение."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "stale-p2-risk",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In Java, what is the main risk when several threads share a plain non-volatile field?",
+            "ru": "Каков главный риск в Java, когда несколько потоков используют общий обычный (не-volatile) field?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "A stale read is the classic symptom: correct-looking code that never notices the update.",
+              "ru": "Устаревшее чтение — классический симптом: корректный на вид код, который не замечает обновление."
+            },
+            "incorrect": {
+              "en": "The risk is a stale read: the reader keeps an older view of that field.",
+              "ru": "Риск — устаревшее чтение: читатель держит прежний вид этого field."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A reader can keep using a stale value of that field",
+                "ru": "Читатель может продолжать использовать устаревшее значение этого field"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The JVM throws an exception on the second write",
+                "ru": "JVM бросит исключение на второй записи"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing is thrown; the danger is silent — the reader simply does not notice the change.",
+                "ru": "Ничего не бросается; опасность в тишине — читатель просто не замечает изменение."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The field is reset to its default value",
+                "ru": "Field сбрасывается в значение по умолчанию"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Values are never reset; they may just look older than they are.",
+                "ru": "Значения не сбрасываются; они лишь могут выглядеть старее, чем есть."
+              }
+            }
+          ]
+        },
+        {
+          "id": "stale-p3-fill-jmm",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing words.",
+            "ru": "Впиши два пропущенных слова."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The Java Memory Model is the contract volatile is defined against.",
+              "ru": "Java Memory Model — это контракт, относительно которого определён volatile."
+            },
+            "incorrect": {
+              "en": "It is the Java Memory Model — the rules for when a write becomes visible.",
+              "ru": "Это Java Memory Model — правила того, когда запись становится видимой."
+            }
+          },
+          "text": {
+            "en": "The rules that say when one thread's write becomes visible to another are the Java ___ ___.",
+            "ru": "Правила того, когда запись одного потока становится видимой другому, задаёт Java ___ ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "Memory",
+                "memory"
+              ],
+              "ru": [
+                "Memory",
+                "memory"
+              ]
+            },
+            {
+              "en": [
+                "Model",
+                "model"
+              ],
+              "ru": [
+                "Model",
+                "model"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "field-modifier",
+      "title": {
+        "en": "volatile marks one field",
+        "ru": "volatile помечает один field"
+      },
+      "summary": {
+        "en": "volatile is a field modifier: it applies to a single shared variable, not to a method or a block of code.",
+        "ru": "volatile — это модификатор field: он применяется к одной общей переменной, а не к методу или блоку кода."
+      },
+      "discovery": [
+        {
+          "id": "modifier-d1-what-for",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "You want to add volatile to some code. Which of these is what volatile is designed for?",
+            "ru": "Ты хочешь добавить volatile в код. Для чего из этого volatile предназначен?"
+          },
+          "reveal": {
+            "en": "`volatile` is a **field modifier**. You write it on a field declaration, and it tells Java that reads and writes of *that one variable* must be visible across threads according to the Java Memory Model rules.\n\n```java\nclass Service {\n    private volatile boolean running = true;   // one shared signal\n}\n```\n\nTwo consequences follow from \"one field\":\n\n- It says nothing about any **other** field of the same object. Each field carries its own modifier.\n- It says nothing about a **block of code**. `volatile` never makes a method or block exclusive to one thread — it is not a lock.\n\nThe shape it fits best is: one thread writes a simple signal, other threads read it.\n\n```mermaid\nflowchart LR\n  W[\"one writer thread\"] -->|\"writes\"| F[\"volatile boolean running\"]\n  F -->|\"reads\"| R1[\"reader 1\"]\n  F -->|\"reads\"| R2[\"reader 2\"]\n```",
+            "ru": "`volatile` — это **модификатор field**. Ты пишешь его в объявлении field, и он говорит Java, что чтения и записи *именно этой переменной* должны быть видимы между потоками по правилам Java Memory Model.\n\n```java\nclass Service {\n    private volatile boolean running = true;   // один общий сигнал\n}\n```\n\nИз слова «один field» следуют два вывода:\n\n- Он ничего не говорит про **другие** fields того же объекта. У каждого field свой модификатор.\n- Он ничего не говорит про **блок кода**. `volatile` никогда не делает метод или блок исключительным для одного потока — это не lock.\n\nЛучше всего он подходит для схемы: один поток пишет простой сигнал, другие потоки его читают.\n\n```mermaid\nflowchart LR\n  W[\"один поток-писатель\"] -->|\"пишет\"| F[\"volatile boolean running\"]\n  F -->|\"читает\"| R1[\"читатель 1\"]\n  F -->|\"читает\"| R2[\"читатель 2\"]\n```"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — volatile marks a shared field, nothing else.",
+              "ru": "Верно — volatile помечает общий field и ничего больше."
+            },
+            "incorrect": {
+              "en": "volatile is a field modifier — see below.",
+              "ru": "volatile — это модификатор field — смотри ниже."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A shared field that one thread writes and others read",
+                "ru": "Общий field, который один поток пишет, а другие читают"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A block of code that must run in one thread at a time",
+                "ru": "Блок кода, который должен выполняться одним потоком за раз"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "volatile never makes a block exclusive to one thread; it only affects a field.",
+                "ru": "volatile не делает блок исключительным для одного потока; он влияет только на field."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A local variable inside a method",
+                "ru": "Локальную переменную внутри метода"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "volatile is a field modifier; a local variable is not shared between threads.",
+                "ru": "volatile — модификатор field; локальная переменная не разделяется между потоками."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "modifier-p1-tf-field",
+          "type": "true_false",
+          "prompt": {
+            "en": "In Java, volatile is written on a field declaration.",
+            "ru": "В Java volatile пишется в объявлении field."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It is a field modifier — one variable at a time.",
+              "ru": "Это модификатор field — по одной переменной за раз."
+            },
+            "incorrect": {
+              "en": "It is: volatile is a field modifier, applied to one shared variable.",
+              "ru": "Именно так: volatile — модификатор field, применяемый к одной общей переменной."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "modifier-p2-scope",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In Java, what does the volatile modifier affect?",
+            "ru": "На что влияет модификатор volatile в Java?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "One field only; its neighbours keep their own modifiers.",
+              "ru": "Только на один field; соседние fields сохраняют свои модификаторы."
+            },
+            "incorrect": {
+              "en": "Only the field it is written on — not the class and not a code block.",
+              "ru": "Только на тот field, в объявлении которого он написан — не на класс и не на блок кода."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The single field it is declared on",
+                "ru": "Один field, в объявлении которого он стоит"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Every field of the enclosing class",
+                "ru": "Все fields объемлющего класса"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Each field carries its own modifier; volatile does not spread to neighbours.",
+                "ru": "У каждого field свой модификатор; volatile не распространяется на соседние."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The body of every method that uses the field",
+                "ru": "Тело каждого метода, который использует этот field"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Method bodies are untouched; volatile is not a lock around code.",
+                "ru": "Тела методов не затрагиваются; volatile — не lock вокруг кода."
+              }
+            }
+          ]
+        },
+        {
+          "id": "modifier-p3-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing word.",
+            "ru": "Впиши пропущенное слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A field modifier — that is the whole scope of volatile.",
+              "ru": "Модификатор field — это и есть вся область действия volatile."
+            },
+            "incorrect": {
+              "en": "It is a field modifier: it applies to one shared variable, not to code.",
+              "ru": "Это модификатор field: он применяется к одной общей переменной, а не к коду."
+            }
+          },
+          "text": {
+            "en": "volatile is a ___ modifier: it applies to one shared variable, not to a block of code.",
+            "ru": "volatile — это модификатор ___: он применяется к одной общей переменной, а не к блоку кода."
+          },
+          "blanks": [
+            {
+              "en": [
+                "field"
+              ],
+              "ru": [
+                "field",
+                "поля"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "visibility",
+      "title": {
+        "en": "Guarantee 1: visibility",
+        "ru": "Гарантия 1: visibility"
+      },
+      "summary": {
+        "en": "A volatile read is forced to refresh that variable and sees volatile writes in a single global order.",
+        "ru": "Volatile-чтение принудительно обновляет переменную и видит volatile-записи в едином глобальном порядке."
+      },
+      "discovery": [
+        {
+          "id": "visibility-d1-volatile-flag",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The stop flag is now volatile. Thread A runs run(); thread B calls stop(). What does volatile guarantee here?",
+            "ru": "Теперь stop flag объявлен volatile. Поток A выполняет run(); поток B вызывает stop(). Что здесь гарантирует volatile?"
+          },
+          "code": "class Worker implements Runnable {\n    private volatile boolean running = true;\n\n    public void run() {\n        while (running) {\n            // do work\n        }\n    }\n\n    public void stop() {              // called from another thread\n        running = false;\n    }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "This is the first of volatile's two guarantees: **visibility**. A volatile read is *forced to refresh* that variable instead of reusing a value the thread already had, and volatile reads and writes of one variable line up in a single global order. So the loop's next read of `running` sees `false`.\n\n```mermaid\nsequenceDiagram\n  participant W as Writer thread\n  participant M as Main memory\n  participant R as Reader thread\n  W->>M: running = false (volatile write)\n  R->>M: read running (volatile read)\n  M-->>R: running = false\n```\n\nWhy this matters: it turns \"probably, eventually\" into a specified guarantee for that field. What it is *not* is a timing promise — the loop is not interrupted mid-iteration; it exits when it next reads the flag. And the guarantee covers this one field, not the code around it.",
+            "ru": "Это первая из двух гарантий volatile — **visibility** (видимость). Volatile-чтение *принудительно обновляет* переменную, вместо того чтобы переиспользовать значение, которое поток уже имел, а volatile-чтения и записи одной переменной выстраиваются в единый глобальный порядок. Поэтому следующее чтение `running` в цикле увидит `false`.\n\n```mermaid\nsequenceDiagram\n  participant W as Поток-писатель\n  participant M as Main memory\n  participant R as Поток-читатель\n  W->>M: running = false (volatile-запись)\n  R->>M: чтение running (volatile-чтение)\n  M-->>R: running = false\n```\n\nЗачем это нужно: «наверное, когда-нибудь» превращается в определённую гарантию для этого field. Но это *не* обещание про время — цикл не прерывается посреди итерации; он выйдет, когда в следующий раз прочитает flag. И гарантия относится к этому одному field, а не к коду вокруг него."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the next volatile read of running is guaranteed to see false.",
+              "ru": "Верно — следующее volatile-чтение running гарантированно увидит false."
+            },
+            "incorrect": {
+              "en": "volatile guarantees visibility of that field's latest write — see below.",
+              "ru": "volatile гарантирует видимость последней записи этого field — смотри ниже."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The loop's next read of running sees false",
+                "ru": "Следующее чтение running в цикле увидит false"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing changes — the reader may still keep the old value forever",
+                "ru": "Ничего не меняется — читатель всё равно может навсегда остаться со старым значением"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the plain-field case; a volatile read is forced to refresh the variable.",
+                "ru": "Это случай обычного field; volatile-чтение обязано обновить переменную."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Other threads are also blocked from changing any other field meanwhile",
+                "ru": "Другим потокам тем временем запрещено менять любые другие fields"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "volatile blocks nobody and covers only the field it is declared on.",
+                "ru": "volatile никого не блокирует и относится только к своему field."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "visibility-p1-refresh-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In Java, a volatile read is forced to refresh that variable instead of reusing an older value.",
+            "ru": "В Java volatile-чтение обязано обновить переменную, а не переиспользовать прежнее значение."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That refresh is exactly what the visibility guarantee buys you.",
+              "ru": "Именно это обновление и даёт гарантия visibility."
+            },
+            "incorrect": {
+              "en": "It is forced to refresh — that is the visibility guarantee.",
+              "ru": "Обязано обновить — это и есть гарантия visibility."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "visibility-p2-what-it-solves",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In Java, which problem does volatile's visibility guarantee solve for a shared flag?",
+            "ru": "Какую проблему решает гарантия visibility у volatile для общего flag в Java?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Readers stop working from an older view of that field.",
+              "ru": "Читатели перестают работать по прежнему виду этого field."
+            },
+            "incorrect": {
+              "en": "It removes stale reads of that field — nothing more.",
+              "ru": "Она устраняет устаревшие чтения этого field — и ничего больше."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Readers no longer work with a stale value of that field",
+                "ru": "Читатели больше не работают с устаревшим значением этого field"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Two threads can no longer run the same method at the same time",
+                "ru": "Два потока больше не могут одновременно выполнять один метод"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "volatile never stops two threads from being in the same code at once.",
+                "ru": "volatile не мешает двум потокам одновременно находиться в одном коде."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The field can no longer be changed after its first write",
+                "ru": "Field больше нельзя изменить после первой записи"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A volatile field stays fully mutable; volatile is about visibility, not immutability.",
+                "ru": "Volatile field остаётся полностью изменяемым; volatile про видимость, а не про неизменяемость."
+              }
+            }
+          ]
+        },
+        {
+          "id": "visibility-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the visibility rule for a volatile field in Java.",
+            "ru": "Собери правило visibility для volatile field в Java."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The read refreshes the variable, so the latest written value shows up.",
+              "ru": "Чтение обновляет переменную, поэтому появляется последнее записанное значение."
+            },
+            "incorrect": {
+              "en": "A volatile read always sees the latest written value of that field.",
+              "ru": "Volatile-чтение всегда видит последнее записанное значение этого field."
+            }
+          },
+          "tokens": {
+            "en": [
+              "volatile",
+              "read",
+              "always",
+              "sees",
+              "the",
+              "latest",
+              "written",
+              "value"
+            ],
+            "ru": [
+              "volatile-чтение",
+              "всегда",
+              "видит",
+              "последнее",
+              "записанное",
+              "значение"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "stale",
+              "locks"
+            ],
+            "ru": [
+              "устаревшее",
+              "блокирует"
+            ]
+          }
+        },
+        {
+          "id": "visibility-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the guarantee.",
+            "ru": "Назови гарантию."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Visibility is guarantee one; ordering is guarantee two.",
+              "ru": "Visibility — первая гарантия; ordering — вторая."
+            },
+            "incorrect": {
+              "en": "It is visibility — the volatile read refreshes that variable.",
+              "ru": "Это visibility — volatile-чтение обновляет эту переменную."
+            }
+          },
+          "text": {
+            "en": "The volatile guarantee that a read never returns a stale value of that field is called ___.",
+            "ru": "Гарантия volatile, что чтение никогда не вернёт устаревшее значение этого field, называется ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "visibility"
+              ],
+              "ru": [
+                "visibility",
+                "видимость"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ordering-publication",
+      "title": {
+        "en": "Guarantee 2: ordering",
+        "ru": "Гарантия 2: ordering"
+      },
+      "summary": {
+        "en": "A volatile write has release semantics and a later read of the same field has acquire semantics, so ordinary writes made before the volatile write become visible after that read.",
+        "ru": "Volatile-запись имеет release-семантику, а последующее чтение того же field — acquire-семантику, поэтому обычные записи до volatile-записи становятся видимыми после этого чтения."
+      },
+      "discovery": [
+        {
+          "id": "ordering-d1-publish-data",
+          "type": "predict_output",
+          "prompt": {
+            "en": "data is a plain field, ready is volatile. If the reader sees ready == true, what can it print?",
+            "ru": "data — обычный field, ready — volatile. Если читатель увидел ready == true, что он может напечатать?"
+          },
+          "code": "// shared state\nint data = 0;                      // plain field\nvolatile boolean ready = false;    // volatile field\n\n// writer thread\ndata = 42;\nready = true;\n\n// reader thread\nif (ready) {\n    System.out.println(data);\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "This is volatile's second guarantee: **ordering**. A volatile write has **release** semantics and a later read of the *same* volatile field has **acquire** semantics. Together they form what the Java Memory Model calls a **happens-before** edge, and that edge carries more than the flag itself: **ordinary writes made before the volatile write become visible after the volatile read**.\n\n```mermaid\nsequenceDiagram\n  participant W as Writer thread\n  participant M as Main memory\n  participant R as Reader thread\n  W->>M: data = 42 (plain write)\n  W->>M: ready = true (volatile write)\n  R->>M: read ready (volatile read)\n  M-->>R: ready = true and data = 42 visible\n```\n\nSo the writer's order matters: prepare the ordinary data **first**, flip the volatile flag **last**. A reader that acquires the flag sees the data too. Two limits: only writes *before* the volatile write are covered, and only for a reader that actually reads that volatile field afterwards.",
+            "ru": "Это вторая гарантия volatile — **ordering** (порядок). Volatile-запись имеет **release**-семантику, а последующее чтение *того же* volatile field — **acquire**-семантику. Вместе они образуют то, что Java Memory Model называет связью **happens-before**, и эта связь несёт больше, чем сам flag: **обычные записи, сделанные до volatile-записи, становятся видимыми после volatile-чтения**.\n\n```mermaid\nsequenceDiagram\n  participant W as Поток-писатель\n  participant M as Main memory\n  participant R as Поток-читатель\n  W->>M: data = 42 (обычная запись)\n  W->>M: ready = true (volatile-запись)\n  R->>M: чтение ready (volatile-чтение)\n  M-->>R: ready = true и data = 42 видимы\n```\n\nПоэтому порядок у писателя важен: сначала подготовить обычные данные, **последним** переключить volatile flag. Читатель, который прочитал flag, увидит и данные. Два ограничения: покрываются только записи *до* volatile-записи и только для того читателя, который затем действительно читает этот volatile field."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the volatile write publishes the plain write that came before it.",
+              "ru": "Верно — volatile-запись публикует обычную запись, сделанную до неё."
+            },
+            "incorrect": {
+              "en": "The volatile write/read pair also publishes earlier ordinary writes — see below.",
+              "ru": "Пара volatile-запись/чтение публикует и предыдущие обычные записи — смотри ниже."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "42 — the plain write before the volatile write is visible too",
+                "ru": "42 — обычная запись до volatile-записи тоже видима"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "0 or 42, because data is not volatile",
+                "ru": "0 или 42, потому что data не volatile"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The volatile write publishes the ordinary writes made before it, so data is 42.",
+                "ru": "Volatile-запись публикует обычные записи, сделанные до неё, поэтому data равно 42."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — the reader can never see ready == true",
+                "ru": "Ничего — читатель никогда не увидит ready == true"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A volatile write is visible to a later volatile read of the same field.",
+                "ru": "Volatile-запись видима последующему volatile-чтению того же field."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "ordering-p1-sees-data",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In Java, a thread writes plain field data = 42 and then writes volatile boolean ready = true. Another thread reads ready == true. What does it see for data?",
+            "ru": "В Java поток записывает обычный field data = 42, а затем volatile boolean ready = true. Другой поток читает ready == true. Что он увидит в data?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The volatile write publishes everything the writer did before it.",
+              "ru": "Volatile-запись публикует всё, что писатель сделал до неё."
+            },
+            "incorrect": {
+              "en": "It sees 42: the volatile write/read pair publishes earlier ordinary writes.",
+              "ru": "Он увидит 42: пара volatile-запись/чтение публикует предыдущие обычные записи."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "42",
+                "ru": "42"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Possibly the old value, since data is not volatile",
+                "ru": "Возможно, старое значение, ведь data не volatile"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Ordering covers ordinary writes made before the volatile write.",
+                "ru": "Ordering покрывает обычные записи, сделанные до volatile-записи."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "42, because data silently becomes volatile too",
+                "ru": "42, потому что data тоже неявно становится volatile"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "data keeps its own modifier; the guarantee comes from the ordering edge, not from changing data.",
+                "ru": "У data остаётся свой модификатор; гарантию даёт связь ordering, а не изменение data."
+              }
+            }
+          ]
+        },
+        {
+          "id": "ordering-p2-sort-publish",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the publication pattern that uses a volatile flag in Java.",
+            "ru": "Расставь по порядку шаблон публикации через volatile flag в Java."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Data first, flag last — the flag is what publishes the data.",
+              "ru": "Сначала данные, flag последним — именно flag публикует данные."
+            },
+            "incorrect": {
+              "en": "The writer fills the ordinary fields first and writes the volatile flag last.",
+              "ru": "Писатель сначала заполняет обычные fields и только затем пишет volatile flag."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "The writer fills the ordinary fields (data = 42)",
+                "ru": "Писатель заполняет обычные fields (data = 42)"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "The writer writes true to the volatile flag",
+                "ru": "Писатель записывает true в volatile flag"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "The reader reads the volatile flag and sees true",
+                "ru": "Читатель читает volatile flag и видит true"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "The reader reads the ordinary fields and sees the values written before the flag",
+                "ru": "Читатель читает обычные fields и видит значения, записанные до flag"
+              }
+            }
+          ]
+        },
+        {
+          "id": "ordering-p3-match-semantics",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each part of a volatile field access in Java to what it means.",
+            "ru": "Соотнеси каждую часть доступа к volatile field в Java с её смыслом."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Release on the write, acquire on the read — and earlier writes travel along.",
+              "ru": "Release на записи, acquire на чтении — и предыдущие записи едут вместе с ними."
+            },
+            "incorrect": {
+              "en": "The write is release, the later read of the same field is acquire, and earlier ordinary writes become visible.",
+              "ru": "Запись — release, последующее чтение того же field — acquire, а предыдущие обычные записи становятся видимыми."
+            }
+          },
+          "pairs": [
+            {
+              "id": "release",
+              "left": {
+                "en": "volatile write",
+                "ru": "volatile-запись"
+              },
+              "right": {
+                "en": "Has release semantics",
+                "ru": "Имеет release-семантику"
+              }
+            },
+            {
+              "id": "acquire",
+              "left": {
+                "en": "Later read of the same volatile field",
+                "ru": "Последующее чтение того же volatile field"
+              },
+              "right": {
+                "en": "Has acquire semantics",
+                "ru": "Имеет acquire-семантику"
+              }
+            },
+            {
+              "id": "plain",
+              "left": {
+                "en": "Ordinary write before the volatile write",
+                "ru": "Обычная запись до volatile-записи"
+              },
+              "right": {
+                "en": "Becomes visible after that volatile read",
+                "ru": "Становится видимой после этого volatile-чтения"
+              }
+            }
+          ]
+        },
+        {
+          "id": "ordering-p4-fill-semantics",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing terms.",
+            "ru": "Впиши два пропущенных термина."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Release on the write side, acquire on the read side.",
+              "ru": "Release на стороне записи, acquire на стороне чтения."
+            },
+            "incorrect": {
+              "en": "The write is release; the later read of the same volatile field is acquire.",
+              "ru": "Запись — release; последующее чтение того же volatile field — acquire."
+            }
+          },
+          "text": {
+            "en": "A volatile write has ___ semantics; a later read of the same volatile field has ___ semantics.",
+            "ru": "Volatile-запись имеет ___-семантику; последующее чтение того же volatile field имеет ___-семантику."
+          },
+          "blanks": [
+            {
+              "en": [
+                "release"
+              ],
+              "ru": [
+                "release"
+              ]
+            },
+            {
+              "en": [
+                "acquire"
+              ],
+              "ru": [
+                "acquire"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "happens-before",
+      "title": {
+        "en": "happens-before",
+        "ru": "happens-before"
+      },
+      "summary": {
+        "en": "A write to a volatile variable happens-before every later read of that same variable — a memory-ordering contract, not a claim about cores or caches.",
+        "ru": "Запись в volatile-переменную happens-before каждого последующего чтения этой же переменной — это контракт memory ordering, а не утверждение про ядра или кэши."
+      },
+      "discovery": [
+        {
+          "id": "hb-d1-caches-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "volatile works by switching off CPU caches so that all threads read the same physical memory.",
+            "ru": "volatile работает за счёт отключения кэшей CPU, чтобы все потоки читали одну и ту же физическую память."
+          },
+          "reveal": {
+            "en": "The precise phrase is **happens-before**: a write to a volatile variable happens-before every later read of *that same* volatile variable. It is a **contract about memory ordering**, not a statement about hardware. Caches are not switched off, threads are not pinned to one CPU core, and the JVM may still reorder code that the contract does not constrain. What you get is a promise you can reason about.\n\n```mermaid\nflowchart LR\n  A[\"volatile write: ready = true\"] -->|\"happens-before\"| B[\"later volatile read: ready\"]\n  B --> C[\"reader also sees writes made before A\"]\n```\n\nTwo details worth remembering. The edge exists between the write and read of the **same** variable — two different volatile fields do not create an edge between each other. And the edge is **one-directional in time**: only a read that happens *later* than the write benefits.",
+            "ru": "Точная формулировка — **happens-before**: запись в volatile-переменную happens-before каждого последующего чтения *этой же* volatile-переменной. Это **контракт про memory ordering**, а не утверждение про железо. Кэши не отключаются, потоки не привязываются к одному ядру CPU, и JVM всё ещё может переупорядочивать то, что контракт не ограничивает. Ты получаешь обещание, на которое можно опираться в рассуждениях.\n\n```mermaid\nflowchart LR\n  A[\"volatile-запись: ready = true\"] -->|\"happens-before\"| B[\"последующее volatile-чтение: ready\"]\n  B --> C[\"читатель видит и записи, сделанные до A\"]\n```\n\nДва момента стоит запомнить. Связь существует между записью и чтением **одной и той же** переменной — два разных volatile field не создают связь друг с другом. И связь **направлена во времени**: выгоду получает только чтение, которое происходит *позже* записи."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — it is a memory-ordering contract, not a hardware trick.",
+              "ru": "Верно — это контракт memory ordering, а не трюк с железом."
+            },
+            "incorrect": {
+              "en": "Caches stay; volatile gives a specified ordering contract — see below.",
+              "ru": "Кэши остаются; volatile даёт определённый контракт ordering — смотри ниже."
+            }
+          },
+          "answer": false
+        }
+      ],
+      "practice": [
+        {
+          "id": "hb-p1-what-it-means",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In Java, what does \"a volatile write happens-before a later volatile read of the same variable\" guarantee?",
+            "ru": "Что гарантирует в Java фраза «volatile-запись happens-before последующего volatile-чтения той же переменной»?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The edge carries the writer's earlier work over to the reader.",
+              "ru": "Связь переносит на читателя и предыдущую работу писателя."
+            },
+            "incorrect": {
+              "en": "It guarantees that everything the writer did before that write is visible to the reader after that read.",
+              "ru": "Она гарантирует, что всё сделанное писателем до этой записи видно читателю после этого чтения."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Everything the writer did before that write is visible to the reader after that read",
+                "ru": "Всё, что писатель сделал до этой записи, видно читателю после этого чтения"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The two threads run on the same CPU core",
+                "ru": "Оба потока выполняются на одном ядре CPU"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "happens-before says nothing about cores or caches; it is a memory-ordering contract.",
+                "ru": "happens-before ничего не говорит про ядра или кэши; это контракт memory ordering."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The reader's whole method runs after the writer's whole method",
+                "ru": "Весь метод читателя выполняется после всего метода писателя"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It is not a scheduling promise — only an ordering of memory effects.",
+                "ru": "Это не обещание про планирование — только порядок эффектов в памяти."
+              }
+            }
+          ]
+        },
+        {
+          "id": "hb-p2-same-variable-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In Java, the happens-before edge from volatile is created between a write and a later read of the SAME volatile variable.",
+            "ru": "В Java связь happens-before от volatile возникает между записью и последующим чтением ОДНОЙ И ТОЙ ЖЕ volatile-переменной."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Same variable — two unrelated volatile fields give you no edge.",
+              "ru": "Одна и та же переменная — два несвязанных volatile field связи не дают."
+            },
+            "incorrect": {
+              "en": "It is the same variable: the write and the later read must target one volatile field.",
+              "ru": "Именно одна и та же переменная: запись и последующее чтение должны быть по одному volatile field."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "hb-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the happens-before rule for volatile in Java.",
+            "ru": "Собери правило happens-before для volatile в Java."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Write, then every later read of that variable — that is the edge.",
+              "ru": "Запись, затем каждое последующее чтение этой переменной — это и есть связь."
+            },
+            "incorrect": {
+              "en": "A volatile write happens-before every later read of that variable.",
+              "ru": "Volatile-запись happens-before каждого последующего чтения этой переменной."
+            }
+          },
+          "tokens": {
+            "en": [
+              "a",
+              "volatile",
+              "write",
+              "happens-before",
+              "every",
+              "later",
+              "read",
+              "of",
+              "that",
+              "variable"
+            ],
+            "ru": [
+              "volatile-запись",
+              "happens-before",
+              "каждого",
+              "последующего",
+              "чтения",
+              "этой",
+              "переменной"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "locks",
+              "core"
+            ],
+            "ru": [
+              "блокирует",
+              "ядра"
+            ]
+          }
+        },
+        {
+          "id": "hb-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing words of the term.",
+            "ru": "Впиши два пропущенных слова термина."
+          },
+          "feedback": {
+            "correct": {
+              "en": "happens-before is the phrase interviewers listen for.",
+              "ru": "happens-before — та формулировка, которую ждут на собеседовании."
+            },
+            "incorrect": {
+              "en": "It is happens-before: the write is ordered before every later read of that variable.",
+              "ru": "Это happens-before: запись упорядочена до каждого последующего чтения этой переменной."
+            }
+          },
+          "text": {
+            "en": "The relationship a volatile write creates with every later read of the same variable is called ___-___.",
+            "ru": "Отношение, которое volatile-запись создаёт с каждым последующим чтением той же переменной, называется ___-___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "happens"
+              ],
+              "ru": [
+                "happens"
+              ]
+            },
+            {
+              "en": [
+                "before"
+              ],
+              "ru": [
+                "before"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "not-a-lock",
+      "title": {
+        "en": "volatile is not a lock",
+        "ru": "volatile — это не lock"
+      },
+      "summary": {
+        "en": "volatile gives no mutual exclusion: it does not make a block of code exclusive and does not protect an invariant spread over several fields.",
+        "ru": "volatile не даёт mutual exclusion: он не делает блок кода исключительным и не защищает invariant, размазанный по нескольким fields."
+      },
+      "discovery": [
+        {
+          "id": "lock-d1-check-then-act",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "Two threads call takeOne() on the same Stock. Where is the defect?",
+            "ru": "Два потока вызывают takeOne() на одном Stock. Где здесь дефект?"
+          },
+          "code": "class Stock {\n    private volatile int count = 10;\n\n    void takeOne() {\n        if (count > 0) {          // check\n            count = count - 1;    // then act\n        }\n    }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "`volatile` is **not a lock**. **Mutual exclusion** means only one thread at a time may be inside a piece of code; volatile never provides it. Each single read and each single write of `count` is visible, but nothing stops two threads from sitting between the check and the act.\n\n```mermaid\nsequenceDiagram\n  participant A as Thread A\n  participant B as Thread B\n  A->>A: reads count = 10\n  B->>B: reads count = 10\n  A->>A: writes 9\n  B->>B: writes 9\n```\n\nBoth threads read 10, both subtract one, both write 9 — one decrement is simply lost. The visible field did not stop them from overwriting each other.\n\nThe same limit applies to an **invariant** — a rule that must always hold, such as \"`low` is never greater than `high`\". An invariant that spans several fields cannot be protected by marking each field volatile; it needs one synchronization mechanism around the whole invariant.",
+            "ru": "`volatile` — **не lock**. **Mutual exclusion** означает, что внутри участка кода одновременно может быть только один поток; volatile этого никогда не даёт. Каждое отдельное чтение и каждая отдельная запись `count` видимы, но ничто не мешает двум потокам оказаться между проверкой и действием.\n\n```mermaid\nsequenceDiagram\n  participant A as Поток A\n  participant B as Поток B\n  A->>A: читает count = 10\n  B->>B: читает count = 10\n  A->>A: пишет 9\n  B->>B: пишет 9\n```\n\nОба потока прочитали 10, оба вычли единицу, оба записали 9 — одно уменьшение просто потеряно. Видимый field не помешал им перезаписать друг друга.\n\nТо же ограничение касается **invariant** — правила, которое должно выполняться всегда, например «`low` никогда не больше `high`». Invariant, охватывающий несколько fields, нельзя защитить, помечая каждый field как volatile; ему нужен один механизм синхронизации вокруг всего invariant."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — volatile makes the field visible, not the check-then-act indivisible.",
+              "ru": "Верно — volatile делает field видимым, а не проверку-и-действие неделимыми."
+            },
+            "incorrect": {
+              "en": "volatile gives no mutual exclusion, so both threads can pass the check — see below.",
+              "ru": "volatile не даёт mutual exclusion, поэтому оба потока могут пройти проверку — смотри ниже."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Two threads can both pass the check and both write, so one decrement is lost",
+                "ru": "Оба потока могут пройти проверку и оба записать, поэтому одно уменьшение теряется"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing is wrong — volatile makes takeOne() safe",
+                "ru": "Всё в порядке — volatile делает takeOne() безопасным"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "volatile fixes visibility of the field, not exclusivity of the method.",
+                "ru": "volatile чинит видимость field, а не исключительность метода."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "count is read twice, so the second read may be stale",
+                "ru": "count читается дважды, поэтому второе чтение может быть устаревшим"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Each volatile read is fresh; the problem is the gap between the reads and the write.",
+                "ru": "Каждое volatile-чтение свежее; проблема в промежутке между чтениями и записью."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "lock-p1-exclusive-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In Java, marking a field volatile makes the block of code that uses it mutually exclusive between threads.",
+            "ru": "В Java пометка field как volatile делает блок кода, который его использует, взаимоисключающим между потоками."
+          },
+          "feedback": {
+            "correct": {
+              "en": "volatile is not a lock; two threads may be in that code at once.",
+              "ru": "volatile — не lock; два потока могут находиться в этом коде одновременно."
+            },
+            "incorrect": {
+              "en": "No — volatile gives no mutual exclusion at all.",
+              "ru": "Нет — volatile вообще не даёт mutual exclusion."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "lock-p2-what-not",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In Java, which of these does volatile NOT provide?",
+            "ru": "Что из перечисленного volatile в Java НЕ даёт?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Visibility and ordering yes; mutual exclusion never.",
+              "ru": "Visibility и ordering — да; mutual exclusion — никогда."
+            },
+            "incorrect": {
+              "en": "It gives visibility and ordering for that field, but never mutual exclusion.",
+              "ru": "Он даёт visibility и ordering для этого field, но никогда — mutual exclusion."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Mutual exclusion between threads",
+                "ru": "Mutual exclusion между потоками"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Visibility of writes to that field",
+                "ru": "Visibility записей в этот field"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Visibility is exactly what volatile does provide.",
+                "ru": "Visibility — именно то, что volatile как раз даёт."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Ordering between a volatile write and a later read of that field",
+                "ru": "Ordering между volatile-записью и последующим чтением этого field"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That ordering is volatile's second guarantee.",
+                "ru": "Этот ordering — вторая гарантия volatile."
+              }
+            }
+          ]
+        },
+        {
+          "id": "lock-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble what volatile does and does not give in Java.",
+            "ru": "Собери, что volatile в Java даёт, а что нет."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Visibility, not exclusion — the one-line version of \"volatile is not a lock\".",
+              "ru": "Visibility, а не exclusion — краткая версия фразы «volatile — не lock»."
+            },
+            "incorrect": {
+              "en": "volatile gives visibility, not mutual exclusion.",
+              "ru": "volatile даёт visibility, а не mutual exclusion."
+            }
+          },
+          "tokens": {
+            "en": [
+              "volatile",
+              "gives",
+              "visibility",
+              "not",
+              "mutual",
+              "exclusion"
+            ],
+            "ru": [
+              "volatile",
+              "даёт",
+              "visibility",
+              "а",
+              "не",
+              "mutual",
+              "exclusion"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "atomicity",
+              "locks"
+            ],
+            "ru": [
+              "атомарность",
+              "блокировки"
+            ]
+          }
+        },
+        {
+          "id": "lock-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing word.",
+            "ru": "Впиши пропущенное слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "No mutual exclusion means a multi-step update stays unprotected.",
+              "ru": "Отсутствие mutual exclusion означает, что многошаговое обновление остаётся незащищённым."
+            },
+            "incorrect": {
+              "en": "It is exclusion: volatile provides no mutual exclusion.",
+              "ru": "Это exclusion: volatile не даёт mutual exclusion."
+            }
+          },
+          "text": {
+            "en": "volatile provides no mutual ___, so it cannot protect a multi-step update.",
+            "ru": "volatile не даёт mutual ___, поэтому он не может защитить многошаговое обновление."
+          },
+          "blanks": [
+            {
+              "en": [
+                "exclusion"
+              ],
+              "ru": [
+                "exclusion"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "increment-not-atomic",
+      "title": {
+        "en": "volatile does not make count++ atomic",
+        "ru": "volatile не делает count++ атомарным"
+      },
+      "summary": {
+        "en": "count++ expands into read, compute and write, so another thread can interleave even when count is volatile.",
+        "ru": "count++ разворачивается в read, compute и write, поэтому другой поток может вклиниться, даже если count объявлен volatile."
+      },
+      "discovery": [
+        {
+          "id": "inc-d1-two-threads",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Two threads each call increment() 1000 times. What can the final printed value be?",
+            "ru": "Два потока вызывают increment() по 1000 раз каждый. Каким может оказаться напечатанное итоговое значение?"
+          },
+          "code": "class Counter {\n    volatile int count = 0;\n\n    void increment() {\n        count++;\n    }\n}\n\n// two threads, 1000 increment() calls each, then:\nSystem.out.println(counter.count);",
+          "codeLang": "java",
+          "reveal": {
+            "en": "`count++` looks like one step, but it is a **compound operation**: it expands into **read** `count`, **compute** `count + 1`, **write** the result. An operation is **atomic** (indivisible) when no other thread can observe or interfere with it half-done — and `count++` is not.\n\nvolatile makes the read visible and the write visible. It does not join them together, so another thread can slip into the gap:\n\n```\nthread A: read 5\nthread B: read 5          // B read before A wrote back\nthread A: write 6\nthread B: write 6         // one increment disappeared\n```\n\nThe final value can therefore be anything from 1000 to 2000 — never more, because a lost update only ever loses. This is why \"is the field volatile?\" is the wrong question for a counter; the right question is \"is the *update* indivisible?\"",
+            "ru": "`count++` выглядит как один шаг, но это **compound operation** (составная операция): она разворачивается в **read** `count`, **compute** `count + 1`, **write** результата. Операция **atomic** (неделимая), когда другой поток не может увидеть или испортить её на середине — а `count++` таким не является.\n\nvolatile делает чтение видимым и запись видимой. Но он не склеивает их вместе, поэтому другой поток может влезть в промежуток:\n\n```\nпоток A: читает 5\nпоток B: читает 5          // B прочитал до того, как A записал\nпоток A: пишет 6\nпоток B: пишет 6           // одно увеличение исчезло\n```\n\nПоэтому итог может быть любым от 1000 до 2000 — но не больше, ведь потерянное обновление только теряет. Вот почему «а field volatile?» — неверный вопрос для счётчика; верный вопрос — «а само *обновление* неделимо?»"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — increments can be lost even on a volatile field.",
+              "ru": "Верно — увеличения могут теряться даже на volatile field."
+            },
+            "incorrect": {
+              "en": "count++ is read-compute-write, so updates can be lost — see below.",
+              "ru": "count++ — это read-compute-write, поэтому обновления могут теряться — смотри ниже."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "2000 or less — some increments can be lost",
+                "ru": "2000 или меньше — часть увеличений может потеряться"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Always exactly 2000, because count is volatile",
+                "ru": "Всегда ровно 2000, потому что count объявлен volatile"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "volatile makes each read and write visible; it does not fuse them into one step.",
+                "ru": "volatile делает каждое чтение и запись видимыми; он не сливает их в один шаг."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Sometimes more than 2000, because writes can duplicate",
+                "ru": "Иногда больше 2000, потому что записи могут дублироваться"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A lost update only loses; the count never exceeds the number of increments.",
+                "ru": "Потерянное обновление только теряет; счётчик никогда не превысит число увеличений."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "inc-p1-safe-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In Java, declaring a counter as volatile int makes count++ thread-safe.",
+            "ru": "В Java объявление счётчика как volatile int делает count++ потокобезопасным."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The read-compute-write sequence can still interleave.",
+              "ru": "Последовательность read-compute-write всё равно может перемешаться."
+            },
+            "incorrect": {
+              "en": "No — count++ is still read, compute, write, and another thread can interleave.",
+              "ru": "Нет — count++ всё равно состоит из read, compute, write, и другой поток может вклиниться."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "inc-p2-steps-mc",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In Java, into which steps does count++ on an int field expand?",
+            "ru": "На какие шаги разворачивается count++ для int field в Java?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Three steps — and the gaps between them are where updates get lost.",
+              "ru": "Три шага — и именно в промежутках между ними теряются обновления."
+            },
+            "incorrect": {
+              "en": "It expands into read, compute and write — three steps, not one.",
+              "ru": "Он разворачивается в read, compute и write — три шага, а не один."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "read, compute, write",
+                "ru": "read, compute, write"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "One indivisible step",
+                "ru": "Один неделимый шаг"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "If it were indivisible, no increment could ever be lost.",
+                "ru": "Если бы он был неделимым, ни одно увеличение не могло бы потеряться."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "lock, write, unlock",
+                "ru": "lock, write, unlock"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "No lock is involved — volatile never locks anything.",
+                "ru": "Никакого lock здесь нет — volatile ничего не блокирует."
+              }
+            }
+          ]
+        },
+        {
+          "id": "inc-p3-sort-lost-update",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the interleaving that loses an increment of a volatile int count in Java.",
+            "ru": "Расставь по порядку перемешивание, из-за которого теряется увеличение volatile int count в Java."
+          },
+          "reveal": {
+            "en": "This interleaving is called a **lost update**. Both threads read the same starting value, both compute the same result, and the second write simply overwrites the first — so two increments produce one. volatile guarantees each read and write is visible, which is precisely why both threads see 5: the problem is not visibility, it is that the three steps of `count++` are not held together. To fix it you need an indivisible update, not a fresher read.",
+            "ru": "Такое перемешивание называется **lost update** (потерянное обновление). Оба потока читают одно и то же исходное значение, оба вычисляют один результат, и вторая запись просто перекрывает первую — два увеличения дают одно. volatile гарантирует, что каждое чтение и запись видимы, и именно поэтому оба потока видят 5: проблема не в видимости, а в том, что три шага `count++` не удерживаются вместе. Чинится это неделимым обновлением, а не более свежим чтением."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two reads of the same value, two writes of the same result — one increment gone.",
+              "ru": "Два чтения одного значения, две записи одного результата — одно увеличение исчезло."
+            },
+            "incorrect": {
+              "en": "Both threads read the same value first, then both write the same result, so one increment is lost.",
+              "ru": "Сначала оба потока читают одно значение, затем оба записывают один результат, поэтому одно увеличение теряется."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Thread A reads count = 5",
+                "ru": "Поток A читает count = 5"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Thread B reads the same 5, before A writes anything back",
+                "ru": "Поток B читает то же 5, пока A ничего не записал"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Thread A writes 6",
+                "ru": "Поток A записывает 6"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Thread B writes 6 as well, overwriting A's result",
+                "ru": "Поток B тоже записывает 6, перекрывая результат A"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "One increment is lost: the count is 6, not 7",
+                "ru": "Одно увеличение потеряно: счётчик равен 6, а не 7"
+              }
+            }
+          ]
+        },
+        {
+          "id": "inc-p4-fill-steps",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing step names.",
+            "ru": "Впиши два пропущенных названия шагов."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Three steps means another thread has somewhere to slip in.",
+              "ru": "Три шага означают, что другому потоку есть куда вклиниться."
+            },
+            "incorrect": {
+              "en": "It is read and write: count++ is read, compute, write.",
+              "ru": "Это read и write: count++ — это read, compute, write."
+            }
+          },
+          "text": {
+            "en": "count++ is not atomic: it expands into ___, compute and ___.",
+            "ru": "count++ не атомарен: он разворачивается в ___, compute и ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "read"
+              ],
+              "ru": [
+                "read"
+              ]
+            },
+            {
+              "en": [
+                "write"
+              ],
+              "ru": [
+                "write"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "atomics-and-locks",
+      "title": {
+        "en": "When to use an atomic class or synchronized",
+        "ru": "Когда нужен atomic class или synchronized"
+      },
+      "summary": {
+        "en": "When the update itself must be indivisible, use AtomicInteger, LongAdder, synchronized or a lock; synchronized also adds mutual exclusion plus visibility at monitor enter and exit.",
+        "ru": "Когда само обновление должно быть неделимым, используй AtomicInteger, LongAdder, synchronized или lock; synchronized даёт ещё и mutual exclusion плюс visibility на monitor enter и exit."
+      },
+      "discovery": [
+        {
+          "id": "atomics-d1-choose",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Many threads call recordHit(). Which change makes the update itself indivisible?",
+            "ru": "Много потоков вызывают recordHit(). Какое изменение сделает само обновление неделимым?"
+          },
+          "code": "class Meter {\n    int hits = 0;               // shared, updated by many threads\n\n    void recordHit() {\n        hits++;\n    }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "When the *update* must be indivisible, volatile is the wrong tool. The alternatives, from lightest to heaviest:\n\n- **`AtomicInteger`** / **`LongAdder`** — classes whose operations perform a read-modify-write as one indivisible step (`incrementAndGet()`), so no increment is lost.\n- **`synchronized`** or an explicit **lock** — these give **mutual exclusion**: one thread at a time inside the guarded code, plus visibility at monitor enter and exit. This is what you need when several fields or several steps must change together.\n\n```mermaid\nflowchart TD\n  Q[\"what does the shared state need?\"] --> S[\"publish or read one value\"]\n  Q --> C[\"indivisible update of one number\"]\n  Q --> I[\"several fields or steps together\"]\n  S --> V[\"volatile\"]\n  C --> A[\"AtomicInteger or LongAdder\"]\n  I --> L[\"synchronized or a lock\"]\n```\n\nNote that `synchronized` is a **superset** of volatile's guarantees for the state it guards: exclusion *and* visibility. That is why \"volatile is a lightweight synchronized\" is misleading — it is lighter because it does strictly less.",
+            "ru": "Когда неделимым должно быть само *обновление*, volatile — неподходящий инструмент. Альтернативы, от самой лёгкой к самой тяжёлой:\n\n- **`AtomicInteger`** / **`LongAdder`** — классы, чьи операции выполняют read-modify-write одним неделимым шагом (`incrementAndGet()`), поэтому ни одно увеличение не теряется.\n- **`synchronized`** или явный **lock** — они дают **mutual exclusion**: один поток за раз внутри защищённого кода, плюс visibility на monitor enter и exit. Это нужно, когда несколько fields или несколько шагов должны меняться вместе.\n\n```mermaid\nflowchart TD\n  Q[\"что нужно общему состоянию?\"] --> S[\"опубликовать или прочитать одно значение\"]\n  Q --> C[\"неделимое обновление одного числа\"]\n  Q --> I[\"несколько fields или шагов вместе\"]\n  S --> V[\"volatile\"]\n  C --> A[\"AtomicInteger или LongAdder\"]\n  I --> L[\"synchronized или lock\"]\n```\n\nЗаметь: для защищаемого состояния `synchronized` — **надмножество** гарантий volatile: и exclusion, и visibility. Поэтому фраза «volatile — это облегчённый synchronized» вводит в заблуждение: он легче именно потому, что делает строго меньше."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — an atomic class makes the read-modify-write one indivisible step.",
+              "ru": "Верно — atomic class делает read-modify-write одним неделимым шагом."
+            },
+            "incorrect": {
+              "en": "An indivisible update needs an atomic class or a lock, not volatile — see below.",
+              "ru": "Неделимое обновление требует atomic class или lock, а не volatile — смотри ниже."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Make hits an AtomicInteger and call incrementAndGet()",
+                "ru": "Сделать hits типа AtomicInteger и вызывать incrementAndGet()"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Declare hits as volatile int",
+                "ru": "Объявить hits как volatile int"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That fixes visibility only; hits++ still interleaves and loses updates.",
+                "ru": "Это чинит только visibility; hits++ по-прежнему перемешивается и теряет обновления."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Add the volatile modifier to recordHit()",
+                "ru": "Добавить модификатор volatile к recordHit()"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "volatile is a field modifier; to guard the method use synchronized.",
+                "ru": "volatile — модификатор field; чтобы защитить метод, используй synchronized."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "atomics-p1-which-tool",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In Java, which tool makes a counter increment indivisible without writing a lock yourself?",
+            "ru": "Какой инструмент в Java делает увеличение счётчика неделимым, не заставляя писать lock вручную?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "AtomicInteger performs the read-modify-write as one step.",
+              "ru": "AtomicInteger выполняет read-modify-write одним шагом."
+            },
+            "incorrect": {
+              "en": "AtomicInteger (or LongAdder) — a volatile int still loses increments.",
+              "ru": "AtomicInteger (или LongAdder) — volatile int всё равно теряет увеличения."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "AtomicInteger",
+                "ru": "AtomicInteger"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "volatile int",
+                "ru": "volatile int"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "volatile gives visibility, not an indivisible read-modify-write.",
+                "ru": "volatile даёт visibility, а не неделимый read-modify-write."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A plain int with a comment warning other developers",
+                "ru": "Обычный int с комментарием-предупреждением для других разработчиков"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A plain int has neither visibility nor atomicity.",
+                "ru": "У обычного int нет ни visibility, ни атомарности."
+              }
+            }
+          ]
+        },
+        {
+          "id": "atomics-p2-synchronized-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In Java, synchronized provides mutual exclusion plus visibility at monitor enter and exit.",
+            "ru": "В Java synchronized даёт mutual exclusion плюс visibility на monitor enter и exit."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That extra exclusion is exactly what volatile lacks.",
+              "ru": "Именно этого exclusion и не хватает volatile."
+            },
+            "incorrect": {
+              "en": "It does — and that exclusion is what volatile does not give.",
+              "ru": "Даёт — и именно этого exclusion volatile не предоставляет."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "atomics-p3-match-tools",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each Java concurrency tool to what it gives you.",
+            "ru": "Соотнеси каждый инструмент многопоточности в Java с тем, что он даёт."
+          },
+          "feedback": {
+            "correct": {
+              "en": "volatile publishes, atomics make one update indivisible, synchronized excludes.",
+              "ru": "volatile публикует, atomics делают одно обновление неделимым, synchronized исключает."
+            },
+            "incorrect": {
+              "en": "volatile = visibility and ordering for one field; AtomicInteger = indivisible update; synchronized = mutual exclusion plus visibility.",
+              "ru": "volatile — visibility и ordering для одного field; AtomicInteger — неделимое обновление; synchronized — mutual exclusion плюс visibility."
+            }
+          },
+          "pairs": [
+            {
+              "id": "vol",
+              "left": {
+                "en": "volatile",
+                "ru": "volatile"
+              },
+              "right": {
+                "en": "Visibility and ordering for one field, no mutual exclusion",
+                "ru": "Visibility и ordering для одного field, без mutual exclusion"
+              }
+            },
+            {
+              "id": "atomic",
+              "left": {
+                "en": "AtomicInteger",
+                "ru": "AtomicInteger"
+              },
+              "right": {
+                "en": "An indivisible read-modify-write on one value",
+                "ru": "Неделимый read-modify-write одного значения"
+              }
+            },
+            {
+              "id": "sync",
+              "left": {
+                "en": "synchronized",
+                "ru": "synchronized"
+              },
+              "right": {
+                "en": "Mutual exclusion plus visibility at monitor enter and exit",
+                "ru": "Mutual exclusion плюс visibility на monitor enter и exit"
+              }
+            },
+            {
+              "id": "volinc",
+              "left": {
+                "en": "count++ on a volatile int",
+                "ru": "count++ на volatile int"
+              },
+              "right": {
+                "en": "Still not thread-safe: updates can be lost",
+                "ru": "Всё ещё не потокобезопасно: обновления могут теряться"
+              }
+            }
+          ]
+        },
+        {
+          "id": "atomics-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the class name.",
+            "ru": "Впиши имя класса."
+          },
+          "feedback": {
+            "correct": {
+              "en": "For counters: an atomic class or a lock, never a bare volatile int.",
+              "ru": "Для счётчиков — atomic class или lock, но не просто volatile int."
+            },
+            "incorrect": {
+              "en": "Use AtomicInteger (or LongAdder) — volatile does not make the update indivisible.",
+              "ru": "Используй AtomicInteger (или LongAdder) — volatile не делает обновление неделимым."
+            }
+          },
+          "text": {
+            "en": "For an indivisible counter update in Java, use ___ instead of a volatile int.",
+            "ru": "Для неделимого обновления счётчика в Java используй ___ вместо volatile int."
+          },
+          "blanks": [
+            {
+              "en": [
+                "AtomicInteger",
+                "LongAdder"
+              ],
+              "ru": [
+                "AtomicInteger",
+                "LongAdder"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "volatile-reference",
+      "title": {
+        "en": "A volatile reference publishes only what came before",
+        "ru": "Volatile reference публикует только то, что было до"
+      },
+      "summary": {
+        "en": "volatile on a reference publishes the reference and the writes made before publication; later mutations inside the object still need their own thread-safety plan.",
+        "ru": "volatile на reference публикует сам reference и записи, сделанные до публикации; последующим изменениям внутри объекта всё равно нужен свой план thread-safety."
+      },
+      "discovery": [
+        {
+          "id": "ref-d1-later-mutation",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "Other threads read config after publish(). Where is the thread-safety hole?",
+            "ru": "Другие потоки читают config после publish(). Где здесь дыра в thread-safety?"
+          },
+          "code": "class Holder {\n    private volatile Config config;\n\n    void publish() {\n        Config c = new Config();\n        c.setTimeout(30);\n        config = c;              // volatile write\n    }\n\n    void tweak() {\n        config.setTimeout(60);   // later mutation, no synchronization\n    }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Writing a fully prepared object into a volatile field is **safe publication**: the volatile write publishes both the reference *and* the ordinary writes made before it, so a reader that reads the field sees a fully built object — never a half-initialized one.\n\n```mermaid\nflowchart LR\n  P[\"prepare the object: ordinary writes\"] --> W[\"volatile write: config = c\"]\n  W --> R[\"reader: volatile read sees the reference and those writes\"]\n  R --> L[\"later mutations of the object: not covered\"]\n```\n\nWhat it does **not** do is protect the object forever. Once the reference is published, `tweak()` performs ordinary writes on a shared object with no synchronization at all — readers get no guarantee about them. So volatile publication fits the pattern \"prepare it fully, publish it once, and keep later mutation controlled\"; changes after publication need their own plan, for example one synchronization mechanism around them.",
+            "ru": "Запись полностью подготовленного объекта в volatile field — это **safe publication** (безопасная публикация): volatile-запись публикует и сам reference, *и* обычные записи, сделанные до неё, поэтому читатель, прочитавший field, видит полностью построенный объект, а не полуинициализированный.\n\n```mermaid\nflowchart LR\n  P[\"подготовка объекта: обычные записи\"] --> W[\"volatile-запись: config = c\"]\n  W --> R[\"читатель: volatile-чтение видит reference и эти записи\"]\n  R --> L[\"последующие изменения объекта: не покрыты\"]\n```\n\nЧего он **не** делает — так это не защищает объект навсегда. После публикации reference метод `tweak()` выполняет обычные записи в общий объект вообще без синхронизации — читателям про них ничего не обещано. Поэтому volatile-публикация подходит под схему «подготовить полностью, опубликовать один раз и держать дальнейшие изменения под контролем»; изменениям после публикации нужен свой план, например один механизм синхронизации вокруг них."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — publication is safe, the later mutation is not.",
+              "ru": "Верно — публикация безопасна, а последующее изменение — нет."
+            },
+            "incorrect": {
+              "en": "The volatile write is fine; the unsynchronized later mutation is the hole — see below.",
+              "ru": "Volatile-запись в порядке; дыра — в несинхронизированном последующем изменении — смотри ниже."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "tweak() mutates the already-published object with no synchronization, so readers have no guarantee about that change",
+                "ru": "tweak() меняет уже опубликованный объект без синхронизации, поэтому читателям про это изменение ничего не обещано"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The volatile write of config is unsafe — readers may see a half-built Config",
+                "ru": "Volatile-запись config небезопасна — читатели могут увидеть полусобранный Config"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Writes made before the volatile write are published with it, so the object is fully built.",
+                "ru": "Записи до volatile-записи публикуются вместе с ней, поэтому объект собран полностью."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — a volatile reference makes every future change to the object safe",
+                "ru": "Ничего — volatile reference делает безопасным любое будущее изменение объекта"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It publishes the reference and earlier writes only; later mutations are ordinary writes again.",
+                "ru": "Он публикует только reference и предыдущие записи; последующие изменения — снова обычные записи."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "ref-p1-forever-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In Java, a volatile reference makes every future mutation of the referenced object thread-safe.",
+            "ru": "В Java volatile reference делает потокобезопасным любое будущее изменение объекта, на который он ссылается."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It publishes the reference and earlier writes — nothing after that.",
+              "ru": "Он публикует reference и предыдущие записи — и ничего после этого."
+            },
+            "incorrect": {
+              "en": "No — later mutations of the object need their own thread-safety plan.",
+              "ru": "Нет — последующим изменениям объекта нужен свой план thread-safety."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "ref-p2-what-published",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In Java, what exactly does writing a fully prepared object into a volatile field publish?",
+            "ru": "Что именно публикует в Java запись полностью подготовленного объекта в volatile field?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The reference plus everything written before it — a fully built object.",
+              "ru": "Reference плюс всё, что записано до него — полностью построенный объект."
+            },
+            "incorrect": {
+              "en": "The reference and the writes made before the publication.",
+              "ru": "Reference и записи, сделанные до публикации."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The reference plus the writes made before the publication",
+                "ru": "Reference плюс записи, сделанные до публикации"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Only the reference; the object's fields may still look empty",
+                "ru": "Только reference; fields объекта всё ещё могут выглядеть пустыми"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The ordering guarantee carries the earlier ordinary writes along with the reference.",
+                "ru": "Гарантия ordering переносит вместе с reference и предыдущие обычные записи."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The reference plus all future changes to the object",
+                "ru": "Reference плюс все будущие изменения объекта"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Future changes are ordinary writes and carry no guarantee.",
+                "ru": "Будущие изменения — обычные записи, и на них никаких гарантий нет."
+              }
+            }
+          ]
+        },
+        {
+          "id": "ref-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble what a volatile reference in Java publishes.",
+            "ru": "Собери, что публикует volatile reference в Java."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Earlier writes travel with the reference; later ones do not.",
+              "ru": "Предыдущие записи едут вместе с reference; последующие — нет."
+            },
+            "incorrect": {
+              "en": "A volatile reference publishes earlier writes, not later mutations.",
+              "ru": "Volatile reference публикует предыдущие записи, а не последующие изменения."
+            }
+          },
+          "tokens": {
+            "en": [
+              "a",
+              "volatile",
+              "reference",
+              "publishes",
+              "earlier",
+              "writes",
+              "not",
+              "later",
+              "mutations"
+            ],
+            "ru": [
+              "volatile-reference",
+              "публикует",
+              "предыдущие",
+              "записи",
+              "а",
+              "не",
+              "последующие",
+              "изменения"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "forever"
+            ],
+            "ru": [
+              "навсегда"
+            ]
+          }
+        },
+        {
+          "id": "ref-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the pattern.",
+            "ru": "Назови паттерн."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Safe publication: prepare fully, then write the volatile field.",
+              "ru": "Safe publication: подготовить полностью, затем записать volatile field."
+            },
+            "incorrect": {
+              "en": "It is safe publication — the volatile write publishes the object and its earlier writes.",
+              "ru": "Это safe publication — volatile-запись публикует объект и предыдущие записи."
+            }
+          },
+          "text": {
+            "en": "Writing a fully prepared object into a volatile field is called safe ___.",
+            "ru": "Запись полностью подготовленного объекта в volatile field называется safe ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "publication"
+              ],
+              "ru": [
+                "publication",
+                "публикация"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "where-volatile-fits",
+      "title": {
+        "en": "Where volatile fits",
+        "ru": "Где volatile подходит"
+      },
+      "summary": {
+        "en": "Good fits are small: a stop flag, one-writer many-reader status flags, publishing a prepared reference, and the instance field in double-checked locking.",
+        "ru": "Хорошие сценарии маленькие: stop flag, status flags с одним writer и многими readers, публикация подготовленного reference и field instance в double-checked locking."
+      },
+      "discovery": [
+        {
+          "id": "fits-d1-best-fit",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which shared state is the best fit for a single volatile field?",
+            "ru": "Какое общее состояние лучше всего подходит для одного volatile field?"
+          },
+          "reveal": {
+            "en": "Good volatile use cases are small and simple:\n\n- a **stop flag** such as `volatile boolean running`;\n- one-writer, many-reader **status flags** and cancellation signals;\n- publishing a fully prepared object reference, when later mutation is controlled;\n- **double-checked locking**, where the instance field must be volatile.\n\n```java\nprivate volatile boolean running = true;\n\npublic void run() {\n    while (running) { doWork(); }\n}\n\npublic void stop() {\n    running = false;\n}\n```\n\nWhy is the stop flag such a clean fit? It is **one independent value**; there is a single writer; readers only need the latest published value; and there is no read-modify-write, so nothing can be lost. In production this is why status flags and cancellation signals stay visible without taking a lock on every read — the hard part is never writing the keyword, it is proving the state really is one independent signal.",
+            "ru": "Хорошие сценарии для volatile — маленькие и простые:\n\n- **stop flag** вроде `volatile boolean running`;\n- **status flags** и сигналы отмены с одним writer и многими readers;\n- публикация полностью подготовленного object reference, когда дальнейшие изменения контролируются;\n- **double-checked locking**, где field instance обязан быть volatile.\n\n```java\nprivate volatile boolean running = true;\n\npublic void run() {\n    while (running) { doWork(); }\n}\n\npublic void stop() {\n    running = false;\n}\n```\n\nПочему stop flag подходит так хорошо? Это **одно независимое значение**; writer один; readers нужен только последний опубликованный value; и здесь нет read-modify-write, поэтому терять нечего. В production именно поэтому status flags и сигналы отмены остаются видимыми без lock на каждом чтении — сложность не в том, чтобы написать keyword, а в том, чтобы доказать: состояние действительно является одним независимым сигналом."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — one independent value, one writer, readers only need the latest value.",
+              "ru": "Верно — одно независимое значение, один writer, читателям нужно лишь последнее значение."
+            },
+            "incorrect": {
+              "en": "volatile fits one simple independent signal — see below.",
+              "ru": "volatile подходит для одного простого независимого сигнала — смотри ниже."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A boolean stop flag that one thread sets and a worker loop reads",
+                "ru": "Boolean stop flag, который один поток выставляет, а рабочий цикл читает"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A counter incremented by many threads",
+                "ru": "Счётчик, который увеличивают много потоков"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "An increment is a read-modify-write; that needs an atomic class or a lock.",
+                "ru": "Увеличение — это read-modify-write; для него нужен atomic class или lock."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Two fields that must always stay consistent with each other",
+                "ru": "Два fields, которые должны всегда оставаться согласованными друг с другом"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "An invariant across fields needs one synchronization mechanism around the whole invariant.",
+                "ru": "Invariant между fields требует одного механизма синхронизации вокруг всего invariant."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "fits-p1-why-stop-flag",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In Java, why is a boolean stop flag a good use case for volatile?",
+            "ru": "Почему boolean stop flag — хороший сценарий для volatile в Java?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "One independent value, one writer, no read-modify-write.",
+              "ru": "Одно независимое значение, один writer, никакого read-modify-write."
+            },
+            "incorrect": {
+              "en": "Because it is one independent value that one thread writes and others only read.",
+              "ru": "Потому что это одно независимое значение, которое один поток пишет, а другие только читают."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It is one independent value that one thread writes and others only read",
+                "ru": "Это одно независимое значение, которое один поток пишет, а другие только читают"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Because volatile makes the loop exit at the exact moment of the write",
+                "ru": "Потому что volatile заставляет цикл выйти точно в момент записи"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "volatile is a memory-visibility guarantee, not a timing guarantee.",
+                "ru": "volatile — гарантия видимости в памяти, а не гарантия по времени."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Because volatile locks the loop body while the flag is read",
+                "ru": "Потому что volatile блокирует тело цикла, пока читается flag"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "volatile locks nothing; that is precisely why reads stay cheap.",
+                "ru": "volatile ничего не блокирует; именно поэтому чтения остаются дешёвыми."
+              }
+            }
+          ]
+        },
+        {
+          "id": "fits-p2-dcl-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In Java's double-checked locking pattern, the instance field must be volatile.",
+            "ru": "В паттерне double-checked locking в Java field instance обязан быть volatile."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Without volatile on that field the pattern is broken.",
+              "ru": "Без volatile на этом field паттерн ломается."
+            },
+            "incorrect": {
+              "en": "It must be — double-checked locking requires a volatile instance field.",
+              "ru": "Обязан — double-checked locking требует volatile field instance."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "fits-p3-match-state-tool",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each kind of shared state in Java to the tool that fits it.",
+            "ru": "Соотнеси каждый вид общего состояния в Java с подходящим инструментом."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One independent value → volatile; anything compound → atomics or a lock.",
+              "ru": "Одно независимое значение → volatile; всё составное → atomics или lock."
+            },
+            "incorrect": {
+              "en": "volatile fits single flags and one-time publication; counters and invariants need atomics or a lock.",
+              "ru": "volatile подходит для одиночных flags и однократной публикации; счётчикам и invariants нужны atomics или lock."
+            }
+          },
+          "pairs": [
+            {
+              "id": "flag",
+              "left": {
+                "en": "A boolean stop flag",
+                "ru": "Boolean stop flag"
+              },
+              "right": {
+                "en": "volatile",
+                "ru": "volatile"
+              }
+            },
+            {
+              "id": "counter",
+              "left": {
+                "en": "A counter incremented by many threads",
+                "ru": "Счётчик, увеличиваемый многими потоками"
+              },
+              "right": {
+                "en": "AtomicInteger or a lock",
+                "ru": "AtomicInteger или lock"
+              }
+            },
+            {
+              "id": "invariant",
+              "left": {
+                "en": "Two fields that must stay consistent",
+                "ru": "Два fields, которые должны оставаться согласованными"
+              },
+              "right": {
+                "en": "One synchronization mechanism around the whole invariant",
+                "ru": "Один механизм синхронизации вокруг всего invariant"
+              }
+            },
+            {
+              "id": "publish",
+              "left": {
+                "en": "A fully prepared object published once",
+                "ru": "Полностью подготовленный объект, публикуемый один раз"
+              },
+              "right": {
+                "en": "A volatile reference",
+                "ru": "Volatile reference"
+              }
+            }
+          ]
+        },
+        {
+          "id": "fits-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing word.",
+            "ru": "Впиши пропущенное слово."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The stop flag is the textbook volatile use case.",
+              "ru": "Stop flag — учебниковый сценарий для volatile."
+            },
+            "incorrect": {
+              "en": "It is a stop flag, such as volatile boolean running.",
+              "ru": "Это stop flag, например volatile boolean running."
+            }
+          },
+          "text": {
+            "en": "A classic volatile use case is a stop ___ such as volatile boolean running.",
+            "ru": "Классический сценарий для volatile — stop ___ вроде volatile boolean running."
+          },
+          "blanks": [
+            {
+              "en": [
+                "flag"
+              ],
+              "ru": [
+                "flag",
+                "флаг"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "choosing-the-tool",
+      "title": {
+        "en": "Choosing volatile or something stronger",
+        "ru": "Выбор между volatile и чем-то сильнее"
+      },
+      "summary": {
+        "en": "Use volatile when the shared state is one independent value and readers only need the latest published value; use a lock or an atomic class when the operation combines several steps.",
+        "ru": "Используй volatile, когда общее состояние — одно независимое значение и readers нужен только последний опубликованный value; используй lock или atomic class, когда операция объединяет несколько шагов."
+      },
+      "discovery": [
+        {
+          "id": "choose-d1-two-fields",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Both fields are volatile and one thread calls setBounds(3, 12). Can a reader see a mix of the old and new bounds?",
+            "ru": "Оба fields объявлены volatile, и один поток вызывает setBounds(3, 12). Может ли читатель увидеть смесь старых и новых границ?"
+          },
+          "code": "class Range {\n    private volatile int low = 0;\n    private volatile int high = 10;\n\n    void setBounds(int l, int h) {\n        low = l;\n        high = h;\n    }\n\n    int span() {\n        return high - low;   // read by another thread\n    }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Yes — a reader can see `low = 3` together with the old `high = 10`. Two volatile fields are **two independent publications**; volatile never fuses them into one step. The rule of thumb:\n\n- use volatile when the shared state is **one independent value** and readers only need the latest published value;\n- use a lock or an atomic class when the operation **combines several steps** or ties several fields into one invariant.\n\n```mermaid\nflowchart TD\n  S[\"shared mutable state?\"] -->|\"no\"| L[\"local or immutable data\"]\n  S -->|\"yes\"| F{\"single independent flag or value?\"}\n  F -->|\"yes\"| V[\"volatile can fit\"]\n  F -->|\"no\"| C{\"compound update or invariant?\"}\n  C -->|\"yes\"| A[\"atomic class or lock\"]\n  C -->|\"no\"| R[\"review ownership and visibility\"]\n```\n\nSo the question to ask is never \"is this field shared?\" but \"is this state one independent value?\" If two fields must agree, one synchronization mechanism has to cover the whole invariant.",
+            "ru": "Да — читатель может увидеть `low = 3` вместе со старым `high = 10`. Два volatile fields — это **две независимые публикации**; volatile никогда не сливает их в один шаг. Практическое правило:\n\n- используй volatile, когда общее состояние — **одно независимое значение** и readers нужен только последний опубликованный value;\n- используй lock или atomic class, когда операция **объединяет несколько шагов** или связывает несколько fields в один invariant.\n\n```mermaid\nflowchart TD\n  S[\"общее изменяемое состояние?\"] -->|\"нет\"| L[\"локальные или immutable данные\"]\n  S -->|\"да\"| F{\"один независимый flag или value?\"}\n  F -->|\"да\"| V[\"volatile может подойти\"]\n  F -->|\"нет\"| C{\"compound update или invariant?\"}\n  C -->|\"да\"| A[\"atomic class или lock\"]\n  C -->|\"нет\"| R[\"проверь ownership и visibility\"]\n```\n\nПоэтому спрашивать надо не «этот field общий?», а «это состояние — одно независимое значение?» Если два fields обязаны быть согласованы, один механизм синхронизации должен покрывать весь invariant."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — each volatile field is published on its own.",
+              "ru": "Верно — каждый volatile field публикуется сам по себе."
+            },
+            "incorrect": {
+              "en": "Two volatile fields are two separate publications — see below.",
+              "ru": "Два volatile fields — это две отдельные публикации — смотри ниже."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Yes — each field is published on its own, so a reader can see 3 with the old 10",
+                "ru": "Да — каждый field публикуется отдельно, поэтому читатель может увидеть 3 со старым 10"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "No — volatile fields of one object are updated together as one atomic step",
+                "ru": "Нет — volatile fields одного объекта обновляются вместе как один атомарный шаг"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "volatile has no grouping effect; each field is its own independent write.",
+                "ru": "volatile не группирует ничего; каждый field — своя независимая запись."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "No — a volatile write blocks readers until setBounds() finishes",
+                "ru": "Нет — volatile-запись блокирует читателей, пока setBounds() не завершится"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "volatile provides no mutual exclusion, so nobody is blocked.",
+                "ru": "volatile не даёт mutual exclusion, поэтому никто не блокируется."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "choose-p1-when-enough",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In Java, when is a single volatile field enough for shared state?",
+            "ru": "Когда в Java одного volatile field достаточно для общего состояния?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "One independent value plus read-only consumers — that is the fit.",
+              "ru": "Одно независимое значение плюс читатели только на чтение — вот и подходящий случай."
+            },
+            "incorrect": {
+              "en": "When it is one independent value and readers only need the latest published value.",
+              "ru": "Когда это одно независимое значение и readers нужен только последний опубликованный value."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "When it is one independent value and readers only need the latest published value",
+                "ru": "Когда это одно независимое значение и читателям нужен только последний опубликованный value"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Whenever only two threads touch it",
+                "ru": "Всегда, когда с ним работают только два потока"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The number of threads is irrelevant; the shape of the update is what matters.",
+                "ru": "Количество потоков не важно; важна форма самого обновления."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Whenever writes are rare compared to reads",
+                "ru": "Всегда, когда записи редки по сравнению с чтениями"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A rare compound update is still a compound update and can still be lost.",
+                "ru": "Редкое составное обновление остаётся составным и всё равно может потеряться."
+              }
+            }
+          ]
+        },
+        {
+          "id": "choose-p2-invariant-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In Java, making two related fields volatile keeps the invariant between them consistent for readers.",
+            "ru": "В Java пометка двух связанных fields как volatile сохраняет для читателей согласованность invariant между ними."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two volatile fields are two separate publications; a reader can catch a mix.",
+              "ru": "Два volatile fields — две отдельные публикации; читатель может поймать смесь."
+            },
+            "incorrect": {
+              "en": "No — an invariant across fields needs one synchronization mechanism around the whole invariant.",
+              "ru": "Нет — invariant между fields требует одного механизма синхронизации вокруг всего invariant."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "choose-p3-sort-decision",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the decision steps for shared mutable state in Java.",
+            "ru": "Расставь по порядку шаги решения для общего изменяемого состояния в Java."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Ask whether it is shared, then whether it is one value, then whether the update is compound.",
+              "ru": "Сначала спроси, общее ли оно, затем — одно ли это значение, затем — составное ли обновление."
+            },
+            "incorrect": {
+              "en": "Start from \"is it really shared and mutable\", then narrow down to volatile, atomics or a lock.",
+              "ru": "Начни с «действительно ли оно общее и изменяемое», затем сужай до volatile, atomics или lock."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Ask whether the state is really shared and mutable",
+                "ru": "Спросить, действительно ли состояние общее и изменяемое"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "If it is one independent flag or value, volatile can fit",
+                "ru": "Если это один независимый flag или value, volatile может подойти"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "If the update combines several steps, use an atomic class or a lock",
+                "ru": "Если обновление объединяет несколько шагов, взять atomic class или lock"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "If several fields form one invariant, put one synchronization mechanism around the whole invariant",
+                "ru": "Если несколько fields образуют один invariant, обернуть весь invariant одним механизмом синхронизации"
+              }
+            }
+          ]
+        },
+        {
+          "id": "choose-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing words.",
+            "ru": "Впиши два пропущенных слова."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One independent value → volatile; several steps → an atomic class or a lock.",
+              "ru": "Одно независимое значение → volatile; несколько шагов → atomic class или lock."
+            },
+            "incorrect": {
+              "en": "volatile fits one independent value; a compound update needs an atomic class or a lock.",
+              "ru": "volatile подходит для одного независимого значения; составному обновлению нужен atomic class или lock."
+            }
+          },
+          "text": {
+            "en": "volatile fits one ___ value; a compound update needs an ___ class or a lock.",
+            "ru": "volatile подходит для одного ___ значения; составному обновлению нужен ___ class или lock."
+          },
+          "blanks": [
+            {
+              "en": [
+                "independent"
+              ],
+              "ru": [
+                "независимого",
+                "независимое",
+                "independent"
+              ]
+            },
+            {
+              "en": [
+                "atomic"
+              ],
+              "ru": [
+                "atomic"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "putting-it-together",
+      "title": {
+        "en": "Putting it together",
+        "ru": "Собираем всё вместе"
+      },
+      "summary": {
+        "en": "volatile publishes one field plus everything written before it, and stops exactly there: compound updates and later mutations need atomics or a lock.",
+        "ru": "volatile публикует один field плюс всё, что записано до него, и на этом заканчивается: составным обновлениям и последующим изменениям нужны atomics или lock."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "cap-d1-await-publish",
+          "type": "predict_output",
+          "prompt": {
+            "en": "One worker thread runs run(); the main thread runs await(). What does await() print?",
+            "ru": "Один рабочий поток выполняет run(); главный поток выполняет await(). Что напечатает await()?"
+          },
+          "code": "class Job {\n    int processed = 0;                 // plain field\n    volatile boolean done = false;     // volatile flag\n\n    void run() {                       // the only worker thread\n        for (int i = 0; i < 3; i++) {\n            processed++;\n        }\n        done = true;\n    }\n\n    void await() {                     // the main thread\n        while (!done) {\n            // spin\n        }\n        System.out.println(processed);\n    }\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "This is the whole topic in one snippet. The worker's `processed++` calls are plain writes made by a **single** thread, so no update can be lost there. Then the volatile write `done = true` publishes them; the main thread's volatile read of `done` is the acquire side, so after the loop exits it sees `processed = 3`.\n\n```mermaid\nflowchart LR\n  P[\"plain writes: processed++ three times\"] --> W[\"volatile write: done = true\"]\n  W -->|\"happens-before\"| R[\"volatile read: while (!done)\"]\n  R --> S[\"reader sees done = true and processed = 3\"]\n  S --> N[\"compound updates still need atomics or a lock\"]\n```\n\nTwo things would break it. If a **second** worker thread also ran `processed++`, the plain (or even volatile) increment could lose updates — that needs an atomic class or a lock. And if `done` were a plain field, the spin loop could never see the change at all. volatile solves visibility and ordering for one field; it never solves indivisibility.",
+            "ru": "Это вся тема в одном фрагменте. Вызовы `processed++` у воркера — обычные записи **одного** потока, поэтому потерять там нечего. Затем volatile-запись `done = true` их публикует; volatile-чтение `done` в главном потоке — сторона acquire, поэтому после выхода из цикла он видит `processed = 3`.\n\n```mermaid\nflowchart LR\n  P[\"обычные записи: processed++ три раза\"] --> W[\"volatile-запись: done = true\"]\n  W -->|\"happens-before\"| R[\"volatile-чтение: while (!done)\"]\n  R --> S[\"читатель видит done = true и processed = 3\"]\n  S --> N[\"составным обновлениям всё равно нужны atomics или lock\"]\n```\n\nСломать это могут две вещи. Если бы `processed++` выполнял **второй** рабочий поток, обычное (да и volatile) увеличение могло бы потерять обновления — тут нужен atomic class или lock. А если бы `done` был обычным field, цикл вообще мог бы никогда не увидеть изменение. volatile решает visibility и ordering для одного field; неделимость он не решает никогда."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the volatile write of done publishes the earlier plain writes.",
+              "ru": "Верно — volatile-запись done публикует предыдущие обычные записи."
+            },
+            "incorrect": {
+              "en": "The volatile write/read pair publishes processed too — see below.",
+              "ru": "Пара volatile-запись/чтение публикует и processed — смотри ниже."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "3",
+                "ru": "3"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Possibly 0, because processed is not volatile",
+                "ru": "Возможно 0, потому что processed не volatile"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The volatile write of done creates a happens-before edge that publishes those writes.",
+                "ru": "Volatile-запись done создаёт связь happens-before, которая публикует эти записи."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — await() may spin forever",
+                "ru": "Ничего — await() может крутиться бесконечно"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "done is volatile, so the read is guaranteed to see the write.",
+                "ru": "done объявлен volatile, поэтому чтение гарантированно увидит запись."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cap-p1-spot-counter",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "Many threads call record(). Both fields are volatile. What is the real defect?",
+            "ru": "Много потоков вызывают record(). Оба fields объявлены volatile. В чём настоящий дефект?"
+          },
+          "code": "class Meter {\n    private volatile int hits = 0;\n    private volatile boolean started = true;\n\n    void record() {              // called by many threads\n        if (started) {\n            hits++;\n        }\n    }\n}",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "volatile publishes each read and write; it does not make hits++ indivisible.",
+              "ru": "volatile публикует каждое чтение и запись; он не делает hits++ неделимым."
+            },
+            "incorrect": {
+              "en": "hits++ is read-compute-write, so increments can be lost despite volatile.",
+              "ru": "hits++ — это read-compute-write, поэтому увеличения могут теряться несмотря на volatile."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "hits++ is a read-compute-write, so increments can be lost even though hits is volatile",
+                "ru": "hits++ — это read-compute-write, поэтому увеличения теряются, даже если hits объявлен volatile"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "started must be copied into a local variable before the check",
+                "ru": "started нужно скопировать в локальную переменную перед проверкой"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The volatile read of started is already fresh; that is not the problem.",
+                "ru": "Volatile-чтение started и так свежее; проблема не в этом."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — both fields are volatile, so record() is thread-safe",
+                "ru": "Ничего — оба fields volatile, поэтому record() потокобезопасен"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "volatile gives no mutual exclusion over the read-compute-write sequence.",
+                "ru": "volatile не даёт mutual exclusion над последовательностью read-compute-write."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p2-publish-then-mutate",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The writer publishes a Box through a volatile field and then mutates it. What can the reader print?",
+            "ru": "Писатель публикует Box через volatile field, а затем меняет его. Что может напечатать читатель?"
+          },
+          "code": "class Box { int size = 1; }\n\n// shared\nvolatile Box box = null;\n\n// writer thread\nBox b = new Box();\nb.size = 5;\nbox = b;          // volatile write\nb.size = 9;       // later mutation, no synchronization\n\n// reader thread\nBox r = box;\nif (r != null) {\n    System.out.println(r.size);\n}",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Two atoms meet here. The volatile write `box = b` is **safe publication**: it publishes the reference together with the ordinary write `b.size = 5`, so a reader that sees a non-null `box` is guaranteed to see at least `5` — never the raw default `1`.\n\nThe write `b.size = 9` happens **after** the publication, so it sits outside the happens-before edge. It is an ordinary write to a shared object with no synchronization: the reader may or may not see it. Hence `5` or `9`, with no guarantee which.\n\nThat is the practical warning about volatile references: publishing once is safe, but if the object keeps changing afterwards those changes need their own thread-safety plan.",
+            "ru": "Здесь встречаются два атома. Volatile-запись `box = b` — это **safe publication**: она публикует reference вместе с обычной записью `b.size = 5`, поэтому читатель, увидевший непустой `box`, гарантированно увидит как минимум `5`, а не исходную единицу.\n\nЗапись `b.size = 9` происходит **после** публикации, поэтому оказывается вне связи happens-before. Это обычная запись в общий объект без синхронизации: читатель может её увидеть, а может и нет. Отсюда `5` или `9`, без гарантий, что именно.\n\nЭто и есть практическое предупреждение о volatile reference: однократная публикация безопасна, но если объект продолжает меняться потом, этим изменениям нужен свой план thread-safety."
+          },
+          "feedback": {
+            "correct": {
+              "en": "5 is published by the volatile write; the later mutation to 9 carries no guarantee.",
+              "ru": "5 публикуется volatile-записью; последующее изменение на 9 не гарантировано."
+            },
+            "incorrect": {
+              "en": "It can print 5 or 9: only the write before the publication is guaranteed.",
+              "ru": "Он может напечатать 5 или 9: гарантирована только запись до публикации."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "5 or 9",
+                "ru": "5 или 9"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Always 9, because box is volatile",
+                "ru": "Всегда 9, потому что box объявлен volatile"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The mutation to 9 happens after publication, so it carries no guarantee.",
+                "ru": "Изменение на 9 происходит после публикации, поэтому оно не гарантировано."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Always 1, since the reader cannot see the writer's field writes",
+                "ru": "Всегда 1, ведь читатель не видит записи в fields, сделанные писателем"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The volatile write publishes the ordinary writes made before it, so 1 is impossible.",
+                "ru": "Volatile-запись публикует обычные записи, сделанные до неё, поэтому 1 невозможна."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p3-sort-full-flow",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the complete volatile publication flow in Java, including its limits.",
+            "ru": "Расставь по порядку полный процесс публикации через volatile в Java, включая его границы."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Prepare, publish, read — then remember what volatile does not cover.",
+              "ru": "Подготовить, опубликовать, прочитать — и помнить, что volatile не покрывает."
+            },
+            "incorrect": {
+              "en": "Ordinary writes first, then the volatile write, then the volatile read; later mutations and compound updates need more.",
+              "ru": "Сначала обычные записи, затем volatile-запись, затем volatile-чтение; последующим изменениям и составным обновлениям нужно больше."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "The writer fills the ordinary fields of a fully prepared object",
+                "ru": "Писатель заполняет обычные fields полностью подготовленного объекта"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "The writer stores the reference in a volatile field (release)",
+                "ru": "Писатель сохраняет reference в volatile field (release)"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "The reader reads that volatile field (acquire) and sees the reference and those writes",
+                "ru": "Читатель читает этот volatile field (acquire) и видит reference и эти записи"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Any later mutation of the published object needs its own synchronization",
+                "ru": "Любому последующему изменению опубликованного объекта нужна своя синхронизация"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "Any compound update of a value needs an atomic class or a lock",
+                "ru": "Любому составному обновлению значения нужен atomic class или lock"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p4-match-roles",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each mechanism to its role in Java's memory-visibility toolkit.",
+            "ru": "Соотнеси каждый механизм с его ролью в наборе инструментов видимости памяти в Java."
+          },
+          "feedback": {
+            "correct": {
+              "en": "volatile publishes and orders one field; atomics and locks handle indivisibility.",
+              "ru": "volatile публикует и упорядочивает один field; atomics и locks отвечают за неделимость."
+            },
+            "incorrect": {
+              "en": "The write publishes, the read acquires, AtomicInteger makes an update indivisible, synchronized excludes, and count++ on a volatile int is still unsafe.",
+              "ru": "Запись публикует, чтение делает acquire, AtomicInteger делает обновление неделимым, synchronized исключает, а count++ на volatile int всё ещё небезопасен."
+            }
+          },
+          "pairs": [
+            {
+              "id": "w",
+              "left": {
+                "en": "volatile write",
+                "ru": "volatile-запись"
+              },
+              "right": {
+                "en": "Publishes the field and the ordinary writes made before it",
+                "ru": "Публикует field и обычные записи, сделанные до неё"
+              }
+            },
+            {
+              "id": "r",
+              "left": {
+                "en": "Later volatile read of the same field",
+                "ru": "Последующее volatile-чтение того же field"
+              },
+              "right": {
+                "en": "Sees that write and everything that came before it",
+                "ru": "Видит эту запись и всё, что было до неё"
+              }
+            },
+            {
+              "id": "a",
+              "left": {
+                "en": "AtomicInteger",
+                "ru": "AtomicInteger"
+              },
+              "right": {
+                "en": "Makes a read-modify-write indivisible",
+                "ru": "Делает read-modify-write неделимым"
+              }
+            },
+            {
+              "id": "s",
+              "left": {
+                "en": "synchronized",
+                "ru": "synchronized"
+              },
+              "right": {
+                "en": "Mutual exclusion plus visibility at monitor enter and exit",
+                "ru": "Mutual exclusion плюс visibility на monitor enter и exit"
+              }
+            },
+            {
+              "id": "i",
+              "left": {
+                "en": "count++ on a volatile int",
+                "ru": "count++ на volatile int"
+              },
+              "right": {
+                "en": "Still loses updates under concurrency",
+                "ru": "Всё равно теряет обновления при конкурентном доступе"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p5-fill-answer",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill the key parts of the interview answer about volatile.",
+            "ru": "Впиши ключевые части ответа про volatile на собеседовании."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two guarantees for one field, and an atomic class for indivisible updates.",
+              "ru": "Две гарантии для одного field и atomic class для неделимых обновлений."
+            },
+            "incorrect": {
+              "en": "volatile gives visibility and ordering for one field; for an indivisible count++ use AtomicInteger.",
+              "ru": "volatile даёт visibility и ordering для одного field; для неделимого count++ используй AtomicInteger."
+            }
+          },
+          "text": {
+            "en": "volatile guarantees ___ (a read is never stale) and ___ (release/acquire) for a single field; for an indivisible count++ use ___.",
+            "ru": "volatile гарантирует ___ (чтение никогда не устаревшее) и ___ (release/acquire) для одного field; для неделимого count++ используй ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "visibility"
+              ],
+              "ru": [
+                "visibility",
+                "видимость"
+              ]
+            },
+            {
+              "en": [
+                "ordering"
+              ],
+              "ru": [
+                "ordering",
+                "порядок"
+              ]
+            },
+            {
+              "en": [
+                "AtomicInteger",
+                "LongAdder"
+              ],
+              "ru": [
+                "AtomicInteger",
+                "LongAdder"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

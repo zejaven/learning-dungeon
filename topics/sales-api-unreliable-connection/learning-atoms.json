@@ -1,0 +1,3326 @@
+{
+  "schemaVersion": 1,
+  "topicId": "sales-api-unreliable-connection",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "timeout-ambiguity",
+      "title": {
+        "en": "A timeout is not an answer",
+        "ru": "Таймаут — это не ответ"
+      },
+      "summary": {
+        "en": "After a timeout the client cannot tell \"the request was lost\" from \"the response was lost\", so the write itself must be made safe to repeat.",
+        "ru": "После таймаута клиент не может отличить «запрос потерялся» от «ответ потерялся», поэтому саму запись нужно сделать безопасной для повтора."
+      },
+      "discovery": [
+        {
+          "id": "timeout-d1-two-worlds",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A till sends `POST /sales` and the request times out. What does the client now know about the sale?",
+            "ru": "Касса отправляет `POST /sales`, и запрос завершается таймаутом. Что клиент теперь знает о продаже?"
+          },
+          "reveal": {
+            "en": "A **timeout is not an answer** — it only says the reply did not arrive in time. Two completely different worlds produce exactly the same silence:\n\n```mermaid\nflowchart TD\n  A[\"POST /sales times out\"] --> B[\"world 1: the request never arrived, nothing registered\"]\n  A --> C[\"world 2: the sale was registered, the response was lost\"]\n  B --> D[\"the client sees the same silence in both\"]\n  C --> D\n```\n\nSo the client has only two bad options: give up (and lose real money in world 1) or retry (and charge the customer twice in world 2). No smarter timeout, no longer wait and no extra status code removes this — the information simply is not there.\n\nThe way out is to stop trying to tell the worlds apart and instead make the retry harmless. An operation is **idempotent** when repeating it changes nothing beyond the first application. Once the write is idempotent you may retry as often as you like, because the second call cannot do damage. The name the client attaches to one business action, so the server can recognise a repeat of it, is called the **idempotency key** — the next steps build the design around it.",
+            "ru": "**Таймаут — это не ответ**: он лишь говорит, что отклик не пришёл вовремя. Два совершенно разных мира дают одинаковое молчание:\n\n```mermaid\nflowchart TD\n  A[\"POST /sales завершился таймаутом\"] --> B[\"мир 1: запрос не дошёл, ничего не зарегистрировано\"]\n  A --> C[\"мир 2: продажа зарегистрирована, ответ потерялся\"]\n  B --> D[\"клиент видит одинаковое молчание в обоих случаях\"]\n  C --> D\n```\n\nПоэтому у клиента только два плохих варианта: сдаться (и потерять реальные деньги в мире 1) или повторить (и списать с покупателя дважды в мире 2). Ни более умный таймаут, ни более долгое ожидание, ни дополнительный код ответа этого не исправят — информации просто нет.\n\nВыход — перестать различать эти миры и сделать повтор безвредным. Операция **идемпотентна**, если её повторение ничего не меняет сверх первого применения. Как только запись идемпотентна, повторять можно сколько угодно: второй вызов не навредит. Имя, которое клиент присваивает одному бизнес-действию, чтобы сервер узнал его повтор, называется **ключом идемпотентности** — вокруг него и строится весь дальнейший дизайн."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — the timeout carries no information about the server's state.",
+              "ru": "Верно — таймаут не несёт никакой информации о состоянии сервера."
+            },
+            "incorrect": {
+              "en": "A timeout is silence: the request may have been lost, or the response may have been.",
+              "ru": "Таймаут — это молчание: мог потеряться запрос, а мог и ответ."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Nothing definite — the sale may or may not be registered",
+                "ru": "Ничего определённого — продажа может быть зарегистрирована, а может и нет"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The sale was not registered, because no response arrived",
+                "ru": "Продажа не зарегистрирована, раз ответ не пришёл"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The server may have registered it and the response was lost on the way back.",
+                "ru": "Сервер мог её зарегистрировать, а ответ потерялся на обратном пути."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The sale was registered, because the request left the device",
+                "ru": "Продажа зарегистрирована, раз запрос ушёл с устройства"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Leaving the device is not arriving — the request may never have reached the server.",
+                "ru": "Уйти с устройства не значит дойти — запрос мог вообще не достичь сервера."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "timeout-p1-what-makes-retry-safe",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What makes retrying a timed-out `POST /sales` safe?",
+            "ru": "Что делает безопасным повтор `POST /sales`, завершившегося таймаутом?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Safety comes from the write being idempotent, not from the retry being clever.",
+              "ru": "Безопасность даёт идемпотентность записи, а не хитрость повтора."
+            },
+            "incorrect": {
+              "en": "Only an idempotent write makes a retry safe — the repeat must have no effect beyond the first call.",
+              "ru": "Повтор безопасен только при идемпотентной записи — повторный вызов не должен ничего добавлять к первому."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The write is idempotent, so a repeat has no effect beyond the first call",
+                "ru": "Запись идемпотентна, поэтому повтор ничего не добавляет к первому вызову"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A longer client timeout, so the response has time to arrive",
+                "ru": "Более длинный таймаут клиента, чтобы ответ успел прийти"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A longer wait narrows the window but never removes it; the write can still be applied twice.",
+                "ru": "Долгое ожидание сужает окно, но не убирает его; запись всё равно может примениться дважды."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Checking `GET /sales` first to see whether the sale is already there",
+                "ru": "Сначала проверить `GET /sales`, есть ли продажа"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The check and the retry are two calls; the sale can land between them.",
+                "ru": "Проверка и повтор — два вызова; продажа может появиться между ними."
+              }
+            }
+          ]
+        },
+        {
+          "id": "timeout-p2-give-up-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "When `POST /sales` times out, giving up is the safe choice, because the sale was probably not registered.",
+            "ru": "Когда `POST /sales` завершается таймаутом, сдаться — безопасный выбор, потому что продажа, скорее всего, не зарегистрирована."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Giving up silently loses real money whenever it was only the response that was lost.",
+              "ru": "Молчаливый отказ теряет реальные деньги каждый раз, когда потерялся именно ответ."
+            },
+            "incorrect": {
+              "en": "No — the sale may well be registered; giving up loses money instead of duplicating it.",
+              "ru": "Нет — продажа вполне может быть зарегистрирована; отказ теряет деньги вместо дублирования."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "timeout-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble what a timeout on `POST /sales` tells the client.",
+            "ru": "Собери, что таймаут на `POST /sales` сообщает клиенту."
+          },
+          "feedback": {
+            "correct": {
+              "en": "That is the whole problem in one line: silence is not a state.",
+              "ru": "Вся проблема в одной строке: молчание — не состояние."
+            },
+            "incorrect": {
+              "en": "A timeout does not tell the client whether the write happened.",
+              "ru": "Таймаут не говорит клиенту, произошла ли запись."
+            }
+          },
+          "tokens": {
+            "en": [
+              "a",
+              "timeout",
+              "does",
+              "not",
+              "tell",
+              "the",
+              "client",
+              "whether",
+              "the",
+              "write",
+              "happened"
+            ],
+            "ru": [
+              "таймаут",
+              "не",
+              "говорит",
+              "клиенту,",
+              "произошла",
+              "ли",
+              "запись"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "always",
+              "failed"
+            ],
+            "ru": [
+              "всегда",
+              "провалилась"
+            ]
+          }
+        },
+        {
+          "id": "timeout-p4-fill-idempotent",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the missing term.",
+            "ru": "Впиши пропущенный термин."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Idempotency is what turns an unsafe retry into a free one.",
+              "ru": "Идемпотентность превращает опасный повтор в бесплатный."
+            },
+            "incorrect": {
+              "en": "The term is idempotent: repeating the operation changes nothing beyond the first application.",
+              "ru": "Термин — идемпотентная: повтор операции ничего не меняет сверх первого применения."
+            }
+          },
+          "text": {
+            "en": "An operation that can be repeated without any effect beyond the first application is called ___.",
+            "ru": "Операция, которую можно повторять без эффекта сверх первого применения, называется ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "idempotent",
+                "idempotency"
+              ],
+              "ru": [
+                "идемпотентной",
+                "идемпотентная",
+                "идемпотентность",
+                "idempotent"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "client-mints-the-key",
+      "title": {
+        "en": "The client mints the key",
+        "ru": "Ключ создаёт клиент"
+      },
+      "summary": {
+        "en": "The idempotency key is created on the device, once per business action, before the first network call — never per HTTP attempt and never derived from the payload.",
+        "ru": "Ключ идемпотентности создаётся на устройстве, один раз на бизнес-действие, до первого сетевого вызова — не на каждую HTTP-попытку и не из содержимого запроса."
+      },
+      "discovery": [
+        {
+          "id": "key-d1-who-and-when",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Where and when should the idempotency key for a sale be created?",
+            "ru": "Где и когда должен создаваться ключ идемпотентности для продажи?"
+          },
+          "reveal": {
+            "en": "The key is born **with the sale, on the device, before the first network call** — a UUID, or `deviceId + local sequence number`.\n\n```mermaid\nflowchart LR\n  S[\"sale happens\"] --> K[\"mint key sale-1\"]\n  K --> Q[\"attempt 1: POST with sale-1\"]\n  K --> R[\"attempt 2: POST with sale-1\"]\n  K --> T[\"attempt 3: POST with sale-1\"]\n```\n\nWhy not the server? Because the server may never see the first attempt — and that is exactly the failure the key has to survive. If the id only exists once a request arrives, the client has no name for the sale during the outage.\n\nWhy not one key per HTTP attempt? Because then every retry looks like a brand-new sale and you have no idempotency at all: the server registers both and the total doubles. This is the classic interview trap — a retry path that re-creates the sale object and generates a *fresh* key.\n\nWhy not a hash of the request body? Because two customers buying the same coffee at the same price in the same second are **two** sales. Identity must be explicit, never inferred from the contents.",
+            "ru": "Ключ рождается **вместе с продажей, на устройстве, до первого сетевого вызова** — это UUID или `deviceId + локальный порядковый номер`.\n\n```mermaid\nflowchart LR\n  S[\"произошла продажа\"] --> K[\"создаём ключ sale-1\"]\n  K --> Q[\"попытка 1: POST с sale-1\"]\n  K --> R[\"попытка 2: POST с sale-1\"]\n  K --> T[\"попытка 3: POST с sale-1\"]\n```\n\nПочему не сервер? Потому что сервер может вообще не увидеть первую попытку — а это ровно тот сбой, который ключ обязан пережить. Если id появляется лишь когда запрос дошёл, у клиента нет имени для продажи во время обрыва связи.\n\nПочему не по ключу на HTTP-попытку? Тогда каждый повтор выглядит как новая продажа, и идемпотентности нет вовсе: сервер регистрирует обе, и итог удваивается. Это классическая ловушка на собеседовании — путь повтора, который пересоздаёт объект продажи и генерирует *новый* ключ.\n\nПочему не хеш тела запроса? Потому что два покупателя, купившие один и тот же кофе по той же цене в одну секунду, — это **две** продажи. Идентичность должна быть явной, а не выведенной из содержимого."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The key belongs to the business action, and it must exist before the first send.",
+              "ru": "Ключ принадлежит бизнес-действию и должен существовать до первой отправки."
+            },
+            "incorrect": {
+              "en": "It is minted on the device, when the sale happens, before the first network call.",
+              "ru": "Он создаётся на устройстве, в момент продажи, до первого сетевого вызова."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "On the device, when the sale happens, before the first send",
+                "ru": "На устройстве, в момент продажи, до первой отправки"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "On the server, when the first request arrives",
+                "ru": "На сервере, когда придёт первый запрос"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The server may never see the first attempt, leaving the client with no name for the sale.",
+                "ru": "Сервер может не увидеть первую попытку, и у клиента не останется имени для продажи."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "On the device, freshly for each HTTP attempt",
+                "ru": "На устройстве, заново на каждую HTTP-попытку"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A new key per attempt makes every retry look like a new sale — no idempotency at all.",
+                "ru": "Новый ключ на попытку делает каждый повтор новой продажей — идемпотентности нет."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "By hashing the request body, so identical sales share a key",
+                "ru": "Хешированием тела запроса, чтобы одинаковые продажи имели общий ключ"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Two identical purchases in the same second are two real sales; identity must be explicit.",
+                "ru": "Две одинаковые покупки в одну секунду — это две настоящие продажи; идентичность должна быть явной."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "key-p1-spot-new-key",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This sender retries a sale over an unreliable link. What is the defect?",
+            "ru": "Этот отправщик повторяет продажу по ненадёжной связи. В чём дефект?"
+          },
+          "code": "void send(Sale sale) {\n    boolean ok = false;\n    while (!ok) {\n        String key = UUID.randomUUID().toString();\n        ok = http.post(\"/sales\", key, sale);\n    }\n}",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "A key minted inside the loop makes every retry a new sale on the server.",
+              "ru": "Ключ, созданный внутри цикла, делает каждый повтор новой продажей на сервере."
+            },
+            "incorrect": {
+              "en": "The key is generated inside the retry loop, so the server sees a different sale each attempt.",
+              "ru": "Ключ генерируется внутри цикла повторов, поэтому сервер видит на каждой попытке другую продажу."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The key is generated inside the retry loop, so each attempt looks like a new sale",
+                "ru": "Ключ генерируется внутри цикла повторов, поэтому каждая попытка выглядит новой продажей"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "`UUID.randomUUID()` is not unique enough to serve as an idempotency key",
+                "ru": "`UUID.randomUUID()` недостаточно уникален для ключа идемпотентности"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A UUID is a fine key; the defect is *when* it is created, not what it is.",
+                "ru": "UUID — нормальный ключ; дефект в том, *когда* он создаётся, а не в его виде."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The key should travel inside the body, not as a separate argument",
+                "ru": "Ключ должен передаваться в теле, а не отдельным аргументом"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A header or a `saleId` in the body both work; placement is not the bug here.",
+                "ru": "И заголовок, и `saleId` в теле работают; дело не в размещении."
+              }
+            }
+          ]
+        },
+        {
+          "id": "key-p2-payload-hash-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Deduplicating sales by a hash of the request body is an acceptable substitute for a client-minted idempotency key.",
+            "ru": "Дедупликация продаж по хешу тела запроса — приемлемая замена ключу идемпотентности, созданному клиентом."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two genuinely separate sales can have byte-identical bodies; the key must be an explicit identity.",
+              "ru": "Две по-настоящему разные продажи могут иметь побайтово одинаковые тела; ключ обязан быть явной идентичностью."
+            },
+            "incorrect": {
+              "en": "No — identical bodies can be two real sales, so a content hash would silently swallow one.",
+              "ru": "Нет — одинаковые тела могут быть двумя настоящими продажами, и хеш содержимого молча проглотит одну."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "key-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the rule for minting an idempotency key.",
+            "ru": "Собери правило создания ключа идемпотентности."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One key per business action, created before the first attempt ever leaves.",
+              "ru": "Один ключ на бизнес-действие, созданный до того, как уйдёт первая попытка."
+            },
+            "incorrect": {
+              "en": "The client generates one key per sale before the first send.",
+              "ru": "Клиент генерирует один ключ на продажу до первой отправки."
+            }
+          },
+          "tokens": {
+            "en": [
+              "the",
+              "client",
+              "generates",
+              "one",
+              "key",
+              "per",
+              "sale",
+              "before",
+              "the",
+              "first",
+              "send"
+            ],
+            "ru": [
+              "клиент",
+              "генерирует",
+              "один",
+              "ключ",
+              "на",
+              "продажу",
+              "до",
+              "первой",
+              "отправки"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "server",
+              "attempt"
+            ],
+            "ru": [
+              "сервер",
+              "попытку"
+            ]
+          }
+        },
+        {
+          "id": "key-p4-fill-per-what",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill in what a key is scoped to, and what it is NOT scoped to.",
+            "ru": "Впиши, на что выдаётся ключ и на что он НЕ выдаётся."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One sale, one key — however many HTTP attempts it takes to deliver it.",
+              "ru": "Одна продажа — один ключ, сколько бы HTTP-попыток ни потребовалось."
+            },
+            "incorrect": {
+              "en": "A key is minted per sale (business action), never per HTTP attempt.",
+              "ru": "Ключ создаётся на продажу (бизнес-действие), а не на HTTP-попытку."
+            }
+          },
+          "text": {
+            "en": "An idempotency key is minted once per ___, never per HTTP ___.",
+            "ru": "Ключ идемпотентности создаётся один раз на ___, а не на HTTP-___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "sale",
+                "business action"
+              ],
+              "ru": [
+                "продажу",
+                "бизнес-действие",
+                "sale"
+              ]
+            },
+            {
+              "en": [
+                "attempt",
+                "request",
+                "retry"
+              ],
+              "ru": [
+                "попытку",
+                "запрос",
+                "attempt"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "local-queue-first",
+      "title": {
+        "en": "Write locally, then send",
+        "ru": "Сначала записать локально, потом отправить"
+      },
+      "summary": {
+        "en": "The sale is committed to a durable local queue on the device before the first send, so the till keeps selling offline and no sale dies with a request.",
+        "ru": "Продажа фиксируется в надёжной локальной очереди на устройстве до первой отправки, поэтому касса продолжает продавать в офлайне и ни одна продажа не умирает вместе с запросом."
+      },
+      "discovery": [
+        {
+          "id": "queue-d1-crash-mid-request",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A till records a sale into a durable local queue, starts `POST /sales`, and the device loses power mid-request. What is lost?",
+            "ru": "Касса записывает продажу в надёжную локальную очередь, начинает `POST /sales`, и посреди запроса пропадает питание. Что потеряно?"
+          },
+          "reveal": {
+            "en": "The device gets a **durable local queue** — SQLite, a WAL file, Room or Core Data: anything that survives a crash and a dead battery. Recording the sale commits it locally; sending is a *separate*, retryable step.\n\n```mermaid\nflowchart LR\n  S[\"sale happens\"] --> Q[\"durable local queue: sale + key\"]\n  Q --> B[\"background sender\"]\n  B --> A[\"Sales API\"]\n  B -.->|\"link down\"| Q\n```\n\nTwo consequences fall out of that split:\n\n- The till keeps selling while completely offline — this is called **store-and-forward**: store the fact now, forward it when the link comes back.\n- A sale is never \"lost in a request\", because the request was never the place the sale lived.\n\nThis is the client-side mirror of the outbox idea: write the business fact and the \"must be delivered\" record together, deliver later. An in-memory list is not enough — it is exactly what a dead battery erases.",
+            "ru": "У устройства есть **надёжная локальная очередь** — SQLite, WAL-файл, Room или Core Data: что угодно, что переживёт падение приложения и разряженную батарею. Запись продажи фиксирует её локально; отправка — *отдельный*, повторяемый шаг.\n\n```mermaid\nflowchart LR\n  S[\"произошла продажа\"] --> Q[\"надёжная локальная очередь: продажа + ключ\"]\n  Q --> B[\"фоновый отправщик\"]\n  B --> A[\"Sales API\"]\n  B -.->|\"связь пропала\"| Q\n```\n\nИз этого разделения следуют два вывода:\n\n- Касса продолжает продавать полностью офлайн — это называется **store-and-forward**: сохрани факт сейчас, доставь, когда связь вернётся.\n- Продажа никогда не «теряется в запросе», потому что запрос никогда и не был местом, где она жила.\n\nЭто клиентское зеркало идеи outbox: записать бизнес-факт и запись «должно быть доставлено» вместе, доставить позже. Списка в памяти недостаточно — именно его стирает разряженная батарея."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The sale lives in the queue, not in the request, so the sender simply tries again.",
+              "ru": "Продажа живёт в очереди, а не в запросе, поэтому отправщик просто попробует снова."
+            },
+            "incorrect": {
+              "en": "Nothing is lost: the sale was committed locally before the send, so it is resent later.",
+              "ru": "Ничего не потеряно: продажа зафиксирована локально до отправки, поэтому её отправят позже."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Nothing — the sale is in the local queue and will be resent",
+                "ru": "Ничего — продажа лежит в локальной очереди и будет отправлена снова"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The sale, because it only existed inside the in-flight request",
+                "ru": "Продажа, ведь она существовала только внутри летящего запроса"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is precisely what the durable local queue prevents — the sale was written first.",
+                "ru": "Именно это и предотвращает надёжная локальная очередь — продажа была записана первой."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing, because the server has already accepted it",
+                "ru": "Ничего, потому что сервер её уже принял"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The server may never have received it; the guarantee comes from the local queue, not the server.",
+                "ru": "Сервер мог её не получить; гарантию даёт локальная очередь, а не сервер."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "queue-p1-what-it-buys",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does store-and-forward on a till buy you?",
+            "ru": "Что даёт кассе подход store-and-forward?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Selling and delivering become independent, so an outage stops delivery, not business.",
+              "ru": "Продажа и доставка становятся независимыми, поэтому обрыв связи останавливает доставку, а не бизнес."
+            },
+            "incorrect": {
+              "en": "It lets the till keep selling while offline and deliver the queued sales once the link returns.",
+              "ru": "Он позволяет кассе продавать офлайн и доставить накопленные продажи, когда связь вернётся."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The till keeps selling while offline and delivers the queued sales later",
+                "ru": "Касса продолжает продавать офлайн и доставляет накопленные продажи позже"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The server no longer needs to deduplicate repeated sales",
+                "ru": "Серверу больше не нужно дедуплицировать повторные продажи"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The queue makes retries possible; it is the server that still has to make them harmless.",
+                "ru": "Очередь делает повторы возможными; безвредными их всё равно должен делать сервер."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Requests stop timing out, because the sale is sent from disk",
+                "ru": "Запросы перестают завершаться таймаутом, ведь продажа отправляется с диска"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The link is just as unreliable; the queue changes what happens after a timeout, not the timeout.",
+                "ru": "Связь так же ненадёжна; очередь меняет то, что происходит после таймаута, а не сам таймаут."
+              }
+            }
+          ]
+        },
+        {
+          "id": "queue-p2-in-memory-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Holding pending sales in an in-memory list is enough, as long as a background sender keeps retrying them.",
+            "ru": "Хранить неотправленные продажи в списке в памяти достаточно, если фоновый отправщик продолжает их повторять."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A crash or a dead battery erases memory; the queue has to be durable storage.",
+              "ru": "Падение или разряженная батарея стирают память; очередь должна быть надёжным хранилищем."
+            },
+            "incorrect": {
+              "en": "No — an app crash or a flat battery wipes an in-memory list along with the money it represents.",
+              "ru": "Нет — падение приложения или разряд батареи стирают список в памяти вместе с деньгами, которые он представляет."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "queue-p3-sort-client-steps",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order what a till does with one sale, from the moment money changes hands.",
+            "ru": "Расставь по порядку, что касса делает с одной продажей с момента передачи денег."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Record, commit, send, confirm — sending is never the first durable step.",
+              "ru": "Записать, зафиксировать, отправить, подтвердить — отправка никогда не первый надёжный шаг."
+            },
+            "incorrect": {
+              "en": "The sale is minted with its key and committed to durable storage BEFORE any send.",
+              "ru": "Продажа создаётся со своим ключом и фиксируется в надёжном хранилище ДО любой отправки."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Create the sale together with its idempotency key",
+                "ru": "Создать продажу вместе с её ключом идемпотентности"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Commit it to the durable local queue",
+                "ru": "Зафиксировать её в надёжной локальной очереди"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "A background sender POSTs /sales with that key",
+                "ru": "Фоновый отправщик отправляет POST /sales с этим ключом"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "On a response, mark the local sale as delivered",
+                "ru": "При получении ответа пометить локальную продажу как доставленную"
+              }
+            }
+          ]
+        },
+        {
+          "id": "queue-p4-fill-store-forward",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the client-side pattern.",
+            "ru": "Дополни клиентский паттерн."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Store the fact locally now, forward it whenever the link allows.",
+              "ru": "Сохрани факт локально сейчас, доставь его, когда позволит связь."
+            },
+            "incorrect": {
+              "en": "The sale goes into a durable local queue first; the pattern is called store-and-forward.",
+              "ru": "Продажа сначала попадает в надёжную локальную очередь; паттерн называется store-and-forward."
+            }
+          },
+          "text": {
+            "en": "The till commits the sale to a durable local ___ before sending it; this is called ___-and-forward.",
+            "ru": "Касса фиксирует продажу в надёжной локальной ___ до отправки; это называется ___-and-forward."
+          },
+          "blanks": [
+            {
+              "en": [
+                "queue"
+              ],
+              "ru": [
+                "очереди",
+                "очередь",
+                "queue"
+              ]
+            },
+            {
+              "en": [
+                "store"
+              ],
+              "ru": [
+                "store"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "server-idempotency-store",
+      "title": {
+        "en": "The idempotency store",
+        "ru": "Хранилище идемпотентности"
+      },
+      "summary": {
+        "en": "The server keeps key -> (status, response body, created_at) and answers a repeat by replaying the stored response without applying anything.",
+        "ru": "Сервер держит key -> (статус, тело ответа, created_at) и отвечает на повтор сохранённым ответом, ничего не применяя."
+      },
+      "discovery": [
+        {
+          "id": "store-d1-known-key",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A retry arrives with an idempotency key the server has already handled, carrying the same body. What should the server do?",
+            "ru": "Приходит повтор с ключом идемпотентности, который сервер уже обработал, и с тем же телом. Что сервер должен сделать?"
+          },
+          "reveal": {
+            "en": "The server keeps an **idempotency store** — a table mapping the key to what happened:\n\n```\nkey       | status | response body            | created_at\n----------+--------+--------------------------+---------------------\nsale-1    | 201    | {\"receiptId\": \"r-9931\"}  | 2026-07-27T10:04:12Z\n```\n\nFor every request the server looks the key up. If it is unknown, the sale is registered and the response is written into this store. If it is known, the stored response is **replayed** and nothing is applied.\n\nThat last word matters. Merely *skipping* a repeat is deduplication, and it leaves the client with no receipt id and no way to confirm anything — it still cannot tell whether the sale exists. **Idempotency** means the retry gets the *same answer* as the original: same receipt id, same body. Store the response, do not just swallow the request.\n\nThe same server-side idea applied to messages consumed from a broker rather than over HTTP is known as the inbox pattern.",
+            "ru": "Сервер держит **хранилище идемпотентности** — таблицу, связывающую ключ с тем, что произошло:\n\n```\nkey       | status | тело ответа              | created_at\n----------+--------+--------------------------+---------------------\nsale-1    | 201    | {\"receiptId\": \"r-9931\"}  | 2026-07-27T10:04:12Z\n```\n\nДля каждого запроса сервер ищет ключ. Если ключ неизвестен, продажа регистрируется, а ответ записывается в это хранилище. Если ключ известен, сохранённый ответ **повторяется**, и ничего не применяется.\n\nПоследнее слово важно. Просто *пропустить* повтор — это дедупликация, и клиент остаётся без id чека и без возможности что-либо подтвердить: он по-прежнему не знает, существует ли продажа. **Идемпотентность** означает, что повтор получает *тот же ответ*, что и оригинал: тот же id чека, то же тело. Сохраняй ответ, а не просто проглатывай запрос.\n\nТа же серверная идея для сообщений, потребляемых из брокера, а не по HTTP, называется паттерном inbox."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Replay the stored answer, apply nothing — that is idempotency rather than mere dedup.",
+              "ru": "Повторить сохранённый ответ и ничего не применять — это идемпотентность, а не просто дедупликация."
+            },
+            "incorrect": {
+              "en": "It replays the stored response and applies nothing, so the client gets the same receipt back.",
+              "ru": "Он повторяет сохранённый ответ и ничего не применяет, поэтому клиент получает тот же чек."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Return the stored response and apply nothing",
+                "ru": "Вернуть сохранённый ответ и ничего не применять"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Register the sale again, since the client clearly asked twice",
+                "ru": "Зарегистрировать продажу снова — клиент же попросил дважды"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the double charge the whole design exists to prevent.",
+                "ru": "Это и есть двойное списание, ради предотвращения которого всё и строится."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Silently ignore it and answer with an empty body",
+                "ru": "Молча проигнорировать и ответить пустым телом"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is deduplication, not idempotency — the client is left with no receipt to show.",
+                "ru": "Это дедупликация, а не идемпотентность — клиенту нечего показать вместо чека."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "store-p1-what-is-stored",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does a server's idempotency store hold against each key?",
+            "ru": "Что сервер хранит в хранилище идемпотентности рядом с каждым ключом?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Status plus body plus creation time is exactly what a replay and a retention purge need.",
+              "ru": "Статус, тело и время создания — ровно то, что нужно для повтора ответа и очистки по сроку."
+            },
+            "incorrect": {
+              "en": "It stores the response status and body plus the creation time, so a retry can be answered identically.",
+              "ru": "Хранятся статус и тело ответа плюс время создания, чтобы повтор получил тот же ответ."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The response status and body, plus when the record was created",
+                "ru": "Статус и тело ответа плюс время создания записи"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Just the key itself, as a marker that it was seen",
+                "ru": "Только сам ключ, как отметку, что он уже встречался"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Then a retry has no response to replay and the client still cannot get its receipt.",
+                "ru": "Тогда повтору нечего вернуть, и клиент по-прежнему не получит свой чек."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The client's IP address and user agent",
+                "ru": "IP-адрес клиента и user agent"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Idempotency is keyed by the business action, not by who or where sent it.",
+                "ru": "Идемпотентность привязана к бизнес-действию, а не к тому, кто и откуда его прислал."
+              }
+            }
+          ]
+        },
+        {
+          "id": "store-p2-skip-is-enough-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Silently skipping a repeated request without returning a response is equivalent to being idempotent.",
+            "ru": "Молча пропустить повторный запрос, не возвращая ответ, — это то же самое, что быть идемпотентным."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Skipping is dedup; idempotency also gives the retry the original answer back.",
+              "ru": "Пропуск — это дедупликация; идемпотентность ещё и возвращает повтору исходный ответ."
+            },
+            "incorrect": {
+              "en": "No — that is deduplication; an idempotent endpoint replays the original response too.",
+              "ru": "Нет — это дедупликация; идемпотентный эндпоинт ещё и повторяет исходный ответ."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "store-p3-sort-server-steps",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order how a server handles one incoming sale request carrying an idempotency key.",
+            "ru": "Расставь по порядку, как сервер обрабатывает входящий запрос продажи с ключом идемпотентности."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Look the key up first; only an unknown key ever reaches the business write.",
+              "ru": "Сначала поиск ключа; до бизнес-записи доходит только неизвестный ключ."
+            },
+            "incorrect": {
+              "en": "Read the key, look it up, replay if known, otherwise register the sale and store the response.",
+              "ru": "Прочитать ключ, найти его, при известном — вернуть сохранённый ответ, иначе зарегистрировать продажу и сохранить ответ."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Read the idempotency key from the request",
+                "ru": "Прочитать ключ идемпотентности из запроса"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Look the key up in the idempotency store",
+                "ru": "Найти ключ в хранилище идемпотентности"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "If the key is known, return the stored response and apply nothing",
+                "ru": "Если ключ известен, вернуть сохранённый ответ и ничего не применять"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "If the key is new, register the sale and store its response",
+                "ru": "Если ключ новый, зарегистрировать продажу и сохранить её ответ"
+              }
+            }
+          ]
+        },
+        {
+          "id": "store-p4-fill-status-body",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the two parts of the answer the server keeps per key.",
+            "ru": "Назови две части ответа, которые сервер хранит для каждого ключа."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Keeping both is what lets a retry receive a byte-identical answer.",
+              "ru": "Хранение обеих частей позволяет повтору получить побайтово тот же ответ."
+            },
+            "incorrect": {
+              "en": "The server keeps the response status and the response body for each key.",
+              "ru": "Сервер хранит для каждого ключа статус ответа и тело ответа."
+            }
+          },
+          "text": {
+            "en": "For each idempotency key the server stores the response ___ and the response ___, so a retry gets the same answer.",
+            "ru": "Для каждого ключа идемпотентности сервер хранит ___ ответа и ___ ответа, чтобы повтор получил тот же ответ."
+          },
+          "blanks": [
+            {
+              "en": [
+                "status",
+                "status code"
+              ],
+              "ru": [
+                "статус",
+                "код",
+                "status"
+              ]
+            },
+            {
+              "en": [
+                "body"
+              ],
+              "ru": [
+                "тело",
+                "body"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "api-status-codes",
+      "title": {
+        "en": "201, 200 and 409",
+        "ru": "201, 200 и 409"
+      },
+      "summary": {
+        "en": "The first request answers 201 Created, a replay answers 200 OK with the stored body, and a known key carrying a different body answers 409 Conflict.",
+        "ru": "Первый запрос отвечает 201 Created, повтор — 200 OK с сохранённым телом, а известный ключ с другим телом — 409 Conflict."
+      },
+      "discovery": [
+        {
+          "id": "codes-d1-second-call",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The second line is a retry of the first: same key, same body. What should the API answer?",
+            "ru": "Вторая строка — повтор первой: тот же ключ, то же тело. Что должен ответить API?"
+          },
+          "code": "POST /sales  Idempotency-Key: sale-1  { \"total\": 250 }   -> 201 Created\nPOST /sales  Idempotency-Key: sale-1  { \"total\": 250 }   -> ?",
+          "codeLang": "text",
+          "reveal": {
+            "en": "The endpoint has three meaningful answers:\n\n```\nPOST /sales\nIdempotency-Key: 5f2a-...        # or saleId inside the body\n{ \"saleId\": \"5f2a-...\", \"deviceId\": \"pos-7\",\n  \"occurredAt\": \"2026-07-27T10:04:11Z\", \"total\": 250 }\n\n201 Created   - first time, body = the registered sale\n200 OK        - replay of a stored response, nothing applied\n409 Conflict  - same key, different body (or a concurrent attempt in flight)\n```\n\n`201` means \"this actually happened now\"; `200` means \"it happened earlier, here is that same answer again\". The client can treat both as success, which is the point: the retry loop needs no special case.\n\nNotice that the sale carries **its own id** and **its own timestamp** (`occurredAt`), both minted on the device. `PUT /sales/{saleId}` is an equally good shape for the same reason — a client-chosen id makes the endpoint naturally idempotent, which is exactly what `PUT` is defined to mean.",
+            "ru": "У эндпоинта три осмысленных ответа:\n\n```\nPOST /sales\nIdempotency-Key: 5f2a-...        # или saleId внутри тела\n{ \"saleId\": \"5f2a-...\", \"deviceId\": \"pos-7\",\n  \"occurredAt\": \"2026-07-27T10:04:11Z\", \"total\": 250 }\n\n201 Created   - первый раз, тело = зарегистрированная продажа\n200 OK        - повтор сохранённого ответа, ничего не применено\n409 Conflict  - тот же ключ, другое тело (или параллельная попытка в полёте)\n```\n\n`201` означает «это произошло прямо сейчас»; `200` — «это произошло раньше, вот тот же ответ снова». Клиент может считать оба успехом, и в этом смысл: циклу повторов не нужен особый случай.\n\nОбрати внимание: продажа несёт **свой id** и **своё время** (`occurredAt`), и то и другое создано на устройстве. `PUT /sales/{saleId}` — не менее хорошая форма по той же причине: выбранный клиентом id делает эндпоинт идемпотентным по своей природе, а это ровно то, что и означает `PUT`."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The replay succeeds with the stored body and changes nothing.",
+              "ru": "Повтор успешен, возвращает сохранённое тело и ничего не меняет."
+            },
+            "incorrect": {
+              "en": "A repeat of the same key with the same body answers 200 OK with the stored response.",
+              "ru": "Повтор того же ключа с тем же телом отвечает 200 OK и сохранённым ответом."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "200 OK with the stored response, nothing applied",
+                "ru": "200 OK с сохранённым ответом, ничего не применено"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "201 Created again, registering a second sale",
+                "ru": "Снова 201 Created с регистрацией второй продажи"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A second registration is exactly what the shared key prevents.",
+                "ru": "Вторая регистрация — ровно то, что предотвращает общий ключ."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "409 Conflict, because the key is already taken",
+                "ru": "409 Conflict, ведь ключ уже занят"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "409 is for a known key carrying a *different* body; an identical retry must succeed.",
+                "ru": "409 — для известного ключа с *другим* телом; идентичный повтор должен быть успешным."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "429 Too Many Requests, to slow the client down",
+                "ru": "429 Too Many Requests, чтобы притормозить клиента"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Retrying a lost response is expected behaviour, not abuse.",
+                "ru": "Повтор после потерянного ответа — ожидаемое поведение, а не злоупотребление."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "codes-p1-different-body",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A request arrives at the sales API with a known idempotency key but a different sale body. What should the API return?",
+            "ru": "В sales API приходит запрос с известным ключом идемпотентности, но с другим телом продажи. Что должен вернуть API?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "That is almost always a reused key — a client bug worth failing loudly on.",
+              "ru": "Почти всегда это переиспользованный ключ — баг клиента, о котором надо падать громко."
+            },
+            "incorrect": {
+              "en": "409 Conflict: a known key with a different body means the key was reused for another sale.",
+              "ru": "409 Conflict: известный ключ с другим телом означает, что ключ переиспользован для другой продажи."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "409 Conflict",
+                "ru": "409 Conflict"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "200 OK with the response stored under that key",
+                "ru": "200 OK с ответом, сохранённым под этим ключом"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That quietly hides a real, different sale behind an old receipt.",
+                "ru": "Это тихо прячет настоящую другую продажу за старым чеком."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "201 Created, registering the new body under the same key",
+                "ru": "201 Created с регистрацией нового тела под тем же ключом"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The key already names another sale; overwriting its meaning destroys the guarantee.",
+                "ru": "Ключ уже называет другую продажу; подмена его смысла разрушает гарантию."
+              }
+            }
+          ]
+        },
+        {
+          "id": "codes-p2-put-shape-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "`PUT /sales/{saleId}` with a client-chosen `saleId` is a naturally idempotent shape for registering a sale.",
+            "ru": "`PUT /sales/{saleId}` с выбранным клиентом `saleId` — естественно идемпотентная форма для регистрации продажи."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A client-chosen id in the URL is itself the key, which is what PUT is defined to mean.",
+              "ru": "Выбранный клиентом id в URL сам и есть ключ — именно это и означает PUT."
+            },
+            "incorrect": {
+              "en": "It is — the client-chosen id in the path acts as the idempotency key.",
+              "ru": "Да — выбранный клиентом id в пути работает как ключ идемпотентности."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "codes-p3-match-situations",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each situation on a sales API to the status code it should answer with.",
+            "ru": "Соотнеси каждую ситуацию в sales API с кодом ответа, который она должна вернуть."
+          },
+          "feedback": {
+            "correct": {
+              "en": "201 applied it, 200 replayed it, 409 refused an ambiguous reuse.",
+              "ru": "201 — применили, 200 — повторили ответ, 409 — отказали неоднозначному переиспользованию."
+            },
+            "incorrect": {
+              "en": "New key -> 201; same key and body -> 200; same key, different body -> 409.",
+              "ru": "Новый ключ -> 201; тот же ключ и тело -> 200; тот же ключ, другое тело -> 409."
+            }
+          },
+          "pairs": [
+            {
+              "id": "created",
+              "left": {
+                "en": "First request with a brand-new key",
+                "ru": "Первый запрос с совершенно новым ключом"
+              },
+              "right": {
+                "en": "201 Created",
+                "ru": "201 Created"
+              }
+            },
+            {
+              "id": "replay",
+              "left": {
+                "en": "Retry with the same key and the same body",
+                "ru": "Повтор с тем же ключом и тем же телом"
+              },
+              "right": {
+                "en": "200 OK, stored response replayed",
+                "ru": "200 OK, повторён сохранённый ответ"
+              }
+            },
+            {
+              "id": "conflict",
+              "left": {
+                "en": "Known key carrying a different body",
+                "ru": "Известный ключ с другим телом"
+              },
+              "right": {
+                "en": "409 Conflict",
+                "ru": "409 Conflict"
+              }
+            }
+          ]
+        },
+        {
+          "id": "codes-p4-fill-codes",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two status codes.",
+            "ru": "Впиши два кода ответа."
+          },
+          "feedback": {
+            "correct": {
+              "en": "200 for a harmless replay, 409 for an ambiguous key reuse.",
+              "ru": "200 — безвредный повтор ответа, 409 — неоднозначное переиспользование ключа."
+            },
+            "incorrect": {
+              "en": "A replay answers 200; a known key with a different body answers 409.",
+              "ru": "Повтор отвечает 200; известный ключ с другим телом отвечает 409."
+            }
+          },
+          "text": {
+            "en": "Replaying a stored sale response answers ___; a known key with a different body answers ___.",
+            "ru": "Повтор сохранённого ответа продажи возвращает ___; известный ключ с другим телом возвращает ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "200",
+                "200 ok"
+              ],
+              "ru": [
+                "200",
+                "200 ok"
+              ]
+            },
+            {
+              "en": [
+                "409",
+                "409 conflict"
+              ],
+              "ru": [
+                "409",
+                "409 conflict"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "one-transaction",
+      "title": {
+        "en": "One transaction for both writes",
+        "ru": "Одна транзакция на обе записи"
+      },
+      "summary": {
+        "en": "The idempotency record and the sale are committed in a single local transaction, so a crash cannot leave one without the other.",
+        "ru": "Запись идемпотентности и продажа фиксируются одной локальной транзакцией, чтобы падение не оставило одну без другой."
+      },
+      "discovery": [
+        {
+          "id": "tx-d1-crash-between",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A server commits the idempotency key in one transaction, then the sale in a second one — and crashes between them. What happens when the client retries?",
+            "ru": "Сервер фиксирует ключ идемпотентности одной транзакцией, затем продажу — второй, и падает между ними. Что произойдёт при повторе клиента?"
+          },
+          "reveal": {
+            "en": "Splitting the two writes leaves a gap, and a crash in that gap breaks the guarantee in one of two directions:\n\n```mermaid\nflowchart TD\n  A[\"key committed, then crash\"] --> B[\"retry sees a known key, replays, sale never registered\"]\n  C[\"sale committed, then crash\"] --> D[\"retry sees no key, registers a second sale\"]\n```\n\nA key without a sale silently swallows real money forever — every retry is answered \"already done\" for something that never happened. A sale without a key lets the very next retry duplicate it.\n\nThe fix is not clever ordering; there is no safe order. Both records live in the same database, so put them in **one transaction** and let the database's atomicity apply both or neither. That is the ACID atomicity you already have inside a single database — the design just has to actually use it.\n\nAnd note what is *not* possible: no transaction spans the device and the server. That missing transaction is precisely why the idempotency key exists in the first place.",
+            "ru": "Разделение двух записей оставляет зазор, и падение в этом зазоре ломает гарантию в одну из двух сторон:\n\n```mermaid\nflowchart TD\n  A[\"ключ зафиксирован, затем падение\"] --> B[\"повтор видит известный ключ, отвечает ответом, продажа не зарегистрирована\"]\n  C[\"продажа зафиксирована, затем падение\"] --> D[\"повтор не видит ключа и регистрирует вторую продажу\"]\n```\n\nКлюч без продажи навсегда молча проглатывает реальные деньги — каждый повтор получает «уже сделано» о том, чего не было. Продажа без ключа позволяет ближайшему повтору её продублировать.\n\nЛечится это не хитрым порядком — безопасного порядка нет. Обе записи живут в одной базе, поэтому помести их в **одну транзакцию** и позволь атомарности базы применить обе или ни одной. Это та самая атомарность ACID, которая уже есть внутри одной базы — дизайну надо лишь ею воспользоваться.\n\nИ заметь, чего сделать *нельзя*: ни одна транзакция не охватывает устройство и сервер. Именно эта отсутствующая транзакция и есть причина существования ключа идемпотентности."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A key with no sale answers every retry \"already done\" — the sale is lost forever.",
+              "ru": "Ключ без продажи отвечает на каждый повтор «уже сделано» — продажа потеряна навсегда."
+            },
+            "incorrect": {
+              "en": "The key is already there, so the retry is treated as a duplicate and the sale never gets registered.",
+              "ru": "Ключ уже на месте, поэтому повтор считают дубликатом, и продажа так и не регистрируется."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The key exists, so the retry is treated as a duplicate and the sale is lost forever",
+                "ru": "Ключ существует, поэтому повтор считают дубликатом, и продажа потеряна навсегда"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The retry registers the sale normally, so nothing is lost",
+                "ru": "Повтор нормально регистрирует продажу, поэтому ничего не потеряно"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The key is already stored, so the server replays instead of registering anything.",
+                "ru": "Ключ уже сохранён, поэтому сервер вернёт сохранённый ответ, а не зарегистрирует продажу."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The sale is registered twice",
+                "ru": "Продажа регистрируется дважды"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Duplication is what the opposite order causes — sale first, key second.",
+                "ru": "Дублирование даёт обратный порядок — сначала продажа, потом ключ."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "tx-p1-sale-first",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A sales server commits the sale first and the idempotency key in a separate transaction afterwards, crashing in between. What goes wrong?",
+            "ru": "Сервер продаж фиксирует сначала продажу, а ключ идемпотентности — отдельной транзакцией после, и падает между ними. Что пойдёт не так?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "No key means the retry looks brand new — a second sale for one purchase.",
+              "ru": "Нет ключа — повтор выглядит новым, и одна покупка даёт вторую продажу."
+            },
+            "incorrect": {
+              "en": "The retry finds no key, so it registers a second sale for the same purchase.",
+              "ru": "Повтор не находит ключа и регистрирует вторую продажу для той же покупки."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The retry finds no key and registers a second sale",
+                "ru": "Повтор не находит ключа и регистрирует вторую продажу"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The retry is rejected with 409, so the sale is unreachable",
+                "ru": "Повтор отклоняется с 409, и продажа становится недоступной"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "409 needs a known key; here the key was never committed.",
+                "ru": "Для 409 нужен известный ключ; здесь ключ так и не зафиксирован."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — committing the sale first is the safe order",
+                "ru": "Ничего — фиксировать продажу первой безопасно"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no safe order across two transactions; only one transaction is safe.",
+                "ru": "Безопасного порядка из двух транзакций нет; безопасна только одна транзакция."
+              }
+            }
+          ]
+        },
+        {
+          "id": "tx-p2-distributed-tx-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A single database transaction can span the till and the sales server, making the local sale and the remote registration atomic together.",
+            "ru": "Одна транзакция базы данных может охватить кассу и сервер продаж, сделав локальную продажу и удалённую регистрацию атомарными вместе."
+          },
+          "feedback": {
+            "correct": {
+              "en": "No transaction spans a device and a server — that gap is why the key exists.",
+              "ru": "Ни одна транзакция не охватывает устройство и сервер — из-за этого зазора и нужен ключ."
+            },
+            "incorrect": {
+              "en": "No — there is no transaction across the network, which is exactly why an idempotency key is needed.",
+              "ru": "Нет — транзакции через сеть не существует, именно поэтому и нужен ключ идемпотентности."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "tx-p3-sort-first-time",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the server's first-time handling of a sale, all inside one transaction.",
+            "ru": "Расставь по порядку первичную обработку продажи на сервере — всё внутри одной транзакции."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Key, sale and response are all inside the same commit, so a crash undoes all three.",
+              "ru": "Ключ, продажа и ответ — внутри одного коммита, поэтому падение откатывает все три."
+            },
+            "incorrect": {
+              "en": "Begin, insert the key, register the sale, store the response, then commit — one transaction.",
+              "ru": "Начать, вставить ключ, зарегистрировать продажу, сохранить ответ, затем закоммитить — одна транзакция."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Begin the transaction",
+                "ru": "Начать транзакцию"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "Insert the idempotency key",
+                "ru": "Вставить ключ идемпотентности"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Register the sale",
+                "ru": "Зарегистрировать продажу"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Store the response under that key",
+                "ru": "Сохранить ответ под этим ключом"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "Commit — all of it or none of it",
+                "ru": "Закоммитить — всё вместе или ничего"
+              }
+            }
+          ]
+        },
+        {
+          "id": "tx-p4-fill-atomicity",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Complete the rule and name the ACID property it relies on.",
+            "ru": "Дополни правило и назови свойство ACID, на которое оно опирается."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One commit for both writes — all or nothing is exactly atomicity.",
+              "ru": "Один коммит на обе записи — «всё или ничего» это и есть атомарность."
+            },
+            "incorrect": {
+              "en": "They share one transaction, relying on the atomicity property of ACID.",
+              "ru": "Они живут в одной транзакции, опираясь на свойство атомарности из ACID."
+            }
+          },
+          "text": {
+            "en": "The idempotency record and the sale are written in ___ transaction, relying on the ___ property of ACID.",
+            "ru": "Запись идемпотентности и продажа пишутся в ___ транзакции, опираясь на свойство ___ из ACID."
+          },
+          "blanks": [
+            {
+              "en": [
+                "one",
+                "a single",
+                "the same",
+                "single"
+              ],
+              "ru": [
+                "одной",
+                "той же",
+                "общей",
+                "one"
+              ]
+            },
+            {
+              "en": [
+                "atomicity",
+                "atomic"
+              ],
+              "ru": [
+                "атомарности",
+                "атомарность",
+                "atomicity"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "unique-constraint",
+      "title": {
+        "en": "Let the database arbitrate",
+        "ru": "Пусть спор решает база"
+      },
+      "summary": {
+        "en": "Two simultaneous retries of one key are stopped by a UNIQUE constraint on the key column; an application-level \"if exists\" check is a race, not a guard.",
+        "ru": "Два одновременных повтора одного ключа останавливает UNIQUE constraint на колонке ключа; проверка «if exists» на уровне приложения — гонка, а не защита."
+      },
+      "discovery": [
+        {
+          "id": "unique-d1-two-instances",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A slow first attempt and an eager retry carry the same idempotency key to two server instances at the same moment. Both look the key up and find nothing. What stops both from registering the sale?",
+            "ru": "Медленная первая попытка и нетерпеливый повтор приносят один ключ идемпотентности на два инстанса сервера одновременно. Оба ищут ключ и не находят. Что помешает обоим зарегистрировать продажу?"
+          },
+          "reveal": {
+            "en": "An application-level `if (exists)` check is **check-then-act**: between the check and the insert, the other instance can insert the same key. That is a race, not a guard.\n\n```mermaid\nflowchart TD\n  A[\"instance A: key not found\"] --> C[\"A inserts sale-1\"]\n  B[\"instance B: key not found\"] --> D[\"B inserts sale-1\"]\n  C --> E[\"UNIQUE constraint: A wins, registers the sale\"]\n  D --> F[\"UNIQUE constraint: B violates it, returns 409\"]\n```\n\nThe fix is to make the uniqueness check **be** the write: put a `UNIQUE` constraint on the idempotency key column and let the database arbitrate. Exactly one insert can win; the loser gets a constraint violation and answers `409` / \"retry shortly\" instead of registering a second sale.\n\nThis is the same reasoning as optimistic locking — do not ask whether a conflict will happen, act and let the storage engine reject the conflicting write. A distributed lock in Redis can be added on top as an optimisation to avoid wasted work, but it must never be the source of truth: if the lock service hiccups, only the database constraint still holds the line.",
+            "ru": "Проверка `if (exists)` на уровне приложения — это **check-then-act**: между проверкой и вставкой другой инстанс успевает вставить тот же ключ. Это гонка, а не защита.\n\n```mermaid\nflowchart TD\n  A[\"инстанс A: ключ не найден\"] --> C[\"A вставляет sale-1\"]\n  B[\"инстанс B: ключ не найден\"] --> D[\"B вставляет sale-1\"]\n  C --> E[\"UNIQUE constraint: A выигрывает и регистрирует продажу\"]\n  D --> F[\"UNIQUE constraint: B нарушает его и возвращает 409\"]\n```\n\nЛечение — сделать так, чтобы проверка уникальности **и была** записью: повесь `UNIQUE` constraint на колонку ключа идемпотентности и позволь базе рассудить спор. Выиграть может ровно одна вставка; проигравший получает нарушение ограничения и отвечает `409` / «повтори чуть позже» вместо второй продажи.\n\nЛогика та же, что в оптимистичной блокировке: не спрашивай, будет ли конфликт, — действуй и позволь движку хранения отвергнуть конфликтующую запись. Распределённый лок в Redis можно добавить сверху как оптимизацию, чтобы не делать лишней работы, но он никогда не источник истины: если сервис локов икнёт, линию держит только ограничение базы."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The uniqueness check has to BE the write — that is what a constraint gives you.",
+              "ru": "Проверка уникальности должна БЫТЬ записью — это и даёт ограничение."
+            },
+            "incorrect": {
+              "en": "A UNIQUE constraint on the key column: exactly one insert wins, the loser gets 409.",
+              "ru": "UNIQUE constraint на колонке ключа: выигрывает ровно одна вставка, проигравший получает 409."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A UNIQUE constraint on the key column — the losing insert gets a constraint violation",
+                "ru": "UNIQUE constraint на колонке ключа — проигравшая вставка получает нарушение ограничения"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The application's `if (exists)` check before inserting",
+                "ru": "Проверка приложения `if (exists)` перед вставкой"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Between the check and the insert the other instance can insert — check-then-act is a race.",
+                "ru": "Между проверкой и вставкой другой инстанс успевает вставить — check-then-act это гонка."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing can — one of the two will inevitably be a duplicate",
+                "ru": "Ничто не помешает — одна из двух неизбежно станет дубликатом"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The database can arbitrate, as long as the uniqueness check is the write itself.",
+                "ru": "База может рассудить спор, если проверка уникальности и есть сама запись."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "A distributed lock in Redis, held around the whole handler",
+                "ru": "Распределённый лок в Redis, удерживаемый вокруг всего обработчика"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A lock is an optimisation on top; the constraint has to remain the source of truth.",
+                "ru": "Лок — оптимизация сверху; источником истины должно оставаться ограничение."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "unique-p1-spot-check-then-act",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "Two server instances run this handler concurrently with the same key. What is the defect?",
+            "ru": "Два инстанса сервера выполняют этот обработчик одновременно с одним ключом. В чём дефект?"
+          },
+          "code": "if (store.find(key) == null) {\n    store.insert(key);\n    sales.register(sale);\n}\nreturn store.response(key);",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "Check-then-act leaves a window in which both instances pass the check.",
+              "ru": "Check-then-act оставляет окно, в котором проверку проходят оба инстанса."
+            },
+            "incorrect": {
+              "en": "Between `find` and `insert` another instance can insert the same key, so both register the sale.",
+              "ru": "Между `find` и `insert` другой инстанс успевает вставить тот же ключ, и продажу регистрируют оба."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Between the lookup and the insert another instance can insert the same key",
+                "ru": "Между поиском и вставкой другой инстанс может вставить тот же ключ"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "`store.find` should return an `Optional` instead of `null`",
+                "ru": "`store.find` должен возвращать `Optional`, а не `null`"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is style; the correctness problem is the gap between the check and the write.",
+                "ru": "Это стиль; проблема корректности — зазор между проверкой и записью."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The response should be returned before the sale is registered",
+                "ru": "Ответ надо возвращать до регистрации продажи"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Moving the return changes nothing about two instances passing the same check.",
+                "ru": "Перенос return ничего не меняет: проверку всё равно проходят два инстанса."
+              }
+            }
+          ]
+        },
+        {
+          "id": "unique-p2-loser-answer",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In the concurrent-insert race on an idempotency key, what should the losing request answer?",
+            "ru": "В гонке за вставку ключа идемпотентности что должен ответить проигравший запрос?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The loser refuses politely; the sale is being registered by the winner right now.",
+              "ru": "Проигравший вежливо отказывает; продажу прямо сейчас регистрирует победитель."
+            },
+            "incorrect": {
+              "en": "409 Conflict / \"retry shortly\" — never a second registration of the same sale.",
+              "ru": "409 Conflict / «повтори чуть позже» — но никак не вторая регистрация той же продажи."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "409 Conflict, meaning a concurrent attempt is in flight — retry shortly",
+                "ru": "409 Conflict — параллельная попытка в полёте, повтори чуть позже"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "201 Created, registering its own copy of the sale",
+                "ru": "201 Created с регистрацией собственной копии продажи"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the duplicate the constraint exists to prevent.",
+                "ru": "Это тот самый дубликат, ради предотвращения которого стоит ограничение."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "200 OK with an empty body, since another request handles it",
+                "ru": "200 OK с пустым телом, ведь запрос обрабатывает другой"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no stored response yet to replay, so a success answer would be a lie.",
+                "ru": "Сохранённого ответа ещё нет, поэтому успешный ответ был бы враньём."
+              }
+            }
+          ]
+        },
+        {
+          "id": "unique-p3-redis-truth-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A distributed lock in Redis can replace the database constraint as the source of truth for idempotency keys.",
+            "ru": "Распределённый лок в Redis может заменить ограничение базы как источник истины для ключей идемпотентности."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A lock is an optimisation on top; the constraint is what actually holds when things go wrong.",
+              "ru": "Лок — оптимизация сверху; при сбоях линию держит именно ограничение."
+            },
+            "incorrect": {
+              "en": "No — a lock can reduce wasted work, but the UNIQUE constraint must stay the source of truth.",
+              "ru": "Нет — лок снижает лишнюю работу, но источником истины должен оставаться UNIQUE constraint."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "unique-p4-fill-constraint",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the database constraint that settles concurrent retries.",
+            "ru": "Назови ограничение базы, которое разрешает конкурентные повторы."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The insert itself is the check, so only one attempt can win.",
+              "ru": "Сама вставка и есть проверка, поэтому выиграть может только одна попытка."
+            },
+            "incorrect": {
+              "en": "A UNIQUE constraint on the idempotency key column — the losing insert violates it.",
+              "ru": "UNIQUE constraint на колонке ключа идемпотентности — проигравшая вставка его нарушает."
+            }
+          },
+          "text": {
+            "en": "Concurrent retries of one sale are settled by a ___ constraint on the idempotency key column.",
+            "ru": "Конкурентные повторы одной продажи разрешает ___ constraint на колонке ключа идемпотентности."
+          },
+          "blanks": [
+            {
+              "en": [
+                "unique"
+              ],
+              "ru": [
+                "unique",
+                "уникальности"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "backoff-jitter-parking",
+      "title": {
+        "en": "Backoff, jitter and parking",
+        "ru": "Backoff, джиттер и парковка"
+      },
+      "summary": {
+        "en": "The client retries the same key with capped exponential backoff plus random jitter, only on timeouts, 5xx and 429, and parks the sale after N attempts instead of dropping it.",
+        "ru": "Клиент повторяет с тем же ключом, используя ограниченный экспоненциальный backoff и случайный джиттер, только по таймаутам, 5xx и 429, а после N попыток паркует продажу, а не выбрасывает её."
+      },
+      "discovery": [
+        {
+          "id": "retry-d1-lockstep-fleet",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A thousand tills lost the sales API for a minute. Each retries every 200 ms, and they all resume the instant it comes back. What breaks?",
+            "ru": "Тысяча касс на минуту потеряла sales API. Каждая повторяет раз в 200 мс, и все возобновляют работу в момент его восстановления. Что сломается?"
+          },
+          "reveal": {
+            "en": "Retries need a shape, not just a loop. Three rules:\n\n- **Capped exponential backoff.** Same key, growing delay: 200 ms, 400 ms, 800 ms, ... up to a cap (say 30 s). Growth stops hammering a struggling server; the cap stops the delay from drifting into hours.\n- **Jitter** — a random offset added to each delay. Without it a fleet retries in perfect lockstep and flattens the server the moment it recovers, because every device's clock started at the same outage. Jitter spreads the same load over the window.\n- **Retry only what can succeed:** timeouts, 5xx and 429. A `400` will never succeed no matter how often you send it, and a `409` on a different body is a client bug, not a transient fault.\n\nAfter N attempts the sale is **parked**, not dropped: it stays on the device in a state that a scheduled resync or an operator can pick up later. Dropping it would throw away money for a fault that may clear tomorrow.\n\n```mermaid\nflowchart LR\n  A[\"attempt fails\"] --> B[\"wait 200ms * 2^n, capped, plus jitter\"]\n  B --> C[\"resend with the SAME key\"]\n  C --> A\n  C --> D[\"after N attempts: park for a later resync\"]\n```",
+            "ru": "У повторов должна быть форма, а не просто цикл. Три правила:\n\n- **Ограниченный экспоненциальный backoff.** Тот же ключ, растущая пауза: 200 мс, 400 мс, 800 мс, ... до потолка (скажем, 30 с). Рост перестаёт долбить задыхающийся сервер; потолок не даёт паузе уползти в часы.\n- **Джиттер** — случайное смещение, добавляемое к каждой паузе. Без него парк устройств повторяет синхронно и кладёт сервер в момент восстановления, ведь отсчёт у всех начался с одного и того же обрыва. Джиттер размазывает ту же нагрузку по окну.\n- **Повторять только то, что может пройти:** таймауты, 5xx и 429. `400` не пройдёт, сколько его ни отправляй, а `409` на другое тело — это баг клиента, а не временный сбой.\n\nПосле N попыток продажа **паркуется**, а не выбрасывается: она остаётся на устройстве в состоянии, которое позже подхватит плановая пересинхронизация или оператор. Выбросить её значило бы потерять деньги из-за сбоя, который может пройти завтра.\n\n```mermaid\nflowchart LR\n  A[\"попытка не удалась\"] --> B[\"ждём 200мс * 2^n, с потолком, плюс джиттер\"]\n  B --> C[\"отправляем снова с ТЕМ ЖЕ ключом\"]\n  C --> A\n  C --> D[\"после N попыток: парковка до пересинхронизации\"]\n```"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Synchronised retries are a load spike aimed at the weakest moment.",
+              "ru": "Синхронные повторы — это всплеск нагрузки, направленный в самый слабый момент."
+            },
+            "incorrect": {
+              "en": "A fleet retrying in lockstep flattens the server exactly as it tries to recover.",
+              "ru": "Парк устройств, повторяющих синхронно, кладёт сервер ровно в момент его восстановления."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The synchronised retries flatten the server the moment it recovers",
+                "ru": "Синхронные повторы кладут сервер в момент его восстановления"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing — retries are cheap and the server will cope",
+                "ru": "Ничего — повторы дешёвые, сервер справится"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A thousand devices in lockstep is a load spike arriving at the worst possible moment.",
+                "ru": "Тысяча устройств в унисон — это всплеск нагрузки в самый неудачный момент."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The idempotency keys start colliding between devices",
+                "ru": "Ключи идемпотентности начинают конфликтовать между устройствами"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Keys stay unique per sale; the problem is the shape of the load, not the keys.",
+                "ru": "Ключи остаются уникальными на продажу; проблема в форме нагрузки, а не в ключах."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "retry-p1-which-responses",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which responses is it worth retrying `POST /sales` on?",
+            "ru": "По каким ответам стоит повторять `POST /sales`?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Retry the transient faults; a malformed request stays malformed forever.",
+              "ru": "Повторяй временные сбои; некорректный запрос останется некорректным навсегда."
+            },
+            "incorrect": {
+              "en": "Timeouts, 5xx and 429 are transient and worth retrying; a 400 never becomes valid.",
+              "ru": "Таймауты, 5xx и 429 временные и достойны повтора; 400 не станет валидным."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Timeouts, 5xx and 429",
+                "ru": "Таймауты, 5xx и 429"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Every non-2xx response, including 400",
+                "ru": "Любой ответ не 2xx, включая 400"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A 400 will never succeed no matter how often you send it — it wastes attempts.",
+                "ru": "400 не пройдёт, сколько его ни отправляй — это просто трата попыток."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Only timeouts, since any real response means the server decided",
+                "ru": "Только таймауты, ведь любой реальный ответ означает решение сервера"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "5xx and 429 are transient server-side conditions and are worth retrying too.",
+                "ru": "5xx и 429 — временные состояния сервера, их тоже стоит повторять."
+              }
+            }
+          ]
+        },
+        {
+          "id": "retry-p2-drop-after-limit-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Once the client's retry limit is reached, the correct behaviour is to drop the sale.",
+            "ru": "Как только исчерпан лимит повторов клиента, правильное поведение — выбросить продажу."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It is parked for a scheduled or manual resync — the money was real.",
+              "ru": "Она паркуется до плановой или ручной пересинхронизации — деньги-то были настоящие."
+            },
+            "incorrect": {
+              "en": "No — the sale is parked, not dropped, so a later resync or an operator can deliver it.",
+              "ru": "Нет — продажа паркуется, а не выбрасывается, чтобы её доставила пересинхронизация или оператор."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "retry-p3-sort-retry-cycle",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order one retry cycle of a queued sale after a failed attempt.",
+            "ru": "Расставь по порядку один цикл повтора для продажи в очереди после неудачной попытки."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Wait, then resend the same key — and park rather than drop when attempts run out.",
+              "ru": "Подождать, затем отправить тот же ключ — а когда попытки кончатся, припарковать, а не выбросить."
+            },
+            "incorrect": {
+              "en": "Send, time out, wait backoff plus jitter, resend the SAME key, and park after N attempts.",
+              "ru": "Отправить, поймать таймаут, подождать backoff с джиттером, отправить ТОТ ЖЕ ключ, после N попыток припарковать."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "Send the sale with its idempotency key",
+                "ru": "Отправить продажу с её ключом идемпотентности"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "The attempt times out",
+                "ru": "Попытка завершается таймаутом"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "Wait the capped backoff delay plus random jitter",
+                "ru": "Подождать ограниченную паузу backoff плюс случайный джиттер"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "Resend with the SAME key",
+                "ru": "Отправить снова с ТЕМ ЖЕ ключом"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "After N attempts, park the sale for a later resync",
+                "ru": "После N попыток припарковать продажу до пересинхронизации"
+              }
+            }
+          ]
+        },
+        {
+          "id": "retry-p4-fill-backoff-jitter",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the two ingredients of a safe retry schedule.",
+            "ru": "Назови две составляющие безопасного расписания повторов."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Growth protects the server; randomness desynchronises the fleet.",
+              "ru": "Рост бережёт сервер; случайность рассинхронизирует парк устройств."
+            },
+            "incorrect": {
+              "en": "Capped exponential backoff plus random jitter — growth plus desynchronisation.",
+              "ru": "Ограниченный экспоненциальный backoff плюс случайный джиттер — рост плюс рассинхронизация."
+            }
+          },
+          "text": {
+            "en": "Retries use capped ___ backoff plus random ___, so a fleet of tills does not retry in lockstep.",
+            "ru": "Повторы используют ограниченный ___ backoff плюс случайный ___, чтобы парк касс не повторял синхронно."
+          },
+          "blanks": [
+            {
+              "en": [
+                "exponential"
+              ],
+              "ru": [
+                "экспоненциальный",
+                "exponential"
+              ]
+            },
+            {
+              "en": [
+                "jitter"
+              ],
+              "ru": [
+                "джиттер",
+                "jitter"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sale-lifecycle",
+      "title": {
+        "en": "The sale's lifecycle",
+        "ru": "Жизненный цикл продажи"
+      },
+      "summary": {
+        "en": "A local sale moves QUEUED -> SENDING -> CONFIRMED, returns to QUEUED on a timeout, and becomes PARKED when the attempt limit runs out.",
+        "ru": "Локальная продажа проходит QUEUED -> SENDING -> CONFIRMED, возвращается в QUEUED по таймауту и становится PARKED, когда лимит попыток исчерпан."
+      },
+      "discovery": [
+        {
+          "id": "life-d1-after-timeout",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A queued sale is being sent and the attempt times out. Which state should the local record move to?",
+            "ru": "Продажа из очереди отправляется, и попытка завершается таймаутом. В какое состояние должна перейти локальная запись?"
+          },
+          "reveal": {
+            "en": "The device is really running a small state machine per sale:\n\n```mermaid\nstateDiagram-v2\n  [*] --> QUEUED: recorded locally with its key\n  QUEUED --> SENDING: attempt\n  SENDING --> CONFIRMED: response received\n  SENDING --> QUEUED: timeout, wait out the backoff\n  QUEUED --> PARKED: attempt limit reached\n  PARKED --> QUEUED: scheduled or manual resync\n  CONFIRMED --> [*]\n```\n\nA timeout is not a failure of the sale, only of one attempt — the record goes back to `QUEUED` and waits out its backoff. `PARKED` is not terminal either: a resync moves it back into the queue.\n\n`CONFIRMED` is the only state in which the local row may be pruned, and even then most systems keep it for a while. The reason is **reconciliation**: a scheduled job that compares what the device says it sold with what the server has. Idempotency protects each individual sale, but nothing protects you from a device whose queue was wiped — a daily \"device says N sales, server has M\" comparison is the only way to notice that.",
+            "ru": "На устройстве по сути крутится маленький автомат состояний на каждую продажу:\n\n```mermaid\nstateDiagram-v2\n  [*] --> QUEUED: записана локально со своим ключом\n  QUEUED --> SENDING: попытка\n  SENDING --> CONFIRMED: ответ получен\n  SENDING --> QUEUED: таймаут, ждём backoff\n  QUEUED --> PARKED: лимит попыток исчерпан\n  PARKED --> QUEUED: плановая или ручная пересинхронизация\n  CONFIRMED --> [*]\n```\n\nТаймаут — это неудача не продажи, а одной попытки: запись возвращается в `QUEUED` и ждёт свой backoff. `PARKED` тоже не финальное состояние: пересинхронизация возвращает продажу в очередь.\n\n`CONFIRMED` — единственное состояние, в котором локальную запись можно удалять, да и то большинство систем держат её ещё какое-то время. Причина — **сверка (reconciliation)**: регулярная задача, которая сравнивает, что устройство считает проданным, с тем, что есть на сервере. Идемпотентность защищает каждую отдельную продажу, но ничто не защитит от устройства, у которого стёрли очередь — ежедневное сравнение «устройство говорит N продаж, на сервере M» единственный способ это заметить."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One attempt failed, not the sale — back to the queue it goes.",
+              "ru": "Провалилась одна попытка, а не продажа — она возвращается в очередь."
+            },
+            "incorrect": {
+              "en": "It returns to QUEUED and waits out the backoff before the next attempt.",
+              "ru": "Она возвращается в QUEUED и ждёт backoff перед следующей попыткой."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Back to QUEUED, to wait out the backoff",
+                "ru": "Обратно в QUEUED, чтобы переждать backoff"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "CONFIRMED, since the request was sent successfully",
+                "ru": "CONFIRMED, ведь запрос успешно ушёл"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Only a received response confirms anything; a timeout confirms nothing.",
+                "ru": "Подтверждает только полученный ответ; таймаут не подтверждает ничего."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "PARKED, so an operator can look at it",
+                "ru": "PARKED, чтобы на неё посмотрел оператор"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Parking happens only after the attempt limit is exhausted, not after one timeout.",
+                "ru": "Парковка наступает только после исчерпания лимита попыток, а не после одного таймаута."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "It is deleted, and the till asks the cashier to repeat the sale",
+                "ru": "Она удаляется, и касса просит кассира повторить продажу"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A sale is never deleted on a timeout — the money already changed hands.",
+                "ru": "Продажу никогда не удаляют по таймауту — деньги уже перешли из рук в руки."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "life-p1-prunable-state",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In a till's local sale queue, which state is the only one where the local row may be pruned?",
+            "ru": "В локальной очереди продаж кассы в каком единственном состоянии локальную запись можно удалять?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "And even then most systems keep it a while, so reconciliation can compare the two sides.",
+              "ru": "И даже тогда большинство систем держат её ещё какое-то время, чтобы сверка могла сравнить обе стороны."
+            },
+            "incorrect": {
+              "en": "Only CONFIRMED — every other state still owes the server a delivery.",
+              "ru": "Только CONFIRMED — во всех остальных состояниях продажа ещё должна быть доставлена."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "CONFIRMED, and usually only after a reconciliation window",
+                "ru": "CONFIRMED, и обычно только после окна сверки"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "PARKED, since the retries have given up on it",
+                "ru": "PARKED, ведь повторы от неё уже отказались"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A parked sale still has to be delivered by a later resync — deleting it loses money.",
+                "ru": "Припаркованную продажу ещё предстоит доставить при пересинхронизации — удалить её значит потерять деньги."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "SENDING, because the sale is already on its way",
+                "ru": "SENDING, ведь продажа уже в пути"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "In-flight is the least safe moment to delete anything — the attempt may still time out.",
+                "ru": "Момент полёта — самый неудачный для удаления: попытка ещё может завершиться таймаутом."
+              }
+            }
+          ]
+        },
+        {
+          "id": "life-p2-match-states",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each state of a locally queued sale to what it means.",
+            "ru": "Соотнеси каждое состояние локально поставленной в очередь продажи с его смыслом."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Only CONFIRMED is an ending; PARKED is just a longer pause.",
+              "ru": "Финалом является только CONFIRMED; PARKED — просто более долгая пауза."
+            },
+            "incorrect": {
+              "en": "QUEUED waits, SENDING is in flight, CONFIRMED got a response, PARKED ran out of attempts.",
+              "ru": "QUEUED ждёт, SENDING в полёте, CONFIRMED получила ответ, PARKED исчерпала попытки."
+            }
+          },
+          "pairs": [
+            {
+              "id": "queued",
+              "left": {
+                "en": "QUEUED",
+                "ru": "QUEUED"
+              },
+              "right": {
+                "en": "Recorded locally with its key, waiting to be sent",
+                "ru": "Записана локально со своим ключом, ждёт отправки"
+              }
+            },
+            {
+              "id": "sending",
+              "left": {
+                "en": "SENDING",
+                "ru": "SENDING"
+              },
+              "right": {
+                "en": "An attempt is currently in flight",
+                "ru": "Прямо сейчас выполняется попытка"
+              }
+            },
+            {
+              "id": "confirmed",
+              "left": {
+                "en": "CONFIRMED",
+                "ru": "CONFIRMED"
+              },
+              "right": {
+                "en": "A response arrived; the row may eventually be pruned",
+                "ru": "Ответ получен; запись со временем можно удалить"
+              }
+            },
+            {
+              "id": "parked",
+              "left": {
+                "en": "PARKED",
+                "ru": "PARKED"
+              },
+              "right": {
+                "en": "The attempt limit ran out; waits for a resync",
+                "ru": "Лимит попыток исчерпан; ждёт пересинхронизации"
+              }
+            }
+          ]
+        },
+        {
+          "id": "life-p3-fill-parked",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the state name.",
+            "ru": "Впиши название состояния."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Parking keeps the sale alive for a scheduled or manual resync.",
+              "ru": "Парковка сохраняет продажу живой до плановой или ручной пересинхронизации."
+            },
+            "incorrect": {
+              "en": "It moves to PARKED — never deleted, because the money was real.",
+              "ru": "Она переходит в PARKED — её не удаляют, ведь деньги были настоящие."
+            }
+          },
+          "text": {
+            "en": "A sale whose attempt limit ran out moves to ___ instead of being deleted.",
+            "ru": "Продажа, исчерпавшая лимит попыток, переходит в ___, а не удаляется."
+          },
+          "blanks": [
+            {
+              "en": [
+                "parked"
+              ],
+              "ru": [
+                "parked"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "key-retention",
+      "title": {
+        "en": "How long keys are kept",
+        "ru": "Сколько хранятся ключи"
+      },
+      "summary": {
+        "en": "The idempotency store is purged on a window that must outlast the longest possible retry — 30 days, not 30 minutes — and its key column is indexed.",
+        "ru": "Хранилище идемпотентности чистится по окну, которое должно переживать самый долгий возможный повтор — 30 дней, а не 30 минут — и его колонка ключа проиндексирована."
+      },
+      "discovery": [
+        {
+          "id": "retention-d1-drawer-till",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A sales API purges idempotency keys after 30 minutes. A till that sat in a drawer for a week finally syncs its queued sales — some of which the server already registered. What happens?",
+            "ru": "Sales API чистит ключи идемпотентности через 30 минут. Касса, пролежавшая неделю в ящике, наконец синхронизирует накопленные продажи — часть из них сервер уже зарегистрировал. Что произойдёт?"
+          },
+          "reveal": {
+            "en": "Idempotency only lasts as long as the memory of the key. Once a key is purged, the very next retry carrying it looks like a brand-new sale, and the server dutifully registers it a second time.\n\nSo the retention window is not a storage decision — it is a **correctness** decision, and its floor is the longest retry any client could possibly perform. That includes a device that was switched off, out of coverage, or in a drawer for a week. Purge after something like 30 days, not 30 minutes.\n\nThe store still cannot grow forever, so two things keep it healthy:\n\n- a purge job that deletes records older than the window (this is what `created_at` in the store is for);\n- an **index** on the key column, because every single request does a lookup by key, and that lookup must stay cheap as the table grows.\n\nToo short a window silently reintroduces double charges. Too long a window costs disk — the cheaper mistake by far.",
+            "ru": "Идемпотентность живёт ровно столько, сколько помнится ключ. Как только ключ вычищен, ближайший повтор с ним выглядит совершенно новой продажей, и сервер послушно регистрирует её второй раз.\n\nПоэтому окно хранения — это решение не про хранилище, а про **корректность**, и его нижняя граница — самый долгий повтор, который вообще может сделать клиент. Включая устройство, которое было выключено, вне зоны покрытия или неделю пролежало в ящике. Чисти примерно через 30 дней, а не через 30 минут.\n\nХранилище всё же не может расти вечно, поэтому его здоровье держат две вещи:\n\n- задача очистки, удаляющая записи старше окна (для этого в хранилище и есть `created_at`);\n- **индекс** на колонке ключа, потому что каждый запрос делает поиск по ключу, и этот поиск должен оставаться дешёвым по мере роста таблицы.\n\nСлишком короткое окно молча возвращает двойные списания. Слишком длинное стоит места на диске — куда более дешёвая ошибка."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Purged keys mean the server has forgotten those sales ever happened.",
+              "ru": "Вычищенные ключи означают, что сервер забыл о существовании этих продаж."
+            },
+            "incorrect": {
+              "en": "The keys are long gone, so already-registered sales are registered a second time.",
+              "ru": "Ключей давно нет, поэтому уже зарегистрированные продажи регистрируются повторно."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The keys are gone, so already-registered sales are registered again",
+                "ru": "Ключей больше нет, поэтому уже зарегистрированные продажи регистрируются снова"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing — the server rejects the sales as too old",
+                "ru": "Ничего — сервер отклонит продажи как слишком старые"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing rejects them; without the key the server just sees a brand-new sale.",
+                "ru": "Их ничто не отклоняет; без ключа сервер видит просто новую продажу."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The server answers 409 Conflict for each of them",
+                "ru": "Сервер ответит 409 Conflict на каждую из них"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "409 needs a known key; these keys were purged, so nothing conflicts.",
+                "ru": "Для 409 нужен известный ключ; эти ключи вычищены, поэтому конфликта нет."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "retention-p1-window-driver",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What sets the minimum retention window for idempotency keys?",
+            "ru": "Чем определяется минимальное окно хранения ключей идемпотентности?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The window must outlast the slowest client that could still retry.",
+              "ru": "Окно должно переживать самого медленного клиента, который ещё может повторить."
+            },
+            "incorrect": {
+              "en": "The longest retry any client could still perform — including a device offline for a week.",
+              "ru": "Самый долгий повтор, который ещё может сделать клиент — включая устройство, неделю бывшее офлайн."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The longest retry any client could still perform",
+                "ru": "Самый долгий повтор, который ещё может сделать любой клиент"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The average request latency of the API",
+                "ru": "Средняя задержка запросов к API"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Latency is milliseconds; a device can retry days later, and the key must still be there.",
+                "ru": "Задержка — это миллисекунды; устройство может повторить через дни, и ключ должен быть на месте."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "How much disk the idempotency table is allowed to use",
+                "ru": "Сколько диска разрешено занимать таблице идемпотентности"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Disk sets the upper bound; the lower bound is correctness and it wins.",
+                "ru": "Диск задаёт верхнюю границу; нижнюю задаёт корректность, и она важнее."
+              }
+            }
+          ]
+        },
+        {
+          "id": "retention-p2-index-reason",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why is the key column of an idempotency store indexed?",
+            "ru": "Зачем колонка ключа в хранилище идемпотентности проиндексирована?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Every request pays for that lookup, so it must not degrade as the table grows.",
+              "ru": "За этот поиск платит каждый запрос, поэтому он не должен деградировать с ростом таблицы."
+            },
+            "incorrect": {
+              "en": "Every request looks the key up, so the lookup must stay cheap as the store grows.",
+              "ru": "Каждый запрос ищет ключ, поэтому поиск должен оставаться дешёвым по мере роста хранилища."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Every request does a lookup by key, and it must stay cheap as the table grows",
+                "ru": "Каждый запрос делает поиск по ключу, и он должен оставаться дешёвым при росте таблицы"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "So the keys are returned in creation order",
+                "ru": "Чтобы ключи возвращались в порядке создания"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing iterates keys in order; the index exists for point lookups.",
+                "ru": "Никто не перебирает ключи по порядку; индекс нужен для точечного поиска."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Because an index is what enforces the retention window",
+                "ru": "Потому что именно индекс обеспечивает окно хранения"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Retention is enforced by a purge job over created_at, not by an index.",
+                "ru": "Окно обеспечивает задача очистки по created_at, а не индекс."
+              }
+            }
+          ]
+        },
+        {
+          "id": "retention-p3-forever-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "An idempotency store can simply keep every key forever, so retention needs no thought.",
+            "ru": "Хранилище идемпотентности может просто хранить все ключи вечно, поэтому о сроке хранения думать не нужно."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It cannot grow without limit — it needs a window, chosen to outlast the longest retry.",
+              "ru": "Оно не может расти бесконечно — нужно окно, выбранное длиннее самого долгого повтора."
+            },
+            "incorrect": {
+              "en": "No — the store cannot grow forever; it needs a purge window longer than the longest retry.",
+              "ru": "Нет — хранилище не может расти вечно; нужно окно очистки длиннее самого долгого повтора."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "retention-p4-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the retention rule for idempotency keys.",
+            "ru": "Собери правило хранения ключей идемпотентности."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Retention is a correctness decision measured against the slowest client.",
+              "ru": "Срок хранения — решение о корректности, измеряемое по самому медленному клиенту."
+            },
+            "incorrect": {
+              "en": "Keep keys longer than the longest possible retry.",
+              "ru": "Храни ключи дольше самого долгого возможного повтора."
+            }
+          },
+          "tokens": {
+            "en": [
+              "keep",
+              "keys",
+              "longer",
+              "than",
+              "the",
+              "longest",
+              "possible",
+              "retry"
+            ],
+            "ru": [
+              "храни",
+              "ключи",
+              "дольше",
+              "самого",
+              "долгого",
+              "возможного",
+              "повтора"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "shorter",
+              "request"
+            ],
+            "ru": [
+              "короче",
+              "запроса"
+            ]
+          }
+        },
+        {
+          "id": "retention-p5-fill-window",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill in the two time units that make the point.",
+            "ru": "Впиши две единицы времени, в которых и суть."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Days cost disk; minutes cost double charges.",
+              "ru": "Дни стоят диска; минуты стоят двойных списаний."
+            },
+            "incorrect": {
+              "en": "Purge idempotency keys after about 30 days, not 30 minutes.",
+              "ru": "Чисти ключи идемпотентности примерно через 30 дней, а не через 30 минут."
+            }
+          },
+          "text": {
+            "en": "Purge idempotency keys after about 30 ___, not 30 ___.",
+            "ru": "Чисти ключи идемпотентности примерно через 30 ___, а не через 30 ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "days"
+              ],
+              "ru": [
+                "дней",
+                "days"
+              ]
+            },
+            {
+              "en": [
+                "minutes"
+              ],
+              "ru": [
+                "минут",
+                "minutes"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ordering-and-clocks",
+      "title": {
+        "en": "occurredAt, not receivedAt",
+        "ru": "occurredAt, а не receivedAt"
+      },
+      "summary": {
+        "en": "Business order comes from the device's occurredAt plus a per-device sequence number, never from arrival order; the server records receivedAt too, because device clocks lie.",
+        "ru": "Бизнес-порядок задаёт клиентский occurredAt плюс порядковый номер устройства, а не порядок прибытия; сервер пишет ещё и receivedAt, потому что часы устройств врут."
+      },
+      "discovery": [
+        {
+          "id": "time-d1-late-sync",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A till syncs six hours late, so its sales land in the database after sales that happened later on other tills. What must the reports sort by?",
+            "ru": "Касса синхронизируется с опозданием в шесть часов, поэтому её продажи попадают в базу после продаж, случившихся позже на других кассах. По чему должны сортироваться отчёты?"
+          },
+          "reveal": {
+            "en": "Two timestamps, two different questions:\n\n- **`occurredAt`** — set on the device, when the sale actually happened.\n- **`receivedAt`** — set on the server, when the sale finally synced.\n\nThe server's clock answers \"when did I learn about this\", which is not a business fact. So the sale carries its own `occurredAt`, and reports sort by it — plus a **per-device sequence number** to break ties and to order sales that share a second on one device. Arrival order must never define business order; a six-hour sync would scramble every report that trusted it.\n\n```mermaid\nflowchart LR\n  A[\"sale on the device\"] --> B[\"occurredAt: device clock\"]\n  A --> C[\"seq: per-device counter\"]\n  B --> R[\"reports sort by occurredAt + seq\"]\n  C --> R\n  D[\"server accepts the sale\"] --> E[\"receivedAt: server clock\"]\n  E --> F[\"used for diagnostics and skew checks\"]\n```\n\nBut device clocks are wrong — sometimes by years. That is why you record **both** and never trust either blindly: keep `occurredAt` for ordering, keep `receivedAt` as the server's own fact, and reject or flag anything implausible (a sale dated next year, or hours before the device was deployed) rather than silently rewriting it.",
+            "ru": "Две отметки времени отвечают на два разных вопроса:\n\n- **`occurredAt`** — проставляется на устройстве, когда продажа реально произошла.\n- **`receivedAt`** — проставляется на сервере, когда продажа наконец синхронизировалась.\n\nЧасы сервера отвечают на вопрос «когда я об этом узнал», а это не бизнес-факт. Поэтому продажа несёт свой `occurredAt`, и отчёты сортируются по нему — плюс **порядковый номер устройства**, чтобы разрешать ничьи и упорядочивать продажи, попавшие в одну секунду на одной кассе. Порядок прибытия не должен определять бизнес-порядок: синхронизация с задержкой в шесть часов перепутала бы любой отчёт, который на него положился.\n\n```mermaid\nflowchart LR\n  A[\"продажа на устройстве\"] --> B[\"occurredAt: часы устройства\"]\n  A --> C[\"seq: счётчик устройства\"]\n  B --> R[\"отчёты сортируются по occurredAt + seq\"]\n  C --> R\n  D[\"сервер принял продажу\"] --> E[\"receivedAt: часы сервера\"]\n  E --> F[\"используется для диагностики и проверки расхождений\"]\n```\n\nНо часы на устройствах врут — иногда на годы. Поэтому записывают **обе** отметки и не верят слепо ни одной: `occurredAt` для порядка, `receivedAt` как собственный факт сервера, а всё неправдоподобное (продажа будущим годом или задолго до установки устройства) отклоняют или помечают, а не переписывают молча."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The device knows when the sale happened; the server only knows when it heard about it.",
+              "ru": "Устройство знает, когда продажа произошла; сервер знает лишь, когда о ней услышал."
+            },
+            "incorrect": {
+              "en": "Reports sort by the device's occurredAt plus a per-device sequence number.",
+              "ru": "Отчёты сортируются по клиентскому occurredAt плюс порядковому номеру устройства."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The device's occurredAt, plus a per-device sequence number",
+                "ru": "По occurredAt устройства плюс порядковому номеру устройства"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The server's receivedAt, since the server clock is the trusted one",
+                "ru": "По receivedAt сервера, ведь часам сервера доверяют"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The server clock says when the sale synced, not when it happened.",
+                "ru": "Часы сервера говорят, когда продажа синхронизировалась, а не когда произошла."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The order the rows were inserted",
+                "ru": "По порядку вставки строк"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Arrival order is exactly what a six-hour sync scrambles.",
+                "ru": "Порядок прибытия — ровно то, что путает синхронизация с задержкой в шесть часов."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "time-p1-implausible-clock",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A sale arrives at the sales API with an `occurredAt` five years in the future. What should the server do?",
+            "ru": "В sales API приходит продажа с `occurredAt` на пять лет вперёд. Что должен сделать сервер?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Keep both timestamps and surface the anomaly instead of hiding it.",
+              "ru": "Хранить обе отметки и показать аномалию, а не прятать её."
+            },
+            "incorrect": {
+              "en": "Record its own receivedAt and reject or flag the implausible occurredAt rather than trusting it.",
+              "ru": "Записать свой receivedAt и отклонить или пометить неправдоподобный occurredAt, а не доверять ему."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Record its own receivedAt and reject or flag the implausible value",
+                "ru": "Записать свой receivedAt и отклонить или пометить неправдоподобное значение"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Silently overwrite occurredAt with the server clock",
+                "ru": "Молча перезаписать occurredAt часами сервера"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That reports every late sync at sync time and hides a broken device clock.",
+                "ru": "Так каждая поздняя синхронизация попадёт в отчёт по времени синхронизации и скроет сломанные часы."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Trust it — the device is the source of truth for time",
+                "ru": "Доверять ему — устройство и есть источник истины о времени"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Device clocks are wrong sometimes by years; blind trust puts sales in the wrong period.",
+                "ru": "Часы устройств врут иногда на годы; слепое доверие отправит продажи не в тот период."
+              }
+            }
+          ]
+        },
+        {
+          "id": "time-p2-receivedat-enough-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "The server's `receivedAt` is a good enough timestamp for business reports about sales.",
+            "ru": "Серверный `receivedAt` — достаточно хорошая отметка времени для бизнес-отчётов о продажах."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It answers \"when did we sync\", which is a different question from \"when was it sold\".",
+              "ru": "Он отвечает на вопрос «когда синхронизировались», а не «когда продали»."
+            },
+            "incorrect": {
+              "en": "No — receivedAt records the sync, so late syncs would land in the wrong reporting period.",
+              "ru": "Нет — receivedAt фиксирует синхронизацию, и поздние продажи попадут не в тот отчётный период."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "time-p3-match-time-fields",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each ordering input in a sales API to its role.",
+            "ru": "Соотнеси каждый источник порядка в sales API с его ролью."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The device owns business time; the server owns sync time; arrival order owns nothing.",
+              "ru": "Устройству принадлежит бизнес-время, серверу — время синхронизации, порядку прибытия — ничего."
+            },
+            "incorrect": {
+              "en": "occurredAt is when it happened, receivedAt is when it synced, seq breaks ties, arrival order is irrelevant.",
+              "ru": "occurredAt — когда произошло, receivedAt — когда синхронизировалось, seq разрешает ничьи, порядок прибытия неважен."
+            }
+          },
+          "pairs": [
+            {
+              "id": "occurred",
+              "left": {
+                "en": "occurredAt",
+                "ru": "occurredAt"
+              },
+              "right": {
+                "en": "When the sale happened, set by the device",
+                "ru": "Когда произошла продажа, проставляет устройство"
+              }
+            },
+            {
+              "id": "received",
+              "left": {
+                "en": "receivedAt",
+                "ru": "receivedAt"
+              },
+              "right": {
+                "en": "When the server got it, set by the server",
+                "ru": "Когда сервер её получил, проставляет сервер"
+              }
+            },
+            {
+              "id": "seq",
+              "left": {
+                "en": "Per-device sequence number",
+                "ru": "Порядковый номер устройства"
+              },
+              "right": {
+                "en": "Orders sales from one device when timestamps tie",
+                "ru": "Упорядочивает продажи одного устройства при равных отметках"
+              }
+            },
+            {
+              "id": "arrival",
+              "left": {
+                "en": "Arrival order of the rows",
+                "ru": "Порядок прибытия строк"
+              },
+              "right": {
+                "en": "Must never define business order",
+                "ru": "Не должен определять бизнес-порядок"
+              }
+            }
+          ]
+        },
+        {
+          "id": "time-p4-fill-timestamps",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the two timestamps a sale record carries.",
+            "ru": "Назови две отметки времени, которые несёт запись продажи."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One for the business fact, one for the server's own fact.",
+              "ru": "Одна — про бизнес-факт, вторая — про собственный факт сервера."
+            },
+            "incorrect": {
+              "en": "Reports sort by the device's occurredAt; the server additionally records receivedAt.",
+              "ru": "Отчёты сортируются по occurredAt устройства; сервер дополнительно пишет receivedAt."
+            }
+          },
+          "text": {
+            "en": "Reports sort by the device's ___; the server additionally records its own ___.",
+            "ru": "Отчёты сортируются по ___ устройства; сервер дополнительно пишет свой ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "occurredat"
+              ],
+              "ru": [
+                "occurredat"
+              ]
+            },
+            {
+              "en": [
+                "receivedat"
+              ],
+              "ru": [
+                "receivedat"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "effectively-once",
+      "title": {
+        "en": "Effectively-once, not exactly-once",
+        "ru": "Effectively-once, а не exactly-once"
+      },
+      "summary": {
+        "en": "Over a lossy link you get at-least-once delivery plus an idempotent effect — effectively-once registration; true exactly-once delivery is impossible.",
+        "ru": "По теряющей связи вы получаете доставку at-least-once плюс идемпотентный эффект — регистрацию effectively-once; настоящая доставка exactly-once невозможна."
+      },
+      "discovery": [
+        {
+          "id": "once-d1-what-you-promise",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What can you honestly promise the business about sales sent over a link that drops?",
+            "ru": "Что честно можно пообещать бизнесу про продажи, отправляемые по рвущейся связи?"
+          },
+          "reveal": {
+            "en": "Three delivery guarantees are worth naming:\n\n- **at-most-once** — never delivered twice, but sales can be lost. Unacceptable: the money already changed hands.\n- **at-least-once** — never lost, but can be delivered more than once. This is what retrying gives you.\n- **exactly-once delivery** — never lost, never duplicated. Over a lossy link this does not exist; it is the **Two Generals problem**: no finite exchange of messages can make both sides certain, because the last message can always be the one that is lost.\n\nSo you take at-least-once delivery and make the *effect* idempotent. The combination is called **effectively-once**: the message may arrive many times, but the sale is registered once.\n\n```mermaid\nflowchart LR\n  A[\"at-least-once delivery\"] --> C[\"effectively-once registration\"]\n  B[\"idempotent effect\"] --> C\n```\n\nThis is also why \"just put a message broker in front of it\" does not make the problem go away: a broker also delivers at-least-once, so the consumer still has to deduplicate. The transport changes; the guarantee does not.",
+            "ru": "Стоит назвать три гарантии доставки:\n\n- **at-most-once** — никогда не дважды, но продажи могут теряться. Неприемлемо: деньги уже перешли из рук в руки.\n- **at-least-once** — ничего не теряется, но доставка может произойти больше одного раза. Это и даёт повтор запросов.\n- **exactly-once доставка** — ничего не теряется и не дублируется. По теряющей связи её не существует; это **проблема двух генералов**: никакой конечный обмен сообщениями не сделает обе стороны уверенными, ведь потеряться всегда может именно последнее сообщение.\n\nПоэтому берут доставку at-least-once и делают идемпотентным сам *эффект*. Комбинация называется **effectively-once**: сообщение может прийти много раз, но продажа регистрируется один.\n\n```mermaid\nflowchart LR\n  A[\"доставка at-least-once\"] --> C[\"регистрация effectively-once\"]\n  B[\"идемпотентный эффект\"] --> C\n```\n\nПо этой же причине «поставь впереди брокер сообщений» не решает проблему: брокер тоже даёт at-least-once, и потребителю всё равно нужна дедупликация. Меняется транспорт, а не гарантия."
+          },
+          "feedback": {
+            "correct": {
+              "en": "At-least-once delivery plus an idempotent effect is the honest promise.",
+              "ru": "Доставка at-least-once плюс идемпотентный эффект — честное обещание."
+            },
+            "incorrect": {
+              "en": "At-least-once delivery with an idempotent effect, which together is called effectively-once.",
+              "ru": "Доставка at-least-once с идемпотентным эффектом — вместе это называют effectively-once."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "At-least-once delivery with an idempotent effect — effectively-once registration",
+                "ru": "Доставку at-least-once с идемпотентным эффектом — регистрацию effectively-once"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Exactly-once delivery, given careful enough retry logic",
+                "ru": "Доставку exactly-once при достаточно аккуратной логике повторов"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "No retry logic achieves exactly-once over a lossy link — that is the Two Generals problem.",
+                "ru": "Никакая логика повторов не даёт exactly-once по теряющей связи — это проблема двух генералов."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "At-most-once delivery, so nothing is ever double-charged",
+                "ru": "Доставку at-most-once, чтобы никого никогда не списать дважды"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "At-most-once loses real sales; the money changed hands whether the request survived or not.",
+                "ru": "At-most-once теряет настоящие продажи; деньги перешли из рук в руки независимо от судьбы запроса."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "once-p1-broker-fixes-it",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Would putting a message broker between the till and the sales service remove the need for idempotency?",
+            "ru": "Уберёт ли брокер сообщений между кассой и сервисом продаж необходимость в идемпотентности?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The transport changes, the guarantee does not — the consumer still deduplicates.",
+              "ru": "Меняется транспорт, а не гарантия — потребитель всё равно дедуплицирует."
+            },
+            "incorrect": {
+              "en": "No — a broker also delivers at-least-once, so the consumer still needs to deduplicate.",
+              "ru": "Нет — брокер тоже доставляет at-least-once, поэтому потребителю всё равно нужна дедупликация."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "No — a broker also delivers at-least-once, so the consumer still deduplicates",
+                "ru": "Нет — брокер тоже доставляет at-least-once, поэтому потребитель всё равно дедуплицирует"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Yes — brokers deliver each message exactly once",
+                "ru": "Да — брокеры доставляют каждое сообщение ровно один раз"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Brokers give at-least-once too; the problem moves to the consumer, it does not vanish.",
+                "ru": "Брокеры дают тот же at-least-once; проблема переезжает к потребителю, а не исчезает."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Yes — the broker persists the message, so it cannot be duplicated",
+                "ru": "Да — брокер сохраняет сообщение, поэтому оно не может продублироваться"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Persistence prevents loss, not duplication; a redelivery is still a second message.",
+                "ru": "Сохранность защищает от потери, а не от дублирования; повторная доставка — это всё равно второе сообщение."
+              }
+            }
+          ]
+        },
+        {
+          "id": "once-p2-retrying-dangerous-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Retrying a request is inherently dangerous, so a well-designed client avoids retries.",
+            "ru": "Повтор запроса опасен сам по себе, поэтому хорошо спроектированный клиент избегает повторов."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Retrying a NON-idempotent endpoint is dangerous; fix the endpoint and retry freely.",
+              "ru": "Опасен повтор НЕидемпотентного эндпоинта; почини эндпоинт — и повторяй спокойно."
+            },
+            "incorrect": {
+              "en": "No — only retrying a non-idempotent endpoint is dangerous; make it idempotent and retry freely.",
+              "ru": "Нет — опасен лишь повтор неидемпотентного эндпоинта; сделай его идемпотентным и повторяй спокойно."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "once-p3-reconciliation",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Idempotency protects each individual sale. What catches a till whose local queue was wiped before it ever synced?",
+            "ru": "Идемпотентность защищает каждую отдельную продажу. Что поймает кассу, у которой стёрли локальную очередь до синхронизации?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Only a periodic count-vs-count comparison notices sales that were never sent at all.",
+              "ru": "Только периодическое сравнение «сколько против скольких» заметит продажи, которые вообще не отправлялись."
+            },
+            "incorrect": {
+              "en": "A reconciliation job comparing the device's sale count with the server's is the only way to notice.",
+              "ru": "Заметить это может только задача сверки, сравнивающая счёт продаж устройства со счётом сервера."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A periodic reconciliation job comparing the device's count with the server's",
+                "ru": "Периодическая задача сверки, сравнивающая счёт устройства со счётом сервера"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The UNIQUE constraint on the idempotency key",
+                "ru": "UNIQUE constraint на ключе идемпотентности"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The constraint only sees requests that arrive; these never did.",
+                "ru": "Ограничение видит только пришедшие запросы; эти не приходили вовсе."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A longer key retention window on the server",
+                "ru": "Более длинное окно хранения ключей на сервере"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Retention protects retries that happen; it cannot conjure sales that were never sent.",
+                "ru": "Хранение защищает состоявшиеся повторы; оно не воскресит продажи, которые не отправлялись."
+              }
+            }
+          ]
+        },
+        {
+          "id": "once-p4-fill-guarantee",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Name the delivery guarantee and the combined guarantee.",
+            "ru": "Назови гарантию доставки и итоговую гарантию."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Delivery repeats; the effect does not — that is the whole promise.",
+              "ru": "Доставка повторяется, эффект — нет; в этом всё обещание."
+            },
+            "incorrect": {
+              "en": "Delivery is at-least-once; with an idempotent effect the registration is effectively-once.",
+              "ru": "Доставка — at-least-once; при идемпотентном эффекте регистрация получается effectively-once."
+            }
+          },
+          "text": {
+            "en": "Delivery over an unreliable link is ___; combined with an idempotent effect, registration becomes ___.",
+            "ru": "Доставка по ненадёжной связи — это ___; вместе с идемпотентным эффектом регистрация становится ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "at-least-once",
+                "at least once"
+              ],
+              "ru": [
+                "at-least-once",
+                "at least once"
+              ]
+            },
+            {
+              "en": [
+                "effectively-once",
+                "effectively once"
+              ],
+              "ru": [
+                "effectively-once",
+                "effectively once"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "end-to-end-sale",
+      "title": {
+        "en": "The whole path of one sale",
+        "ru": "Весь путь одной продажи"
+      },
+      "summary": {
+        "en": "One sale from the till's local queue, through jittered retries, to an idempotent server write, a replayed response and correctly ordered reports.",
+        "ru": "Одна продажа: от локальной очереди кассы через повторы с джиттером к идемпотентной записи на сервере, повтору ответа и корректному порядку в отчётах."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "cap-d1-full-trace",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Read this log of one sale on an unreliable link. How many sales end up registered, and what does the second POST return?",
+            "ru": "Прочитай лог одной продажи на ненадёжной связи. Сколько продаж окажется зарегистрировано и что вернёт второй POST?"
+          },
+          "code": "10:04:11  till   sale S recorded in the local queue, key sale-1\n10:04:12  till   POST /sales  Idempotency-Key: sale-1\n10:04:12  server key sale-1 is new -> registers S, stores the response\n10:04:42  till   timeout - no response ever arrived\n10:05:14  till   POST /sales  Idempotency-Key: sale-1   (same body)\n10:05:14  server ?",
+          "codeLang": "text",
+          "reveal": {
+            "en": "This is the entire design in one trace. Every piece is doing a specific job:\n\n```mermaid\nflowchart TD\n  A[\"sale happens: mint key, commit to the local queue\"] --> B[\"send with that key\"]\n  B --> C[\"timeout? wait backoff plus jitter, resend the SAME key\"]\n  C --> B\n  B --> D[\"server: insert key under a UNIQUE constraint\"]\n  D --> E[\"winner: register the sale and store the response in ONE transaction\"]\n  D --> F[\"loser or known key: replay the stored response, apply nothing\"]\n  E --> G[\"client marks it CONFIRMED\"]\n  F --> G\n  G --> H[\"reports sort by occurredAt; keys kept longer than any retry\"]\n```\n\nThe first POST registered the sale; only the response was lost, so the client legitimately cannot tell and retries. The second POST carries the *same* key, so the server finds it in the idempotency store, replays the stored response and applies nothing. One sale, one receipt, two requests — that is effectively-once.\n\nRemove any single piece and it breaks: a fresh key per retry gives two sales; no local queue and the sale dies with the request; two transactions and a crash loses or duplicates it; no unique constraint and two concurrent retries both register; too short a retention and a week-late sync duplicates everything; and reports that trust arrival order scramble the day.",
+            "ru": "Это весь дизайн в одном логе. Каждая часть выполняет конкретную работу:\n\n```mermaid\nflowchart TD\n  A[\"произошла продажа: создаём ключ, фиксируем в локальной очереди\"] --> B[\"отправляем с этим ключом\"]\n  B --> C[\"таймаут? ждём backoff плюс джиттер, отправляем ТОТ ЖЕ ключ\"]\n  C --> B\n  B --> D[\"сервер: вставка ключа под UNIQUE constraint\"]\n  D --> E[\"победитель: регистрируем продажу и сохраняем ответ в ОДНОЙ транзакции\"]\n  D --> F[\"проигравший или известный ключ: возвращаем сохранённый ответ, ничего не применяем\"]\n  E --> G[\"клиент помечает продажу CONFIRMED\"]\n  F --> G\n  G --> H[\"отчёты сортируются по occurredAt; ключи хранятся дольше любого повтора\"]\n```\n\nПервый POST зарегистрировал продажу; потерялся только ответ, поэтому клиент обоснованно не может этого знать и повторяет. Второй POST несёт *тот же* ключ, сервер находит его в хранилище идемпотентности, возвращает сохранённый ответ и ничего не применяет. Одна продажа, один чек, два запроса — это и есть effectively-once.\n\nУберите любой элемент, и всё ломается: новый ключ на повтор даёт две продажи; без локальной очереди продажа умирает вместе с запросом; две транзакции и падение теряют или дублируют её; без уникального ограничения два параллельных повтора зарегистрируют обе; слишком короткое хранение — и синхронизация неделю спустя всё продублирует; а отчёты, доверяющие порядку прибытия, перепутают день."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One sale; the repeat of the key replays the stored answer.",
+              "ru": "Одна продажа; повтор ключа возвращает сохранённый ответ."
+            },
+            "incorrect": {
+              "en": "One sale — the second POST carries the same key, so the stored response is replayed.",
+              "ru": "Одна продажа — второй POST несёт тот же ключ, поэтому возвращается сохранённый ответ."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "One sale; the second POST replays the stored response and applies nothing",
+                "ru": "Одна продажа; второй POST возвращает сохранённый ответ и ничего не применяет"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Two sales; the second POST registers S again",
+                "ru": "Две продажи; второй POST снова регистрирует S"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The shared key is precisely what stops the second registration.",
+                "ru": "Общий ключ — ровно то, что останавливает вторую регистрацию."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "One sale; the second POST answers 409 Conflict",
+                "ru": "Одна продажа; второй POST отвечает 409 Conflict"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "409 is for a known key with a different body; this retry carries the same body.",
+                "ru": "409 — для известного ключа с другим телом; этот повтор несёт то же тело."
+              }
+            },
+            {
+              "id": "d",
+              "text": {
+                "en": "One sale, but the client can never confirm it and must park it",
+                "ru": "Одна продажа, но клиент не может её подтвердить и должен её припарковать"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The replayed response is exactly what lets the client confirm and stop retrying.",
+                "ru": "Повторённый ответ — ровно то, что позволяет клиенту подтвердить продажу и прекратить повторы."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cap-p1-spot-split-commit",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This sales handler already uses an atomic key insert. Which remaining defect can still lose or duplicate a sale?",
+            "ru": "Этот обработчик продаж уже использует атомарную вставку ключа. Какой оставшийся дефект всё ещё может потерять или продублировать продажу?"
+          },
+          "code": "Sale register(String key, Sale sale) {\n    if (!store.insertIfAbsent(key)) {   // UNIQUE constraint decides the race\n        return store.response(key);\n    }\n    Sale saved = sales.register(sale);  // a second, separate transaction\n    store.saveResponse(key, saved);\n    return saved;\n}",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "The key is durable before the sale is, so a crash in between swallows the sale forever.",
+              "ru": "Ключ становится надёжным раньше продажи, поэтому падение между ними навсегда проглатывает продажу."
+            },
+            "incorrect": {
+              "en": "The key commits before the sale, so a crash in between leaves a key with no sale — lost forever.",
+              "ru": "Ключ фиксируется раньше продажи, поэтому падение между ними оставляет ключ без продажи — она потеряна навсегда."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The key is committed before the sale, so a crash in between loses the sale forever",
+                "ru": "Ключ фиксируется до продажи, поэтому падение между ними навсегда теряет продажу"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "`insertIfAbsent` should be replaced by a plain `contains` check",
+                "ru": "`insertIfAbsent` следует заменить обычной проверкой `contains`"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The opposite — the atomic insert is what stops two concurrent retries from both registering.",
+                "ru": "Наоборот — именно атомарная вставка не даёт двум параллельным повторам зарегистрировать обе."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The response should be returned before it is stored",
+                "ru": "Ответ нужно возвращать до его сохранения"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Moving the return changes nothing; the defect is that the writes are in separate transactions.",
+                "ru": "Перенос return ничего не меняет; дефект в том, что записи в разных транзакциях."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p2-predict-send-first",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The device loses power while this POST is in flight. What is the state of this sale afterwards?",
+            "ru": "Устройство теряет питание, пока этот POST в полёте. В каком состоянии окажется продажа?"
+          },
+          "code": "void onSale(Cart cart) {\n    Sale sale = new Sale(UUID.randomUUID().toString(), cart);\n    if (http.post(\"/sales\", sale.id(), sale)) {  // send first\n        queue.save(sale);                        // persist locally only on success\n    }\n}",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "Nothing durable was written before the send, so the device forgets the sale entirely.",
+              "ru": "До отправки ничего надёжного не записано, поэтому устройство полностью забывает продажу."
+            },
+            "incorrect": {
+              "en": "It is gone from the device: the local write only happens after a successful send.",
+              "ru": "Она исчезла с устройства: локальная запись происходит только после успешной отправки."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Gone from the device — nothing was written locally before the send",
+                "ru": "Исчезла с устройства — до отправки локально ничего не записано"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Safely in the local queue, waiting for a retry",
+                "ru": "Надёжно лежит в локальной очереди и ждёт повтора"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "`queue.save` runs only after a successful POST, which never returned here.",
+                "ru": "`queue.save` выполняется только после успешного POST, а он здесь не вернулся."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Registered on the server and confirmed on the device",
+                "ru": "Зарегистрирована на сервере и подтверждена на устройстве"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The server may or may not have it, and the device no longer knows the sale existed.",
+                "ru": "У сервера она может быть, а может и нет, и устройство больше не знает о её существовании."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p3-sort-full-flow",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the complete journey of one sale that is registered on the first attempt but whose response is lost.",
+            "ru": "Расставь по порядку полный путь продажи, которая регистрируется с первой попытки, но чей ответ теряется."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Local commit, send, server write in one transaction, backoff, replay, confirm.",
+              "ru": "Локальная фиксация, отправка, запись на сервере одной транзакцией, backoff, повтор ответа, подтверждение."
+            },
+            "incorrect": {
+              "en": "Record locally first, send, register plus store the response atomically, wait out backoff, resend, replay.",
+              "ru": "Сначала запись локально, отправка, атомарная регистрация с сохранением ответа, backoff, повтор, возврат ответа."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "The till records the sale locally with a freshly minted idempotency key",
+                "ru": "Касса записывает продажу локально со свежесозданным ключом идемпотентности"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "A background sender POSTs /sales with that key",
+                "ru": "Фоновый отправщик отправляет POST /sales с этим ключом"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "The server inserts the key, registers the sale and stores the response in one transaction",
+                "ru": "Сервер вставляет ключ, регистрирует продажу и сохраняет ответ в одной транзакции"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "The response is lost, so the client waits out backoff plus jitter and resends the same key",
+                "ru": "Ответ теряется, поэтому клиент ждёт backoff с джиттером и отправляет тот же ключ снова"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "The server finds the key and replays the stored response, applying nothing",
+                "ru": "Сервер находит ключ и возвращает сохранённый ответ, ничего не применяя"
+              }
+            },
+            {
+              "id": "s6",
+              "text": {
+                "en": "The client marks the sale CONFIRMED; reports sort it by its occurredAt",
+                "ru": "Клиент помечает продажу CONFIRMED; отчёты сортируют её по occurredAt"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p4-match-mechanism-to-failure",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each mechanism of a sales API over an unreliable link to the failure it prevents.",
+            "ru": "Соотнеси каждый механизм sales API на ненадёжной связи со сбоем, который он предотвращает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Each piece answers exactly one failure mode; drop one and that failure returns.",
+              "ru": "Каждая часть закрывает ровно один сбой; убери одну — и сбой вернётся."
+            },
+            "incorrect": {
+              "en": "Key stops duplicate registration, queue stops loss, one transaction stops half-writes, the constraint stops races, jitter stops storms.",
+              "ru": "Ключ не даёт дублировать, очередь — терять, одна транзакция — писать наполовину, ограничение — гонки, джиттер — штормы."
+            }
+          },
+          "pairs": [
+            {
+              "id": "m1",
+              "left": {
+                "en": "Client-minted idempotency key",
+                "ru": "Ключ идемпотентности, созданный клиентом"
+              },
+              "right": {
+                "en": "A retry being registered as a second sale",
+                "ru": "Регистрация повтора как второй продажи"
+              }
+            },
+            {
+              "id": "m2",
+              "left": {
+                "en": "Durable local queue",
+                "ru": "Надёжная локальная очередь"
+              },
+              "right": {
+                "en": "A sale dying together with a failed request",
+                "ru": "Гибель продажи вместе с неудавшимся запросом"
+              }
+            },
+            {
+              "id": "m3",
+              "left": {
+                "en": "One transaction for the key and the sale",
+                "ru": "Одна транзакция на ключ и продажу"
+              },
+              "right": {
+                "en": "A crash leaving a key without its sale",
+                "ru": "Падение, оставляющее ключ без его продажи"
+              }
+            },
+            {
+              "id": "m4",
+              "left": {
+                "en": "UNIQUE constraint on the key column",
+                "ru": "UNIQUE constraint на колонке ключа"
+              },
+              "right": {
+                "en": "Two simultaneous retries both registering",
+                "ru": "Регистрацию обоими одновременными повторами"
+              }
+            },
+            {
+              "id": "m5",
+              "left": {
+                "en": "Backoff with random jitter",
+                "ru": "Backoff со случайным джиттером"
+              },
+              "right": {
+                "en": "A fleet of tills flattening the recovering server",
+                "ru": "Обрушение восстанавливающегося сервера парком касс"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p5-fill-interview-answer",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill the key parts of the interview answer.",
+            "ru": "Впиши ключевые части ответа для собеседования."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One key per sale, a constraint to settle races, and effectively-once as the honest promise.",
+              "ru": "Один ключ на продажу, ограничение для разрешения гонок и effectively-once как честное обещание."
+            },
+            "incorrect": {
+              "en": "The client mints a key per sale, a UNIQUE constraint settles concurrent retries, and the result is effectively-once.",
+              "ru": "Клиент создаёт ключ на продажу, UNIQUE constraint разрешает конкурентные повторы, а результат — effectively-once."
+            }
+          },
+          "text": {
+            "en": "The client mints one idempotency key per ___; the server settles concurrent retries with a ___ constraint; delivery stays at-least-once, so registration is ___.",
+            "ru": "Клиент создаёт один ключ идемпотентности на ___; сервер разрешает конкурентные повторы через ___ constraint; доставка остаётся at-least-once, поэтому регистрация — ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "sale",
+                "business action"
+              ],
+              "ru": [
+                "продажу",
+                "бизнес-действие",
+                "sale"
+              ]
+            },
+            {
+              "en": [
+                "unique"
+              ],
+              "ru": [
+                "unique",
+                "уникальности"
+              ]
+            },
+            {
+              "en": [
+                "effectively-once",
+                "effectively once"
+              ],
+              "ru": [
+                "effectively-once",
+                "effectively once"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

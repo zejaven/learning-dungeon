@@ -1,0 +1,3671 @@
+{
+  "schemaVersion": 1,
+  "topicId": "injection-attacks",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5",
+  "atoms": [
+    {
+      "id": "injection-shape",
+      "title": {
+        "en": "What an injection is",
+        "ru": "Что такое инъекция"
+      },
+      "summary": {
+        "en": "An injection is untrusted text pasted into a string that an interpreter then parses, so the data becomes part of the grammar.",
+        "ru": "Инъекция — это недоверенный текст, попавший в строку, которую затем разбирает интерпретатор, и данные становятся частью грамматики."
+      },
+      "discovery": [
+        {
+          "id": "shape-d1-flat-string",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The application builds this string and sends it to the database. How can the database tell which part of it was typed by the user?",
+            "ru": "Приложение собирает эту строку и отправляет её в базу. Как база может понять, какую часть напечатал пользователь?"
+          },
+          "code": "String name = request.getParameter(\"name\");\nString sql = \"SELECT id FROM users WHERE name = '\" + name + \"'\";",
+          "codeLang": "java",
+          "reveal": {
+            "en": "It cannot. In the Java code `sql` and `name` are two different variables; after the `+` that distinction exists nowhere. The database receives one flat string.\n\nAn **injection** is exactly that: untrusted data ends up inside a string that some **interpreter** (a parser) is about to read, so the data is judged by that parser's grammar instead of staying a value. Characters that mean something to that grammar — a quote, a semicolon, a comment marker — are called **metacharacters**, and the parser obeys them.\n\n```mermaid\nflowchart TB\n  A[\"our SQL text\"] --> C[\"one flat string\"]\n  B[\"the value somebody typed\"] --> C\n  C --> D{\"the parser reads it\"}\n  D -->|\"no metacharacters\"| E[\"it stays one literal: a value\"]\n  D -->|\"a quote or a comment marker\"| F[\"it becomes keywords and operators\"]\n```\n\nThe parser is not being careless — its job is to obey valid syntax, not to guess who typed it. Swap the parser and you get the whole family: SQL injection (the database), XXE (an XML parser), command injection (a shell), LDAP, XPath, template and expression-language injection. [XSS](topic:xss) is the same shape with a browser as the parser, and injection has been in the [OWASP Top Ten](topic:owasp-top-ten) for its entire existence.",
+            "ru": "Никак. В Java-коде `sql` и `name` — две разные переменные; после `+` этого различия нет уже нигде. База получает одну плоскую строку.\n\n**Инъекция** — это ровно оно: недоверенные данные оказываются внутри строки, которую вот-вот прочитает какой-то **интерпретатор** (парсер), и данные оцениваются по грамматике этого парсера, вместо того чтобы остаться значением. Символы, что-то значащие для этой грамматики — кавычка, точка с запятой, маркер комментария, — называются **метасимволами**, и парсер им подчиняется.\n\n```mermaid\nflowchart TB\n  A[\"наш текст SQL\"] --> C[\"одна плоская строка\"]\n  B[\"значение, напечатанное посторонним\"] --> C\n  C --> D{\"парсер её читает\"}\n  D -->|\"метасимволов нет\"| E[\"остаётся одним литералом: значением\"]\n  D -->|\"кавычка или маркер комментария\"| F[\"становится ключевыми словами и операторами\"]\n```\n\nПарсер не проявляет небрежность — его работа в том, чтобы подчиняться корректному синтаксису, а не гадать, кто его напечатал. Подставьте другой парсер — и получите всё семейство: SQL injection (база), XXE (парсер XML), командная инъекция (оболочка), LDAP, XPath, инъекция в шаблоны и в языки выражений. [XSS](topic:xss) — та же форма, где парсером оказывается браузер, а сама инъекция входит в [OWASP Top Ten](topic:owasp-top-ten) всё время существования этого списка."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Right — after the concatenation there is only one string, and no marker of where the halves were.",
+              "ru": "Верно — после конкатенации остаётся одна строка, и границы половин нигде не помечены."
+            },
+            "incorrect": {
+              "en": "It cannot: the concatenation erased the difference between the application's SQL and the user's value.",
+              "ru": "Никак: конкатенация стёрла разницу между SQL приложения и значением пользователя."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It cannot — after the + there is only one flat string",
+                "ru": "Никак — после + остаётся одна плоская строка"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The JDBC driver marks the user's part so the database skips it",
+                "ru": "JDBC-драйвер помечает часть пользователя, и база её пропускает"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing tags the halves; the driver ships the finished text as it is.",
+                "ru": "Половины ничем не помечены; драйвер отправляет готовый текст как есть."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Everything after WHERE is treated as data",
+                "ru": "Всё после WHERE считается данными"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A WHERE clause is full grammar: keywords, operators, even subqueries.",
+                "ru": "WHERE — это полноценная грамматика: ключевые слова, операторы, даже подзапросы."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "shape-p1-common",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What do SQL injection, XXE and command injection have in common?",
+            "ru": "Что общего у SQL injection, XXE и командной инъекции?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "One shape, different parsers: data reaches a grammar and is obeyed.",
+              "ru": "Одна форма, разные парсеры: данные попадают в грамматику, и им подчиняются."
+            },
+            "incorrect": {
+              "en": "They are one bug with a different parser plugged in: untrusted data becomes part of the text a parser reads.",
+              "ru": "Это одна ошибка с подставленным другим парсером: недоверенные данные становятся частью текста, который читает парсер."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Untrusted data reaches a parser as part of the text it parses",
+                "ru": "Недоверенные данные попадают к парсеру как часть разбираемого им текста"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "They all exploit a missing or misconfigured HTTPS connection",
+                "ru": "Все они эксплуатируют отсутствующий или неверно настроенный HTTPS"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Transport encryption is unrelated — it delivers the payload perfectly intact.",
+                "ru": "Шифрование транспорта тут ни при чём — оно доставляет нагрузку в целости."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "They all require administrator rights in the target system",
+                "ru": "Всем им нужны права администратора в целевой системе"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "No rights are needed: the attacker borrows whatever rights the application already has.",
+                "ru": "Права не нужны: злоумышленник пользуется теми правами, что уже есть у приложения."
+              }
+            }
+          ]
+        },
+        {
+          "id": "shape-p2-auth-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "An injection attack requires the attacker to break the application's authentication first.",
+            "ru": "Для инъекции злоумышленнику сначала нужно взломать аутентификацию приложения."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Any input the application concatenates is enough; a legitimate logged-in user can inject too.",
+              "ru": "Достаточно любого ввода, который приложение склеивает; инъекцию может сделать и легитимный пользователь."
+            },
+            "incorrect": {
+              "en": "No — every authentication check passes, because the request really is a normal request with a crafted value.",
+              "ru": "Нет — все проверки аутентификации проходят, ведь запрос действительно обычный, просто со специальным значением."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "shape-p3-match-parsers",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each injection to the parser it fools.",
+            "ru": "Соотнеси каждую инъекцию с парсером, который она обманывает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Same bug, different interpreter — that is the whole family.",
+              "ru": "Та же ошибка, другой интерпретатор — в этом и есть всё семейство."
+            },
+            "incorrect": {
+              "en": "Each injection is named after the parser that ends up obeying the attacker's characters.",
+              "ru": "Каждая инъекция названа по парсеру, который в итоге подчиняется символам злоумышленника."
+            }
+          },
+          "pairs": [
+            {
+              "id": "sqli",
+              "left": {
+                "en": "SQL injection",
+                "ru": "SQL injection"
+              },
+              "right": {
+                "en": "The database's SQL parser",
+                "ru": "SQL-парсер базы данных"
+              }
+            },
+            {
+              "id": "xxe",
+              "left": {
+                "en": "XXE",
+                "ru": "XXE"
+              },
+              "right": {
+                "en": "An XML parser",
+                "ru": "Парсер XML"
+              }
+            },
+            {
+              "id": "cmd",
+              "left": {
+                "en": "Command injection",
+                "ru": "Командная инъекция"
+              },
+              "right": {
+                "en": "A shell",
+                "ru": "Командная оболочка"
+              }
+            },
+            {
+              "id": "xss",
+              "left": {
+                "en": "XSS",
+                "ru": "XSS"
+              },
+              "right": {
+                "en": "A browser",
+                "ru": "Браузер"
+              }
+            }
+          ]
+        },
+        {
+          "id": "shape-p4-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble what goes wrong in every injection.",
+            "ru": "Собери, что идёт не так при любой инъекции."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The value stopped being a value and joined the grammar.",
+              "ru": "Значение перестало быть значением и вошло в грамматику."
+            },
+            "incorrect": {
+              "en": "In every injection the data becomes part of the grammar instead of staying a value.",
+              "ru": "При любой инъекции данные становятся частью грамматики вместо того, чтобы остаться значением."
+            }
+          },
+          "tokens": {
+            "en": [
+              "data",
+              "becomes",
+              "part",
+              "of",
+              "the",
+              "grammar"
+            ],
+            "ru": [
+              "данные",
+              "становятся",
+              "частью",
+              "грамматики"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "encrypted",
+              "network"
+            ],
+            "ru": [
+              "зашифрованными",
+              "сети"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "breaking-the-literal",
+      "title": {
+        "en": "Breaking out of the literal",
+        "ru": "Выход из литерала"
+      },
+      "summary": {
+        "en": "The value sits inside a quoted string literal, so one apostrophe ends it and the rest of the input is read as SQL.",
+        "ru": "Значение стоит внутри строкового литерала в кавычках, поэтому один апостроф его закрывает, и остаток ввода читается как SQL."
+      },
+      "discovery": [
+        {
+          "id": "literal-d1-tautology",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The name comes from the request. What does the statement the database receives actually filter by?",
+            "ru": "Имя приходит из запроса. По чему на самом деле фильтрует запрос, который получит база?"
+          },
+          "code": "String name = \"' OR '1'='1\";   // typed by the attacker\nString sql = \"SELECT id, name, role FROM users WHERE name = '\" + name\n           + \"' AND active = TRUE\";",
+          "codeLang": "java",
+          "reveal": {
+            "en": "The attacker's whole task is to get **out of the string literal** the value sits in — and one apostrophe does it. Here is the text the database receives:\n\n```\nSELECT id, name, role FROM users WHERE name = '' OR '1'='1' AND active = TRUE\n                                              ^^ an empty literal, then a keyword\n```\n\n`''` is the (now closed) empty literal, and everything after it is grammar: `OR '1'='1'` is a **tautology** — a condition that is true for every row — so the `WHERE` stops filtering and the query returns the whole table.\n\nNotice what did *not* happen. The value was not weird, oversized or malformed; a plain `alice` would have stayed one literal and the query would have worked as intended. The bug is the concatenation, and the quote is only the key that unlocks it.",
+            "ru": "Вся задача злоумышленника — выбраться **из строкового литерала**, внутри которого сидит значение, и для этого хватает одного апострофа. Вот текст, который получит база:\n\n```\nSELECT id, name, role FROM users WHERE name = '' OR '1'='1' AND active = TRUE\n                                              ^^ пустой литерал, дальше ключевое слово\n```\n\n`''` — это (уже закрытый) пустой литерал, а всё после него является грамматикой: `OR '1'='1'` — это **тавтология**, условие, истинное для каждой строки, поэтому `WHERE` перестаёт фильтровать и запрос возвращает всю таблицу.\n\nОбратите внимание, чего *не* произошло. Значение не было странным, огромным или некорректным; обычное `alice` осталось бы одним литералом, и запрос отработал бы как задумано. Ошибка — в конкатенации, а кавычка лишь ключ, который её открывает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The OR turns the condition into a tautology, so every row matches.",
+              "ru": "OR превращает условие в тавтологию, и подходит каждая строка."
+            },
+            "incorrect": {
+              "en": "The quote closed the literal, so OR '1'='1' became grammar and the WHERE stopped filtering.",
+              "ru": "Кавычка закрыла литерал, OR '1'='1' стало грамматикой, и WHERE перестал фильтровать."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Nothing useful — OR '1'='1' is true for every row",
+                "ru": "Ни по чему — OR '1'='1' истинно для каждой строки"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "By a user literally named ' OR '1'='1",
+                "ru": "По пользователю с именем ровно ' OR '1'='1"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That would be true only if the value stayed one literal — the apostrophe ended it.",
+                "ru": "Так было бы, только если бы значение осталось одним литералом — апостроф его закрыл."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — the database rejects it as a syntax error",
+                "ru": "Ни по чему — база отвергнет его как синтаксическую ошибку"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The payload is deliberately valid SQL; being parseable is the entire point.",
+                "ru": "Нагрузка намеренно является корректным SQL; в том, что она разбирается, и есть весь смысл."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "literal-p1-first-char",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A user value is concatenated into WHERE name = '...' in SQL. Which character does an attacker need first?",
+            "ru": "Пользовательское значение склеивается в WHERE name = '...' в SQL. Какой символ злоумышленнику нужен первым?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The apostrophe ends the literal; everything after it is grammar.",
+              "ru": "Апостроф закрывает литерал; всё после него — грамматика."
+            },
+            "incorrect": {
+              "en": "It is the apostrophe: until the literal is closed, every other character is just text inside it.",
+              "ru": "Это апостроф: пока литерал не закрыт, любой другой символ — просто текст внутри него."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "An apostrophe, to close the string literal",
+                "ru": "Апостроф, чтобы закрыть строковый литерал"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A semicolon, to start a second statement",
+                "ru": "Точку с запятой, чтобы начать второй запрос"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Inside an unclosed literal a semicolon is ordinary text; the quote has to come first.",
+                "ru": "Внутри незакрытого литерала точка с запятой — обычный текст; сначала нужна кавычка."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A backslash, to escape the next character",
+                "ru": "Обратный слэш, чтобы экранировать следующий символ"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Escaping is the defender's tool here; the attacker needs to leave the literal, not stay in it.",
+                "ru": "Экранирование — инструмент защищающегося; злоумышленнику нужно выйти из литерала, а не остаться в нём."
+              }
+            }
+          ]
+        },
+        {
+          "id": "literal-p2-tautology-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "In SQL injection, the payload ' OR '1'='1 works because it makes the WHERE condition true for every row.",
+            "ru": "При SQL injection нагрузка ' OR '1'='1 работает потому, что делает условие WHERE истинным для каждой строки."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A tautology neutralises the filter without touching the rest of the statement.",
+              "ru": "Тавтология обезвреживает фильтр, не трогая остальную часть запроса."
+            },
+            "incorrect": {
+              "en": "It is true: the quote closes the literal and OR '1'='1' is a condition satisfied by every row.",
+              "ru": "Это правда: кавычка закрывает литерал, а OR '1'='1' — условие, которому удовлетворяет каждая строка."
+            }
+          },
+          "answer": true
+        },
+        {
+          "id": "literal-p3-blocklist",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This code tries to stop SQL injection by rejecting a payload. What is wrong with the defence?",
+            "ru": "Этот код пытается остановить SQL injection, отвергая нагрузку. Что не так с такой защитой?"
+          },
+          "code": "String name = request.getParameter(\"name\");\nif (name.contains(\" OR \")) {\n    throw new BadRequestException(\"invalid name\");\n}\nString sql = \"SELECT id FROM users WHERE name = '\" + name + \"'\";",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Blocking a payload is not the same as removing the bug. The value is still concatenated into the statement text, so the grammar is still reachable — only one spelling of one payload has been taken away.\n\nAnd there are endlessly many spellings: `or`, `oR`, `/**/OR/**/`, or a payload that needs no `OR` at all (`admin'--` closes the literal and comments out the rest). Every blocklist is a race the defender loses, because the attacker chooses the input and the grammar is infinite.\n\nA legitimate value can also be rejected: `O'Brien` contains no `OR` here, but a blocklist that also banned apostrophes would break a real surname while still protecting nothing.",
+            "ru": "Заблокировать нагрузку — не то же самое, что убрать ошибку. Значение по-прежнему склеивается в текст запроса, поэтому грамматика по-прежнему достижима — отобрали лишь одно написание одной нагрузки.\n\nА написаний бесконечно много: `or`, `oR`, `/**/OR/**/` или нагрузка, которой `OR` вообще не нужен (`admin'--` закрывает литерал и комментирует остаток). Любой чёрный список — гонка, в которой защищающийся проигрывает: ввод выбирает злоумышленник, а грамматика бесконечна.\n\nЗаодно можно отвергнуть и легитимное значение: в `O'Brien` здесь нет `OR`, но чёрный список, запрещающий ещё и апострофы, сломал бы настоящую фамилию, по-прежнему ничего не защищая."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The concatenation is untouched, so the grammar is still reachable by another spelling.",
+              "ru": "Конкатенация осталась, поэтому грамматика по-прежнему достижима другим написанием."
+            },
+            "incorrect": {
+              "en": "The flaw is the concatenation, not the missing pattern: filtering one payload leaves the statement just as injectable.",
+              "ru": "Проблема в конкатенации, а не в недостающем шаблоне: фильтрация одной нагрузки оставляет запрос столь же уязвимым."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It blocks one spelling of one payload; the value is still concatenated into the statement",
+                "ru": "Он блокирует одно написание одной нагрузки; значение по-прежнему склеивается в запрос"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It should also reject lowercase or and mixed case oR",
+                "ru": "Он должен также отвергать or в нижнем регистре и oR в смешанном"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Case is one of infinitely many variations; fixing it leaves the real flaw untouched.",
+                "ru": "Регистр — одна из бесконечного числа вариаций; её починка не трогает саму ошибку."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — the query is safe once that payload is rejected",
+                "ru": "Ничего — после отклонения этой нагрузки запрос безопасен"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "admin'-- carries no OR at all and still breaks out of the literal.",
+                "ru": "В admin'-- нет никакого OR, и он всё равно выходит из литерала."
+              }
+            }
+          ]
+        },
+        {
+          "id": "literal-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing pieces.",
+            "ru": "Впиши две пропущенные части."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Close the literal, then add a condition that is always true.",
+              "ru": "Закрыть литерал, затем добавить всегда истинное условие."
+            },
+            "incorrect": {
+              "en": "An apostrophe (') ends the literal, and OR '1'='1' is a tautology — true for every row.",
+              "ru": "Апостроф (') закрывает литерал, а OR '1'='1' — тавтология, истинная для каждой строки."
+            }
+          },
+          "text": {
+            "en": "In SQL injection the attacker types a ___ to end the string literal, then OR '1'='1 — a ___ that is true for every row.",
+            "ru": "При SQL injection злоумышленник печатает ___, чтобы закрыть строковый литерал, затем OR '1'='1 — ___, истинную для каждой строки."
+          },
+          "blanks": [
+            {
+              "en": [
+                "'",
+                "quote",
+                "single quote",
+                "apostrophe"
+              ],
+              "ru": [
+                "'",
+                "кавычку",
+                "кавычка",
+                "апостроф"
+              ]
+            },
+            {
+              "en": [
+                "tautology"
+              ],
+              "ru": [
+                "тавтологию",
+                "тавтология",
+                "tautology"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "attacker-goals",
+      "title": {
+        "en": "What one parameter buys the attacker",
+        "ru": "Что даёт злоумышленнику один параметр"
+      },
+      "summary": {
+        "en": "A comment marker deletes the rest of the statement, UNION reads other tables, and a semicolon adds a whole new statement.",
+        "ru": "Маркер комментария удаляет остаток запроса, UNION читает другие таблицы, а точка с запятой добавляет целый новый запрос."
+      },
+      "discovery": [
+        {
+          "id": "goals-d1-comment",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The input is admin'-- and the account named admin is locked (active = FALSE). Which check disappears from the statement the database runs?",
+            "ru": "Ввод — admin'--, а аккаунт admin заблокирован (active = FALSE). Какая проверка исчезает из запроса, который выполнит база?"
+          },
+          "code": "String sql = \"SELECT id FROM users WHERE name = '\" + name\n           + \"' AND active = TRUE\";   // name = \"admin'--\"",
+          "codeLang": "java",
+          "reveal": {
+            "en": "In SQL, `--` starts a line comment, so everything after it is thrown away by the parser:\n\n```\nSELECT id FROM users WHERE name = 'admin'-- ' AND active = TRUE\n                                         ^^ the rest is a comment\n```\n\nThe `AND active = TRUE` guard is still in the source code — it is simply no longer in the statement that runs, so a locked account logs in. This is why injection is an **authentication** bug as often as a data bug.\n\nThe same single parameter buys three more things:\n\n- `' UNION SELECT id, number, holder FROM cards --` bolts a second `SELECT` onto the result, returning rows from a table this endpoint never mentions;\n- `'; DROP TABLE users; --` ends the statement and starts a **stacked statement** — a command of the attacker's choosing;\n- and the tautology from before, which simply turns the filter off.\n\n```mermaid\nflowchart LR\n  Q[\"one injectable parameter\"] --> T[\"a tautology returns every row\"]\n  Q --> C[\"a comment marker deletes the guard\"]\n  Q --> U[\"UNION reads another table\"]\n  Q --> S[\"a stacked statement runs a command\"]\n```",
+            "ru": "В SQL `--` начинает строчный комментарий, поэтому всё после него парсер отбрасывает:\n\n```\nSELECT id FROM users WHERE name = 'admin'-- ' AND active = TRUE\n                                         ^^ остаток закомментирован\n```\n\nПроверка `AND active = TRUE` по-прежнему есть в исходном коде — её просто больше нет в том запросе, который выполняется, и заблокированный аккаунт входит. Поэтому инъекция — ошибка **аутентификации** не реже, чем ошибка доступа к данным.\n\nТот же единственный параметр даёт ещё три вещи:\n\n- `' UNION SELECT id, number, holder FROM cards --` пристраивает к результату второй `SELECT` и возвращает строки из таблицы, которую этот эндпоинт не упоминает;\n- `'; DROP TABLE users; --` завершает запрос и начинает **составной (stacked) запрос** — команду по выбору злоумышленника;\n- и уже знакомая тавтология, которая просто выключает фильтр.\n\n```mermaid\nflowchart LR\n  Q[\"один уязвимый параметр\"] --> T[\"тавтология возвращает все строки\"]\n  Q --> C[\"маркер комментария удаляет проверку\"]\n  Q --> U[\"UNION читает другую таблицу\"]\n  Q --> S[\"составной запрос выполняет команду\"]\n```"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Everything after -- is a comment, so the active check never reaches the database.",
+              "ru": "Всё после -- является комментарием, поэтому проверка active до базы не доходит."
+            },
+            "incorrect": {
+              "en": "-- starts a SQL comment, so AND active = TRUE is discarded and a locked account logs in.",
+              "ru": "-- начинает комментарий в SQL, поэтому AND active = TRUE отбрасывается и заблокированный аккаунт входит."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "AND active = TRUE — everything after -- is a comment",
+                "ru": "AND active = TRUE — всё после -- является комментарием"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "None — -- is not valid SQL and the statement fails",
+                "ru": "Никакая — -- не является корректным SQL, и запрос упадёт"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "-- is the standard SQL line-comment marker; the statement parses fine.",
+                "ru": "-- это стандартный маркер строчного комментария в SQL; запрос разбирается нормально."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The whole WHERE clause, so every row is returned",
+                "ru": "Весь WHERE, поэтому вернутся все строки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "name = 'admin' still filters; only the tail after the comment marker is removed.",
+                "ru": "name = 'admin' по-прежнему фильтрует; убран только хвост после маркера комментария."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "goals-p1-union",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In SQL injection, what does the payload ' UNION SELECT id, number, holder FROM cards -- achieve?",
+            "ru": "Чего достигает при SQL injection нагрузка ' UNION SELECT id, number, holder FROM cards --?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "A second SELECT is bolted onto the result set, from a table the endpoint never mentions.",
+              "ru": "К результату пристраивается второй SELECT — из таблицы, которую эндпоинт не упоминает."
+            },
+            "incorrect": {
+              "en": "UNION appends the rows of a second SELECT, so data from an unrelated table comes back through this endpoint.",
+              "ru": "UNION добавляет строки второго SELECT, и через этот эндпоинт возвращаются данные посторонней таблицы."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It returns rows from a table this endpoint never queries",
+                "ru": "Он возвращает строки из таблицы, которую этот эндпоинт не запрашивает"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It deletes the cards table",
+                "ru": "Он удаляет таблицу cards"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "UNION only reads; destruction needs a DROP or DELETE, typically as a stacked statement.",
+                "ru": "UNION только читает; для разрушения нужен DROP или DELETE, обычно составным запросом."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It grants the attacker administrator rights in the database",
+                "ru": "Он выдаёт злоумышленнику права администратора в базе"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing is escalated — it works only because the application's account can already read that table.",
+                "ru": "Никакие права не повышаются — работает лишь потому, что учётная запись приложения уже может читать эту таблицу."
+              }
+            }
+          ]
+        },
+        {
+          "id": "goals-p2-readonly-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "SQL injection can only read data; changing or deleting it requires a separate vulnerability.",
+            "ru": "SQL injection позволяет только читать данные; для изменения или удаления нужна отдельная уязвимость."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A stacked statement such as '; DROP TABLE users; -- runs whatever the account is allowed to run.",
+              "ru": "Составной запрос вроде '; DROP TABLE users; -- выполняет всё, что позволено учётной записи."
+            },
+            "incorrect": {
+              "en": "No — a semicolon can start a second statement, so the same parameter can modify or drop data.",
+              "ru": "Нет — точка с запятой может начать второй запрос, поэтому тот же параметр способен изменить или удалить данные."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "goals-p3-match-payloads",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each SQL injection payload to what it achieves.",
+            "ru": "Соотнеси каждую нагрузку SQL injection с тем, чего она достигает."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Four different grammars reached through one concatenated parameter.",
+              "ru": "Четыре разных грамматики, доступные через один склеенный параметр."
+            },
+            "incorrect": {
+              "en": "OR turns the filter off, -- deletes the tail, UNION adds a SELECT, and a semicolon adds a whole statement.",
+              "ru": "OR выключает фильтр, -- удаляет хвост, UNION добавляет SELECT, а точка с запятой — целый запрос."
+            }
+          },
+          "pairs": [
+            {
+              "id": "or",
+              "left": {
+                "en": "' OR '1'='1",
+                "ru": "' OR '1'='1"
+              },
+              "right": {
+                "en": "The WHERE stops filtering: every row comes back",
+                "ru": "WHERE перестаёт фильтровать: возвращаются все строки"
+              }
+            },
+            {
+              "id": "comment",
+              "left": {
+                "en": "admin'--",
+                "ru": "admin'--"
+              },
+              "right": {
+                "en": "The AND active = TRUE guard is commented out",
+                "ru": "Проверка AND active = TRUE закомментирована"
+              }
+            },
+            {
+              "id": "union",
+              "left": {
+                "en": "' UNION SELECT ... FROM cards --",
+                "ru": "' UNION SELECT ... FROM cards --"
+              },
+              "right": {
+                "en": "Rows from a table the endpoint never mentions",
+                "ru": "Строки из таблицы, которую эндпоинт не упоминает"
+              }
+            },
+            {
+              "id": "stacked",
+              "left": {
+                "en": "'; DROP TABLE users; --",
+                "ru": "'; DROP TABLE users; --"
+              },
+              "right": {
+                "en": "A second statement of the attacker's choosing",
+                "ru": "Второй запрос по выбору злоумышленника"
+              }
+            }
+          ]
+        },
+        {
+          "id": "goals-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing SQL tokens.",
+            "ru": "Впиши два пропущенных SQL-токена."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One deletes the rest of the statement, the other appends rows from elsewhere.",
+              "ru": "Один удаляет остаток запроса, другой добавляет строки из другого места."
+            },
+            "incorrect": {
+              "en": "-- starts a SQL comment, and UNION appends the rows of a second SELECT to the result.",
+              "ru": "-- начинает комментарий в SQL, а UNION добавляет к результату строки второго SELECT."
+            }
+          },
+          "text": {
+            "en": "In SQL injection, ___ starts a comment that deletes the rest of the statement, and ___ appends a second SELECT whose rows join the result.",
+            "ru": "При SQL injection ___ начинает комментарий, удаляющий остаток запроса, а ___ добавляет второй SELECT, строки которого попадают в результат."
+          },
+          "blanks": [
+            {
+              "en": [
+                "--"
+              ],
+              "ru": [
+                "--"
+              ]
+            },
+            {
+              "en": [
+                "UNION"
+              ],
+              "ru": [
+                "UNION"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    ,
+    {
+      "id": "blind-injection",
+      "title": {
+        "en": "Blind injection",
+        "ru": "Слепая инъекция"
+      },
+      "summary": {
+        "en": "Blind SQL injection extracts data one bit at a time from whether the request errors or how long it takes.",
+        "ru": "Слепая SQL-инъекция вытаскивает данные по биту за раз — по тому, падает ли запрос с ошибкой или сколько он длится."
+      },
+      "discovery": [
+        {
+          "id": "blind-d1-no-output",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "An injectable endpoint returns only 200 OK: no data, no error text, no stack trace. Can an attacker still extract the contents of a table?",
+            "ru": "Уязвимый эндпоинт возвращает только 200 OK: ни данных, ни текста ошибки, ни стектрейса. Может ли злоумышленник всё равно вытащить содержимое таблицы?"
+          },
+          "reveal": {
+            "en": "Yes. **Blind injection** is the variant where the attacker never sees the query result and instead asks yes/no questions, reading the answer from a side effect of the request.\n\nTwo channels are enough:\n\n- **time** — attach `AND SLEEP(5)` to a condition and the response is slow only when that condition is true;\n- **errors** — craft the payload so an invalid operation happens only when the condition is true, and \"the page broke\" is the bit.\n\nOne bit per request sounds slow, and it is not: a script asks *is the first letter of the password hash greater than 'm'?*, then bisects. A few thousand automated requests reconstruct a column. **An endpoint that returns nothing but 200 OK still leaks.**\n\n```mermaid\nflowchart LR\n  A[\"condition plus AND SLEEP(5)\"] --> R{\"how long did it take?\"}\n  R -->|\"fast\"| N[\"the condition was false\"]\n  R -->|\"slow\"| Y[\"the condition was true\"]\n```\n\nAnd note what does not help: [HTTPS](topic:http-vs-https) delivers the payload perfectly encrypted, and every check in the [endpoint security scheme](topic:endpoint-security-design) passes, because the request really is from a legitimate, authenticated user.",
+            "ru": "Может. **Слепая инъекция** — это вариант, при котором злоумышленник вообще не видит результат запроса и вместо этого задаёт вопросы «да/нет», считывая ответ по побочному эффекту запроса.\n\nХватает двух каналов:\n\n- **время** — прицепите `AND SLEEP(5)` к условию, и ответ окажется медленным, только когда условие истинно;\n- **ошибки** — соберите нагрузку так, чтобы некорректная операция происходила только при истинном условии, и битом станет «страница упала».\n\nОдин бит за запрос звучит медленно, но это не так: скрипт спрашивает *первая буква хэша пароля больше 'm'?* и дальше делит пополам. Несколько тысяч автоматических запросов восстанавливают колонку. **Эндпоинт, который возвращает только 200 OK, всё равно отдаёт данные.**\n\n```mermaid\nflowchart LR\n  A[\"условие плюс AND SLEEP(5)\"] --> R{\"сколько это заняло?\"}\n  R -->|\"быстро\"| N[\"условие было ложным\"]\n  R -->|\"медленно\"| Y[\"условие было истинным\"]\n```\n\nИ заметьте, что не помогает: [HTTPS](topic:http-vs-https) доставит нагрузку в идеально зашифрованном виде, а все проверки [схемы безопасности эндпоинтов](topic:endpoint-security-design) пройдут, потому что запрос действительно от легитимного аутентифицированного пользователя."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Timing and error/no-error are channels; one bit per request is enough.",
+              "ru": "Время и «ошибка/не ошибка» — это каналы; хватает одного бита за запрос."
+            },
+            "incorrect": {
+              "en": "Yes — blind injection reads the answer from the response time or from whether the request errored.",
+              "ru": "Может — слепая инъекция считывает ответ по времени отклика или по тому, упал ли запрос."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Yes — the answer can be read from whether the request errors or how long it takes",
+                "ru": "Да — ответ читается по тому, падает ли запрос с ошибкой и сколько он длится"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "No — with no output there is no channel to read the data from",
+                "ru": "Нет — без вывода нет канала, из которого читать данные"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Timing and error/no-error are channels too, and one bit per request is enough.",
+                "ru": "Время и «ошибка/не ошибка» — тоже каналы, а одного бита за запрос достаточно."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Only if the attacker can also read the application's logs",
+                "ru": "Только если злоумышленник может ещё и читать логи приложения"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing outside the HTTP response is needed — its timing alone carries the bit.",
+                "ru": "Ничего кроме HTTP-ответа не нужно — бит несёт уже само время отклика."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "blind-p1-200ok-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "An endpoint that returns no data and no error message cannot leak information through SQL injection.",
+            "ru": "Эндпоинт, который не возвращает ни данных, ни сообщения об ошибке, не может утечь данные через SQL injection."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Blind injection reads one bit per request from the timing or from error/no-error.",
+              "ru": "Слепая инъекция читает по биту за запрос из времени отклика или из «ошибка/не ошибка»."
+            },
+            "incorrect": {
+              "en": "No — blind injection extracts data through the response time or through whether the request errored.",
+              "ru": "Нет — слепая инъекция вытаскивает данные через время отклика или через факт ошибки."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "blind-p2-definition",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What is blind SQL injection?",
+            "ru": "Что такое слепая SQL injection?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Yes/no questions, answered by an observable side effect rather than by the result set.",
+              "ru": "Вопросы «да/нет», ответ на которые даёт наблюдаемый побочный эффект, а не результат запроса."
+            },
+            "incorrect": {
+              "en": "It is extracting data one bit at a time from an observable side effect, such as an error or the response time.",
+              "ru": "Это извлечение данных по биту за раз из наблюдаемого побочного эффекта — ошибки или времени отклика."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Extracting data one bit at a time from a side effect such as an error or the response time",
+                "ru": "Извлечение данных по биту за раз из побочного эффекта — ошибки или времени отклика"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Injection against a database whose schema the attacker does not know",
+                "ru": "Инъекция в базу, схему которой злоумышленник не знает"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Not knowing the schema is just reconnaissance; blind refers to not seeing the query output.",
+                "ru": "Незнание схемы — это разведка; «слепая» означает, что не виден вывод запроса."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Injection that only works while the application shows stack traces",
+                "ru": "Инъекция, которая работает, только пока приложение показывает стектрейсы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is the opposite: blind injection is precisely the case where nothing useful is shown.",
+                "ru": "Всё наоборот: слепая инъекция — это как раз случай, когда ничего полезного не показывают."
+              }
+            }
+          ]
+        },
+        {
+          "id": "blind-p3-https",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Does HTTPS protect an endpoint against SQL injection?",
+            "ru": "Защищает ли HTTPS эндпоинт от SQL injection?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Transport security says who the sender is, not what their input does to a parser.",
+              "ru": "Безопасность транспорта говорит, кто отправитель, а не что его ввод сделает с парсером."
+            },
+            "incorrect": {
+              "en": "No — HTTPS encrypts the payload in transit and delivers it perfectly intact to the vulnerable code.",
+              "ru": "Нет — HTTPS шифрует нагрузку в пути и доставляет её в целости уязвимому коду."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "No — it encrypts the payload in transit and delivers it intact",
+                "ru": "Нет — он шифрует нагрузку в пути и доставляет её в целости"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Yes — the payload cannot be modified in transit",
+                "ru": "Да — нагрузку нельзя изменить в пути"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The attacker is the sender, not a man in the middle; there is nothing to modify.",
+                "ru": "Злоумышленник и есть отправитель, а не «человек посередине»; менять нечего."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Yes, if the connection also requires a client certificate",
+                "ru": "Да, если соединение ещё и требует клиентский сертификат"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Stronger authentication only proves who is sending the injectable value.",
+                "ru": "Более сильная аутентификация лишь подтверждает, кто отправляет уязвимое значение."
+              }
+            }
+          ]
+        },
+        {
+          "id": "blind-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing pieces.",
+            "ru": "Впиши две пропущенные части."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A slow response is the bit, and a few thousand requests rebuild a column.",
+              "ru": "Медленный ответ — это бит, а несколько тысяч запросов восстанавливают колонку."
+            },
+            "incorrect": {
+              "en": "Blind injection reads the response time; the classic timing payload is AND SLEEP(5).",
+              "ru": "Слепая инъекция читает время отклика; классическая временная нагрузка — AND SLEEP(5)."
+            }
+          },
+          "text": {
+            "en": "Blind SQL injection reads one bit per request from a side effect such as an error or the response ___; the classic timing payload is AND ___(5).",
+            "ru": "Слепая SQL-инъекция читает по биту за запрос из побочного эффекта — ошибки или ___ ответа; классическая временная нагрузка — AND ___(5)."
+          },
+          "blanks": [
+            {
+              "en": [
+                "time"
+              ],
+              "ru": [
+                "времени",
+                "время",
+                "time"
+              ]
+            },
+            {
+              "en": [
+                "SLEEP"
+              ],
+              "ru": [
+                "SLEEP"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "blast-radius",
+      "title": {
+        "en": "Whose rights the statement runs with",
+        "ru": "С чьими правами выполняется запрос"
+      },
+      "summary": {
+        "en": "An injection runs with exactly the rights of the database account the application connects with, so a least-privileged user decides how bad one is.",
+        "ru": "Инъекция выполняется ровно с правами той учётной записи базы, под которой подключается приложение, поэтому минимальные привилегии определяют, насколько она страшна."
+      },
+      "discovery": [
+        {
+          "id": "blast-d1-union-rights",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A UNION payload on the users endpoint successfully reads a cards table that this endpoint never mentions. What made that possible?",
+            "ru": "Нагрузка с UNION на эндпоинте users успешно читает таблицу cards, которую этот эндпоинт не упоминает. Что сделало это возможным?"
+          },
+          "reveal": {
+            "en": "The database account the application connects with can read that table. **No privilege was escalated.** An injection gives an outsider exactly the rights your service already has — no more, no less.\n\nThat is the argument for a **least-privileged** database user: a separate account per service, no DDL rights, no access to tables the service does not own. It does not prevent injection; it decides *how bad* one is. `'; DROP TABLE users; --` needs DDL rights to work; the `cards` read needs a grant on `cards`.\n\nTwo production habits belong with it:\n\n- **do not return raw database errors.** A response containing the failing SQL is a map of your schema for the attacker; see [managing errors and error codes](topic:api-error-handling).\n- **a WAF is a speed bump, not a fix.** It matches patterns, and injection is produced by grammar — and grammar has infinitely many spellings.",
+            "ru": "Учётная запись базы, под которой подключается приложение, может читать эту таблицу. **Никакие права не повышались.** Инъекция даёт постороннему ровно те права, что уже есть у вашего сервиса, — не больше и не меньше.\n\nЭто и есть аргумент за пользователя базы с **минимальными привилегиями**: отдельная учётная запись на сервис, без прав DDL, без доступа к таблицам, которыми сервис не владеет. Инъекцию это не предотвращает — это определяет, *насколько* она страшна. Чтобы сработал `'; DROP TABLE users; --`, нужны права DDL; чтобы прочитать `cards`, нужен грант на `cards`.\n\nРядом стоят две продакшен-привычки:\n\n- **не возвращайте сырые ошибки базы.** Ответ с упавшим SQL — это карта вашей схемы для злоумышленника; см. [управление ошибками и кодами ошибок](topic:api-error-handling).\n- **WAF — это лежачий полицейский, а не починка.** Он сопоставляет шаблоны, а инъекция порождается грамматикой, у которой бесконечно много написаний."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The statement ran as the application's own database user, which already had that grant.",
+              "ru": "Запрос выполнился под собственной учётной записью приложения, у которой этот грант уже был."
+            },
+            "incorrect": {
+              "en": "Nothing was escalated: the injected statement runs with the rights of the application's database account.",
+              "ru": "Ничего не повышалось: внедрённый запрос выполняется с правами учётной записи базы, под которой работает приложение."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The database account the application connects with can read that table",
+                "ru": "Учётная запись базы, под которой подключается приложение, может читать эту таблицу"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The injection escalated the attacker's privileges inside the database",
+                "ru": "Инъекция повысила права злоумышленника внутри базы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Injection escalates nothing; it borrows the rights the application already holds.",
+                "ru": "Инъекция ничего не повышает; она занимает права, которые уже есть у приложения."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The attacker guessed the database administrator's password",
+                "ru": "Злоумышленник подобрал пароль администратора базы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "No credentials are involved — the application is already authenticated to the database.",
+                "ru": "Никакие учётные данные не участвуют — приложение уже аутентифицировано в базе."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "blast-p1-least-priv-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Running an application under a least-privileged database user prevents SQL injection.",
+            "ru": "Работа приложения под пользователем базы с минимальными привилегиями предотвращает SQL injection."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It does not prevent the injection — it caps what the injected statement can reach.",
+              "ru": "Инъекцию это не предотвращает — это ограничивает, до чего дотянется внедрённый запрос."
+            },
+            "incorrect": {
+              "en": "No — the injection still happens; least privilege only decides how much damage it can do.",
+              "ru": "Нет — инъекция всё равно произойдёт; минимальные привилегии лишь определяют масштаб ущерба."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "blast-p2-raw-errors",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why should an application not return raw database errors to the client?",
+            "ru": "Почему приложению не стоит возвращать клиенту сырые ошибки базы данных?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The failing statement and the table names are exactly what an attacker needs next.",
+              "ru": "Упавший запрос и имена таблиц — ровно то, что нужно злоумышленнику дальше."
+            },
+            "incorrect": {
+              "en": "A raw error hands over the failing SQL and the schema, which maps the database for the attacker.",
+              "ru": "Сырая ошибка отдаёт упавший SQL и схему, то есть рисует злоумышленнику карту базы."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It hands the attacker the failing SQL and the schema behind it",
+                "ru": "Она отдаёт злоумышленнику упавший SQL и стоящую за ним схему"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It makes the response noticeably slower",
+                "ru": "Она заметно замедляет ответ"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Performance is not the issue; the leaked schema information is.",
+                "ru": "Дело не в производительности, а в утёкшей информации о схеме."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It prevents the client from retrying the request",
+                "ru": "Она мешает клиенту повторить запрос"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Retries are unaffected — the problem is what the error text reveals.",
+                "ru": "На повторы это не влияет — проблема в том, что раскрывает текст ошибки."
+              }
+            }
+          ]
+        },
+        {
+          "id": "blast-p3-waf",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A WAF now blocks requests containing ' OR '1'='1. Is the application safe from SQL injection?",
+            "ru": "WAF теперь блокирует запросы, содержащие ' OR '1'='1. Защищено ли приложение от SQL injection?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Pattern matching against an infinite grammar is a speed bump, not a fix.",
+              "ru": "Сопоставление шаблонов с бесконечной грамматикой — лежачий полицейский, а не починка."
+            },
+            "incorrect": {
+              "en": "No — a WAF matches patterns, and the same grammar can be written in endlessly many ways.",
+              "ru": "Нет — WAF сопоставляет шаблоны, а ту же грамматику можно записать бесконечным числом способов."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "No — a WAF matches patterns, and the same grammar has endless spellings",
+                "ru": "Нет — WAF сопоставляет шаблоны, а у той же грамматики бесконечно много написаний"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Yes — that is the standard SQL injection payload",
+                "ru": "Да — это стандартная нагрузка SQL injection"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It is one spelling of one payload; admin'-- carries no OR at all.",
+                "ru": "Это одно написание одной нагрузки; в admin'-- вообще нет OR."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Yes, as long as the rule set is updated weekly",
+                "ru": "Да, если набор правил обновляется еженедельно"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Updates chase spellings; the vulnerable concatenation is still in the code.",
+                "ru": "Обновления гонятся за написаниями; уязвимая конкатенация остаётся в коде."
+              }
+            }
+          ]
+        },
+        {
+          "id": "blast-p4-match-measures",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each measure to what it actually does about SQL injection.",
+            "ru": "Соотнеси каждую меру с тем, что она реально делает с SQL injection."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Only one of these prevents the bug; the rest limit or slow down its exploitation.",
+              "ru": "Ошибку предотвращает только одна из них; остальные ограничивают или замедляют эксплуатацию."
+            },
+            "incorrect": {
+              "en": "Binding prevents it, least privilege limits the reach, hidden errors remove a channel, and a WAF only blocks known spellings.",
+              "ru": "Привязка предотвращает, минимальные права ограничивают охват, скрытые ошибки убирают канал, а WAF блокирует лишь известные написания."
+            }
+          },
+          "pairs": [
+            {
+              "id": "bind",
+              "left": {
+                "en": "Bind parameters",
+                "ru": "Привязка параметров"
+              },
+              "right": {
+                "en": "Prevents the injection",
+                "ru": "Предотвращает инъекцию"
+              }
+            },
+            {
+              "id": "leastpriv",
+              "left": {
+                "en": "Least-privileged database account",
+                "ru": "Учётная запись базы с минимальными правами"
+              },
+              "right": {
+                "en": "Limits what one injection can reach",
+                "ru": "Ограничивает, до чего дотянется одна инъекция"
+              }
+            },
+            {
+              "id": "errors",
+              "left": {
+                "en": "Hiding raw database errors",
+                "ru": "Сокрытие сырых ошибок базы"
+              },
+              "right": {
+                "en": "Removes a feedback channel the attacker uses",
+                "ru": "Убирает канал обратной связи, которым пользуется злоумышленник"
+              }
+            },
+            {
+              "id": "waf",
+              "left": {
+                "en": "A WAF",
+                "ru": "WAF"
+              },
+              "right": {
+                "en": "Blocks known payload spellings, nothing more",
+                "ru": "Блокирует известные написания нагрузок, не больше"
+              }
+            }
+          ]
+        },
+        {
+          "id": "blast-p5-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing pieces.",
+            "ru": "Впиши две пропущенные части."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It does not stop the injection; it caps what the injection can touch.",
+              "ru": "Инъекцию это не останавливает; это ограничивает, до чего она дотянется."
+            },
+            "incorrect": {
+              "en": "No DDL rights, plus a separate account per service, is the principle of least privilege.",
+              "ru": "Без прав DDL и с отдельной учётной записью на сервис — это принцип минимальных привилегий."
+            }
+          },
+          "text": {
+            "en": "A separate database account per service, with no ___ rights and no access to tables it does not own, applies the principle of ___ privilege.",
+            "ru": "Отдельная учётная запись базы на каждый сервис, без прав ___ и без доступа к чужим таблицам, реализует принцип ___ привилегий."
+          },
+          "blanks": [
+            {
+              "en": [
+                "DDL"
+              ],
+              "ru": [
+                "DDL"
+              ]
+            },
+            {
+              "en": [
+                "least"
+              ],
+              "ru": [
+                "минимальных",
+                "минимальные",
+                "least"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    ,
+    {
+      "id": "prepared-statement-time-and-channel",
+      "title": {
+        "en": "Why a prepared statement works",
+        "ru": "Почему работает prepared statement"
+      },
+      "summary": {
+        "en": "The statement text is parsed into a plan before the value exists, and the value travels beside the statement instead of inside it.",
+        "ru": "Текст запроса разбирается в план до появления значения, а значение едет рядом с запросом, а не внутри него."
+      },
+      "discovery": [
+        {
+          "id": "ps-d1-sort-order",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order what happens when an application runs a query with a bind parameter.",
+            "ru": "Расставь по порядку то, что происходит, когда приложение выполняет запрос с привязанным параметром."
+          },
+          "reveal": {
+            "en": "A **prepared statement** is a SQL text that is a constant containing a `?` — a **placeholder**, also called a **bind parameter**. That text goes to the database **first** and is parsed into a plan: a plan with a hole where the value goes. The value is sent **afterwards**, through a different part of the protocol, tagged as a parameter of an already-parsed statement.\n\n```mermaid\nsequenceDiagram\n  participant A as Application\n  participant D as Database\n  A->>D: SELECT ... WHERE name = ? AND active = TRUE\n  D->>D: parse - the plan is fixed before any value exists\n  A->>D: parameter 1 is the text ' OR '1'='1\n  D->>D: compare that string with the name column\n  D-->>A: no rows\n```\n\nSo the guarantee is about **time** and **channel**, not about characters:\n\n- **time** — the grammar is decided *before* the value exists, so no value can change it. (This is also why the [query plan](topic:query-plan) can be reused across calls: same text, same plan, different parameters.)\n- **channel** — the value never enters the statement text, so there is no grammar for it to join. Nothing was escaped, nothing was filtered, nothing was rejected. A quote in the value is just a quote, stored and compared as a quote.\n\nThat is why \"it escapes the input for you\" is the wrong answer. See [prepared statements](topic:prepared-statements).",
+            "ru": "**Prepared statement** — это текст SQL, являющийся константой с `?` внутри; `?` называют **плейсхолдером** или **привязанным параметром**. Этот текст уходит в базу **первым** и разбирается в план — план с дыркой на месте значения. Значение отправляется **потом**, другой частью протокола, помеченное как параметр уже разобранного запроса.\n\n```mermaid\nsequenceDiagram\n  participant A as Приложение\n  participant D as База\n  A->>D: SELECT ... WHERE name = ? AND active = TRUE\n  D->>D: разбор - план зафиксирован до появления значения\n  A->>D: параметр 1 - это текст ' OR '1'='1\n  D->>D: сравнить эту строку с колонкой name\n  D-->>A: строк нет\n```\n\nТо есть гарантия — про **время** и **канал**, а не про символы:\n\n- **время** — грамматика определена *до* того, как появилось значение, поэтому никакое значение её уже не изменит. (По той же причине [план запроса](topic:query-plan) можно переиспользовать между вызовами: тот же текст, тот же план, другие параметры.)\n- **канал** — значение вообще не попадает в текст запроса, и присоединяться к грамматике ему негде. Ничего не экранировали, ничего не фильтровали, ничего не отвергли. Кавычка в значении — просто кавычка, её так и сохранят и так и сравнят.\n\nПоэтому «он за вас экранирует ввод» — неправильный ответ. См. [prepared statements](topic:prepared-statements)."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Text first, plan second, value last — the grammar is settled before the value exists.",
+              "ru": "Сначала текст, потом план, значение последним — грамматика решена до появления значения."
+            },
+            "incorrect": {
+              "en": "The text with the ? goes first and is parsed into a plan; only then is the value sent separately.",
+              "ru": "Сначала уходит текст с ?, он разбирается в план; и только потом отдельно отправляется значение."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "The application sends the statement text, which contains a ? and no value",
+                "ru": "Приложение отправляет текст запроса, в котором есть ? и нет значения"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "The database parses that text into a plan with a hole where the value goes",
+                "ru": "База разбирает этот текст в план с дыркой на месте значения"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "The application sends the value separately, tagged as parameter 1",
+                "ru": "Приложение отдельно отправляет значение, помеченное как параметр 1"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "The database compares the value with the column, as a value and never as SQL",
+                "ru": "База сравнивает значение с колонкой — как значение, а не как SQL"
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "ps-p1-why",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why does a PreparedStatement with WHERE name = ? prevent SQL injection?",
+            "ru": "Почему PreparedStatement с WHERE name = ? предотвращает SQL injection?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "The grammar is fixed before the value exists, and the value never joins the text.",
+              "ru": "Грамматика зафиксирована до появления значения, и значение никогда не входит в текст."
+            },
+            "incorrect": {
+              "en": "Because the text is parsed into a plan before the value exists, and the value is sent separately — not because anything is escaped.",
+              "ru": "Потому что текст разбирается в план до появления значения, а значение отправляется отдельно, — а не потому, что что-то экранируется."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The text is parsed into a plan before the value exists, and the value is sent separately",
+                "ru": "Текст разбирается в план до появления значения, а значение отправляется отдельно"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The driver escapes the quotes in the value before sending it",
+                "ru": "Драйвер экранирует кавычки в значении перед отправкой"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "This is the common wrong answer: nothing is escaped, because the value never enters the statement text.",
+                "ru": "Это частый неправильный ответ: ничего не экранируется, ведь значение вообще не попадает в текст запроса."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The database validates the value against the column's type",
+                "ru": "База проверяет значение по типу колонки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Type checks are not a security boundary — a text column accepts any string, payload or not.",
+                "ru": "Проверки типов не являются границей безопасности — текстовая колонка принимает любую строку."
+              }
+            }
+          ]
+        },
+        {
+          "id": "ps-p2-predict-bound",
+          "type": "predict_output",
+          "prompt": {
+            "en": "No user is literally named ' OR '1'='1. How many rows come back?",
+            "ru": "Ни один пользователь не назван буквально ' OR '1'='1. Сколько строк вернётся?"
+          },
+          "code": "PreparedStatement ps = conn.prepareStatement(\n        \"SELECT id FROM users WHERE name = ? AND active = TRUE\");\nps.setString(1, \"' OR '1'='1\");\nResultSet rs = ps.executeQuery();",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "The payload is only ever compared as a string, so nothing matches.",
+              "ru": "Нагрузка сравнивается только как строка, поэтому ничего не совпадает."
+            },
+            "incorrect": {
+              "en": "None — the value never enters the statement text, so it is compared to the name column as an ordinary string.",
+              "ru": "Ни одной — значение не попадает в текст запроса и сравнивается с колонкой name как обычная строка."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "None",
+                "ru": "Ни одной"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Every row in users",
+                "ru": "Все строки таблицы users"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is what concatenation would have done; here the payload is only ever a value.",
+                "ru": "Так было бы при конкатенации; здесь нагрузка остаётся всего лишь значением."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It throws a SQLException about an unterminated string",
+                "ru": "Будет SQLException о незакрытой строке"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A quote inside a bound value is an ordinary character, not a syntax event.",
+                "ru": "Кавычка внутри привязанного значения — обычный символ, а не элемент синтаксиса."
+              }
+            }
+          ]
+        },
+        {
+          "id": "ps-p3-one-string-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "With a bind parameter, the database receives one finished SQL string that already contains the value.",
+            "ru": "При привязке параметра база получает одну готовую SQL-строку, в которой значение уже подставлено."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Text and value travel separately, which is exactly the guarantee.",
+              "ru": "Текст и значение едут отдельно — в этом и состоит гарантия."
+            },
+            "incorrect": {
+              "en": "No — the text goes first and is parsed, and the value follows through a different part of the protocol.",
+              "ru": "Нет — сначала уходит и разбирается текст, а значение приходит потом другой частью протокола."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "ps-p4-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the timing guarantee of a prepared statement.",
+            "ru": "Собери гарантию prepared statement про время."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Grammar first, value second — so no value can change the grammar.",
+              "ru": "Сначала грамматика, потом значение — поэтому значение не изменит грамматику."
+            },
+            "incorrect": {
+              "en": "The statement is parsed before the value exists, so the value can never become grammar.",
+              "ru": "Запрос разбирается до появления значения, поэтому значение не может стать грамматикой."
+            }
+          },
+          "tokens": {
+            "en": [
+              "the",
+              "statement",
+              "is",
+              "parsed",
+              "before",
+              "the",
+              "value",
+              "exists"
+            ],
+            "ru": [
+              "запрос",
+              "разбирается",
+              "до",
+              "появления",
+              "значения"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "escaped",
+              "after"
+            ],
+            "ru": [
+              "экранируется",
+              "после"
+            ]
+          }
+        },
+        {
+          "id": "ps-p5-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two words that name the guarantee.",
+            "ru": "Впиши два слова, которые называют эту гарантию."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Neither of them is about characters — that is the point.",
+              "ru": "Ни одно из них не про символы — в этом и суть."
+            },
+            "incorrect": {
+              "en": "Time (parsed before the value exists) and channel (the value travels beside the statement).",
+              "ru": "Время (разбор до появления значения) и канал (значение едет рядом с запросом)."
+            }
+          },
+          "text": {
+            "en": "A prepared statement is safe for two reasons: ___ (the text is parsed before the value exists) and ___ (the value travels beside the statement, not inside it).",
+            "ru": "Prepared statement безопасен по двум причинам: ___ (текст разбирается до появления значения) и ___ (значение едет рядом с запросом, а не внутри него)."
+          },
+          "blanks": [
+            {
+              "en": [
+                "time"
+              ],
+              "ru": [
+                "время",
+                "времени",
+                "time"
+              ]
+            },
+            {
+              "en": [
+                "channel"
+              ],
+              "ru": [
+                "канал",
+                "канала",
+                "channel"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "binding-is-not-escaping",
+      "title": {
+        "en": "Binding is not escaping",
+        "ru": "Привязка — это не экранирование"
+      },
+      "summary": {
+        "en": "Binding does not touch the value at all; escaping is a per-context rule that code must remember to apply correctly every time.",
+        "ru": "Привязка вообще не трогает значение; экранирование — правило про конкретный контекст, которое код обязан не забыть применить правильно каждый раз."
+      },
+      "discovery": [
+        {
+          "id": "escape-d1-obrien",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A user's surname is O'Brien and it is stored through a bind parameter. What is in the database column afterwards?",
+            "ru": "Фамилия пользователя — O'Brien, и она сохраняется через привязанный параметр. Что окажется в колонке базы?"
+          },
+          "reveal": {
+            "en": "`O'Brien`, character for character. **Binding does not modify the value.**\n\n- **Escaping** rewrites a value so that a metacharacter loses its meaning inside one particular context — `'` doubled into `''` inside a quoted SQL literal. It is a rule about *one* context, applied by code that has to remember to apply it, correctly, every single time.\n- **Binding** removes the context: the value never enters the statement text at all, so there is nothing to escape.\n\nThat is why binding is strictly stronger, even when the escaping happens to be correct. Nothing has to be escaped correctly, because nothing is being escaped.\n\nTwo consequences worth carrying into an interview:\n\n- **\"an integer parameter is safe because there are no quotes\"** is wrong. There is no quote to *close* either: `1 OR 1=1` concatenated into a numeric comparison lands directly next to the operators.\n- **input validation** is worth doing and cannot be the main defence. Whether a string is dangerous depends on which parser will eventually read it, and the input layer does not know. `O'Brien` is a legal surname; rejecting it costs real users and still protects nothing.",
+            "ru": "`O'Brien`, символ в символ. **Привязка не изменяет значение.**\n\n- **Экранирование** переписывает значение так, чтобы метасимвол потерял смысл внутри одного конкретного контекста: `'` удваивается в `''` внутри строкового литерала SQL. Это правило про *один* контекст, которое код обязан не забыть применить, правильно, каждый раз.\n- **Привязка** убирает сам контекст: значение вообще не попадает в текст запроса, поэтому экранировать нечего.\n\nПоэтому привязка строго сильнее — даже когда экранирование сделано верно. Ничего не нужно экранировать правильно, потому что ничего не экранируется.\n\nДва следствия, которые стоит унести на собеседование:\n\n- **«числовой параметр безопасен, там нет кавычек»** — неверно. Там и *закрывать* нечего: `1 OR 1=1`, склеенный в числовое сравнение, попадает прямо к операторам.\n- **валидацию ввода** делать стоит, но основной защитой она быть не может. Опасна строка или нет — зависит от того, какой парсер её в итоге прочитает, а слой ввода этого не знает. `O'Brien` — законная фамилия; отвергнув её, вы потеряете живых пользователей и по-прежнему ничего не защитите."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The value is stored verbatim — binding never rewrites it.",
+              "ru": "Значение сохраняется дословно — привязка его не переписывает."
+            },
+            "incorrect": {
+              "en": "O'Brien, unchanged: binding keeps the value out of the statement text instead of altering it.",
+              "ru": "O'Brien без изменений: привязка держит значение вне текста запроса, а не правит его."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "O'Brien — the value was never altered",
+                "ru": "O'Brien — значение вообще не менялось"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "O''Brien — the driver doubled the quote before sending it",
+                "ru": "O''Brien — драйвер удвоил кавычку перед отправкой"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is escaping; binding sends the value separately and leaves it untouched.",
+                "ru": "Это экранирование; привязка отправляет значение отдельно и не трогает его."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "OBrien — the quote was stripped as dangerous input",
+                "ru": "OBrien — кавычку вырезали как опасный ввод"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Nothing is filtered; O'Brien is a legal surname and is stored as typed.",
+                "ru": "Ничего не фильтруется; O'Brien — законная фамилия, она сохраняется как есть."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "escape-p1-escapes-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A bind parameter escapes the quotes in the value before sending it to the database.",
+            "ru": "Привязанный параметр экранирует кавычки в значении перед отправкой в базу."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It does not touch the value; it keeps the value out of the statement text.",
+              "ru": "Он не трогает значение; он держит значение вне текста запроса."
+            },
+            "incorrect": {
+              "en": "No — nothing is escaped, because the value never becomes part of the statement text.",
+              "ru": "Нет — ничего не экранируется, ведь значение вообще не становится частью текста запроса."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "escape-p2-numeric",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "The quote is escaped correctly here. Why is this still injectable?",
+            "ru": "Кавычка здесь экранирована правильно. Почему это всё равно уязвимо?"
+          },
+          "code": "String id = request.getParameter(\"customerId\");\nString safe = id.replace(\"'\", \"''\");\nString sql = \"SELECT * FROM orders WHERE customer_id = \" + safe;",
+          "codeLang": "java",
+          "reveal": {
+            "en": "`customer_id` is numeric, so the value is **not inside a quoted literal** — there is no literal for the doubled quote to protect. The attacker sends `1 OR 1=1`, which contains no quote at all and lands directly next to the operators:\n\n```\nSELECT * FROM orders WHERE customer_id = 1 OR 1=1\n```\n\nThis is exactly the \"an integer parameter is safe because there are no quotes\" misconception: there is no quote to *close*, so no quote is needed. Escaping only ever defends the one context it was written for, and here that context does not exist.\n\nThe fix is not more escaping. It is `WHERE customer_id = ?` with `setInt`/`setLong`, which removes the context entirely.",
+            "ru": "`customer_id` числовая, поэтому значение **не находится внутри литерала в кавычках** — литерала, который защищала бы удвоенная кавычка, попросту нет. Злоумышленник отправляет `1 OR 1=1`, где кавычек вообще нет, и это попадает прямо к операторам:\n\n```\nSELECT * FROM orders WHERE customer_id = 1 OR 1=1\n```\n\nЭто ровно то заблуждение «числовой параметр безопасен, там нет кавычек»: там и *закрывать* нечего, поэтому кавычка не нужна. Экранирование всегда защищает лишь тот единственный контекст, для которого написано, а здесь этого контекста нет.\n\nЧинится это не усилением экранирования, а `WHERE customer_id = ?` с `setInt`/`setLong`, что убирает контекст целиком."
+          },
+          "feedback": {
+            "correct": {
+              "en": "No literal, nothing for the escaping to protect: 1 OR 1=1 needs no quote.",
+              "ru": "Литерала нет, защищать экранированию нечего: для 1 OR 1=1 кавычка не нужна."
+            },
+            "incorrect": {
+              "en": "The value is in a numeric context, not inside a quoted literal, so 1 OR 1=1 works without any quote.",
+              "ru": "Значение стоит в числовом контексте, а не внутри литерала, поэтому 1 OR 1=1 работает без всякой кавычки."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "customer_id is numeric, so the value is not inside a quoted literal at all",
+                "ru": "customer_id числовая, поэтому значение вообще не находится внутри литерала"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "replace should run twice, to catch already-doubled quotes",
+                "ru": "replace нужно вызвать дважды, чтобы поймать уже удвоенные кавычки"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "More escaping changes nothing: the payload here contains no quote to escape.",
+                "ru": "Усиление экранирования ничего не меняет: в этой нагрузке нет кавычки, которую надо экранировать."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It is not injectable — escaping quotes covers every case",
+                "ru": "Оно не уязвимо — экранирование кавычек покрывает все случаи"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "1 OR 1=1 is a complete payload with no quote in it.",
+                "ru": "1 OR 1=1 — полноценная нагрузка, в которой нет ни одной кавычки."
+              }
+            }
+          ]
+        },
+        {
+          "id": "escape-p3-validation",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What role does input validation play against injection?",
+            "ru": "Какую роль играет валидация ввода против инъекций?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Worth doing, but the input layer cannot know which parser will read the value.",
+              "ru": "Делать стоит, но слой ввода не знает, какой парсер прочитает значение."
+            },
+            "incorrect": {
+              "en": "A useful extra layer that cannot be the main defence: danger depends on the parser, which the input layer does not know.",
+              "ru": "Полезный дополнительный слой, но не основная защита: опасность зависит от парсера, а слой ввода его не знает."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A useful extra layer, but not the main defence: whether a string is dangerous depends on the parser that reads it",
+                "ru": "Полезный дополнительный слой, но не основная защита: опасность строки зависит от парсера, который её прочитает"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It is the main defence — a strict allowlist of characters removes the bug",
+                "ru": "Это основная защита — строгий белый список символов убирает ошибку"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "O'Brien is a legal surname; character rules break real users and still leave the concatenation.",
+                "ru": "O'Brien — законная фамилия; правила по символам ломают живых пользователей и оставляют конкатенацию."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It is pointless once parameters are used and should be dropped",
+                "ru": "Она бессмысленна, если используются параметры, и её надо убрать"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Validation still rejects malformed input and reduces noise; it is just not the boundary that stops injection.",
+                "ru": "Валидация всё равно отсекает некорректный ввод и снижает шум; просто не она останавливает инъекцию."
+              }
+            }
+          ]
+        },
+        {
+          "id": "escape-p4-like",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A bound value is used in WHERE name LIKE ? and the user sends %. What happens?",
+            "ru": "Привязанное значение используется в WHERE name LIKE ?, и пользователь присылает %. Что произойдёт?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Still a value — but LIKE has its own pattern language in which % and _ are wildcards.",
+              "ru": "Это по-прежнему значение — но у LIKE свой язык шаблонов, где % и _ являются подстановочными знаками."
+            },
+            "incorrect": {
+              "en": "It is matched as a wildcard: the value stays a value, yet % and _ mean something inside the LIKE grammar.",
+              "ru": "Он сработает как подстановочный знак: значение остаётся значением, но % и _ что-то значат в грамматике LIKE."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It matches everything: % is a wildcard inside the LIKE pattern grammar",
+                "ru": "Он совпадёт со всем: % — подстановочный знак в грамматике шаблона LIKE"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It is SQL injection: the pattern changed the statement",
+                "ru": "Это SQL injection: шаблон изменил запрос"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "No grammar of the statement changed; only LIKE's own pattern language interpreted the character.",
+                "ru": "Грамматика запроса не менялась; символ истолковал лишь собственный язык шаблонов LIKE."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "The driver rejects the value as an invalid pattern",
+                "ru": "Драйвер отвергнет значение как некорректный шаблон"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "% is a perfectly valid pattern; escape it for the LIKE grammar if you need it literal.",
+                "ru": "% — совершенно корректный шаблон; если нужен буквальный символ, экранируйте его для грамматики LIKE."
+              }
+            }
+          ]
+        },
+        {
+          "id": "escape-p5-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each defence against SQL injection to what it actually does to the value.",
+            "ru": "Соотнеси каждую защиту от SQL injection с тем, что она реально делает со значением."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Only binding removes the context; the rest work inside it or beside it.",
+              "ru": "Контекст убирает только привязка; остальное работает внутри него или рядом."
+            },
+            "incorrect": {
+              "en": "Escaping rewrites for one context, binding keeps the value out of the text, validation does not know the parser.",
+              "ru": "Экранирование переписывает под один контекст, привязка держит значение вне текста, валидация не знает парсера."
+            }
+          },
+          "pairs": [
+            {
+              "id": "escaping",
+              "left": {
+                "en": "Escaping",
+                "ru": "Экранирование"
+              },
+              "right": {
+                "en": "Rewrites the value so a metacharacter loses meaning in one context",
+                "ru": "Переписывает значение так, что метасимвол теряет смысл в одном контексте"
+              }
+            },
+            {
+              "id": "binding",
+              "left": {
+                "en": "Bind parameter",
+                "ru": "Привязка параметра"
+              },
+              "right": {
+                "en": "Keeps the value out of the statement text entirely",
+                "ru": "Вообще держит значение вне текста запроса"
+              }
+            },
+            {
+              "id": "validation",
+              "left": {
+                "en": "Input validation",
+                "ru": "Валидация ввода"
+              },
+              "right": {
+                "en": "Rejects malformed input, but does not know which parser reads the value",
+                "ru": "Отсекает некорректный ввод, но не знает, какой парсер прочитает значение"
+              }
+            },
+            {
+              "id": "numeric",
+              "left": {
+                "en": "Doubling a quote for a numeric column",
+                "ru": "Удвоение кавычки для числовой колонки"
+              },
+              "right": {
+                "en": "Protects nothing: the value was never inside a literal",
+                "ru": "Не защищает ничего: значение и не было внутри литерала"
+              }
+            }
+          ]
+        },
+        {
+          "id": "escape-p6-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing words.",
+            "ru": "Впиши два пропущенных слова."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Nothing has to be escaped correctly, because nothing is being escaped.",
+              "ru": "Ничего не нужно экранировать правильно, потому что ничего не экранируется."
+            },
+            "incorrect": {
+              "en": "Binding does not escape the value; it keeps it out of the statement text.",
+              "ru": "Привязка не экранирует значение; она держит его вне текста запроса."
+            }
+          },
+          "text": {
+            "en": "A bind parameter does not ___ the value; it keeps the value out of the statement ___ entirely.",
+            "ru": "Привязанный параметр не ___ значение; он вообще держит значение вне ___ запроса."
+          },
+          "blanks": [
+            {
+              "en": [
+                "escape"
+              ],
+              "ru": [
+                "экранирует",
+                "escape"
+              ]
+            },
+            {
+              "en": [
+                "text"
+              ],
+              "ru": [
+                "текста",
+                "текст",
+                "text"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    ,
+    {
+      "id": "identifiers-need-allowlist",
+      "title": {
+        "en": "What you cannot bind",
+        "ru": "Что нельзя привязать"
+      },
+      "summary": {
+        "en": "A placeholder stands for a value only; a table name, a column name or ORDER BY must be mapped through an allowlist to a constant.",
+        "ru": "Плейсхолдер обозначает только значение; имя таблицы, имя колонки или ORDER BY нужно отображать белым списком в константу."
+      },
+      "discovery": [
+        {
+          "id": "allow-d1-order-by",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The sort column comes from the request, so a developer binds it. What does this statement do?",
+            "ru": "Колонка сортировки приходит из запроса, и разработчик привязывает её. Что сделает этот запрос?"
+          },
+          "code": "PreparedStatement ps = conn.prepareStatement(\n        \"SELECT id, name FROM users ORDER BY ?\");\nps.setString(1, \"name\");",
+          "codeLang": "java",
+          "reveal": {
+            "en": "It does not work. A `?` stands for a **value**, and the database needs the *structure* of a statement in order to parse it at all — so `ORDER BY ?` does not exist.\n\nThe same limit rules out binding: a table name, a column name, `ASC`/`DESC`, a whole `WHERE` fragment. Placeholders protect exactly one thing — values inside an already-fixed statement — and everything else in the statement is structure.\n\nSo when the sort column comes from the request, that string really is concatenated, and the defence has to be a different one: an **allowlist** that maps the input to a constant you wrote yourself.\n\n```java\n// the input chooses a value; it never becomes one\nprivate static final Map<String, String> SORTABLE =\n        Map.of(\"id\", \"id\", \"name\", \"name\", \"role\", \"role\");\nString column = SORTABLE.getOrDefault(requested, \"id\");\nString sql = \"SELECT id, name, role FROM users ORDER BY \" + column;\n```\n\nNote what the allowlist does *not* do: it does not escape, sanitise or repair the input. An unknown value simply never reaches the statement — the only strings that can end up in the SQL are the three you typed yourself.",
+            "ru": "Он не сработает. `?` обозначает **значение**, а *структуру* базе нужно знать, чтобы вообще разобрать запрос, — поэтому `ORDER BY ?` не бывает.\n\nТо же ограничение запрещает привязывать имя таблицы, имя колонки, `ASC`/`DESC`, целый кусок `WHERE`. Плейсхолдеры защищают ровно одно — значения внутри уже зафиксированного запроса, — а всё остальное в запросе является структурой.\n\nПоэтому, когда колонка сортировки приходит из запроса, там действительно конкатенация, и защита нужна другая: **белый список**, отображающий ввод в константу, которую написали вы сами.\n\n```java\n// ввод выбирает значение, но значением не становится\nprivate static final Map<String, String> SORTABLE =\n        Map.of(\"id\", \"id\", \"name\", \"name\", \"role\", \"role\");\nString column = SORTABLE.getOrDefault(requested, \"id\");\nString sql = \"SELECT id, name, role FROM users ORDER BY \" + column;\n```\n\nЗаметьте, чего белый список *не* делает: он не экранирует, не очищает и не исправляет ввод. Неизвестное значение просто не доходит до запроса — в SQL могут попасть только те три строки, которые вы напечатали сами."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A placeholder cannot stand where the parser needs structure.",
+              "ru": "Плейсхолдер не может стоять там, где парсеру нужна структура."
+            },
+            "incorrect": {
+              "en": "It does not work: ? is a value, and ORDER BY needs an identifier, which is structure.",
+              "ru": "Он не сработает: ? — это значение, а ORDER BY нужен идентификатор, то есть структура."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "It does not work — a ? is a value, and the parser needs the structure to read the statement",
+                "ru": "Он не сработает — ? это значение, а парсеру нужна структура, чтобы прочитать запрос"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It sorts by the name column, as intended",
+                "ru": "Он отсортирует по колонке name, как и задумано"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The parameter is the literal string 'name', not the identifier name.",
+                "ru": "Параметр — это строковый литерал 'name', а не идентификатор name."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "It sorts by id, the primary key, as a safe fallback",
+                "ru": "Он отсортирует по id, первичному ключу, как безопасный запасной вариант"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no such fallback; a fallback is something you write yourself in an allowlist.",
+                "ru": "Такого запасного варианта нет; запасной вариант вы пишете сами в белом списке."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "allow-p1-what-binds",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In a JDBC statement, what can a ? placeholder stand for?",
+            "ru": "Что может обозначать плейсхолдер ? в JDBC-запросе?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Values only — structure has to be known before the statement can be parsed.",
+              "ru": "Только значения — структуру нужно знать, чтобы запрос вообще разобрался."
+            },
+            "incorrect": {
+              "en": "Only a value. Table names, column names and sort directions are structure and cannot be bound.",
+              "ru": "Только значение. Имена таблиц, имена колонок и направление сортировки — это структура, их привязать нельзя."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A value compared against a column",
+                "ru": "Значение, с которым сравнивают колонку"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "A table name in the FROM clause",
+                "ru": "Имя таблицы во FROM"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The database cannot even parse the statement without knowing the table.",
+                "ru": "База не сможет разобрать запрос, не зная таблицу."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A column name in the ORDER BY clause",
+                "ru": "Имя колонки в ORDER BY"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "ORDER BY ? does not exist; that identifier needs an allowlist instead.",
+                "ru": "ORDER BY ? не бывает; для этого идентификатора нужен белый список."
+              }
+            }
+          ]
+        },
+        {
+          "id": "allow-p2-escape-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "An allowlist for a sort column works by escaping the dangerous characters in the user's input.",
+            "ru": "Белый список для колонки сортировки работает за счёт экранирования опасных символов во вводе пользователя."
+          },
+          "feedback": {
+            "correct": {
+              "en": "It maps the input to a constant you wrote; unknown input never reaches the statement.",
+              "ru": "Он отображает ввод в написанную вами константу; неизвестный ввод до запроса не доходит."
+            },
+            "incorrect": {
+              "en": "No — an allowlist does not escape, sanitise or repair anything; it only chooses among constants you wrote.",
+              "ru": "Нет — белый список ничего не экранирует, не чистит и не исправляет; он лишь выбирает среди написанных вами констант."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "allow-p3-direction",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "The sort direction comes from the request. Why is this injectable, and what fixes it?",
+            "ru": "Направление сортировки приходит из запроса. Почему это уязвимо и чем чинится?"
+          },
+          "code": "String direction = request.getParameter(\"dir\");   // expected: ASC or DESC\nString sql = \"SELECT id, name FROM users ORDER BY name \" + direction;\nPreparedStatement ps = conn.prepareStatement(sql);",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "A direction is structure, so map it to a constant instead of concatenating the input.",
+              "ru": "Направление — это структура, поэтому отобразите его в константу вместо склейки ввода."
+            },
+            "incorrect": {
+              "en": "direction is concatenated structure; the fix is an allowlist that maps the input to the literal ASC or DESC you wrote.",
+              "ru": "direction — это склеенная структура; чинится белым списком, отображающим ввод в написанные вами ASC или DESC."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "direction is concatenated structure — map it through an allowlist to a constant ASC or DESC",
+                "ru": "direction — это склеенная структура; отобразите её белым списком в константу ASC или DESC"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "It is safe — prepareStatement is being used",
+                "ru": "Это безопасно — используется prepareStatement"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The statement has no placeholder; the value became SQL text before the driver ever saw it.",
+                "ru": "В запросе нет плейсхолдера; значение стало текстом SQL ещё до того, как его увидел драйвер."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Bind it with ps.setString(1, direction)",
+                "ru": "Привязать через ps.setString(1, direction)"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "There is no ? to bind to, and a sort direction is not a value.",
+                "ru": "Привязывать не к чему — нет ?, а направление сортировки не является значением."
+              }
+            }
+          ]
+        },
+        {
+          "id": "allow-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing words.",
+            "ru": "Впиши два пропущенных слова."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Values get placeholders; identifiers get a map to constants you wrote.",
+              "ru": "Значениям — плейсхолдеры; идентификаторам — отображение в написанные вами константы."
+            },
+            "incorrect": {
+              "en": "A ? can only stand for a value; identifiers such as ORDER BY columns need an allowlist.",
+              "ru": "? может обозначать только значение; идентификаторы вроде колонок ORDER BY требуют белого списка."
+            }
+          },
+          "text": {
+            "en": "In SQL, a ? can only stand for a ___; a table name, a column name or ASC/DESC must instead be mapped through an ___.",
+            "ru": "В SQL ? может обозначать только ___; имя таблицы, имя колонки или ASC/DESC нужно вместо этого отображать через ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "value"
+              ],
+              "ru": [
+                "значение",
+                "значения",
+                "value"
+              ]
+            },
+            {
+              "en": [
+                "allowlist",
+                "allow-list",
+                "whitelist"
+              ],
+              "ru": [
+                "белый список",
+                "белого списка",
+                "allowlist",
+                "whitelist"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "concatenated-prepare-and-orm",
+      "title": {
+        "en": "A PreparedStatement that was concatenated first",
+        "ru": "PreparedStatement, который сначала склеили"
+      },
+      "summary": {
+        "en": "The protection is the placeholder, not the class name — and a concatenated JPQL, HQL or native ORM query is exactly as injectable.",
+        "ru": "Защиту даёт плейсхолдер, а не имя класса — и склеенный JPQL, HQL или нативный запрос ORM уязвим ровно так же."
+      },
+      "discovery": [
+        {
+          "id": "concat-d1-prepare",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "PreparedStatement is used here. Is this safe from SQL injection?",
+            "ru": "Здесь используется PreparedStatement. Защищено ли это от SQL injection?"
+          },
+          "code": "String name = request.getParameter(\"name\");\nPreparedStatement ps = conn.prepareStatement(\n        \"SELECT id FROM users WHERE name = '\" + name + \"' AND active = TRUE\");\nResultSet rs = ps.executeQuery();",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Completely vulnerable. **Order of operations decides everything:** the `+` ran first, so by the time the driver receives the statement, the value is already SQL text. A statement with no `?` in it has no parameters to keep out, and `prepareStatement` faithfully prepares the attacker's SQL.\n\nThis one survives code review precisely because the safe-looking API call is right there in the diff. **The protection is the placeholder, not the class name.**\n\nThe same trap sits one level up. In JPA/Hibernate a concatenated JPQL, HQL or native query is exactly as injectable as concatenated SQL:\n\n```java\n// just as vulnerable, in JPQL\nem.createQuery(\"SELECT o FROM Order o WHERE o.status = '\" + status + \"'\");\n// safe\nem.createQuery(\"SELECT o FROM Order o WHERE o.status = :status\")\n  .setParameter(\"status\", status);\n```\n\nAn ORM protects only the queries it generates itself; see [Hibernate under the hood](topic:hibernate-under-the-hood) — it ends up issuing SQL like anything else, and `setParameter` is what binds.",
+            "ru": "Полностью уязвимо. **Всё решает порядок операций:** сначала отработал `+`, поэтому к моменту, когда драйвер получает запрос, значение уже является текстом SQL. У запроса без `?` нет параметров, которые можно было бы держать снаружи, и `prepareStatement` добросовестно готовит SQL злоумышленника.\n\nЭта ловушка переживает ревью именно потому, что безопасно выглядящий вызов API прямо тут, в диффе. **Защиту даёт плейсхолдер, а не имя класса.**\n\nТа же ловушка есть слоем выше. В JPA/Hibernate склеенный JPQL, HQL или нативный запрос уязвим ровно так же, как склеенный SQL:\n\n```java\n// столь же уязвимо, но в JPQL\nem.createQuery(\"SELECT o FROM Order o WHERE o.status = '\" + status + \"'\");\n// безопасно\nem.createQuery(\"SELECT o FROM Order o WHERE o.status = :status\")\n  .setParameter(\"status\", status);\n```\n\nORM защищает только те запросы, которые генерирует сам; см. [Hibernate под капотом](topic:hibernate-under-the-hood) — в итоге он отправляет SQL, как и всё остальное, а привязывает значения `setParameter`."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The + ran before the driver saw anything; there is no placeholder to protect.",
+              "ru": "+ отработал раньше, чем драйвер что-либо увидел; защищать нечем — плейсхолдера нет."
+            },
+            "incorrect": {
+              "en": "No — the value became SQL text before prepareStatement was called, and a statement without ? has nothing to bind.",
+              "ru": "Нет — значение стало текстом SQL ещё до вызова prepareStatement, а в запросе без ? привязывать нечего."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "No — the + ran first, so the value is already SQL text when the driver receives it",
+                "ru": "Нет — сначала отработал +, поэтому драйвер получает значение уже как текст SQL"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Yes — prepareStatement parses the text on the server, which neutralises the payload",
+                "ru": "Да — prepareStatement разбирает текст на сервере, и это обезвреживает нагрузку"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "It parses text that already contains the payload, which is exactly how the payload becomes grammar.",
+                "ru": "Он разбирает текст, в котором нагрузка уже есть, — именно так она и становится грамматикой."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Yes, provided name is never null",
+                "ru": "Да, при условии что name не бывает null"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Null-ness is irrelevant; the flaw is that the value is part of the statement text.",
+                "ru": "Дело не в null; проблема в том, что значение является частью текста запроса."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "concat-p1-orm",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Does using Hibernate or Spring Data make an application immune to SQL injection?",
+            "ru": "Делает ли использование Hibernate или Spring Data приложение неуязвимым к SQL injection?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Generated queries are safe; anything you assemble by hand is not.",
+              "ru": "Сгенерированные запросы безопасны; всё, что вы собираете руками, — нет."
+            },
+            "incorrect": {
+              "en": "No — only generated queries are safe; concatenated JPQL, HQL and native queries are just as injectable.",
+              "ru": "Нет — безопасны только сгенерированные запросы; склеенные JPQL, HQL и нативные запросы уязвимы так же."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "No — only generated queries are safe; concatenated JPQL, HQL and native queries are not",
+                "ru": "Нет — безопасны только сгенерированные запросы; склеенные JPQL, HQL и нативные — нет"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Yes — an ORM never sends raw SQL to the database",
+                "ru": "Да — ORM никогда не отправляет в базу сырой SQL"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "An ORM ends up issuing SQL like anything else; the abstraction is not a boundary.",
+                "ru": "ORM в итоге отправляет SQL, как и всё остальное; абстракция не является границей."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Yes, as long as the entities are annotated correctly",
+                "ru": "Да, если сущности размечены аннотациями правильно"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Mapping annotations have nothing to do with how a query string was assembled.",
+                "ru": "Аннотации маппинга никак не связаны с тем, как была собрана строка запроса."
+              }
+            }
+          ]
+        },
+        {
+          "id": "concat-p2-jpql",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This uses JPA rather than raw JDBC. What is the bug?",
+            "ru": "Здесь используется JPA, а не сырой JDBC. В чём ошибка?"
+          },
+          "code": "String status = request.getParameter(\"status\");\nList<Order> orders = em.createQuery(\n        \"SELECT o FROM Order o WHERE o.status = '\" + status + \"'\", Order.class)\n        .getResultList();",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "Concatenated JPQL is injectable; :status plus setParameter is the fix.",
+              "ru": "Склеенный JPQL уязвим; чинится через :status и setParameter."
+            },
+            "incorrect": {
+              "en": "The JPQL string is concatenated — use a named parameter (:status) and setParameter instead.",
+              "ru": "Строка JPQL склеена — используйте именованный параметр (:status) и setParameter."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The JPQL string is concatenated — use a named parameter and setParameter",
+                "ru": "Строка JPQL склеена — нужен именованный параметр и setParameter"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing — JPQL is not SQL, so it cannot be injected",
+                "ru": "Ничего — JPQL это не SQL, поэтому инъекция невозможна"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "JPQL has its own grammar and is translated into SQL; the payload rides along either way.",
+                "ru": "У JPQL своя грамматика, и он транслируется в SQL; нагрузка едет вместе с ним в любом случае."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nothing — passing Order.class fixes the result type and makes it safe",
+                "ru": "Ничего — передача Order.class фиксирует тип результата и делает это безопасным"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The result type says nothing about how the query text was built.",
+                "ru": "Тип результата ничего не говорит о том, как был собран текст запроса."
+              }
+            }
+          ]
+        },
+        {
+          "id": "concat-p3-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing pieces.",
+            "ru": "Впиши две пропущенные части."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Look for the ? in the text, not for the reassuring class name in the diff.",
+              "ru": "Ищите ? в тексте, а не успокаивающее имя класса в диффе."
+            },
+            "incorrect": {
+              "en": "The placeholder in the text is what protects you, not the fact that prepareStatement was called.",
+              "ru": "Защищает плейсхолдер в тексте, а не сам факт вызова prepareStatement."
+            }
+          },
+          "text": {
+            "en": "What makes a statement safe is the ___ inside its text, not the fact that ___ was called.",
+            "ru": "Запрос делает безопасным ___ внутри его текста, а не сам факт вызова ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "placeholder",
+                "?"
+              ],
+              "ru": [
+                "плейсхолдер",
+                "placeholder",
+                "?"
+              ]
+            },
+            {
+              "en": [
+                "prepareStatement"
+              ],
+              "ru": [
+                "prepareStatement"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    ,
+    {
+      "id": "second-order-injection",
+      "title": {
+        "en": "Second-order injection",
+        "ru": "Инъекция второго порядка"
+      },
+      "summary": {
+        "en": "A value bound correctly on the way in is still dangerous when a later query reads it back out of the database and concatenates it.",
+        "ru": "Значение, корректно привязанное на входе, всё равно опасно, когда более поздний запрос читает его из базы и склеивает в SQL."
+      },
+      "discovery": [
+        {
+          "id": "second-d1-report",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Registration bound the value correctly. Is the nightly report query safe?",
+            "ru": "При регистрации значение привязали правильно. Безопасен ли ночной отчётный запрос?"
+          },
+          "code": "// registration - bound correctly\nPreparedStatement ins = conn.prepareStatement(\"INSERT INTO users(name) VALUES (?)\");\nins.setString(1, \"x'; DROP TABLE audit; --\");\nins.executeUpdate();\n\n// nightly report - reads the stored name back\nString name = rs.getString(\"name\");\nstmt.executeQuery(\"SELECT count(*) FROM logins WHERE user = '\" + name + \"'\");",
+          "codeLang": "java",
+          "reveal": {
+            "en": "The first query did everything right: the payload landed in the column as an ordinary string, character for character — because binding stores the value, it does not neutralise it.\n\nThe bug is on the *second* code path. A report, a batch job or an admin screen reads that row back and concatenates it, and at that moment the stored string becomes SQL. This is **second-order injection**: there is no user input anywhere on the vulnerable code path, which is exactly why it survives review.\n\n```mermaid\nflowchart LR\n  U[\"user input\"] --> B[\"bound INSERT: stored verbatim\"]\n  B --> DB[\"users table\"]\n  DB --> R[\"report query concatenates the value\"]\n  R --> X[\"injection, with no user input in sight\"]\n```\n\nIn security jargon the marker on untrusted data is called **taint**: data is tainted by where it *originally* came from, not by where it is stored now. \"It came from our own database\" feels like a security property and is not one — **taint does not wear off in storage.**",
+            "ru": "Первый запрос сделал всё правильно: нагрузка легла в колонку обычной строкой, символ в символ, — ведь привязка сохраняет значение, а не обезвреживает его.\n\nОшибка на *втором* пути кода. Отчёт, фоновая задача или админский экран читает эту строку обратно и склеивает её в SQL — и в этот момент сохранённая строка становится SQL. Это **инъекция второго порядка**: пользовательского ввода на уязвимом пути нет нигде, именно поэтому она переживает ревью.\n\n```mermaid\nflowchart LR\n  U[\"ввод пользователя\"] --> B[\"привязанный INSERT: сохранено дословно\"]\n  B --> DB[\"таблица users\"]\n  DB --> R[\"отчётный запрос склеивает значение\"]\n  R --> X[\"инъекция, а ввода пользователя не видно\"]\n```\n\nНа жаргоне безопасности пометка на недоверенных данных называется **taint** (недоверенность): данные помечены тем, откуда они пришли *изначально*, а не тем, где они лежат сейчас. «Пришло из нашей же базы» кажется свойством безопасности, но им не является — **пометка не выветривается в хранилище.**"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Binding stored the payload verbatim; the second query turns it back into SQL.",
+              "ru": "Привязка сохранила нагрузку дословно; второй запрос снова превращает её в SQL."
+            },
+            "incorrect": {
+              "en": "No — the stored value is concatenated in the report, so it becomes SQL there. That is second-order injection.",
+              "ru": "Нет — в отчёте сохранённое значение склеивается и становится там SQL. Это и есть инъекция второго порядка."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "No — the stored value is concatenated there, so it becomes SQL in the second query",
+                "ru": "Нет — там сохранённое значение склеивается и становится SQL во втором запросе"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Yes — the value came from the application's own database",
+                "ru": "Да — значение пришло из собственной базы приложения"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is second-order injection in one sentence; where it is stored says nothing about where it came from.",
+                "ru": "Это инъекция второго порядка одной фразой; место хранения ничего не говорит о происхождении."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Yes — the payload was neutralised when it was bound on the way in",
+                "ru": "Да — нагрузку обезвредили, когда её привязывали на входе"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Binding stored the string exactly as typed; it neutralises nothing.",
+                "ru": "Привязка сохранила строку ровно как напечатали; она ничего не обезвреживает."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "second-p1-trusted-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "A value read back from the application's own database is safe to concatenate into a SQL statement.",
+            "ru": "Значение, прочитанное из собственной базы приложения, можно безопасно склеивать в SQL-запрос."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Storage is not laundering: the value is still whatever a user typed.",
+              "ru": "Хранилище ничего не отмывает: значение по-прежнему то, что напечатал пользователь."
+            },
+            "incorrect": {
+              "en": "No — that is second-order injection; taint does not wear off in storage.",
+              "ru": "Нет — это инъекция второго порядка; пометка недоверенности не выветривается в хранилище."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "second-p2-definition",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What is second-order SQL injection?",
+            "ru": "Что такое SQL-инъекция второго порядка?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Stored safely once, concatenated later — the two halves live in different code paths.",
+              "ru": "Сначала безопасно сохранили, потом склеили — две половины живут в разных путях кода."
+            },
+            "incorrect": {
+              "en": "A payload stored verbatim by one query and concatenated into SQL by a later one.",
+              "ru": "Нагрузка, дословно сохранённая одним запросом и склеенная в SQL более поздним."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A payload stored safely by one query and concatenated into SQL by a later one",
+                "ru": "Нагрузка, безопасно сохранённая одним запросом и склеенная в SQL более поздним"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "An injection that needs two vulnerable parameters at the same time",
+                "ru": "Инъекция, которой одновременно нужны два уязвимых параметра"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "One parameter is enough; what makes it second-order is the delay between storing and using.",
+                "ru": "Хватает одного параметра; второй порядок создаёт разрыв во времени между сохранением и использованием."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "An injection that only works on the second attempt because of query caching",
+                "ru": "Инъекция, срабатывающая только со второй попытки из-за кэширования запросов"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Caching is unrelated; the second order is a second code path, not a second try.",
+                "ru": "Кэширование ни при чём; второй порядок — это второй путь кода, а не вторая попытка."
+              }
+            }
+          ]
+        },
+        {
+          "id": "second-p3-word-bank",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the rule that second-order injection breaks.",
+            "ru": "Собери правило, которое нарушает инъекция второго порядка."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Data is untrusted because of where it came from, not where it now sits.",
+              "ru": "Данные недоверенные из-за того, откуда пришли, а не где сейчас лежат."
+            },
+            "incorrect": {
+              "en": "Taint does not wear off in storage: a stored value is still whatever a user typed.",
+              "ru": "Недоверенность не выветривается в хранилище: сохранённое значение — по-прежнему то, что напечатал пользователь."
+            }
+          },
+          "tokens": {
+            "en": [
+              "taint",
+              "does",
+              "not",
+              "wear",
+              "off",
+              "in",
+              "storage"
+            ],
+            "ru": [
+              "недоверенность",
+              "не",
+              "выветривается",
+              "в",
+              "хранилище"
+            ]
+          },
+          "distractors": {
+            "en": [
+              "encryption",
+              "quickly"
+            ],
+            "ru": [
+              "шифрование",
+              "быстро"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "dynamic-sql-inside-the-database",
+      "title": {
+        "en": "Dynamic SQL inside the database",
+        "ru": "Динамический SQL внутри базы"
+      },
+      "summary": {
+        "en": "A perfectly bound parameter is still injected if the stored procedure it is passed to assembles a statement out of it and executes that string.",
+        "ru": "Идеально привязанный параметр всё равно даёт инъекцию, если хранимая процедура собирает из него запрос и выполняет эту строку."
+      },
+      "discovery": [
+        {
+          "id": "dynsql-d1-execute-immediate",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "The application calls this procedure with a correctly bound parameter. Can the value still be injected?",
+            "ru": "Приложение вызывает эту процедуру с корректно привязанным параметром. Может ли значение всё равно дать инъекцию?"
+          },
+          "code": "CREATE PROCEDURE find_by_role(p_role IN VARCHAR2) AS\nBEGIN\n  EXECUTE IMMEDIATE 'SELECT * FROM users WHERE role = ''' || p_role || '''';\nEND;",
+          "codeLang": "sql",
+          "reveal": {
+            "en": "Yes. The binding did its job and then handed the value to code that undoes it.\n\n**Dynamic SQL** is SQL assembled as a string at run time and then executed — `EXECUTE IMMEDIATE` here, or `EXEC` / `sp_executesql` on other databases. It takes a string and parses it as a statement, exactly like any other statement. So the concatenation did not disappear: it moved somewhere the JDBC driver cannot see.\n\n```mermaid\nflowchart LR\n  A[\"application binds the value\"] --> C[\"procedure call: the value is data\"]\n  C --> E[\"EXECUTE IMMEDIATE on a concatenated string\"]\n  E --> P[\"the database parses it: the value is grammar again\"]\n```\n\nThis is why \"we bind everything\" is only half an answer at an interview. You also have to know what the procedures do with what you bound — and the fix is the same one, applied one level down: use a bind variable inside the dynamic statement (`USING`) instead of concatenating `p_role` into it.",
+            "ru": "Может. Привязка отработала и передала значение коду, который её отменяет.\n\n**Динамический SQL** — это SQL, собираемый строкой во время выполнения и затем выполняемый: здесь `EXECUTE IMMEDIATE`, в других базах `EXEC` / `sp_executesql`. Он берёт строку и разбирает её как запрос — точно так же, как любой другой запрос. То есть конкатенация никуда не делась: она переехала туда, где JDBC-драйвер её не видит.\n\n```mermaid\nflowchart LR\n  A[\"приложение привязывает значение\"] --> C[\"вызов процедуры: значение это данные\"]\n  C --> E[\"EXECUTE IMMEDIATE над склеенной строкой\"]\n  E --> P[\"база разбирает её: значение снова грамматика\"]\n```\n\nПоэтому «мы всё привязываем» — только половина ответа на собеседовании. Нужно ещё знать, что процедуры делают с тем, что вы привязали, — а чинится это тем же способом уровнем ниже: использовать переменную привязки внутри динамического запроса (`USING`) вместо склейки `p_role` в него."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The procedure builds a fresh statement out of the value and parses that.",
+              "ru": "Процедура собирает из значения новый запрос и разбирает уже его."
+            },
+            "incorrect": {
+              "en": "Yes — the procedure concatenates the value into a new statement and EXECUTE IMMEDIATE parses that string.",
+              "ru": "Может — процедура склеивает значение в новый запрос, и EXECUTE IMMEDIATE разбирает эту строку."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Yes — the procedure concatenates it into a new statement and executes that string",
+                "ru": "Может — процедура склеивает его в новый запрос и выполняет эту строку"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "No — the value was bound, so the database already treats it as data forever",
+                "ru": "Нет — значение привязали, поэтому база навсегда считает его данными"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Binding protected the call; the procedure then built a fresh statement out of the value.",
+                "ru": "Привязка защитила вызов; дальше процедура собрала из значения новый запрос."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "No — code running inside the database cannot be injected",
+                "ru": "Нет — код, работающий внутри базы, нельзя проинъектировать"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "EXECUTE IMMEDIATE parses a string as a statement, wherever that string was built.",
+                "ru": "EXECUTE IMMEDIATE разбирает строку как запрос, где бы эта строка ни собиралась."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "dynsql-p1-guarantee-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "Calling a stored procedure with bound parameters guarantees the value is never parsed as SQL.",
+            "ru": "Вызов хранимой процедуры с привязанными параметрами гарантирует, что значение никогда не будет разобрано как SQL."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The guarantee ends at the procedure boundary; dynamic SQL inside can undo it.",
+              "ru": "Гарантия заканчивается на границе процедуры; динамический SQL внутри может её отменить."
+            },
+            "incorrect": {
+              "en": "No — if the procedure assembles a statement out of the value and executes that string, the value is parsed as SQL.",
+              "ru": "Нет — если процедура собирает из значения запрос и выполняет эту строку, значение разбирается как SQL."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "dynsql-p2-where",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A parameter is bound correctly and the stored procedure it is passed to is still injected. Where did the concatenation happen?",
+            "ru": "Параметр привязан правильно, а хранимая процедура, которой его передали, всё равно проинъектирована. Где произошла конкатенация?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Inside the database, in dynamic SQL the driver never sees.",
+              "ru": "Внутри базы, в динамическом SQL, который драйвер не видит."
+            },
+            "incorrect": {
+              "en": "Inside the procedure: dynamic SQL built by concatenation and run with EXECUTE IMMEDIATE or sp_executesql.",
+              "ru": "Внутри процедуры: динамический SQL, собранный конкатенацией и запущенный через EXECUTE IMMEDIATE или sp_executesql."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Inside the procedure, in dynamic SQL run with EXECUTE IMMEDIATE or sp_executesql",
+                "ru": "Внутри процедуры, в динамическом SQL через EXECUTE IMMEDIATE или sp_executesql"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "In the JDBC driver, which rebuilt the statement before sending it",
+                "ru": "В JDBC-драйвере, который пересобрал запрос перед отправкой"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The driver sent the value as a parameter; the concatenation is server-side code you wrote.",
+                "ru": "Драйвер отправил значение параметром; конкатенация — это ваш серверный код."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "In the database's query plan cache",
+                "ru": "В кэше планов запросов базы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A plan cache stores plans; it never assembles statement text from values.",
+                "ru": "Кэш планов хранит планы; он никогда не собирает текст запроса из значений."
+              }
+            }
+          ]
+        },
+        {
+          "id": "dynsql-p3-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing pieces.",
+            "ru": "Впиши две пропущенные части."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The concatenation simply moved somewhere the driver cannot see.",
+              "ru": "Конкатенация просто переехала туда, где драйвер её не видит."
+            },
+            "incorrect": {
+              "en": "EXECUTE IMMEDIATE over a concatenated string undoes the binding the application did.",
+              "ru": "EXECUTE IMMEDIATE над склеенной строкой отменяет привязку, сделанную приложением."
+            }
+          },
+          "text": {
+            "en": "A stored procedure that runs ___ IMMEDIATE over a string it built by concatenation undoes the ___ the application did.",
+            "ru": "Хранимая процедура, выполняющая ___ IMMEDIATE над собранной конкатенацией строкой, отменяет ___, сделанную приложением."
+          },
+          "blanks": [
+            {
+              "en": [
+                "EXECUTE"
+              ],
+              "ru": [
+                "EXECUTE"
+              ]
+            },
+            {
+              "en": [
+                "binding",
+                "bind"
+              ],
+              "ru": [
+                "привязку",
+                "привязка",
+                "binding"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    ,
+    {
+      "id": "xxe-external-entities",
+      "title": {
+        "en": "XXE: the document tells the parser what to do",
+        "ru": "XXE: документ указывает парсеру, что делать"
+      },
+      "summary": {
+        "en": "XXE is injection in an XML parser: the document declares an external entity, and the parser opens the resource it points at.",
+        "ru": "XXE — это инъекция в парсере XML: документ объявляет внешнюю сущность, и парсер открывает ресурс, на который она указывает."
+      },
+      "discovery": [
+        {
+          "id": "xxe-d1-entity",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A parser with DTD support enabled reads this uploaded document. What ends up inside the total element?",
+            "ru": "Парсер с включённой поддержкой DTD читает этот загруженный документ. Что окажется внутри элемента total?"
+          },
+          "code": "<?xml version=\"1.0\"?>\n<!DOCTYPE invoice [\n  <!ENTITY secret SYSTEM \"file:///etc/passwd\">\n]>\n<invoice>\n  <total>&secret;</total>\n</invoice>",
+          "codeLang": "text",
+          "reveal": {
+            "en": "The contents of `/etc/passwd`.\n\nXML lets a document declare its own **DTD** (Document Type Definition), and a DTD can declare an **entity** — a named placeholder the parser substitutes wherever `&name;` appears. An **external entity** is one declared with `SYSTEM`, pointing not at text but at a *resource*.\n\nA parser with DTD support switched on — historically the JAXP default — resolves `&secret;` by **opening that resource**: as the application's OS user, from inside the application's network, and pastes the contents into the document. If any part of that document comes back in the response, so does the file.\n\n```mermaid\nflowchart LR\n  D[\"uploaded XML with a DTD\"] --> P[\"XML parser with DTDs enabled\"]\n  P --> O[\"opens file:///etc/passwd\"]\n  O --> S[\"contents substituted into the document\"]\n```\n\nThat is **XXE** — XML External Entity — and it is the same bug as SQL injection with a different parser: nothing was escaped wrongly and no value was mis-bound. The untrusted *document* was simply allowed to tell the parser what to do.",
+            "ru": "Содержимое `/etc/passwd`.\n\nXML позволяет документу объявить собственный **DTD** (Document Type Definition), а DTD может объявить **сущность** — именованную подстановку, которую парсер подставляет везде, где встречает `&имя;`. **Внешняя сущность** — это сущность, объявленная через `SYSTEM` и указывающая не на текст, а на *ресурс*.\n\nПарсер с включённой поддержкой DTD (исторически так было по умолчанию в JAXP) раскрывает `&secret;`, то есть **открывает этот ресурс** — под системным пользователем приложения и изнутри его сети — и вставляет содержимое в документ. Если хоть часть этого документа возвращается в ответе, вместе с ним возвращается и файл.\n\n```mermaid\nflowchart LR\n  D[\"загруженный XML с DTD\"] --> P[\"парсер XML с включёнными DTD\"]\n  P --> O[\"открывает file:///etc/passwd\"]\n  O --> S[\"содержимое подставлено в документ\"]\n```\n\nЭто и есть **XXE** — XML External Entity — и это та же ошибка, что SQL injection, только с другим парсером: ничего не экранировали неправильно и ни одно значение не привязали неверно. Просто недоверенному *документу* разрешили указывать парсеру, что делать."
+          },
+          "feedback": {
+            "correct": {
+              "en": "A SYSTEM entity is resolved by opening the resource it names.",
+              "ru": "Сущность SYSTEM раскрывается открытием указанного ресурса."
+            },
+            "incorrect": {
+              "en": "The parser resolves the declared entity by reading that file and substituting its contents.",
+              "ru": "Парсер раскрывает объявленную сущность, читая этот файл и подставляя его содержимое."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "The contents of /etc/passwd, read from the server's filesystem",
+                "ru": "Содержимое /etc/passwd, прочитанное с файловой системы сервера"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "The literal text &secret;",
+                "ru": "Буквальный текст &secret;"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "An undeclared entity would be an error, but this one is declared and gets resolved.",
+                "ru": "Необъявленная сущность была бы ошибкой, но эта объявлена и раскрывается."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "An empty element — external files are never loaded by an XML parser",
+                "ru": "Пустой элемент — парсер XML никогда не загружает внешние файлы"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "With DTDs enabled that is exactly what a SYSTEM entity makes the parser do.",
+                "ru": "При включённых DTD именно это сущность SYSTEM и заставляет парсер сделать."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "xxe-p1-what-is-entity",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What is an external entity in XML?",
+            "ru": "Что такое внешняя сущность в XML?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "A name declared in the DTD whose value the parser fetches from a resource.",
+              "ru": "Имя, объявленное в DTD, значение которого парсер забирает из ресурса."
+            },
+            "incorrect": {
+              "en": "A name declared in the document's DTD that points at a resource the parser fetches and substitutes.",
+              "ru": "Имя, объявленное в DTD документа, которое указывает на ресурс, забираемый и подставляемый парсером."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "A name declared in the DTD that points at a resource the parser opens and substitutes",
+                "ru": "Имя, объявленное в DTD и указывающее на ресурс, который парсер открывает и подставляет"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "An element that belongs to a different XML namespace",
+                "ru": "Элемент, принадлежащий другому пространству имён XML"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Namespaces only qualify names; they never make the parser fetch anything.",
+                "ru": "Пространства имён лишь уточняют имена; они не заставляют парсер что-либо загружать."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "An attribute that references another element by its id",
+                "ru": "Атрибут, ссылающийся на другой элемент по его id"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That is an internal reference within one document, not a resource the parser opens.",
+                "ru": "Это внутренняя ссылка внутри одного документа, а не ресурс, который открывает парсер."
+              }
+            }
+          ]
+        },
+        {
+          "id": "xxe-p2-escaping-tf",
+          "type": "true_false",
+          "prompt": {
+            "en": "XXE is caused by failing to escape the XML document before parsing it.",
+            "ru": "XXE возникает из-за того, что XML-документ не экранировали перед разбором."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The document is perfectly legal XML; the problem is a parser capability that is switched on.",
+              "ru": "Документ является совершенно корректным XML; проблема во включённой возможности парсера."
+            },
+            "incorrect": {
+              "en": "No — the document is valid XML and escaping does not enter into it; the fix is to disable DTDs in the parser.",
+              "ru": "Нет — документ корректен, и экранирование тут ни при чём; чинится отключением DTD в парсере."
+            }
+          },
+          "answer": false
+        },
+        {
+          "id": "xxe-p3-sort-steps",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order what happens during an XXE file-disclosure attack.",
+            "ru": "Расставь по порядку то, что происходит при XXE-атаке с раскрытием файла."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Declare, point at a resource, resolve, substitute — four steps and one file leaves.",
+              "ru": "Объявить, указать на ресурс, раскрыть, подставить — четыре шага, и файл уходит."
+            },
+            "incorrect": {
+              "en": "The document declares a DTD, the DTD declares a SYSTEM entity, the parser opens that resource, and the contents are substituted.",
+              "ru": "Документ объявляет DTD, DTD объявляет сущность SYSTEM, парсер открывает ресурс, содержимое подставляется."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "The attacker uploads an XML document that declares its own DTD",
+                "ru": "Злоумышленник загружает XML-документ, объявляющий собственный DTD"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "The DTD declares a SYSTEM entity pointing at file:///etc/passwd",
+                "ru": "DTD объявляет сущность SYSTEM, указывающую на file:///etc/passwd"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "The parser resolves the entity by opening that resource as the application's OS user",
+                "ru": "Парсер раскрывает сущность, открывая этот ресурс под системным пользователем приложения"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "The file contents are substituted into the document and come back in the response",
+                "ru": "Содержимое файла подставляется в документ и возвращается в ответе"
+              }
+            }
+          ]
+        },
+        {
+          "id": "xxe-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two missing pieces.",
+            "ru": "Впиши две пропущенные части."
+          },
+          "feedback": {
+            "correct": {
+              "en": "The document brings its own declarations, and the parser obeys them.",
+              "ru": "Документ приносит собственные объявления, и парсер им подчиняется."
+            },
+            "incorrect": {
+              "en": "The document declares a DTD containing an external (SYSTEM) entity that the parser then opens.",
+              "ru": "Документ объявляет DTD с внешней (SYSTEM) сущностью, которую парсер затем открывает."
+            }
+          },
+          "text": {
+            "en": "In XXE, the uploaded document declares its own ___, which contains an ___ entity pointing at a resource the parser then opens.",
+            "ru": "При XXE загруженный документ объявляет собственный ___, в котором есть ___ сущность, указывающая на ресурс, открываемый парсером."
+          },
+          "blanks": [
+            {
+              "en": [
+                "DTD"
+              ],
+              "ru": [
+                "DTD"
+              ]
+            },
+            {
+              "en": [
+                "external",
+                "SYSTEM"
+              ],
+              "ru": [
+                "внешняя",
+                "внешнюю",
+                "external",
+                "SYSTEM"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "xxe-impact-and-hardening",
+      "title": {
+        "en": "What XXE costs, and how to close it",
+        "ru": "Чем оборачивается XXE и как его закрыть"
+      },
+      "summary": {
+        "en": "One entity feature yields file disclosure, SSRF and denial of service; the fix is to disable DTDs in every parser factory the application owns.",
+        "ru": "Одна возможность с сущностями даёт раскрытие файлов, SSRF и отказ в обслуживании; чинится отключением DTD во всех фабриках парсеров приложения."
+      },
+      "discovery": [
+        {
+          "id": "impact-d1-no-echo",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "An XXE-vulnerable endpoint never echoes the parsed document back to the caller. Which attacks are still possible?",
+            "ru": "Уязвимый к XXE эндпоинт никогда не возвращает разобранный документ вызывающему. Какие атаки всё ещё возможны?"
+          },
+          "reveal": {
+            "en": "All of them. Three outcomes come out of the one feature:\n\n- **file disclosure** — point the entity at a config file and it returns your database password. It is a read primitive over everything the process can see.\n- **SSRF** (server-side request forgery) — point it at a URL and the parser makes the request *for* you. Your firewall sees a call from a trusted host, because it is one; cloud metadata endpoints such as `http://169.254.169.254/` are the classic target.\n- **denial of service** — the \"billion laughs\" attack, where entities only reference each other and each level multiplies the one below. A few hundred bytes expand to gigabytes.\n\nAnd blind XXE is still XXE: out-of-band variants send the data to the attacker's own server *from inside your network*, so echoing the document is not required.\n\n```mermaid\nflowchart LR\n  P[\"XML parser with DTDs enabled\"] --> F[\"file: a local file is read\"]\n  P --> S[\"http: a request from inside the network\"]\n  P --> D[\"nested entities: memory exhausted\"]\n```\n\nThe fix is not escaping and not binding — it is turning off a capability the application never used:\n\n```java\nDocumentBuilderFactory f = DocumentBuilderFactory.newInstance();\nf.setFeature(\"http://apache.org/xml/features/disallow-doctype-decl\", true);\nf.setXIncludeAware(false);\nf.setExpandEntityReferences(false);\n```\n\nThe same setting exists for `SAXParserFactory`, `XMLInputFactory` (`SUPPORT_DTD`), `TransformerFactory` and `SchemaFactory`. The hard part in practice is not the setting — it is *finding every parser*. XML hides in SOAP bodies, SAML assertions, SVG uploads, `.docx`/`.xlsx` files, RSS feeds, XML sitemaps and configuration imports, and each library brings its own defaults. A shared, hardened factory beats a rule that every developer must remember.",
+            "ru": "Все. Из одной возможности вытекают три исхода:\n\n- **раскрытие файлов** — направьте сущность на файл конфигурации, и вернётся пароль от базы. Это примитив чтения по всему, что видит процесс.\n- **SSRF** (подделка запроса на стороне сервера) — направьте её на URL, и парсер сделает запрос *за вас*. Ваш файрвол видит обращение с доверенного узла, потому что так и есть; классическая цель — метаданные облачной платформы, например `http://169.254.169.254/`.\n- **отказ в обслуживании** — атака «миллиард смешков», где сущности ссылаются только друг на друга и каждый уровень умножает предыдущий. Несколько сотен байт разворачиваются в гигабайты.\n\nИ слепой XXE — тоже XXE: внеполосные варианты отправляют данные на сервер злоумышленника *изнутри вашей сети*, поэтому возвращать документ в ответе не требуется.\n\n```mermaid\nflowchart LR\n  P[\"парсер XML с включёнными DTD\"] --> F[\"file: читается локальный файл\"]\n  P --> S[\"http: запрос изнутри сети\"]\n  P --> D[\"вложенные сущности: память исчерпана\"]\n```\n\nЧинится это не экранированием и не привязкой, а отключением возможности, которой приложение никогда не пользовалось:\n\n```java\nDocumentBuilderFactory f = DocumentBuilderFactory.newInstance();\nf.setFeature(\"http://apache.org/xml/features/disallow-doctype-decl\", true);\nf.setXIncludeAware(false);\nf.setExpandEntityReferences(false);\n```\n\nТа же настройка есть у `SAXParserFactory`, `XMLInputFactory` (`SUPPORT_DTD`), `TransformerFactory` и `SchemaFactory`. Сложность на практике не в настройке, а в том, чтобы *найти все парсеры*. XML прячется в телах SOAP, в утверждениях SAML, в загруженных SVG, в файлах `.docx`/`.xlsx`, в RSS-лентах, в XML-картах сайта и в импорте конфигураций, и у каждой библиотеки свои умолчания. Общая преднастроенная фабрика надёжнее правила, которое должен помнить каждый разработчик."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two of the three never needed the echo, and the third can leave through the attacker's own server.",
+              "ru": "Двум из трёх ответ и не был нужен, а третий может уйти через сервер злоумышленника."
+            },
+            "incorrect": {
+              "en": "All of them: SSRF and the denial of service need no echo, and blind XXE exfiltrates out of band.",
+              "ru": "Все: SSRF и отказ в обслуживании в ответе не нуждаются, а слепой XXE выносит данные внеполосно."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "All of them: an internal request (SSRF), memory exhaustion, and out-of-band exfiltration",
+                "ru": "Все: внутренний запрос (SSRF), исчерпание памяти и внеполосный вынос данных"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "None — without the document in the response there is no channel",
+                "ru": "Никакие — без документа в ответе нет канала"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Blind XXE sends the data out of your network itself, and a denial of service needs no channel at all.",
+                "ru": "Слепой XXE сам отправляет данные из вашей сети, а отказу в обслуживании канал вообще не нужен."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Only the denial of service",
+                "ru": "Только отказ в обслуживании"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "SSRF and out-of-band exfiltration do not need the response to echo the document either.",
+                "ru": "SSRF и внеполосному выносу данных возвращённый документ тоже не нужен."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "impact-p1-fix",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "How do you fix XXE in a Java application that parses XML with DocumentBuilderFactory?",
+            "ru": "Как починить XXE в Java-приложении, которое разбирает XML через DocumentBuilderFactory?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "Turn off a capability the application never used, in the factory itself.",
+              "ru": "Отключить в самой фабрике возможность, которой приложение никогда не пользовалось."
+            },
+            "incorrect": {
+              "en": "Set the disallow-doctype-decl feature to true, and turn off XInclude and entity-reference expansion.",
+              "ru": "Включить фичу disallow-doctype-decl, а также отключить XInclude и раскрытие ссылок на сущности."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Set the disallow-doctype-decl feature to true, and disable XInclude and entity expansion",
+                "ru": "Включить фичу disallow-doctype-decl и отключить XInclude и раскрытие сущностей"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Escape the <, > and & characters in the document before parsing it",
+                "ru": "Экранировать символы <, > и & в документе перед разбором"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The document is legal XML; escaping it would only stop it from parsing at all.",
+                "ru": "Документ является корректным XML; экранирование лишь помешает ему разобраться."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Validate the document against an XSD schema first",
+                "ru": "Сначала проверить документ по XSD-схеме"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Validation still needs a parser, and that parser resolves the entities while reading.",
+                "ru": "Для проверки всё равно нужен парсер, а он раскрывает сущности прямо при чтении."
+              }
+            }
+          ]
+        },
+        {
+          "id": "impact-p2-json-only",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A team says: \"our API only accepts JSON, so XXE is not our problem.\" What is worth checking?",
+            "ru": "Команда говорит: «наш API принимает только JSON, значит XXE не наша проблема». Что стоит проверить?"
+          },
+          "feedback": {
+            "correct": {
+              "en": "XML hides in integrations and file formats nobody calls XML.",
+              "ru": "XML прячется в интеграциях и форматах файлов, которые никто не называет XML."
+            },
+            "incorrect": {
+              "en": "SOAP clients, SAML assertions, SVG uploads, office-document imports and RSS feeds all parse XML.",
+              "ru": "SOAP-клиенты, SAML-утверждения, загрузка SVG, импорт офисных документов и RSS-ленты — всё это разбирает XML."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "SOAP clients, SAML assertions, SVG uploads, office-document imports and RSS feeds",
+                "ru": "SOAP-клиентов, SAML-утверждения, загрузку SVG, импорт офисных документов и RSS-ленты"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Nothing — a JSON API contains no XML parser anywhere",
+                "ru": "Ничего — в JSON-API нигде нет парсера XML"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A .docx import or a SAML login flow parses XML without anyone thinking about it.",
+                "ru": "Импорт .docx или вход через SAML разбирает XML, и об этом никто не задумывается."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Only the settings of the JSON deserializer",
+                "ru": "Только настройки JSON-десериализатора"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The JSON path is not where XML gets parsed; the integrations around it are.",
+                "ru": "XML разбирается не на пути JSON, а в интеграциях вокруг него."
+              }
+            }
+          ]
+        },
+        {
+          "id": "impact-p3-match",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each XXE payload to what the attacker gets.",
+            "ru": "Соотнеси каждую нагрузку XXE с тем, что получает злоумышленник."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One feature, four different prizes.",
+              "ru": "Одна возможность — четыре разных приза."
+            },
+            "incorrect": {
+              "en": "A file entity reads files, a URL entity is SSRF, nested entities exhaust memory, and out-of-band variants exfiltrate without an echo.",
+              "ru": "Файловая сущность читает файлы, URL-сущность даёт SSRF, вложенные сущности исчерпывают память, а внеполосные варианты выносят данные без ответа."
+            }
+          },
+          "pairs": [
+            {
+              "id": "file",
+              "left": {
+                "en": "An entity pointing at file:///etc/passwd",
+                "ru": "Сущность, указывающая на file:///etc/passwd"
+              },
+              "right": {
+                "en": "The contents of a local file",
+                "ru": "Содержимое локального файла"
+              }
+            },
+            {
+              "id": "ssrf",
+              "left": {
+                "en": "An entity pointing at an internal URL",
+                "ru": "Сущность, указывающая на внутренний URL"
+              },
+              "right": {
+                "en": "A request made from inside your network (SSRF)",
+                "ru": "Запрос, сделанный изнутри вашей сети (SSRF)"
+              }
+            },
+            {
+              "id": "dos",
+              "left": {
+                "en": "Entities that only reference other entities",
+                "ru": "Сущности, ссылающиеся только на другие сущности"
+              },
+              "right": {
+                "en": "Memory exhausted: the billion laughs attack",
+                "ru": "Память исчерпана: атака «миллиард смешков»"
+              }
+            },
+            {
+              "id": "oob",
+              "left": {
+                "en": "An entity that sends the data to the attacker's host",
+                "ru": "Сущность, отправляющая данные на узел злоумышленника"
+              },
+              "right": {
+                "en": "Exfiltration even when the response echoes nothing",
+                "ru": "Вынос данных, даже когда ответ ничего не возвращает"
+              }
+            }
+          ]
+        },
+        {
+          "id": "impact-p4-fill",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Type the two parser settings.",
+            "ru": "Впиши две настройки парсеров."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Same idea in two APIs: refuse the DTD before anything is resolved.",
+              "ru": "Одна и та же идея в двух API: отказаться от DTD до того, как что-либо раскроется."
+            },
+            "incorrect": {
+              "en": "DocumentBuilderFactory takes the disallow-doctype-decl feature; XMLInputFactory has the SUPPORT_DTD property.",
+              "ru": "У DocumentBuilderFactory это фича disallow-doctype-decl; у XMLInputFactory — свойство SUPPORT_DTD."
+            }
+          },
+          "text": {
+            "en": "To stop XXE, set the DocumentBuilderFactory feature ___ to true; on XMLInputFactory the property to disable is ___.",
+            "ru": "Чтобы закрыть XXE, включите у DocumentBuilderFactory фичу ___; у XMLInputFactory нужно выключить свойство ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "disallow-doctype-decl",
+                "http://apache.org/xml/features/disallow-doctype-decl"
+              ],
+              "ru": [
+                "disallow-doctype-decl",
+                "http://apache.org/xml/features/disallow-doctype-decl"
+              ]
+            },
+            {
+              "en": [
+                "SUPPORT_DTD"
+              ],
+              "ru": [
+                "SUPPORT_DTD"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    ,
+    {
+      "id": "injection-end-to-end",
+      "title": {
+        "en": "Putting it together",
+        "ru": "Собираем всё вместе"
+      },
+      "summary": {
+        "en": "One rule across every parser: ask which parser will read the value, then bind it, allowlist it, or turn the parser's capability off.",
+        "ru": "Одно правило для любого парсера: спросить, кто прочитает значение, и затем привязать его, отобразить белым списком или отключить возможность парсера."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "cap-d1-both-endpoints",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Which parts of this class are injectable?",
+            "ru": "Какие части этого класса уязвимы к инъекции?"
+          },
+          "code": "// 1. search endpoint\nPreparedStatement ps = conn.prepareStatement(\n        \"SELECT id FROM users WHERE name = ? ORDER BY \" + request.getParameter(\"sort\"));\nps.setString(1, request.getParameter(\"name\"));\n\n// 2. XML import endpoint\nDocumentBuilderFactory f = DocumentBuilderFactory.newInstance();\nDocument doc = f.newDocumentBuilder().parse(uploadedFile);",
+          "codeLang": "java",
+          "reveal": {
+            "en": "Both. The `?` protects the one value it stands for and nothing else: the `sort` parameter is concatenated **structure**, so it needs an allowlist. And a default `DocumentBuilderFactory` still resolves external entities, so the import endpoint is an XXE.\n\nThe whole topic collapses into one question — *which parser will finally read this value?* — and the answer picks the defence:\n\n```mermaid\nflowchart TB\n  I[\"untrusted value\"] --> Q{\"which parser will read it?\"}\n  Q -->|\"SQL, as a value\"| B[\"bind it: parsed before the value exists\"]\n  Q -->|\"SQL, as an identifier\"| A[\"allowlist it to a constant you wrote\"]\n  Q -->|\"XML\"| X[\"turn DTDs off in the parser factory\"]\n  Q -->|\"shell, LDAP, XPath, template\"| S[\"use that parser's own structured API\"]\n```\n\nTwo more entry points feed the same chart: a value read back out of your own database re-enters it at the top (second-order injection), and a stored procedure that assembles dynamic SQL runs the chart again *inside* the database.\n\nAnd because none of this is perfect, damage control sits underneath all of it: a least-privileged database account decides how far one injection reaches, and raw database errors should never leave the application. The habit that makes the gaps findable is defaulting to parameters everywhere — then the handful of places that must concatenate stand out in review.",
+            "ru": "Обе. `?` защищает только то единственное значение, которое обозначает, и больше ничего: параметр `sort` — это склеенная **структура**, ему нужен белый список. А `DocumentBuilderFactory` по умолчанию по-прежнему раскрывает внешние сущности, поэтому эндпоинт импорта — это XXE.\n\nВся тема сворачивается в один вопрос — *какой парсер в итоге прочитает это значение?* — и ответ выбирает защиту:\n\n```mermaid\nflowchart TB\n  I[\"недоверенное значение\"] --> Q{\"какой парсер его прочитает?\"}\n  Q -->|\"SQL, как значение\"| B[\"привязать: разбор до появления значения\"]\n  Q -->|\"SQL, как идентификатор\"| A[\"белый список в написанную вами константу\"]\n  Q -->|\"XML\"| X[\"отключить DTD в фабрике парсера\"]\n  Q -->|\"оболочка, LDAP, XPath, шаблон\"| S[\"использовать структурный API этого парсера\"]\n```\n\nВ ту же схему ведут ещё два входа: значение, прочитанное из вашей же базы, попадает в неё заново сверху (инъекция второго порядка), а хранимая процедура с динамическим SQL прогоняет схему ещё раз *внутри* базы.\n\nА поскольку идеального ничего нет, под всем этим лежит ограничение ущерба: учётная запись базы с минимальными правами решает, как далеко дотянется одна инъекция, а сырые ошибки базы не должны покидать приложение. Привычка, благодаря которой дыры вообще заметны, — привязывать параметры везде по умолчанию: тогда те несколько мест, где склейка неизбежна, бросаются в глаза на ревью."
+          },
+          "feedback": {
+            "correct": {
+              "en": "One bound value does not make a class safe — check every parser it feeds.",
+              "ru": "Одно привязанное значение не делает класс безопасным — проверьте каждый парсер, который он кормит."
+            },
+            "incorrect": {
+              "en": "Both: the ORDER BY is concatenated structure, and a default DocumentBuilderFactory still resolves external entities.",
+              "ru": "Обе: ORDER BY — это склеенная структура, а DocumentBuilderFactory по умолчанию раскрывает внешние сущности."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "Both — the ORDER BY is concatenated structure, and the XML parser still has DTDs enabled",
+                "ru": "Обе — ORDER BY это склеенная структура, а у парсера XML всё ещё включены DTD"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "Neither — the query binds its value and the parser is a standard JAXP one",
+                "ru": "Ни одна — запрос привязывает значение, а парсер стандартный, из JAXP"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Binding covers only the ?, and a default JAXP factory is exactly the one that resolves entities.",
+                "ru": "Привязка покрывает только ?, а фабрика JAXP по умолчанию — как раз та, что раскрывает сущности."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Only the SQL — XML parsing is a different kind of problem",
+                "ru": "Только SQL — разбор XML это проблема другого рода"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "XXE is the same bug with an XML parser: the document becomes instructions instead of data.",
+                "ru": "XXE — та же ошибка с парсером XML: документ становится инструкциями вместо данных."
+              }
+            }
+          ]
+        }
+      ],
+      "practice": [
+        {
+          "id": "cap-p1-where-is-it",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "The search endpoint is written correctly. Where is the injection?",
+            "ru": "Поисковый эндпоинт написан правильно. Где здесь инъекция?"
+          },
+          "code": "private static final Map<String, String> SORTABLE = Map.of(\"id\", \"id\", \"name\", \"name\");\n\n// search endpoint\nString sort = SORTABLE.getOrDefault(request.getParameter(\"sort\"), \"id\");\nPreparedStatement ps = conn.prepareStatement(\n        \"SELECT id, name FROM users WHERE name = ? ORDER BY \" + sort);\nps.setString(1, request.getParameter(\"name\"));\n\n// nightly report, elsewhere in the codebase\nString stored = rs.getString(\"name\");\nstmt.executeQuery(\"SELECT count(*) FROM logins WHERE user = '\" + stored + \"'\");",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "The report path has no user input in sight and is injectable anyway.",
+              "ru": "На пути отчёта не видно ввода пользователя, и он всё равно уязвим."
+            },
+            "incorrect": {
+              "en": "In the nightly report: the stored name is concatenated, which is second-order injection.",
+              "ru": "В ночном отчёте: сохранённое имя склеивается — это инъекция второго порядка."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "In the report — the stored name is concatenated, which is second-order injection",
+                "ru": "В отчёте — сохранённое имя склеивается, это инъекция второго порядка"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "In ORDER BY \" + sort — concatenating an identifier is always injectable",
+                "ru": "В ORDER BY \" + sort — склейка идентификатора всегда уязвима"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "The input only chose among constants in SORTABLE; an unknown value never reaches the statement.",
+                "ru": "Ввод лишь выбрал среди констант в SORTABLE; неизвестное значение до запроса не доходит."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "Nowhere — the name was bound when it was written to the database",
+                "ru": "Нигде — имя привязали, когда записывали его в базу"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "Binding stored it verbatim; taint does not wear off in storage.",
+                "ru": "Привязка сохранила его дословно; недоверенность в хранилище не выветривается."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p2-predict-bound-comment",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The users table has an inactive user named admin, and nobody named admin'--. What is printed?",
+            "ru": "В таблице users есть неактивный пользователь admin и нет никого с именем admin'--. Что будет напечатано?"
+          },
+          "code": "PreparedStatement ps = conn.prepareStatement(\n        \"SELECT id FROM users WHERE name = ? AND active = TRUE\");\nps.setString(1, \"admin'--\");\nResultSet rs = ps.executeQuery();\nSystem.out.println(rs.next());",
+          "codeLang": "java",
+          "feedback": {
+            "correct": {
+              "en": "The comment marker is just two characters inside a value here.",
+              "ru": "Маркер комментария здесь — просто два символа внутри значения."
+            },
+            "incorrect": {
+              "en": "false — the whole payload is compared to the name column as one string, and the active check still runs.",
+              "ru": "false — вся нагрузка сравнивается с колонкой name одной строкой, а проверка active по-прежнему выполняется."
+            }
+          },
+          "options": [
+            {
+              "id": "a",
+              "text": {
+                "en": "false",
+                "ru": "false"
+              },
+              "correct": true
+            },
+            {
+              "id": "b",
+              "text": {
+                "en": "true — the comment marker removes AND active = TRUE",
+                "ru": "true — маркер комментария убирает AND active = TRUE"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "That happens only when the payload is part of the statement text; a bound value never is.",
+                "ru": "Так бывает, только когда нагрузка входит в текст запроса; привязанное значение туда не попадает."
+              }
+            },
+            {
+              "id": "c",
+              "text": {
+                "en": "A SQLException about an unterminated string literal",
+                "ru": "SQLException о незакрытом строковом литерале"
+              },
+              "correct": false,
+              "feedback": {
+                "en": "A quote inside a bound value is an ordinary character, not a syntax event.",
+                "ru": "Кавычка внутри привязанного значения — обычный символ, а не элемент синтаксиса."
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p3-sort-lifecycle",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order what happens in a SQL injection, from the request to the attacker's result.",
+            "ru": "Расставь по порядку то, что происходит при SQL-инъекции, от запроса до результата у злоумышленника."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Concatenate, parse, run with our rights, leak — the whole life of the bug.",
+              "ru": "Склеить, разобрать, выполнить с нашими правами, утечь — вся жизнь этой ошибки."
+            },
+            "incorrect": {
+              "en": "The value is concatenated, the parser obeys it, the statement runs with the application's rights, and the result leaks back.",
+              "ru": "Значение склеивается, парсер ему подчиняется, запрос выполняется с правами приложения, и результат утекает обратно."
+            }
+          },
+          "steps": [
+            {
+              "id": "s1",
+              "text": {
+                "en": "The user submits a value containing a quote",
+                "ru": "Пользователь отправляет значение с кавычкой"
+              }
+            },
+            {
+              "id": "s2",
+              "text": {
+                "en": "The application concatenates it into the SQL text",
+                "ru": "Приложение склеивает его в текст SQL"
+              }
+            },
+            {
+              "id": "s3",
+              "text": {
+                "en": "The database parses the whole string, and the payload becomes keywords and operators",
+                "ru": "База разбирает всю строку, и нагрузка становится ключевыми словами и операторами"
+              }
+            },
+            {
+              "id": "s4",
+              "text": {
+                "en": "The statement runs with the rights of the application's database account",
+                "ru": "Запрос выполняется с правами учётной записи базы, под которой работает приложение"
+              }
+            },
+            {
+              "id": "s5",
+              "text": {
+                "en": "The response, an error, or the response time carries the result back to the attacker",
+                "ru": "Ответ, ошибка или время отклика доносит результат до злоумышленника"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p4-match-mechanisms",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each mechanism to its role across the whole injection story.",
+            "ru": "Соотнеси каждый механизм с его ролью во всей истории с инъекциями."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Two defences, one anti-pattern, one damage control, one attacker move.",
+              "ru": "Две защиты, один антипаттерн, одно ограничение ущерба и один ход злоумышленника."
+            },
+            "incorrect": {
+              "en": "Bind values, allowlist identifiers, disable DTDs, keep privileges low — and watch for dynamic SQL inside procedures.",
+              "ru": "Привязывайте значения, идентификаторы — белым списком, отключайте DTD, держите права минимальными — и следите за динамическим SQL в процедурах."
+            }
+          },
+          "pairs": [
+            {
+              "id": "bind",
+              "left": {
+                "en": "A bind parameter",
+                "ru": "Привязанный параметр"
+              },
+              "right": {
+                "en": "Keeps a value out of the statement text",
+                "ru": "Держит значение вне текста запроса"
+              }
+            },
+            {
+              "id": "allow",
+              "left": {
+                "en": "An allowlist",
+                "ru": "Белый список"
+              },
+              "right": {
+                "en": "Handles the parts that cannot be bound: identifiers",
+                "ru": "Закрывает то, что нельзя привязать: идентификаторы"
+              }
+            },
+            {
+              "id": "dtd",
+              "left": {
+                "en": "disallow-doctype-decl",
+                "ru": "disallow-doctype-decl"
+              },
+              "right": {
+                "en": "Stops a document from telling the XML parser to open resources",
+                "ru": "Не даёт документу указывать парсеру XML открывать ресурсы"
+              }
+            },
+            {
+              "id": "priv",
+              "left": {
+                "en": "A least-privileged database account",
+                "ru": "Учётная запись базы с минимальными правами"
+              },
+              "right": {
+                "en": "Decides how much one injection can reach",
+                "ru": "Определяет, до чего дотянется одна инъекция"
+              }
+            },
+            {
+              "id": "dynsql",
+              "left": {
+                "en": "EXECUTE IMMEDIATE inside a procedure",
+                "ru": "EXECUTE IMMEDIATE внутри процедуры"
+              },
+              "right": {
+                "en": "Turns a bound value back into SQL grammar",
+                "ru": "Снова превращает привязанное значение в грамматику SQL"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cap-p5-fill-answer",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Fill the key parts of the interview answer.",
+            "ru": "Впиши ключевые части ответа для собеседования."
+          },
+          "feedback": {
+            "correct": {
+              "en": "Time for the value, an allowlist for the structure, a switched-off capability for XML.",
+              "ru": "Время — для значения, белый список — для структуры, отключённая возможность — для XML."
+            },
+            "incorrect": {
+              "en": "Parsed BEFORE the value exists; ORDER BY cannot be bound and needs an allowlist; for XML you disable DTDs.",
+              "ru": "Разбор ДО появления значения; ORDER BY привязать нельзя, нужен белый список; для XML отключают DTD."
+            }
+          },
+          "text": {
+            "en": "A prepared statement is parsed ___ the value exists, so the value can never become grammar; what cannot be bound — a table name, a column name, ___ — needs an allowlist instead; and for XML the fix is to disable ___.",
+            "ru": "Prepared statement разбирается ___ появления значения, поэтому значение не может стать грамматикой; то, что нельзя привязать — имя таблицы, имя колонки, ___, — требует белого списка; а для XML нужно отключить ___."
+          },
+          "blanks": [
+            {
+              "en": [
+                "before"
+              ],
+              "ru": [
+                "до",
+                "before"
+              ]
+            },
+            {
+              "en": [
+                "ORDER BY"
+              ],
+              "ru": [
+                "ORDER BY"
+              ]
+            },
+            {
+              "en": [
+                "DTDs",
+                "DTD",
+                "doctype",
+                "disallow-doctype-decl"
+              ],
+              "ru": [
+                "DTD",
+                "DTDs",
+                "doctype",
+                "disallow-doctype-decl"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

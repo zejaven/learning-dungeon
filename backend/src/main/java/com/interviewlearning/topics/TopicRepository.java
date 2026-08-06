@@ -79,6 +79,9 @@ public class TopicRepository {
     }
 
     public Optional<TopicDetail> getTopic(String id) {
+        if (id == null || !id.matches("[a-zA-Z0-9_-]+")) {
+            return Optional.empty(); // guard against path traversal in the topic id
+        }
         Path topicDir = repoPaths.topicsDir().resolve(id);
         Path yaml = topicDir.resolve("topic.yaml");
         if (!Files.exists(yaml)) {
@@ -141,6 +144,7 @@ public class TopicRepository {
     @SuppressWarnings("unchecked")
     private List<Example> loadExamples(Path topicDir, Map<String, Object> meta) {
         List<Example> examples = new ArrayList<>();
+        Path examplesDir = topicDir.resolve("examples");
         Object raw = meta.get("examples");
         if (raw instanceof List<?> list) {
             for (Object item : list) {
@@ -149,7 +153,7 @@ public class TopicRepository {
                     String file = str(ex, "file", "");
                     String code = file.isEmpty()
                             ? str(ex, "code", "")
-                            : readFile(topicDir.resolve("examples").resolve(file));
+                            : readContainedFile(examplesDir, file);
                     examples.add(new Example(
                             str(ex, "id", file),
                             loc(ex, "title", file),
@@ -162,9 +166,29 @@ public class TopicRepository {
         return examples;
     }
 
+    /** Reads {@code rel} inside {@code baseDir}, refusing paths that escape it (e.g. {@code ../}). */
+    private String readContainedFile(Path baseDir, String rel) {
+        Path p = baseDir.resolve(rel).normalize();
+        if (!p.startsWith(baseDir)) {
+            log.warn("Refusing file outside topic dir: {}", rel);
+            return "";
+        }
+        return readFile(p);
+    }
+
+    /** Resolves missionsFile inside the topic dir, falling back to quiz.yaml if it escapes. */
+    private Path resolveMissionsFile(Path topicDir, Map<String, Object> meta) {
+        Path p = topicDir.resolve(str(meta, "missionsFile", "quiz.yaml")).normalize();
+        if (!p.startsWith(topicDir)) {
+            log.warn("missionsFile escapes topic dir, using quiz.yaml instead");
+            return topicDir.resolve("quiz.yaml");
+        }
+        return p;
+    }
+
     @SuppressWarnings("unchecked")
     private List<Mission> loadMissions(Path topicDir, Map<String, Object> meta) {
-        Path quiz = topicDir.resolve(str(meta, "missionsFile", "quiz.yaml"));
+        Path quiz = resolveMissionsFile(topicDir, meta);
         if (!Files.exists(quiz)) {
             return List.of();
         }
@@ -198,7 +222,7 @@ public class TopicRepository {
      */
     @SuppressWarnings("unchecked")
     private List<BossQuestion> loadBossFight(Path topicDir, Map<String, Object> meta) {
-        Path quiz = topicDir.resolve(str(meta, "missionsFile", "quiz.yaml"));
+        Path quiz = resolveMissionsFile(topicDir, meta);
         if (!Files.exists(quiz)) {
             return List.of();
         }

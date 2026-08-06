@@ -43,7 +43,10 @@ public class AiCliService {
 
     private static final Logger log = LoggerFactory.getLogger(AiCliService.class);
     private static final long STREAM_TIMEOUT_MILLIS = 30 * 60 * 1000L;
-    private static final long RESULT_TIMEOUT_MINUTES = 4;
+    /** Overall wall-clock deadline for one CLI run, stdout reading included. */
+    private static final long OVERALL_TIMEOUT_MINUTES = 30;
+    /** Failed CLI resolutions are retried after this delay, not cached forever. */
+    private static final long RESOLVE_FAILURE_TTL_MILLIS = 60_000;
 
     private final RepoPaths repoPaths;
     private final ObjectMapper mapper;
@@ -56,6 +59,7 @@ public class AiCliService {
     });
 
     private final Map<String, ResolvedCommand> resolvedCache = new LinkedHashMap<>();
+    private final Map<String, Long> resolveFailedAt = new LinkedHashMap<>();
     /** Configured model name (possibly an alias) -> concrete id reported by the CLI. */
     private final Map<String, String> resolvedModels = new ConcurrentHashMap<>();
 
@@ -367,7 +371,37 @@ public class AiCliService {
         stderrDrain.setDaemon(true);
         stderrDrain.start();
 
+        Thread stdoutReader = new Thread(() -> readStdout(process, invocation, sink), cfg.id() + "-stdout");
+        stdoutReader.setDaemon(true);
+        stdoutReader.start();
+
         boolean timedOut = false;
+        try {
+            // Overall deadline for the whole run: previously the timeout only
+            // started after stdout hit EOF, so a CLI stalled with stdout open
+            // would block this thread forever.
+            if (!process.waitFor(OVERALL_TIMEOUT_MINUTES, TimeUnit.MINUTES)) {
+                timedOut = true;
+                process.destroyForcibly();
+            }
+            // Give the reader a moment to flush the last buffered lines after exit.
+            stdoutReader.join(10_000);
+            int exit = timedOut ? -1 : process.exitValue();
+            sink.status(exit == 0 ? "done" : "error",
+                    exit == 0 ? "Completed." : cfg.label() + (timedOut
+                            ? " timed out."
+                            : " exited with code " + exit + "."));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            process.destroyForcibly();
+            sink.status("error", cfg.label() + " run interrupted.");
+        } finally {
+            cleanup(invocation);
+        }
+    }
+
+    private void readStdout(Process process, Invocation invocation, Sink sink) {
+        ProviderConfig cfg = invocation.config();
         try (BufferedReader br = new BufferedReader(
                 new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
@@ -380,22 +414,13 @@ public class AiCliService {
                     sink.ai(event);
                 }
             }
-            if (!process.waitFor(RESULT_TIMEOUT_MINUTES, TimeUnit.MINUTES)) {
-                timedOut = true;
-                process.destroyForcibly();
-            }
-            int exit = timedOut ? -1 : process.exitValue();
-            sink.status(exit == 0 ? "done" : "error",
-                    exit == 0 ? "Completed." : cfg.label() + (timedOut
-                            ? " timed out."
-                            : " exited with code " + exit + "."));
         } catch (IOException e) {
-            sink.status("error", "Stream error: " + e.getMessage());
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            sink.status("error", cfg.label() + " run interrupted.");
-        } finally {
-            cleanup(invocation);
+            log.debug("[{}] stdout closed: {}", cfg.id(), e.getMessage());
+        } catch (RuntimeException e) {
+            // EmitterSink throws when the SSE client disconnects; kill the CLI so
+            // it does not keep burning tokens writing into a dead stream.
+            log.debug("[{}] sink failed mid-stream, killing process: {}", cfg.id(), e.getMessage());
+            process.destroyForcibly();
         }
     }
 
@@ -604,13 +629,18 @@ public class AiCliService {
     private ResolvedCommand resolve(ProviderConfig cfg) {
         synchronized (resolvedCache) {
             ResolvedCommand cached = resolvedCache.get(cfg.id());
-            if (cached != null) {
+            // Failed resolutions expire after a short TTL so a CLI installed or
+            // fixed after backend start becomes available without a restart.
+            if (cached != null && (cached.available()
+                    || System.currentTimeMillis() - resolveFailedAt.getOrDefault(cfg.id(), 0L)
+                    < RESOLVE_FAILURE_TTL_MILLIS)) {
                 return cached;
             }
         }
         ResolvedCommand resolved = resolveFresh(cfg);
         synchronized (resolvedCache) {
             resolvedCache.put(cfg.id(), resolved);
+            resolveFailedAt.put(cfg.id(), System.currentTimeMillis());
         }
         return resolved;
     }
@@ -679,7 +709,8 @@ public class AiCliService {
     private void sendStatus(SseEmitter emitter, String status, String message) {
         try {
             emitter.send(SseEmitter.event().name("status").data(statusJson(status, message)));
-        } catch (IOException ignored) {
+        } catch (IOException | IllegalStateException ignored) {
+            // client already gone
         }
     }
 
@@ -756,7 +787,11 @@ public class AiCliService {
         public void status(String status, String message) {
             sendStatus(emitter, status, message);
             if ("done".equals(status) || "error".equals(status)) {
-                emitter.complete();
+                try {
+                    emitter.complete();
+                } catch (IllegalStateException ignored) {
+                    // emitter already completed/failed
+                }
             }
         }
     }

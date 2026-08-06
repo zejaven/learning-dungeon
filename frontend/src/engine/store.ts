@@ -215,6 +215,9 @@ function defaultCodeFor(topic: TopicDetail): string {
   return (def ?? topic.examples[0])?.code ?? '';
 }
 
+/** Monotonic counter of selectTopic calls; only the latest one may apply its result. */
+let selectSeq = 0;
+
 export const useStore = create<AppState>((set, get) => ({
   topics: [],
   topicsError: null,
@@ -269,9 +272,11 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   async selectTopic(id) {
+    const req = ++selectSeq;
     set({ loadingTopic: true });
     try {
       const topic = await fetchTopic(id);
+      if (req !== selectSeq) return; // a newer topic was selected meanwhile
       const structural = topic.mode === 'structural';
       const files = structural ? (loadProject(id) ?? seedFiles(topic)) : {};
       const sqlQuery = topic.mode === 'sql' ? (loadSql(id) ?? seedSqlQuery(topic)) : '';
@@ -328,6 +333,7 @@ export const useStore = create<AppState>((set, get) => ({
         /* progress is optional; ignore if the DB is unavailable */
       }
     } catch (e) {
+      if (req !== selectSeq) return; // a newer topic manages loadingTopic itself
       set({ loadingTopic: false, runError: (e as Error).message });
     }
   },
@@ -358,6 +364,7 @@ export const useStore = create<AppState>((set, get) => ({
     set({ running: true, runError: null });
     try {
       const result = await runCode(topic.id, code);
+      if (get().topic?.id !== topic.id) return; // a newer topic was selected meanwhile
       const completed = { ...get().completedMissions };
       const newlyCompleted: string[] = [];
       for (const mission of topic.missions) {
@@ -380,6 +387,7 @@ export const useStore = create<AppState>((set, get) => ({
         });
       }
     } catch (e) {
+      if (get().topic?.id !== topic.id) return; // a newer topic was selected meanwhile
       set({ running: false, runError: (e as Error).message });
     }
   },
@@ -469,6 +477,7 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       const projectFiles = Object.entries(files).map(([path, content]) => ({ path, content }));
       const res = await analyzeProject(topic.id, projectFiles);
+      if (get().topic?.id !== topic.id) return; // a newer topic was selected meanwhile
       // Re-check structure missions against the fresh graph (sticky, like trace
       // missions: once achieved they stay completed and are persisted).
       const completed = { ...get().completedMissions };
@@ -491,6 +500,7 @@ export const useStore = create<AppState>((set, get) => ({
         });
       }
     } catch (e) {
+      if (get().topic?.id !== topic.id) return; // a newer topic was selected meanwhile
       set({ analyzing: false, analyzeError: (e as Error).message });
     }
   },
@@ -506,6 +516,7 @@ export const useStore = create<AppState>((set, get) => ({
     set({ runningSql: true });
     try {
       const res = await runSqlQuery(topic.id, sqlQuery);
+      if (get().topic?.id !== topic.id) return; // a newer topic was selected meanwhile
       // Mission flags come from the server (it compares to each expectedSql).
       const completed = { ...get().completedMissions };
       const newly: string[] = [];
@@ -526,6 +537,7 @@ export const useStore = create<AppState>((set, get) => ({
         });
       }
     } catch (e) {
+      if (get().topic?.id !== topic.id) return; // a newer topic was selected meanwhile
       set({ runningSql: false, sqlResult: { columns: [], rows: [], error: (e as Error).message } });
     }
   },
@@ -536,6 +548,7 @@ export const useStore = create<AppState>((set, get) => ({
     set({ runningTests: true });
     try {
       const res = await runChallenge(topic.id, code);
+      if (get().topic?.id !== topic.id) return; // a newer topic was selected meanwhile
       const completed = { ...get().completedMissions };
       const newly: string[] = [];
       for (const [id, pass] of Object.entries(res.missions)) {
@@ -555,6 +568,7 @@ export const useStore = create<AppState>((set, get) => ({
         });
       }
     } catch (e) {
+      if (get().topic?.id !== topic.id) return; // a newer topic was selected meanwhile
       set({
         runningTests: false,
         testResults: [{ name: 'error', passed: false, expected: '', actual: (e as Error).message }],

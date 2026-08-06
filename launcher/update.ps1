@@ -38,7 +38,10 @@ try {
     }
     if ($ok) {
         '[update] build-app.ps1' | Add-Content $log
-        & (Join-Path $scriptDir 'build-app.ps1') *>> $log
+        # Run as a child process: build-app.ps1 exits with a real code on
+        # failure, and its `exit` must not take this updater down with it.
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass `
+            -File (Join-Path $scriptDir 'build-app.ps1') *>> $log
         if ($LASTEXITCODE -ne 0) {
             $ok = $false
             "[update] build failed (exit $LASTEXITCODE)" | Add-Content $log

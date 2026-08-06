@@ -2,7 +2,7 @@
 
 Дата: 2026-08-05. Проверены: backend (все пакеты), frontend (все src), gradle, dev.ps1, launcher/*.ps1, конфиги, все 254 темы в topics/ (скриптом), prompts/, plans/.
 
-> Статус: все пункты из раздела «Сделать сегодня» **выполнены** (коммит `025eed4`, ветка `qa-domain`; backend-тесты и production-сборка фронта зелёные). Выполненное отмечено ✅ по тексту с примечаниями.
+> Статус: все пункты разделов «Сделать сегодня» и «Сделать на этой неделе» **выполнены** (коммиты `025eed4`, `a6a169f` + финальный коммит этой итерации, ветка `qa-domain`; backend-тесты и production-сборка фронта зелёные). Выполненное отмечено ✅ по тексту с примечаниями. Незакрытое: AbortController для SSE-стримов, Monaco `path`, temp-файлы генерации в корне репо, проверка difficulty/categoryId в TopicContractTest — см. раздел 7.
 
 ## 0. Если данных не хватает
 
@@ -24,14 +24,14 @@
 | ✅ 2 | Вывод дочерней JVM копится в память без лимита | `JavaCodeRunner.java:262-268` | `while(true) println` за 5 с таймаута качает сотни МБ в heap → OOM backend'а | cap на N строк + флаг `truncated` | High | S | High |
 | ✅ 3 | JSON в SSE-статусе собирается конкатенацией, экранируются только кавычки | `GenerationTask.java:65-66`, `AiCliService.java:690` | Windows-путь `C:\new\...` в сообщении об ошибке ломает JSON → фронт теряет статус | `mapper.writeValueAsString(Map.of(...))` | High | S | High |
 | ✅ 4 | Нет ни одного Error Boundary | `main.tsx`, `VisualizationCanvas.tsx:24` | Один кривой trace-event = белый экран всего приложения | class ErrorBoundary (~15 строк) вокруг корня и визуализатора | High | S | High |
-| 5 | Чтение stdout AI-CLI без общего дедлайна | `AiCliService.java:371-386` | Зависший CLI вешает HTTP-поток Tomcat навсегда | `waitFor(overallTimeout)` + `destroyForcibly` | High | M | High |
+| ✅ 5 | Чтение stdout AI-CLI без общего дедлайна | `AiCliService.java:371-386` | Зависший CLI вешает HTTP-поток Tomcat навсегда | `waitFor(overallTimeout)` + `destroyForcibly` | High | M | High |
 | ✅ 6 | Сборка фронта не гоняет typecheck | `frontend/package.json:7` | TS-ошибки не ломают build, уезжают в прод-jar | `"build": "tsc --noEmit && vite build"` | Medium | S | High |
-| 7 | Процесс CLI не убивается при обрыве SSE-клиента | `AiCliService.java:744-749` | CLI с bypassPermissions доживает до конца, жгя токены | `finally { if (process.isAlive()) process.destroyForcibly(); }` | Medium | S | High |
-| 8 | Гонки stale state: результат `run`/`runSql`/`analyze` применяется к уже другой теме | `engine/store.ts:355,465,503,533` | Чужие события/галочки миссий в текущей теме | после await: `if (get().topic?.id !== id) return;` | Medium | S | High |
-| 9 | `selectTopic` не защищён от stale-ответа `fetchTopic` | `engine/store.ts:271-306` | URL — тема B, контент — тема A | монотонный счётчик запроса | Medium | S | High |
-| 10 | `topicsError` пишется, но нигде не показывается | `store.ts:31`, `HomeScreen.tsx:336` | При недоступном backend выглядит как «все мои темы удалились» | вывести `topicsError`/`runError` в HomeScreen | Medium | S | High |
-| 11 | Нет `statement.setQueryTimeout` в SQL-песочнице | `SqlService.java:87-100` | Тяжёлый запрос вешает HTTP-поток надолго | `st.setQueryTimeout(5)` | Medium | S | High |
-| 12 | Кэш резолва CLI бессрочный, включая negative result | `AiCliService.java:604-616` | Установил CLI после старта — «unavailable» до рестарта | кэшировать только успех или TTL 60 с | Medium | S | High |
+| ✅ 7 | Процесс CLI не убивается при обрыве SSE-клиента | `AiCliService.java:744-749` | CLI с bypassPermissions доживает до конца, жгя токены | `finally { if (process.isAlive()) process.destroyForcibly(); }` | Medium | S | High |
+| ✅ 8 | Гонки stale state: результат `run`/`runSql`/`analyze` применяется к уже другой теме | `engine/store.ts:355,465,503,533` | Чужие события/галочки миссий в текущей теме | после await: `if (get().topic?.id !== id) return;` | Medium | S | High |
+| ✅ 9 | `selectTopic` не защищён от stale-ответа `fetchTopic` | `engine/store.ts:271-306` | URL — тема B, контент — тема A | монотонный счётчик запроса | Medium | S | High |
+| ✅ 10 | `topicsError` пишется, но нигде не показывается | `store.ts:31`, `HomeScreen.tsx:336` | При недоступном backend выглядит как «все мои темы удалились» | вывести `topicsError`/`runError` в HomeScreen | Medium | S | High |
+| ✅ 11 | Нет `statement.setQueryTimeout` в SQL-песочнице | `SqlService.java:87-100` | Тяжёлый запрос вешает HTTP-поток надолго | `st.setQueryTimeout(5)` | Medium | S | High |
+| ✅ 12 | Кэш резолва CLI бессрочный, включая negative result | `AiCliService.java:604-616` | Установил CLI после старта — «unavailable» до рестарта | кэшировать только успех или TTL 60 с | Medium | S | High |
 | ✅ 13 | `bootJar` молча собирает jar без UI без `frontend/dist` | `backend/build.gradle:55-59` | Валидный jar, который отдаёт 404 на `/` | `doFirst { if (!file('.../dist/index.html').exists()) throw ... }` | Medium | S | High |
 | 14 | SSE-стримы не отменяются (signal поддержан, но не передаётся) | `AssistantDialog.tsx:112`, `BossQuestionForm.tsx:97` | Размонтирование посреди стрима жжёт токены до конца | AbortController + abort в cleanup | Medium | S | High |
 | 15 | Monaco без `path` — общая модель и undo-стек между файлами | `EditorPanel.tsx:16-29` | Undo протекает между файлами structural-режима | `path={activePath ?? 'main'}` | Low | S | Medium |
@@ -97,36 +97,42 @@
 - Как воспроизвести: подменить `app.ai.claude.command` на скрипт, который молчит и не завершается → `POST /api/questions` висит вечно.
 - Фикс: читать stdout в отдельном потоке, основной — `if (!process.waitFor(OVERALL, MINUTES)) { process.destroyForcibly(); sink.status("error", ...); }`.
 - Severity: High / Effort: M / Confidence: High.
+- ✅ **Исправлено**: чтение stdout вынесено в отдельный daemon-поток, основной поток ждёт `waitFor(OVERALL_TIMEOUT_MINUTES = 30)` и убивает процесс; прерывание потока тоже делает `destroyForcibly()`.
 
 ### [P1] Процесс CLI не убивается при обрыве SSE-клиента
 - Где: `ai/AiCliService.java:744-749`.
 - Что не так: при дисконнекте `EmitterSink.ai()` бросает `RuntimeException`, которая вылетает мимо catch'ей (ловятся только IOException/InterruptedException) — `process.destroy()` не вызывается. CLI с `--permission-mode bypassPermissions` доживает до конца, тратя токены, handle не reaped.
 - Фикс: в `runProcessInner` добавить `finally { if (process.isAlive()) process.destroyForcibly(); process.waitFor(5, SECONDS); }`.
 - Severity: Medium / Effort: S / Confidence: High.
+- ✅ **Исправлено**: `readStdout` ловит `RuntimeException` от `EmitterSink` (клиент отключился) и сразу делает `process.destroyForcibly()`; `EmitterSink.status`/`sendStatus` больше не падают на мёртвом эмиттере.
 
 ### [P2] Гонки stale state на фронте
 - Где: `engine/store.ts:271-306` (selectTopic), `:355,465,503,533` (run/analyze/runSql/runTests).
 - Что не так: защита от stale-ответа есть только для `fetchProgress` (`store.ts:312`), остальные экшены применяют результат, даже если пользователь уже ушёл в другую тему: чужие trace-события, чужие галочки миссий (только в памяти сессии, на сервер уходит правильный topicId).
 - Фикс: та же идиома, что уже есть в файле — после await `if (get().topic?.id !== topic.id) return;`, плюс монотонный счётчик в `selectTopic`.
 - Severity: Medium / Effort: S / Confidence: High.
+- ✅ **Исправлено**: в `selectTopic` добавлен счётчик `selectSeq` (результат и `loadingTopic:false` применяет только актуальный запрос); в `run`/`analyze`/`runSql`/`runTests` — guard по `topic.id` после await и в catch.
 
 ### [P2] Path traversal из содержимого topic.yaml
 - Где: `topics/TopicRepository.java:152` (examples), `:167,201` (missionsFile).
 - Что не так: `topicDir.resolve("examples").resolve(file)` без проверки containment — `file: "../../../config/secret.yml"` в yaml вернёт содержимое в `GET /api/topics/{id}`. Источник yaml — AI с bypassPermissions, промпт включает произвольный текст пользователя (prompt injection). Контрастирует с образцовой защитой в `TopicAssetController.resolveAsset:73-95`.
 - Фикс: после resolve — `if (!p.normalize().startsWith(examplesDir)) continue;` и аналог для `missionsFile`. Туда же: валидировать `id` топика в `getTopic` по паттерну `[a-z0-9-]+`.
 - Severity: Medium / Effort: S / Confidence: High (баг), Medium (эксплуатируемость).
+- ✅ **Исправлено**: `getTopic` валидирует `id` по `[a-zA-Z0-9_-]+`; добавлены `readContainedFile` (examples) и `resolveMissionsFile` (missionsFile) с проверкой `startsWith` после normalize.
 
 ### [P2] Компиляция javac in-process без таймаута
 - Где: `runner/JavaCodeRunner.java:204-237`.
 - Что не так: `compiler.getTask(...).call()` синхронно в HTTP-потоке; `timeout-seconds` покрывает только выполнение. Патологический код (тяжёлая рекурсия типов) висит минутами. Ловится только IOException, нет `-proc:none`.
 - Фикс: компиляцию в `ExecutorService` + `Future.get(timeout)`; `catch (Throwable)`; добавить `"-proc:none"` в options.
 - Severity: Medium / Effort: M / Confidence: High (что таймаута нет), Medium (что реально повиснет).
+- ✅ **Исправлено**: компиляция выполняется на daemon-потоке через `ExecutorService` с `Future.get(timeoutSeconds * 3)`, `ExecutionException`/`TimeoutException` возвращают понятную ошибку; добавлен `-proc:none`.
 
 ### [P2] H2-песочница: нет query timeout, доступны опасные функции
 - Где: `sql/SqlService.java:87-100`.
 - Что не так: (а) нет `setQueryTimeout` — декартов продукт вешает HTTP-поток; (б) H2 даёт `CREATE ALIAS ... AS '<java code>'`, `FILE_READ`/`FILE_WRITE`, `RUNSCRIPT` — чтение файлов (включая `config/secret.yml`) от имени backend'а. Изоляция от основной БД при этом хорошая (отдельная in-memory БД, `DB_CLOSE_DELAY=0`).
 - Фикс: `st.setQueryTimeout(5)`; для (б) — либо принять риск (своя машина), либо простой фильтр по `CREATE ALIAS|RUNSCRIPT|SCRIPT|FILE_READ|FILE_WRITE`.
 - Severity: Medium (а) / Low-Medium (б) / Effort: S / Confidence: High.
+- ✅ **Исправлено**: `setQueryTimeout(5)` + фильтр `FORBIDDEN` (`CREATE ALIAS`, `RUNSCRIPT`, `FILE_READ`, `FILE_WRITE`, `LINKED_SCHEMA`) с понятным сообщением об ошибке.
 
 ### [P2] GenerationService: гонка в startOrGet + вечный рост карт
 - Где: `generation/GenerationService.java:32-40`, `GenerationTask.java:31`.
@@ -139,6 +145,7 @@
 - Что не так: `$LASTEXITCODE` выставляют только нативные команды; `throw` в PowerShell-скрипте его не меняет. Сейчас работает «случайно» (перед каждым `throw` падает gradlew/npm). Любой будущий `throw` от командлета → ложный «success»: пользователю скажут, что обновление прошло, а запустится старая сборка.
 - Фикс: в build-app.ps1 обернуть тело в `try/catch { ...; exit 1 }`, либо в update.ps1 проверять `$?`.
 - Severity: Medium / Effort: S / Confidence: High.
+- ✅ **Исправлено**: `build-app.ps1` обёрнут в try/catch с `exit 0`/`exit 1`; `update.ps1` запускает его дочерним `powershell.exe -File`, так что `exit` не рвёт сам updater, а `$LASTEXITCODE` честный.
 
 ### [P2] Сборка фронта без typecheck
 - Где: `frontend/package.json:7-9`.
@@ -154,13 +161,13 @@
 - **Postgres недоступен = приложение падает на старте** (`DbInitializer.java:26`) — пользователь трея увидит только стектрейс; фикс — try/catch с понятным сообщением. S/High.
 - **Нет глобального `@RestControllerAdvice`** — RuntimeException даёт дефолтный пустой 500 (stack trace не утекает — дефолты Boot 3 это закрывают). S/High.
 - **NPE при `e.getMessage() == null`** — `AiCliService.java:194`, `GenerationTask.java:66`. S/Medium.
-- **Негативный кэш резолва CLI навсегда** — `AiCliService.java:604-616` (см. топ-15). S/High.
+- ✅ **Негативный кэш резолва CLI навсегда** — `AiCliService.java:604-616` (см. топ-15). S/High. **Исправлено**: failed-резолв истекает через 60 с (`RESOLVE_FAILURE_TTL_MILLIS`).
 - **Временные файлы в корне репо** — `ai-prompt-*.txt` (`AiCliService.java:302`), `classify-*`, `regen-*` — засоряют `git status`; фикс — `Files.createTempDirectory` в системном temp. S/High.
 - **Гонка MAX+1 версии теории** — `TheoryVersionRepository.java:45-58` → PK violation, второй AI-прогон уже оплачен; фикс — `INSERT ... SELECT COALESCE(MAX(version_no),1)+1` одним statement. S/High.
-- **tray.ps1: «Open log» открывает startup.log, а не app.log** (`tray.ps1:131-134`, расходится с README) + startup.log не ротируется. S/High.
-- **tray.ps1: занятый порт 18080 чужим приложением** → трей молча открывает браузер на него; фикс — проверить `GET /api/system/status` на «наш» bootId. S/High.
-- **Сырой NUL-байт** в `topics/java-data-types/explanation.en.md:5641` — файл считается бинарным; заменить на `'\0'`. S/High.
-- **3 темы без `difficulty`/`categoryId`** (`hashmap`, `arraylist-vs-linkedlist`, `heap-generations`) — AGENTS.md требует, тест не проверяет, `TopicRepository.java:66` молча ставит 0; фикс — дописать поля + проверка в TopicContractTest. S/High.
+- ✅ **tray.ps1: «Open log» открывает startup.log, а не app.log** (`tray.ps1:131-134`, расходится с README) + startup.log не ротируется. S/High. **Исправлено**: app.log первым, startup.log — fallback.
+- ✅ **tray.ps1: занятый порт 18080 чужим приложением** → трей молча открывает браузер на него; фикс — проверить `GET /api/system/status` на «наш» bootId. S/High. **Исправлено**: проверка bootId, чужому порту — MessageBox с PID владельца.
+- ✅ **Сырой NUL-байт** в `topics/java-data-types/explanation.en.md:5641` — файл считается бинарным; заменить на `'\0'`. S/High. **Исправлено**.
+- ✅ **3 темы без `difficulty`/`categoryId`** (`hashmap`, `arraylist-vs-linkedlist`, `heap-generations`) — AGENTS.md требует, тест не проверяет, `TopicRepository.java:66` молча ставит 0; фикс — дописать поля + проверка в TopicContractTest. S/High. **Исправлено частично**: поля дописаны (`java-collections`/`java-collections`/`memory-gc`, difficulty 2/1/2); проверку в TopicContractTest не добавлял — можно отдельно.
 - **`update.flag` не в .gitignore**. S/High.
 - **Monaco `path`**, **WordBank лишнее поле `keys` в ответе**, **SortSteps shuffle может выдать решённое упражнение**, **`deleteQuestion` мёртвый код**, **hardcoded "theory available" в CategoryTree.tsx:74** — все S/High.
 - **Лог генерации: O(n²) рост** — `generationStore.ts:75-79` `[...t.log, line]` без лимита; фикс — cap хвоста. S/High.
@@ -275,14 +282,14 @@ export class ErrorBoundary extends Component<
 6. ✅ `destroyForcibly` в InterruptedException раннера + synchronizedList.
 7. ✅ bootJar: fail-fast без `frontend/dist`.
 
-**Сделать на этой неделе:**
-1. Общий дедлайн на AI-CLI процессы (waitFor + destroyForcibly) и kill при обрыве SSE.
-2. Stale-guards в store (run/runSql/analyze/selectTopic) + показ `topicsError` в UI.
-3. `setQueryTimeout` в SqlService + фильтр опасных H2-функций.
-4. Path-проверка в TopicRepository для examples/missionsFile.
-5. update.ps1: надёжная передача кода ошибки из build-app.ps1.
-6. Компиляция javac с таймаутом + `-proc:none`.
-7. Мелочи из P3 (темы без difficulty, NUL-байт, кэш CLI, temp-файлы, tray-логи).
+**Сделать на этой неделе:** — ✅ выполнено в тот же день, тесты и сборка зелёные.
+1. ✅ Общий дедлайн на AI-CLI процессы (30 мин, waitFor + destroyForcibly) и kill при обрыве SSE.
+2. ✅ Stale-guards в store (run/runSql/analyze/selectTopic) + показ `topicsError`/`runError` в HomeScreen.
+3. ✅ `setQueryTimeout(5)` в SqlService + фильтр опасных H2-функций.
+4. ✅ Path-проверка в TopicRepository для examples/missionsFile + валидация id топика.
+5. ✅ update.ps1: build-app.ps1 с честным exit-кодом, запуск дочерним процессом.
+6. ✅ Компиляция javac с таймаутом + `-proc:none`.
+7. ✅ Мелочи из P3: темы без difficulty, NUL-байт, кэш CLI, tray-логи и чужой порт 18080. **Не сделано**: temp-файлы генерации в корне репо (`ai-prompt-*`, `classify-*`, `regen-*`) — перенести в системный temp; проверка difficulty/categoryId в TopicContractTest.
 
 **Можно отложить:**
 1. Job Object для дерева дочерних процессов (L).

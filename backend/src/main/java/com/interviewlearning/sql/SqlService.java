@@ -14,6 +14,7 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 /**
  * Runs a SQL topic's queries against a disposable in-memory H2 database
@@ -26,6 +27,11 @@ public class SqlService {
 
     private static final Logger log = LoggerFactory.getLogger(SqlService.class);
     private static final int MAX_ROWS = 500;
+    private static final int QUERY_TIMEOUT_SECONDS = 5;
+    /** H2 features that escape the sandbox into the filesystem or arbitrary Java. */
+    private static final Pattern FORBIDDEN = Pattern.compile(
+            "\\b(create\\s+alias|runscript|file_read|file_write|linked_schema)\\b",
+            Pattern.CASE_INSENSITIVE);
 
     static {
         try {
@@ -85,7 +91,11 @@ public class SqlService {
     }
 
     private SqlResult exec(Connection c, String sql) {
+        if (sql != null && FORBIDDEN.matcher(sql).find()) {
+            return SqlResult.error("This statement type is not allowed in the SQL playground.");
+        }
         try (Statement st = c.createStatement()) {
+            st.setQueryTimeout(QUERY_TIMEOUT_SECONDS);
             boolean hasResultSet = st.execute(sql);
             if (!hasResultSet) {
                 int n = st.getUpdateCount();

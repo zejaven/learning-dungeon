@@ -25,7 +25,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -218,9 +222,32 @@ public class JavaCodeRunner {
                     fm.getJavaFileObjectsFromFiles(srcs.stream().map(Path::toFile).toList());
             List<String> options = List.of(
                     "-classpath", classpath,
-                    "-d", outDir.toString()
+                    "-d", outDir.toString(),
+                    "-proc:none"
             );
-            boolean ok = compiler.getTask(null, fm, diagnostics, options, null, units).call();
+            // javac runs in-process; give it a wall-clock budget so pathological
+            // sources cannot pin an HTTP thread. The pool thread is a daemon, so a
+            // stuck compile cannot block JVM shutdown either.
+            ExecutorService pool = Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "javac");
+                t.setDaemon(true);
+                return t;
+            });
+            boolean ok;
+            long compileTimeout = timeoutSeconds * 3L;
+            try {
+                ok = pool.submit(compiler.getTask(null, fm, diagnostics, options, null, units)::call)
+                        .get(compileTimeout, TimeUnit.SECONDS);
+            } catch (TimeoutException e) {
+                return "Compilation timed out after " + compileTimeout + "s.";
+            } catch (ExecutionException e) {
+                return "Compiler error: " + e.getCause();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return "Compilation interrupted.";
+            } finally {
+                pool.shutdownNow();
+            }
             if (ok) {
                 return null;
             }

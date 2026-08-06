@@ -48,6 +48,8 @@ export function HomeScreen() {
   const topics = useStore((s) => s.topics);
   const topic = useStore((s) => s.topic);
   const loadingTopic = useStore((s) => s.loadingTopic);
+  const topicsError = useStore((s) => s.topicsError);
+  const runError = useStore((s) => s.runError);
   const theoryVersions = useStore((s) => s.theoryVersions);
   const activeVersionNo = useStore((s) => s.activeVersionNo);
   const generatingVersion = useStore((s) => s.generatingVersion);
@@ -314,6 +316,7 @@ export function HomeScreen() {
             )}
           </div>
           <div className="panel-body" ref={contentRef}>
+            {topicsError && <div className="output error">{topicsError}</div>}
             {!entry && <p className="home-hint">{ui('selectQuestion', lang)}</p>}
 
             {entry && !entry.topicId && (
@@ -333,7 +336,10 @@ export function HomeScreen() {
               </div>
             )}
 
-            {entry?.topicId && !theoryReady && <p className="home-hint">{ui('openingTheory', lang)}</p>}
+            {entry?.topicId && !theoryReady && !runError && (
+              <p className="home-hint">{ui('openingTheory', lang)}</p>
+            )}
+            {entry?.topicId && !theoryReady && runError && <div className="output error">{runError}</div>}
 
             {theoryReady && showLesson && <LessonPanel />}
 

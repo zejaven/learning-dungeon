@@ -71,7 +71,21 @@ try {
     $listening = [bool](Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction Stop)
 } catch { $listening = $false }
 if ($listening) {
-    Start-Process $url
+    # The port answers, but is it *our* app? A foreign service on 18080 must not
+    # be silently opened in the browser as if it were the Dungeon.
+    $ours = $false
+    try {
+        $status = Invoke-RestMethod "http://127.0.0.1:$port/api/system/status" -TimeoutSec 5
+        $ours = [bool]$status.bootId
+    } catch { $ours = $false }
+    if ($ours) {
+        Start-Process $url
+        return
+    }
+    $owner = (Get-NetTCPConnection -LocalPort $port -State Listen |
+        Select-Object -First 1).OwningProcess
+    Show-Error ("Port $port is already occupied by another application (PID $owner)." +
+        "`n`nFree the port or close that application, then start the Dungeon again.")
     return
 }
 
@@ -129,8 +143,8 @@ $openApp = { Start-Process $url }
 $openItem.add_Click($openApp)
 $notify.add_DoubleClick($openApp)
 $logItem.add_Click({
-    if (Test-Path $startupLog) { Start-Process $startupLog }
-    elseif (Test-Path $logPath) { Start-Process $logPath }
+    if (Test-Path $logPath) { Start-Process $logPath }
+    elseif (Test-Path $startupLog) { Start-Process $startupLog }
 })
 
 $shutdown = {

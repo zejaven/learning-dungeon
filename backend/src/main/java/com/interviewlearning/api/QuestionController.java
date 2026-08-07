@@ -83,7 +83,7 @@ public class QuestionController {
         }
         Path dir;
         try {
-            dir = Files.createTempDirectory(repoPaths.repoRoot(), "classify-");
+            dir = Files.createTempDirectory("classify-");
         } catch (IOException e) {
             return ResponseEntity.internalServerError().body("Could not create temp dir: " + e.getMessage());
         }

@@ -46,6 +46,10 @@ export function AssistantDialog({
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Abort an in-flight stream when the dialog unmounts (e.g. hash navigation).
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   const topicId = topic?.id;
 
@@ -108,11 +112,15 @@ export function AssistantDialog({
     setStatus('running');
     setBusy(true);
     let acc = '';
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
     try {
       await streamSse(
         '/api/assistant/ask',
         { topicId, question: asked, code, lang, provider },
         {
+          signal: ctrl.signal,
           onAi: (line) => {
             const delta = parseTextDelta(line);
             if (delta) {
@@ -142,6 +150,7 @@ export function AssistantDialog({
         },
       );
     } catch (e) {
+      if ((e as Error).name === 'AbortError') return; // dialog closed mid-stream
       setStatus('error');
       setAnswer((prev) => prev + `\n[error] ${(e as Error).message}`);
       setBusy(false);

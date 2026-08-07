@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { saveBossAnswer, streamSse } from '@app/engine/api';
 import { useAi } from '@app/engine/aiStore';
 import { parseTextDelta } from '@app/engine/aiStream';
@@ -63,6 +63,10 @@ export function BossQuestionForm({ topicId, question, onPassed, onBusyChange }: 
   const [liveScore, setLiveScore] = useState<number | null>(null);
   const [busy, setBusyState] = useState(false);
   const [evalError, setEvalError] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Abort an in-flight evaluation when the form unmounts (navigation etc.).
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   // When the question changes, show that question's saved answer + verdict.
   useEffect(() => {
@@ -93,11 +97,15 @@ export function BossQuestionForm({ topicId, question, onPassed, onBusyChange }: 
     setEvalError(false);
     let acc = '';
     let lastStatus = '';
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
     try {
       await streamSse(
         '/api/assistant/evaluate',
         { topicId, question: questionText, answer, lang, provider },
         {
+          signal: ctrl.signal,
           onAi: (line) => {
             const delta = parseTextDelta(line);
             if (!delta) return;
@@ -143,6 +151,7 @@ export function BossQuestionForm({ topicId, question, onPassed, onBusyChange }: 
         },
       );
     } catch (e) {
+      if ((e as Error).name === 'AbortError') return; // unmounted mid-stream
       setStream((prev) => prev + `\n[error] ${(e as Error).message}`);
       setEvalError(true);
       setBusy(false);

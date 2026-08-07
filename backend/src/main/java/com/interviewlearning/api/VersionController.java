@@ -86,7 +86,7 @@ public class VersionController {
 
         Path dir;
         try {
-            dir = Files.createTempDirectory(repoPaths.repoRoot(), "regen-");
+            dir = Files.createTempDirectory("regen-");
         } catch (IOException e) {
             return ResponseEntity.internalServerError().body("Could not create temp dir: " + e.getMessage());
         }

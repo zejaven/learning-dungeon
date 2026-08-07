@@ -69,6 +69,12 @@ class TopicContractTest {
             if (!domainId.isBlank() && !domainId.matches("[a-z0-9]+(-[a-z0-9]+)*")) {
                 errs.add("topic.yaml: domainId '" + domainId + "' must be kebab-case lowercase");
             }
+            if (str(meta, "categoryId").isBlank()) {
+                errs.add("topic.yaml: categoryId is missing (required for catalog placement)");
+            }
+            if (str(meta, "difficulty").isBlank()) {
+                errs.add("topic.yaml: difficulty is missing (1-5)");
+            }
             if (structural) {
                 validateStarter(dir, errs);
             } else if (sqlMode) {

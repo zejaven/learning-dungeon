@@ -5,10 +5,13 @@ export function EditorPanel({
   code,
   onChange,
   language = 'java',
+  path,
 }: {
   code: string;
   onChange: (code: string) => void;
   language?: string;
+  /** Model path: gives each file its own Monaco model (separate undo stack). */
+  path?: string;
 }) {
   const theme = useTheme((s) => s.theme);
   return (
@@ -17,6 +20,7 @@ export function EditorPanel({
         height="100%"
         language={language}
         theme={theme === 'light' ? 'vs' : 'vs-dark'}
+        path={path}
         value={code}
         onChange={(value) => onChange(value ?? '')}
         options={{

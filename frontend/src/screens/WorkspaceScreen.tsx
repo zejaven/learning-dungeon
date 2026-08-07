@@ -188,7 +188,7 @@ function StructuralEditor() {
       </div>
       {activePath ? (
         <EditorPanel
-          key={activePath}
+          path={activePath}
           code={files[activePath] ?? ''}
           onChange={(v) => setFileContent(activePath, v)}
         />

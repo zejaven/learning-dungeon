@@ -2,7 +2,7 @@
 
 Дата: 2026-08-05. Проверены: backend (все пакеты), frontend (все src), gradle, dev.ps1, launcher/*.ps1, конфиги, все 254 темы в topics/ (скриптом), prompts/, plans/.
 
-> Статус: все пункты разделов «Сделать сегодня» и «Сделать на этой неделе» **выполнены** (коммиты `025eed4`, `a6a169f` + финальный коммит этой итерации, ветка `qa-domain`; backend-тесты и production-сборка фронта зелёные). Выполненное отмечено ✅ по тексту с примечаниями. Незакрытое: AbortController для SSE-стримов, Monaco `path`, temp-файлы генерации в корне репо, проверка difficulty/categoryId в TopicContractTest — см. раздел 7.
+> Статус: все пункты разделов «Сделать сегодня» и «Сделать на этой неделе» **выполнены**, включая добитые следом AbortController для SSE, Monaco `path`, temp-файлы и проверку контракта тем (коммиты `025eed4`, `a6a169f`, `438210b` + финальный коммит, ветка `qa-domain`; backend-тесты и production-сборка фронта зелёные). Выполненное отмечено ✅ по тексту с примечаниями. Открытыми остаются только пункты из «Можно отложить».
 
 ## 0. Если данных не хватает
 
@@ -33,8 +33,8 @@
 | ✅ 11 | Нет `statement.setQueryTimeout` в SQL-песочнице | `SqlService.java:87-100` | Тяжёлый запрос вешает HTTP-поток надолго | `st.setQueryTimeout(5)` | Medium | S | High |
 | ✅ 12 | Кэш резолва CLI бессрочный, включая negative result | `AiCliService.java:604-616` | Установил CLI после старта — «unavailable» до рестарта | кэшировать только успех или TTL 60 с | Medium | S | High |
 | ✅ 13 | `bootJar` молча собирает jar без UI без `frontend/dist` | `backend/build.gradle:55-59` | Валидный jar, который отдаёт 404 на `/` | `doFirst { if (!file('.../dist/index.html').exists()) throw ... }` | Medium | S | High |
-| 14 | SSE-стримы не отменяются (signal поддержан, но не передаётся) | `AssistantDialog.tsx:112`, `BossQuestionForm.tsx:97` | Размонтирование посреди стрима жжёт токены до конца | AbortController + abort в cleanup | Medium | S | High |
-| 15 | Monaco без `path` — общая модель и undo-стек между файлами | `EditorPanel.tsx:16-29` | Undo протекает между файлами structural-режима | `path={activePath ?? 'main'}` | Low | S | Medium |
+| ✅ 14 | SSE-стримы не отменяются (signal поддержан, но не передаётся) | `AssistantDialog.tsx:112`, `BossQuestionForm.tsx:97` | Размонтирование посреди стрима жжёт токены до конца | AbortController + abort в cleanup | Medium | S | High |
+| ✅ 15 | Monaco без `path` — общая модель и undo-стек между файлами | `EditorPanel.tsx:16-29` | Undo протекает между файлами structural-режима | `path={activePath ?? 'main'}` | Low | S | Medium |
 
 Легенда: ✅ — исправлено (коммит `025eed4`), см. примечания в разделах 3 и 7. Остальные пункты — в работе/отложено.
 
@@ -162,12 +162,12 @@
 - **Нет глобального `@RestControllerAdvice`** — RuntimeException даёт дефолтный пустой 500 (stack trace не утекает — дефолты Boot 3 это закрывают). S/High.
 - **NPE при `e.getMessage() == null`** — `AiCliService.java:194`, `GenerationTask.java:66`. S/Medium.
 - ✅ **Негативный кэш резолва CLI навсегда** — `AiCliService.java:604-616` (см. топ-15). S/High. **Исправлено**: failed-резолв истекает через 60 с (`RESOLVE_FAILURE_TTL_MILLIS`).
-- **Временные файлы в корне репо** — `ai-prompt-*.txt` (`AiCliService.java:302`), `classify-*`, `regen-*` — засоряют `git status`; фикс — `Files.createTempDirectory` в системном temp. S/High.
+- ✅ **Временные файлы в корне репо** — `ai-prompt-*.txt` (`AiCliService.java:302`), `classify-*`, `regen-*` — засоряют `git status`; фикс — `Files.createTempDirectory` в системном temp. S/High. **Исправлено**: все три места создают файлы в системном temp.
 - **Гонка MAX+1 версии теории** — `TheoryVersionRepository.java:45-58` → PK violation, второй AI-прогон уже оплачен; фикс — `INSERT ... SELECT COALESCE(MAX(version_no),1)+1` одним statement. S/High.
 - ✅ **tray.ps1: «Open log» открывает startup.log, а не app.log** (`tray.ps1:131-134`, расходится с README) + startup.log не ротируется. S/High. **Исправлено**: app.log первым, startup.log — fallback.
 - ✅ **tray.ps1: занятый порт 18080 чужим приложением** → трей молча открывает браузер на него; фикс — проверить `GET /api/system/status` на «наш» bootId. S/High. **Исправлено**: проверка bootId, чужому порту — MessageBox с PID владельца.
 - ✅ **Сырой NUL-байт** в `topics/java-data-types/explanation.en.md:5641` — файл считается бинарным; заменить на `'\0'`. S/High. **Исправлено**.
-- ✅ **3 темы без `difficulty`/`categoryId`** (`hashmap`, `arraylist-vs-linkedlist`, `heap-generations`) — AGENTS.md требует, тест не проверяет, `TopicRepository.java:66` молча ставит 0; фикс — дописать поля + проверка в TopicContractTest. S/High. **Исправлено частично**: поля дописаны (`java-collections`/`java-collections`/`memory-gc`, difficulty 2/1/2); проверку в TopicContractTest не добавлял — можно отдельно.
+- ✅ **3 темы без `difficulty`/`categoryId`** (`hashmap`, `arraylist-vs-linkedlist`, `heap-generations`) — AGENTS.md требует, тест не проверяет, `TopicRepository.java:66` молча ставит 0; фикс — дописать поля + проверка в TopicContractTest. S/High. **Исправлено**: поля дописаны (`java-collections`/`java-collections`/`memory-gc`, difficulty 2/1/2) + `TopicContractTest` теперь требует `categoryId` и `difficulty` у каждой темы.
 - **`update.flag` не в .gitignore**. S/High.
 - **Monaco `path`**, **WordBank лишнее поле `keys` в ответе**, **SortSteps shuffle может выдать решённое упражнение**, **`deleteQuestion` мёртвый код**, **hardcoded "theory available" в CategoryTree.tsx:74** — все S/High.
 - **Лог генерации: O(n²) рост** — `generationStore.ts:75-79` `[...t.log, line]` без лимита; фикс — cap хвоста. S/High.
@@ -289,7 +289,9 @@ export class ErrorBoundary extends Component<
 4. ✅ Path-проверка в TopicRepository для examples/missionsFile + валидация id топика.
 5. ✅ update.ps1: build-app.ps1 с честным exit-кодом, запуск дочерним процессом.
 6. ✅ Компиляция javac с таймаутом + `-proc:none`.
-7. ✅ Мелочи из P3: темы без difficulty, NUL-байт, кэш CLI, tray-логи и чужой порт 18080. **Не сделано**: temp-файлы генерации в корне репо (`ai-prompt-*`, `classify-*`, `regen-*`) — перенести в системный temp; проверка difficulty/categoryId в TopicContractTest.
+7. ✅ Мелочи из P3: темы без difficulty (+ проверка в TopicContractTest), NUL-байт, кэш CLI, tray-логи и чужой порт 18080, temp-файлы генерации перенесены в системный temp.
+
+**Добито следом:** ✅ AbortController для SSE-стримов (`AssistantDialog`/`BossQuestionForm` — стрим умирает при размонтировании), ✅ Monaco `path` (per-file модели, убран key-ремонт в structural-режиме).
 
 **Можно отложить:**
 1. Job Object для дерева дочерних процессов (L).

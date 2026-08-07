@@ -303,7 +303,7 @@ public class AiCliService {
                     : "Do not create, edit, delete, move, or overwrite any files. "
                     + "Do not run shell commands that modify the workspace. Answer only in text.\n\n"
                     + (prompt == null ? "" : prompt);
-            Path promptFile = Files.createTempFile(repoPaths.repoRoot(), "ai-prompt-", ".txt");
+            Path promptFile = Files.createTempFile("ai-prompt-", ".txt");
             Files.writeString(promptFile, effectivePrompt == null ? "" : effectivePrompt, StandardCharsets.UTF_8);
             List<String> cmd = new ArrayList<>();
             cmd.add(command);

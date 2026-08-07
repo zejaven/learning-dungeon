@@ -1,4 +1,4 @@
-# One-time (and after-each-change) build of the packaged app the tray launcher
+﻿# One-time (and after-each-change) build of the packaged app the tray launcher
 # runs: the visual-runtime jar, the production frontend bundle, and the backend
 # bootJar that serves both the API and that bundle.
 #

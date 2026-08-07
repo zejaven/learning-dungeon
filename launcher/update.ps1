@@ -1,4 +1,4 @@
-# Detached updater, invoked by tray.ps1 when the backend left an update.flag on
+﻿# Detached updater, invoked by tray.ps1 when the backend left an update.flag on
 # exit. Optionally pulls the latest commits from GitHub, rebuilds the packaged
 # app (launcher\build-app.ps1), then relaunches the tray (launch.vbs), which
 # starts the freshly built jar. Runs windowless and independent of the tray, so

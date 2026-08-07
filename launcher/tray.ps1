@@ -1,4 +1,4 @@
-# System-tray launcher for the Java Interview Dungeon.
+﻿# System-tray launcher for the Java Interview Dungeon.
 #
 # Starts the packaged backend (which also serves the built frontend), waits for
 # it to come up, opens the browser, and keeps a tray icon alive. Choosing

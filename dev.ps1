@@ -1,4 +1,4 @@
-# Starts the backend (Spring Boot) and the frontend (Vite) for local development.
+﻿# Starts the backend (Spring Boot) and the frontend (Vite) for local development.
 # Backend: http://localhost:18080   Frontend (open this): http://localhost:15173
 #
 # Usage:  ./dev.ps1

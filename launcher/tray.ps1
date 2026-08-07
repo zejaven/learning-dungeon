@@ -61,6 +61,15 @@ if (-not $javaw) {
     if ($cmd) { $javaw = $cmd.Source }
 }
 if (-not $javaw) {
+    # Fall back to the bundled tools\jdk-21 next to the repo.
+    $bundled = Get-ChildItem (Join-Path $root '..\tools') -Directory -Filter 'jdk-21*' -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if ($bundled) {
+        $cand = Join-Path $bundled.FullName 'bin\javaw.exe'
+        if (Test-Path $cand) { $javaw = $cand }
+    }
+}
+if (-not $javaw) {
     Show-Error 'javaw.exe not found. Set JAVA_HOME or add a JDK 21 bin to PATH.'
     return
 }

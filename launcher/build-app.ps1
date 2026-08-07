@@ -7,6 +7,16 @@
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 
+# Fall back to the bundled tools\jdk-21 when JAVA_HOME is not set.
+if (-not $env:JAVA_HOME) {
+    $bundled = Get-ChildItem (Join-Path $root '..\tools') -Directory -Filter 'jdk-21*' -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if ($bundled -and (Test-Path (Join-Path $bundled.FullName 'bin\java.exe'))) {
+        $env:JAVA_HOME = $bundled.FullName
+        Write-Host "JAVA_HOME not set — using bundled JDK: $env:JAVA_HOME" -ForegroundColor DarkGray
+    }
+}
+
 try {
     Write-Host 'Building visual-runtime jar...' -ForegroundColor Cyan
     & "$root\gradlew.bat" -p "$root" :visual-runtime:jar --console=plain

@@ -106,7 +106,9 @@ public final class TopicDtos {
             String aiProvider,
             String aiModel,
             boolean hasAtoms,
-            String domainId
+            String domainId,
+            /** Content languages the topic declares (subset of [en, ru]); default both. */
+            List<String> languages
     ) {
     }
 }

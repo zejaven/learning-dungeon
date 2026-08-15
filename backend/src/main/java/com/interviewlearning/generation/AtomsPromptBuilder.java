@@ -38,8 +38,8 @@ public class AtomsPromptBuilder {
     }
 
     /** A full (non-augment) lesson generation from the given theory version. */
-    public String buildFull(TopicDetail topic, String provider, int versionNo) {
-        return build(topic, provider, versionNo, explanationOf(topic, versionNo), false, "", null);
+    public String buildFull(TopicDetail topic, String provider, int versionNo, List<String> languages) {
+        return build(topic, provider, versionNo, explanationOf(topic, versionNo), false, "", null, languages);
     }
 
     /** The current learning-atoms.json contents, or null if there is no lesson to augment. */
@@ -70,7 +70,10 @@ public class AtomsPromptBuilder {
     }
 
     public String build(TopicDetail topic, String provider, int versionNo, Localized explanation,
-                        boolean augment, String comment, String existingAtoms) {
+                        boolean augment, String comment, String existingAtoms,
+                        List<String> requestedLanguages) {
+        // A lesson can only exist in languages the topic itself has content in.
+        List<String> languages = GenLanguages.effective(topic.languages(), requestedLanguages);
         Path promptFile = repoPaths.promptsDir().resolve("generate-learning-atoms.md");
         String contract;
         try {
@@ -87,6 +90,7 @@ public class AtomsPromptBuilder {
         Path output = repoPaths.topicsDir().resolve(topic.id()).resolve("learning-atoms.json");
 
         StringBuilder sb = new StringBuilder(contract);
+        appendLanguages(sb, languages);
         sb.append("\n\n---\n\nTOPIC:\n")
                 .append("- id: ").append(topic.id()).append("\n")
                 .append("- title (en): ").append(topic.title().en()).append("\n")
@@ -123,10 +127,31 @@ public class AtomsPromptBuilder {
                     .append("faithfully covering the full source explanation below:\n").append(comment);
         }
 
-        sb.append("\n---\n\nSOURCE EXPLANATION (ENGLISH):\n\n").append(explanation.en())
-                .append("\n\n---\n\nSOURCE EXPLANATION (RUSSIAN):\n\n").append(explanation.ru())
-                .append("\n\n---\n\nOUTPUT FILE (write the JSON exactly here):\n")
+        for (String lang : languages) {
+            sb.append("\n---\n\nSOURCE EXPLANATION (").append(GenLanguages.displayName(lang))
+                    .append("):\n\n").append("ru".equals(lang) ? explanation.ru() : explanation.en())
+                    .append("\n");
+        }
+        sb.append("\n---\n\nOUTPUT FILE (write the JSON exactly here):\n")
                 .append(output.toAbsolutePath());
         return sb.toString();
+    }
+
+    /**
+     * When generating in ONE language, override the contract's bilingual
+     * requirements: every localized field carries only that language's key.
+     */
+    private void appendLanguages(StringBuilder sb, List<String> languages) {
+        if (languages.size() != 1) {
+            return; // both languages: the bilingual contract stands as written
+        }
+        String lang = languages.get(0);
+        String name = GenLanguages.displayName(lang);
+        sb.append("\n\n---\n\nLANGUAGES: ").append(name).append(" ONLY — this overrides every "
+                        + "bilingual/two-language requirement in the contract above.\n")
+                .append("- Every localized field in the JSON ({en, ru} objects and {en: [...], "
+                        + "ru: [...]} lists) must contain ONLY the `").append(lang)
+                .append("` key; omit the other language key entirely.\n")
+                .append("- Code, identifiers, and technical tokens stay in English as usual.\n");
     }
 }

@@ -208,6 +208,8 @@ review pool too). Do NOT restate the boss questions verbatim.
   misconceptions, each with its own `feedback` explaining why it is wrong.
 - Bilingual: every localized field in natural English AND natural Russian.
   Code, identifiers and technical tokens stay in English in both languages.
+  (A trailing LANGUAGES directive in this prompt may narrow the lesson to one
+  language — then every localized field carries only that language's key.)
 - NEUTRAL style: the source explanation may weave themed analogies (factories,
   sports, games, production war stories) into its prose. IGNORE the analogies —
   extract only the technical facts. Exercises must be short neutral stimuli

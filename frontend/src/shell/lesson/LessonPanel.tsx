@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAi } from '@app/engine/aiStore';
 import { startAtomsGeneration } from '@app/engine/api';
+import { genLanguages } from '@app/engine/genLangStore';
 import { useGeneration } from '@app/engine/generationStore';
 import { previousPosition, useLesson } from '@app/engine/lessonStore';
 import { navigate, routeForTheory } from '@app/engine/router';
@@ -51,6 +52,7 @@ export function LessonPanel() {
         activeVersionNo,
         options.mode,
         options.comment,
+        genLanguages(),
       );
       useGeneration.getState().attach(ref.taskId, ref.key);
     } catch {

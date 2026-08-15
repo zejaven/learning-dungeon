@@ -7,6 +7,7 @@ import {
   type BulkStatus,
   type StartBulkBody,
 } from './api';
+import { genLanguages } from './genLangStore';
 import { useGeneration } from './generationStore';
 import { useStore } from './store';
 
@@ -89,7 +90,7 @@ export const useBulk = create<BulkState>((set, get) => {
       if (get().starting) return false;
       set({ starting: true, error: null });
       try {
-        const status = await startBulk(body);
+        const status = await startBulk({ ...body, languages: genLanguages() });
         set({ status, starting: false });
         startPolling();
         return true;

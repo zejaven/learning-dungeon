@@ -14,6 +14,7 @@ import {
   saveMissions,
 } from './api';
 import { useAi } from './aiStore';
+import { genLanguages } from './genLangStore';
 import { evaluateStructureMission } from './structure';
 import type {
   ClassGraph,
@@ -273,7 +274,8 @@ export const useStore = create<AppState>((set, get) => ({
 
   async selectTopic(id) {
     const req = ++selectSeq;
-    set({ loadingTopic: true });
+    // Clear a stale runError so HomeScreen shows "opening theory", not an old failure.
+    set({ loadingTopic: true, runError: null });
     try {
       const topic = await fetchTopic(id);
       if (req !== selectSeq) return; // a newer topic was selected meanwhile
@@ -599,7 +601,8 @@ export const useStore = create<AppState>((set, get) => ({
     if (!topic) return;
     set({ generatingVersion: true });
     try {
-      const v = await regenerateVersion(topic.id, style, styleName, useAi.getState().selectedProvider);
+      const v = await regenerateVersion(
+        topic.id, style, styleName, useAi.getState().selectedProvider, genLanguages());
       if (get().topic?.id !== topic.id) return; // switched away meanwhile
       const versions = [...get().theoryVersions, v];
       set({ theoryVersions: versions, activeVersionNo: v.versionNo, generatingVersion: false });

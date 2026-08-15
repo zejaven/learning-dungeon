@@ -17,11 +17,19 @@ topics/<id>/
 
 ## Bilingual rule
 
-Everything shown in the UI must exist in **both English and Russian**. Keep code,
-identifiers and technical terms (Java, HashMap, hashCode, resize, …) untranslated.
-Translatable YAML fields use a `{ en, ru }` map; explanation is two files.
-Java source code (including comments) stays in English — only the trace
+By default everything shown in the UI must exist in **both English and Russian**.
+Keep code, identifiers and technical terms (Java, HashMap, hashCode, resize, …)
+untranslated. Translatable YAML fields use a `{ en, ru }` map; explanation is two
+files. Java source code (including comments) stays in English — only the trace
 *descriptions* are bilingual.
+
+A topic may instead declare `languages:` in topic.yaml (a non-empty subset of
+`[en, ru]`; absent = both). A single-language topic writes every translatable
+YAML field as a plain string in that language (not an `{ en, ru }` map), has only
+`explanation.<lang>.md`, and fills only that language's key in quiz.yaml
+bossFight entries; the app falls back to the available language in the UI.
+A generation prompt may carry a trailing LANGUAGES directive that selects this —
+it overrides the bilingual default above.
 
 ## topic.yaml
 

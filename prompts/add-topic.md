@@ -10,8 +10,11 @@ required (see below).
 Read `prompts/topic-contract.md` for the exact folder schema and the trace-event
 contract. Mirror the existing `topics/hashmap/` topic as your reference example.
 
-**The topic must be fully bilingual (English + Russian).** Every user-visible
-string exists in both languages: `title`, `category`, `summary`, each example's
+**The topic must be fully bilingual (English + Russian)** — unless a trailing
+LANGUAGES directive in this prompt narrows it to one language; in that case
+follow that directive (plain-string YAML fields, a single explanation file,
+`languages:` declared in topic.yaml) instead of the bilingual rules below.
+Every user-visible string exists in both languages: `title`, `category`, `summary`, each example's
 `title` and `explanation`, every mission `title`/`goal`, each `bossFight`
 question's `en`/`ru` (each with a stable `id`),
 the `assistantExample` (the Ask AI placeholder question), two explanation files

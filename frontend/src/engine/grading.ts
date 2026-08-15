@@ -45,7 +45,8 @@ export function grade(exercise: Exercise, answer: AnswerValue, lang: Lang): bool
     }
     case 'word_bank': {
       if (answer.kind !== 'tokens') return false;
-      const correct = exercise.tokens[lang] ?? exercise.tokens.en ?? [];
+      // Single-language lessons fill only one key — fall back across both.
+      const correct = exercise.tokens[lang] ?? exercise.tokens.en ?? exercise.tokens.ru ?? [];
       return answer.tokens.length === correct.length
         && answer.tokens.every((t, i) => t === correct[i]);
     }

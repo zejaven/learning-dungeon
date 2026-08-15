@@ -42,9 +42,11 @@ public class TopicGenController {
      *                   tree question); null/blank for a free-form "Add topic"
      * @param categoryId the catalog category id to use; when blank, the selected AI decides
      * @param difficulty 1-3 to use; when null/0, the selected AI decides
+     * @param languages  content languages to generate ("en"/"ru"); null/empty = both
      */
     public record GenerateRequest(String question, String catalogId, String categoryId,
-                                  Integer difficulty, String style, String styleName, String provider) {
+                                  Integer difficulty, String style, String styleName, String provider,
+                                  List<String> languages) {
     }
 
     /**
@@ -58,7 +60,7 @@ public class TopicGenController {
                 : "add-topic";
         String prompt = prompts.build(new TopicGenSpec(request.question(), request.catalogId(),
                 request.categoryId(), request.difficulty(), request.style(), request.styleName(),
-                request.provider()));
+                request.provider(), request.languages()));
         GenerationTask task = generation.startOrGet(key, request.provider(), prompt, AiTask.GENERATE_TOPIC);
         return Map.of("taskId", task.id(), "key", task.key(), "status", task.status());
     }

@@ -19,8 +19,9 @@ interface Props {
 export function WordBank({ exercise, answer, onChange, showResult, correct }: Props) {
   const lang = useLang((s) => s.lang);
   const pool = useMemo(() => {
-    const tokens = exercise.tokens[lang] ?? exercise.tokens.en ?? [];
-    const distractors = exercise.distractors?.[lang] ?? exercise.distractors?.en ?? [];
+    const tokens = exercise.tokens[lang] ?? exercise.tokens.en ?? exercise.tokens.ru ?? [];
+    const distractors =
+      exercise.distractors?.[lang] ?? exercise.distractors?.en ?? exercise.distractors?.ru ?? [];
     return shuffled([...tokens, ...distractors].map((word, i) => ({ key: `${i}:${word}`, word })));
   }, [exercise.id, lang]);
 
@@ -78,7 +79,7 @@ export function WordBank({ exercise, answer, onChange, showResult, correct }: Pr
       </div>
       {showResult && !correct && (
         <div className="ex-fill-answer">
-          → <code>{(exercise.tokens[lang] ?? exercise.tokens.en ?? []).join(' ')}</code>
+          → <code>{(exercise.tokens[lang] ?? exercise.tokens.en ?? exercise.tokens.ru ?? []).join(' ')}</code>
         </div>
       )}
     </div>

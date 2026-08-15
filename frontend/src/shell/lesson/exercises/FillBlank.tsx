@@ -59,7 +59,7 @@ export function FillBlank({ exercise, answer, onChange, showResult, correct, onE
           {blanks.map((b, i) => (
             <span key={i}>
               {i > 0 && ', '}
-              <code>{filled(i) || '∅'}</code> → <code>{b[lang]?.[0] ?? b.en[0]}</code>
+              <code>{filled(i) || '∅'}</code> → <code>{b[lang]?.[0] ?? b.en?.[0] ?? b.ru?.[0]}</code>
             </span>
           ))}
         </div>

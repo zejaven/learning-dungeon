@@ -36,7 +36,8 @@ public class TopicPromptBuilder {
 
     /** Everything the prompt needs about one topic-to-be. */
     public record TopicGenSpec(String question, String catalogId, String categoryId,
-                               Integer difficulty, String style, String styleName, String provider) {
+                               Integer difficulty, String style, String styleName, String provider,
+                               List<String> languages) {
     }
 
     public String build(TopicGenSpec spec) {
@@ -115,9 +116,35 @@ public class TopicPromptBuilder {
                     .append("   (record this in topic.yaml `style:` — the style this was generated in)\n");
         }
 
+        appendLanguages(sb, GenLanguages.normalize(spec.languages()));
         appendStyle(sb, spec.style());
         appendCrossLinkContext(sb);
         return sb.toString();
+    }
+
+    /**
+     * When the user generates in ONE language, override the contract's bilingual
+     * requirements: single-language topics use plain-string YAML fields, a single
+     * explanation file, and declare {@code languages:} so tests and future
+     * generations know the intended coverage.
+     */
+    private void appendLanguages(StringBuilder sb, List<String> languages) {
+        if (languages.size() != 1) {
+            return; // both languages: the bilingual contract stands as written
+        }
+        String lang = languages.get(0);
+        String name = GenLanguages.displayName(lang);
+        sb.append("\n\n---\n\nLANGUAGES: ").append(name).append(" ONLY — this overrides every "
+                        + "bilingual/two-language requirement in the contract above.\n")
+                .append("- In topic.yaml set `languages: [").append(lang).append("]` and write every "
+                        + "translatable field (title, category, summary, assistantExample, example "
+                        + "titles/explanations, mission title/goal) as a plain ")
+                .append(name).append(" string, NOT an {en, ru} map.\n")
+                .append("- Write ONLY explanation.").append(lang).append(".md; do NOT create the "
+                        + "other explanation file.\n")
+                .append("- In quiz.yaml bossFight entries keep the stable `id` and write only the `")
+                .append(lang).append(":` text; omit the other language key.\n")
+                .append("- Java code, identifiers, and technical tokens stay in English as usual.\n");
     }
 
     /**

@@ -19,7 +19,8 @@ public final class BulkDtos {
                                String endTime,    // "HH:mm" local time-of-day; blank = continuous
                                Integer maxPercent,       // 5-hour window cap, 0..100
                                Integer maxWeeklyPercent, // 7-day window cap, 0..100
-                               List<BulkItem> items) {
+                               List<BulkItem> items,
+                               List<String> languages) { // "en"/"ru"; null/empty = both
     }
 
     /**

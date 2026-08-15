@@ -124,7 +124,8 @@ public class TopicRepository {
                 str(meta, "aiProvider", "claude"),
                 str(meta, "aiModel", ""),
                 Files.exists(topicDir.resolve("learning-atoms.json")),
-                str(meta, "domainId", "java")
+                str(meta, "domainId", "java"),
+                languages(meta)
         ));
     }
 
@@ -238,6 +239,9 @@ public class TopicRepository {
                         String id = str(qm, "id", "q" + i);
                         String en = str(qm, "en", "");
                         String ru = str(qm, "ru", en);
+                        // Single-language quiz files fill only one key; mirror it so
+                        // in-memory Localized values are always fully populated.
+                        if (en.isEmpty()) en = ru;
                         result.add(new BossQuestion(id, new Localized(en, ru)));
                     }
                 }
@@ -359,6 +363,18 @@ public class TopicRepository {
             }
         }
         return fallback;
+    }
+
+    /**
+     * Reads the topic's declared content languages ({@code languages:} in
+     * topic.yaml): a subset of [en, ru]; absent/invalid means both.
+     */
+    private static List<String> languages(Map<String, Object> meta) {
+        List<String> declared = stringList(meta.get("languages")).stream()
+                .map(s -> s.trim().toLowerCase())
+                .filter(s -> s.equals("en") || s.equals("ru"))
+                .toList();
+        return declared.isEmpty() ? List.of("en", "ru") : declared;
     }
 
     /**

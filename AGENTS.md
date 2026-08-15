@@ -170,7 +170,10 @@ If a command cannot be run, say exactly why and what remains unverified.
 - Prefer existing patterns and module boundaries. Do not redesign the shell,
   runner, topic system, or build setup unless the task explicitly requires it.
 - Keep Java source, Java comments, identifiers, and technical tokens in English.
-- User-facing topic content is bilingual: English and Russian.
+- User-facing topic content is bilingual (English and Russian) by default, but a
+  topic may declare `languages:` in topic.yaml (a non-empty subset of
+  `[en, ru]`) and carry content only in those languages — see Topic Authoring.
+  UI chrome strings (`i18n.ts`) stay bilingual always.
 - Files contain UTF-8 Cyrillic content. Preserve UTF-8 and avoid bulk rewrites
   caused only by console encoding/mojibake.
 - Use stable, deterministic data for examples, tests, SQL seeds, and trace states.
@@ -335,7 +338,8 @@ sorting by difficulty. Explanations may embed images: put files under
 `topics/<id>/images/` and reference them with relative links
 (`![...](images/x.png)`) — `TopicContractTest` fails on links to missing files.
 
-Known modes:
+Known modes (the required explanation files are one per declared language —
+both `explanation.en.md` and `explanation.ru.md` unless `languages:` narrows it):
 
 - `trace` (default): runnable `Playground` examples plus trace visualizer.
   Required: `topic.yaml`, `explanation.en.md`, `explanation.ru.md`,
@@ -376,7 +380,16 @@ shape per exercise type — trust it over hand-written JSON.
 
 For all topics:
 
-- Every visible string must exist in both English and Russian.
+- Every visible string must exist in every language the topic declares.
+  `languages:` in topic.yaml is a non-empty subset of `[en, ru]`; absent means
+  both (all legacy topics). A single-language topic writes translatable YAML
+  fields as plain strings, has only `explanation.<lang>.md`, fills only that
+  language's key in bossFight entries and in `learning-atoms.json` localized
+  fields; loaders and the UI fall back to the available language. The
+  settings-gear "Generation languages" checkboxes (persisted like the UI
+  language; at least one always on) select what the AI writes for topic,
+  lesson, theory-version, and bulk generation — for existing topics the choice
+  is narrowed to the topic's declared languages (`GenLanguages.effective`).
 - `bossFight` questions need stable unique ids. Do not reuse an old id for a new
   question.
 - YAML values containing `: `, `#`, quotes, or leading punctuation should be
@@ -395,6 +408,7 @@ Use these as templates:
 - Structural topic: `topics/strategy/`
 - Theory topic: `topics/design-patterns-overview/`
 - Non-Java (domain) theory topic with images: `topics/ndm-scalability/`
+- Single-language topic (`languages: [ru]`): `topics/qa-test-estimation-task/`
 - SQL topic: `topics/sql-many-to-many/`
 - Challenge topic: `topics/algo-max-pair-product/`
 - `learning-atoms.json` (micro-actions lesson): `topics/hashmap/learning-atoms.json`

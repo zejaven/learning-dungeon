@@ -5,6 +5,7 @@ import { useAi } from '@app/engine/aiStore';
 import { useBulk } from '@app/engine/bulkStore';
 import { useDomain } from '@app/engine/domainStore';
 import { startAtomsGeneration, type BulkKind } from '@app/engine/api';
+import { genLanguages } from '@app/engine/genLangStore';
 import { useGeneration } from '@app/engine/generationStore';
 import { useReview } from '@app/engine/reviewStore';
 import {
@@ -184,6 +185,9 @@ export function HomeScreen() {
         topic.id,
         useAi.getState().selectedProvider,
         useStore.getState().activeVersionNo,
+        'full',
+        '',
+        genLanguages(),
       );
       useGeneration.getState().attach(ref.taskId, ref.key);
     } catch {

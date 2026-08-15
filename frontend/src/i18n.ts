@@ -58,6 +58,11 @@ const UI: Record<string, Localized> = {
     en: 'Run the code to see what happens, step by step.',
     ru: 'Запустите код, чтобы увидеть, что происходит, шаг за шагом.',
   },
+  settingsGenLangs: { en: 'Generation languages:', ru: 'Языки генерации:' },
+  settingsGenLangsDesc: {
+    en: 'Languages the AI writes when generating topics, lessons, and theory versions. At least one stays selected.',
+    ru: 'Языки, на которых ИИ пишет темы, уроки и версии теории при генерации. Хотя бы один язык всегда выбран.',
+  },
   errorBoundary: {
     en: 'Something went wrong while rendering this panel.',
     ru: 'Что-то пошло не так при отрисовке этой панели.',

@@ -58,13 +58,14 @@ class TopicContractTest {
         boolean theory = "theory".equals(mode);
         boolean sqlMode = "sql".equals(mode);
         boolean challenge = "challenge".equals(mode);
+        List<String> langs = declaredLanguages(meta, errs);
         if (meta != null) {
             if (!name.equals(str(meta, "id"))) {
                 errs.add("topic.yaml: id '" + str(meta, "id") + "' must equal folder name '" + name + "'");
             }
-            bilingual(meta.get("title"), "topic.yaml: title", errs);
-            bilingual(meta.get("category"), "topic.yaml: category", errs);
-            bilingual(meta.get("summary"), "topic.yaml: summary", errs);
+            localized(meta.get("title"), "topic.yaml: title", langs, errs);
+            localized(meta.get("category"), "topic.yaml: category", langs, errs);
+            localized(meta.get("summary"), "topic.yaml: summary", langs, errs);
             String domainId = str(meta, "domainId");
             if (!domainId.isBlank() && !domainId.matches("[a-z0-9]+(-[a-z0-9]+)*")) {
                 errs.add("topic.yaml: domainId '" + domainId + "' must be kebab-case lowercase");
@@ -83,12 +84,14 @@ class TopicContractTest {
                 validateChallengeFiles(dir, errs);
             } else if (!theory) {
                 // theory topics have no editable project at all.
-                validateExamples(dir, meta, errs);
+                validateExamples(dir, meta, langs, errs);
             }
         }
 
-        requireNonEmptyFile(dir.resolve("explanation.en.md"), errs);
-        requireNonEmptyFile(dir.resolve("explanation.ru.md"), errs);
+        // Only the declared languages need an explanation file (default: both).
+        for (String lang : langs) {
+            requireNonEmptyFile(dir.resolve("explanation." + lang + ".md"), errs);
+        }
         validateImageLinks(dir.resolve("explanation.en.md"), errs);
         validateImageLinks(dir.resolve("explanation.ru.md"), errs);
         if (!structural && !theory && !sqlMode && !challenge) {
@@ -104,9 +107,9 @@ class TopicContractTest {
         if (quiz != null) {
             // theory topics have a Boss Fight but no missions.
             if (!theory) {
-                validateMissions(quiz, mode, errs);
+                validateMissions(quiz, mode, langs, errs);
             }
-            validateBossFight(quiz, errs);
+            validateBossFight(quiz, langs, errs);
         }
 
         if (!errs.isEmpty()) {
@@ -118,7 +121,8 @@ class TopicContractTest {
     // --- field checks ------------------------------------------------------
 
     @SuppressWarnings("unchecked")
-    private void validateExamples(Path dir, Map<String, Object> meta, List<String> errs) {
+    private void validateExamples(Path dir, Map<String, Object> meta, List<String> langs,
+                                  List<String> errs) {
         Object raw = meta.get("examples");
         if (!(raw instanceof List<?> list) || list.isEmpty()) {
             errs.add("topic.yaml: examples must be a non-empty list");
@@ -135,7 +139,7 @@ class TopicContractTest {
             String where = "topic.yaml: examples[" + i + "]";
             if (id.isBlank()) errs.add(where + ": missing id");
             else if (!ids.add(id)) errs.add(where + ": duplicate id '" + id + "'");
-            bilingual(ex.get("title"), where + ".title", errs);
+            localized(ex.get("title"), where + ".title", langs, errs);
             String file = str(ex, "file");
             if (!file.isBlank()) {
                 if (!Files.exists(dir.resolve("examples").resolve(file))) {
@@ -152,7 +156,8 @@ class TopicContractTest {
     }
 
     @SuppressWarnings("unchecked")
-    private void validateMissions(Map<String, Object> quiz, String mode, List<String> errs) {
+    private void validateMissions(Map<String, Object> quiz, String mode, List<String> langs,
+                                  List<String> errs) {
         Object raw = quiz.get("missions");
         if (!(raw instanceof List<?> list) || list.isEmpty()) {
             errs.add("quiz.yaml: missions must be a non-empty list");
@@ -175,8 +180,8 @@ class TopicContractTest {
             String id = str(m, "id");
             if (id.isBlank()) errs.add(where + ": missing id");
             else if (!ids.add(id)) errs.add(where + ": duplicate id '" + id + "'");
-            bilingual(m.get("title"), where + ".title", errs);
-            bilingual(m.get("goal"), where + ".goal", errs);
+            localized(m.get("title"), where + ".title", langs, errs);
+            localized(m.get("goal"), where + ".goal", langs, errs);
             // structure/sql missions are checked against a graph / query result
             // (need a non-empty `requires`); a trace mission is checked by event.
             String typeRaw = str(m, "type");
@@ -233,7 +238,7 @@ class TopicContractTest {
     }
 
     @SuppressWarnings("unchecked")
-    private void validateBossFight(Map<String, Object> quiz, List<String> errs) {
+    private void validateBossFight(Map<String, Object> quiz, List<String> langs, List<String> errs) {
         Object raw = quiz.get("bossFight");
         if (!(raw instanceof List<?> list) || list.isEmpty()) {
             errs.add("quiz.yaml: bossFight must be a non-empty list of { id, en, ru }");
@@ -250,8 +255,9 @@ class TopicContractTest {
             String id = str(q, "id");
             if (id.isBlank()) errs.add(where + ": missing id");
             else if (!ids.add(id)) errs.add(where + ": duplicate id '" + id + "'");
-            if (str(q, "en").isBlank()) errs.add(where + ": missing en");
-            if (str(q, "ru").isBlank()) errs.add(where + ": missing ru");
+            for (String lang : langs) {
+                if (str(q, lang).isBlank()) errs.add(where + ": missing " + lang);
+            }
         }
     }
 
@@ -283,18 +289,49 @@ class TopicContractTest {
         }
     }
 
-    /** A bilingual field must be present and, if a map, have non-blank en and ru. */
-    private void bilingual(Object v, String where, List<String> errs) {
+    /**
+     * A translatable field must be present and, if a map, have a non-blank value
+     * for every language the topic declares (default: both en and ru). A plain
+     * string is always acceptable — the loader uses it for all languages.
+     */
+    private void localized(Object v, String where, List<String> langs, List<String> errs) {
         if (v == null) {
             errs.add(where + ": missing");
             return;
         }
         if (v instanceof Map<?, ?> m) {
-            if (blank(m.get("en"))) errs.add(where + ".en: missing");
-            if (blank(m.get("ru"))) errs.add(where + ".ru: missing");
+            for (String lang : langs) {
+                if (blank(m.get(lang))) errs.add(where + "." + lang + ": missing");
+            }
         } else if (blank(v)) {
             errs.add(where + ": blank");
         }
+    }
+
+    /**
+     * The topic's declared content languages ({@code languages:} in topic.yaml):
+     * validated to be a non-empty subset of [en, ru]; absent = both.
+     */
+    private List<String> declaredLanguages(Map<String, Object> meta, List<String> errs) {
+        List<String> all = List.of("en", "ru");
+        Object raw = meta == null ? null : meta.get("languages");
+        if (raw == null) {
+            return all;
+        }
+        if (!(raw instanceof List<?> list) || list.isEmpty()) {
+            errs.add("topic.yaml: languages must be a non-empty list drawn from [en, ru]");
+            return all;
+        }
+        List<String> result = new ArrayList<>();
+        for (Object o : list) {
+            String lang = String.valueOf(o).trim().toLowerCase();
+            if (!all.contains(lang)) {
+                errs.add("topic.yaml: languages entry '" + o + "' is not one of [en, ru]");
+            } else if (!result.contains(lang)) {
+                result.add(lang);
+            }
+        }
+        return result.isEmpty() ? all : result;
     }
 
     // --- io / parsing ------------------------------------------------------

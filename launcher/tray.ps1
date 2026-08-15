@@ -14,7 +14,10 @@ $ErrorActionPreference = 'Stop'
 
 $root       = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $port       = 18080
-$url        = "http://localhost:$port"
+# 127.0.0.1, never "localhost": the backend binds the IPv4 loopback only
+# (server.address in application.yml), while localhost resolves to ::1 first and
+# a probe there stalls past its own timeout instead of failing over to IPv4.
+$url        = "http://127.0.0.1:$port"
 $iconPath   = Join-Path $PSScriptRoot 'icon.ico'
 $logPath    = Join-Path $PSScriptRoot 'app.log'
 $title      = 'Java Interview Dungeon'

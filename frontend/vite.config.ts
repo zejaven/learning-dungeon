@@ -16,7 +16,7 @@ export default defineConfig({
   server: {
     // Listen on 0.0.0.0 so other devices on the LAN (e.g. a VR headset browser)
     // can reach the dev server at http://<pc-ip>:15173. The /api proxy below still
-    // targets localhost:18080, so the backend stays bound to the PC only.
+    // targets 127.0.0.1:18080, so the backend stays bound to the PC only.
     host: true,
     // Non-default ports so other local projects on 8080/5173 don't collide.
     // strictPort: fail loudly instead of drifting to the next free port, which
@@ -29,7 +29,9 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: 'http://localhost:18080',
+        // 127.0.0.1, not localhost: the backend listens on the IPv4 loopback
+        // only, and Node resolves localhost to ::1 first.
+        target: 'http://127.0.0.1:18080',
         changeOrigin: true,
       },
     },

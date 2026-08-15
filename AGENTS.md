@@ -122,8 +122,10 @@ launcher\build-app.ps1
 This is the mode the in-app settings gear self-updates: the tray supervisor
 (`launcher/tray.ps1`) launches the jar with `-Dapp.launcher=tray`, and on a
 flagged exit hands off to `launcher/update.ps1` to rebuild and relaunch (see
-Backend Notes — the `system` package). Editing `tray.ps1`/`update.ps1`/backend
-startup args only takes effect after a fresh `build-app.ps1` + relaunch.
+Backend Notes — the `system` package). `launch.vbs` runs `launcher/tray.ps1`
+straight from disk, so edits to `tray.ps1`/`update.ps1` apply on the next launch
+with no rebuild; changes to backend or frontend sources need a fresh
+`build-app.ps1` because they are baked into the jar.
 
 Validation commands:
 
@@ -182,6 +184,11 @@ If a command cannot be run, say exactly why and what remains unverified.
 ## Backend Notes
 
 - Main package: `com.interviewlearning`.
+- `server.address: 127.0.0.1` in `application.yml` keeps the run endpoint off the
+  LAN, and it binds the IPv4 loopback ONLY. Anything that talks to the backend
+  from outside a browser (launcher probes, the Vite `/api` proxy, scripts) must
+  address it as `127.0.0.1`: on Windows `localhost` resolves to `::1` first, and
+  connecting there stalls for ~2s rather than failing over.
 - Controllers live mostly under `backend/src/main/java/com/interviewlearning/api`.
 - Topic loading is in `topics/TopicRepository`. It rereads `topics/` from disk on
   requests so new folders appear without a backend restart. It reads `domainId`

@@ -30,7 +30,8 @@ public class SqlService {
     private static final int QUERY_TIMEOUT_SECONDS = 5;
     /** H2 features that escape the sandbox into the filesystem or arbitrary Java. */
     private static final Pattern FORBIDDEN = Pattern.compile(
-            "\\b(create\\s+alias|runscript|file_read|file_write|linked_schema)\\b",
+            "\\b(create\\s+(alias|linked\\s+table)|runscript|csvread|csvwrite"
+                    + "|file_read|file_write|link_schema)\\b",
             Pattern.CASE_INSENSITIVE);
 
     static {

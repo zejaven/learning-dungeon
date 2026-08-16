@@ -15,21 +15,25 @@ topics/<id>/
   quiz.yaml           missions (event-checked) + bossFight questions
 ```
 
-## Bilingual rule
+## Content languages
 
-By default everything shown in the UI must exist in **both English and Russian**.
-Keep code, identifiers and technical terms (Java, HashMap, hashCode, resize, …)
-untranslated. Translatable YAML fields use a `{ en, ru }` map; explanation is two
-files. Java source code (including comments) stays in English — only the trace
-*descriptions* are bilingual.
+A topic carries every user-visible string in each language it declares. The
+languages are listed in `languages:` in topic.yaml; when the key is absent the
+topic carries `[en, ru]`, which is what every legacy topic does.
 
-A topic may instead declare `languages:` in topic.yaml (a non-empty subset of
-`[en, ru]`; absent = both). A single-language topic writes every translatable
-YAML field as a plain string in that language (not an `{ en, ru }` map), has only
-`explanation.<lang>.md`, and fills only that language's key in quiz.yaml
-bossFight entries; the app falls back to the available language in the UI.
-A generation prompt may carry a trailing LANGUAGES directive that selects this —
-it overrides the bilingual default above.
+- Translatable YAML fields use a `{ <lang>: … }` map with one key per declared
+  language — or a plain string, which means the same text serves every language
+  (this is how a single-language topic is written).
+- There is one `explanation.<lang>.md` per declared language.
+- quiz.yaml bossFight entries keep their stable `id` and carry one key per
+  declared language.
+- Code, identifiers and technical terms (Java, HashMap, hashCode, resize, …)
+  stay untranslated, and Java source including comments stays English — only the
+  trace *descriptions* are per-language.
+
+**The generation prompt always ends with a LANGUAGES directive naming the exact
+languages to write. It is authoritative** and overrides any bilingual wording in
+the examples below, which show a topic declaring `[en, ru]`.
 
 ## topic.yaml
 

@@ -46,9 +46,15 @@ base; ids prefixed `qa-`).
   domain's title. A deep link to a topic of another domain (`#/q/ndm-...`)
   auto-switches the domain.
 - Only the `java` domain has the static `CATALOG`, manual questions, and the
-  "Add topic"/"Add question" buttons; other domains build their category tree
-  purely from their topics' `categoryId`/`categoryName`, and their content is
-  imported rather than AI-generated (`prompts/add-topic.md` stays Java-only).
+  "Add question" button; other domains build their category tree purely from
+  their topics' `categoryId`/`categoryName`.
+- "Add topic" works in every domain: the request carries `domainId`, and
+  `TopicPromptBuilder.appendDomain` adds a block that overrides the Java-shaped
+  `prompts/add-topic.md` — it sets `domainId`, requires the `<domain>-` id
+  prefix, forces `mode: theory`, suppresses the Java category/mode heuristics,
+  and lists the categories that domain already uses. Cross-link context is
+  filtered to the same domain, and the generation task is keyed
+  `add-topic:<domainId>` so two domains cannot attach to each other's run.
 - Progress tables still key by `topic_id` only — topic ids are a single global
   namespace, so new domains use an id prefix (e.g. `ndm-`) by convention.
 - The global review pool is filtered to the active domain on the frontend; the
@@ -172,10 +178,15 @@ If a command cannot be run, say exactly why and what remains unverified.
 - Prefer existing patterns and module boundaries. Do not redesign the shell,
   runner, topic system, or build setup unless the task explicitly requires it.
 - Keep Java source, Java comments, identifiers, and technical tokens in English.
-- User-facing topic content is bilingual (English and Russian) by default, but a
-  topic may declare `languages:` in topic.yaml (a non-empty subset of
-  `[en, ru]`) and carry content only in those languages — see Topic Authoring.
-  UI chrome strings (`i18n.ts`) stay bilingual always.
+- The set of content languages lives in one registry per side —
+  `backend/.../lang/ContentLanguages.java` and `frontend/src/languages.ts` —
+  and adding a language is a one-line change there. Nothing else may hardcode a
+  language pair: read text with `Localized.label()` / `tl()` for short labels and
+  `Localized.get()` / `tlStrict()` for body content, which reports a missing
+  translation instead of silently substituting another language.
+- A topic carries content in the languages it declares in `languages:`; an
+  absent key means `[en, ru]` (every legacy topic) — see Topic Authoring. UI
+  chrome strings (`i18n.ts`) are translated for the languages flagged `ui: true`.
 - Files contain UTF-8 Cyrillic content. Preserve UTF-8 and avoid bulk rewrites
   caused only by console encoding/mojibake.
 - Use stable, deterministic data for examples, tests, SQL seeds, and trace states.
@@ -388,15 +399,25 @@ shape per exercise type — trust it over hand-written JSON.
 For all topics:
 
 - Every visible string must exist in every language the topic declares.
-  `languages:` in topic.yaml is a non-empty subset of `[en, ru]`; absent means
-  both (all legacy topics). A single-language topic writes translatable YAML
-  fields as plain strings, has only `explanation.<lang>.md`, fills only that
-  language's key in bossFight entries and in `learning-atoms.json` localized
-  fields; loaders and the UI fall back to the available language. The
-  settings-gear "Generation languages" checkboxes (persisted like the UI
-  language; at least one always on) select what the AI writes for topic,
-  lesson, theory-version, and bulk generation — for existing topics the choice
-  is narrowed to the topic's declared languages (`GenLanguages.effective`).
+  `languages:` in topic.yaml is a non-empty subset of the registry; absent means
+  `[en, ru]` (all legacy topics). A single-language topic writes translatable
+  YAML fields as plain strings, has only `explanation.<lang>.md`, and fills only
+  that language's key in bossFight entries and `learning-atoms.json`. Loaders no
+  longer mirror one language into another: short labels fall back at read time,
+  while theory, lessons and boss questions show a "no text in this language"
+  state instead. The language picker sits next to the style selector in every
+  generation row (topic, new theory version, lesson, Add topic); the choice is
+  global and persisted, and at least one language always stays selected. For an
+  existing topic it is narrowed to what the topic has
+  (`ContentLanguages.effective`), except when regenerating a version, which may
+  add a language the topic lacks.
+- A theory version stores its text per language (`theory_version_text`); the
+  version bar shows a chip per language it has and a `+XX` button that
+  translates it into a missing one. For version 1 that writes
+  `explanation.<lang>.md` and adds the code to topic.yaml through
+  `TopicYamlEditor`, which edits that single line and leaves the rest of the
+  file byte-identical (never a snakeyaml re-dump — it would destroy comments and
+  block scalars).
 - `bossFight` questions need stable unique ids. Do not reuse an old id for a new
   question.
 - YAML values containing `: `, `#`, quotes, or leading punctuation should be

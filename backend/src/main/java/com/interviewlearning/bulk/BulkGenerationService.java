@@ -366,7 +366,7 @@ public class BulkGenerationService {
                         ? item.spec.id() : item.spec.catalogId().trim();
                 String prompt = topicPrompts.build(new TopicGenSpec(item.spec.question(), catalogId,
                         item.spec.categoryId(), item.spec.difficulty(), item.spec.style(),
-                        item.spec.styleName(), run.provider, run.languages));
+                        item.spec.styleName(), run.provider, run.languages, run.domainId));
                 return generation.startOrGet("catalog:" + catalogId, run.provider, prompt,
                         AiTask.GENERATE_TOPIC);
             }

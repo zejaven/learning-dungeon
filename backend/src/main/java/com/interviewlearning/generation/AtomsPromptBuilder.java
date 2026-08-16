@@ -3,6 +3,7 @@ package com.interviewlearning.generation;
 import com.interviewlearning.ai.AiCliService;
 import com.interviewlearning.ai.AiTask;
 import com.interviewlearning.config.RepoPaths;
+import com.interviewlearning.lang.ContentLanguages;
 import com.interviewlearning.theory.TheoryVersionRepository;
 import com.interviewlearning.topics.TopicDtos.BossQuestion;
 import com.interviewlearning.topics.TopicDtos.Localized;
@@ -63,7 +64,7 @@ public class AtomsPromptBuilder {
             return versions.list(topic.id()).stream()
                     .filter(v -> v.versionNo() == versionNo)
                     .findFirst()
-                    .map(v -> new Localized(v.en(), v.ru()))
+                    .map(TheoryVersionRepository.TheoryVersion::texts)
                     .orElse(topic.explanation());
         }
         return topic.explanation();
@@ -73,7 +74,7 @@ public class AtomsPromptBuilder {
                         boolean augment, String comment, String existingAtoms,
                         List<String> requestedLanguages) {
         // A lesson can only exist in languages the topic itself has content in.
-        List<String> languages = GenLanguages.effective(topic.languages(), requestedLanguages);
+        List<String> languages = ContentLanguages.effective(topic.languages(), requestedLanguages);
         Path promptFile = repoPaths.promptsDir().resolve("generate-learning-atoms.md");
         String contract;
         try {
@@ -92,9 +93,11 @@ public class AtomsPromptBuilder {
         StringBuilder sb = new StringBuilder(contract);
         appendLanguages(sb, languages);
         sb.append("\n\n---\n\nTOPIC:\n")
-                .append("- id: ").append(topic.id()).append("\n")
-                .append("- title (en): ").append(topic.title().en()).append("\n")
-                .append("- title (ru): ").append(topic.title().ru()).append("\n");
+                .append("- id: ").append(topic.id()).append("\n");
+        for (String lang : languages) {
+            sb.append("- title (").append(lang).append("): ")
+                    .append(topic.title().label(lang)).append("\n");
+        }
 
         sb.append("\nVALUES TO SET IN THE JSON:\n")
                 .append("- topicId: ").append(topic.id()).append("\n")
@@ -106,7 +109,7 @@ public class AtomsPromptBuilder {
         if (boss != null && !boss.isEmpty()) {
             sb.append("\nBOSS-FIGHT QUESTIONS (context only — prepare for them, do not restate or include):\n");
             for (BossQuestion q : boss) {
-                sb.append("- ").append(q.text().en()).append("\n");
+                sb.append("- ").append(q.text().label(languages.get(0))).append("\n");
             }
         }
 
@@ -128,9 +131,12 @@ public class AtomsPromptBuilder {
         }
 
         for (String lang : languages) {
-            sb.append("\n---\n\nSOURCE EXPLANATION (").append(GenLanguages.displayName(lang))
-                    .append("):\n\n").append("ru".equals(lang) ? explanation.ru() : explanation.en())
-                    .append("\n");
+            String source = explanation.get(lang);
+            if (source == null) {
+                continue; // no text to derive this language's exercises from
+            }
+            sb.append("\n---\n\nSOURCE EXPLANATION (").append(ContentLanguages.displayName(lang))
+                    .append("):\n\n").append(source).append("\n");
         }
         sb.append("\n---\n\nOUTPUT FILE (write the JSON exactly here):\n")
                 .append(output.toAbsolutePath());
@@ -138,20 +144,20 @@ public class AtomsPromptBuilder {
     }
 
     /**
-     * When generating in ONE language, override the contract's bilingual
-     * requirements: every localized field carries only that language's key.
+     * States exactly which languages the lesson must carry. Always emitted: the
+     * contract's "both languages" wording says nothing once more than two
+     * languages are possible.
      */
     private void appendLanguages(StringBuilder sb, List<String> languages) {
-        if (languages.size() != 1) {
-            return; // both languages: the bilingual contract stands as written
-        }
-        String lang = languages.get(0);
-        String name = GenLanguages.displayName(lang);
-        sb.append("\n\n---\n\nLANGUAGES: ").append(name).append(" ONLY — this overrides every "
-                        + "bilingual/two-language requirement in the contract above.\n")
-                .append("- Every localized field in the JSON ({en, ru} objects and {en: [...], "
-                        + "ru: [...]} lists) must contain ONLY the `").append(lang)
-                .append("` key; omit the other language key entirely.\n")
+        String keys = String.join(", ", languages);
+        sb.append("\n\n---\n\nLANGUAGES: ")
+                .append(languages.stream().map(ContentLanguages::displayName)
+                        .collect(java.util.stream.Collectors.joining(", ")))
+                .append(" — exactly these, no others. This overrides every bilingual or "
+                        + "two-language statement in the contract above.\n")
+                .append("- Every localized field in the JSON (text objects and string-list "
+                        + "objects alike) must contain exactly these keys: ").append(keys)
+                .append(" — omit every other language key.\n")
                 .append("- Code, identifiers, and technical tokens stay in English as usual.\n");
     }
 }

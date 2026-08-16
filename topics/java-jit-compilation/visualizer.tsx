@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import type { VisualizerProps } from '@app/engine/traceTypes';
 import { ArrayGrid, type ArrayCell } from '@app/primitives/ArrayGrid';
 import { LinkedNodes, type LinkedNode } from '@app/primitives/LinkedNodes';
-import { tl, useLang } from '@app/i18n';
+import { tl, useLang, type Lang } from '@app/i18n';
 
 type Localized = { en: string; ru: string };
 
@@ -129,7 +129,7 @@ export default function JitVisualizer({ event }: VisualizerProps) {
   );
 }
 
-function methodSubtitle(method: JitMethod, lang: 'en' | 'ru') {
+function methodSubtitle(method: JitMethod, lang: Lang) {
   const parts = [
     `${method.calls} ${tl(LABELS.calls, lang)}`,
     tl(localized(LABELS.mode, method.mode), lang),

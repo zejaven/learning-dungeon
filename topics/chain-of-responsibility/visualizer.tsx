@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { VisualizerProps } from '@app/engine/traceTypes';
 import { LinkedNodes, type LinkedNode } from '@app/primitives/LinkedNodes';
-import { tl, useLang } from '@app/i18n';
+import { tl, useLang, type Lang } from '@app/i18n';
 
 const LABELS = {
   request: { en: 'request', ru: 'запрос' },
@@ -83,7 +83,7 @@ function RequestBanner({
 }: {
   req: RequestState | undefined;
   highlighted: boolean;
-  lang: 'en' | 'ru';
+  lang: Lang;
 }) {
   if (!req) {
     return <div style={{ ...bannerStyle, opacity: 0.5 }}>{tl(LABELS.noRequest, lang)}</div>;

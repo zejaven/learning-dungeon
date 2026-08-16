@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import type { VisualizerProps } from '@app/engine/traceTypes';
 import { ArrayGrid, type ArrayCell } from '@app/primitives/ArrayGrid';
 import { LinkedNodes, type LinkedNode } from '@app/primitives/LinkedNodes';
-import { tl, useLang, type Localized } from '@app/i18n';
+import { tl, useLang, type Localized, type Lang } from '@app/i18n';
 
 const LABELS = {
   operation: { en: 'operation', ru: 'операция' },
@@ -45,21 +45,16 @@ interface ValueItem {
 
 interface ResultState {
   status: string;
-  detailEn: string;
-  detailRu: string;
+  detail: Localized;
 }
 
 interface SetImplementation {
   id: string;
   title: string;
-  structureEn: string;
-  structureRu: string;
-  orderEn: string;
-  orderRu: string;
-  uniquenessEn: string;
-  uniquenessRu: string;
-  costEn: string;
-  costRu: string;
+  structure: Localized;
+  order: Localized;
+  uniqueness: Localized;
+  cost: Localized;
   size: number;
   values: ValueItem[];
   lastResult: ResultState;
@@ -69,8 +64,7 @@ interface SetComparisonState {
   name: string;
   operation: string;
   probe?: string | null;
-  noteEn: string;
-  noteRu: string;
+  note: Localized;
   implementations: SetImplementation[];
 }
 
@@ -94,7 +88,7 @@ export default function SetComparisonVisualizer({ event }: VisualizerProps) {
       <div style={summaryStyle}>
         <Stat label={tl(LABELS.operation, lang)} value={tl(OP_LABELS[state.operation] ?? { en: state.operation, ru: state.operation }, lang)} />
         {state.probe && <Stat label={tl(LABELS.probe, lang)} value={state.probe} />}
-        <div style={noteStyle}>{lang === 'ru' ? state.noteRu : state.noteEn}</div>
+        <div style={noteStyle}>{tl(state.note, lang)}</div>
       </div>
       <ArrayGrid cells={cells} />
     </div>
@@ -108,7 +102,7 @@ function ImplementationView({
 }: {
   impl: SetImplementation;
   highlight: Set<string>;
-  lang: 'en' | 'ru';
+  lang: Lang;
 }) {
   const nodes: LinkedNode[] = impl.values.map((item) => ({
     id: `${impl.id}-${item.index}-${item.value}`,
@@ -124,17 +118,17 @@ function ImplementationView({
         <span style={statusStyle}>{tl(STATUS_LABELS[impl.lastResult.status] ?? { en: impl.lastResult.status, ru: impl.lastResult.status }, lang)}</span>
       </div>
       <div style={factsStyle}>
-        <Fact label={tl(LABELS.structure, lang)} value={lang === 'ru' ? impl.structureRu : impl.structureEn} />
-        <Fact label={tl(LABELS.order, lang)} value={lang === 'ru' ? impl.orderRu : impl.orderEn} />
-        <Fact label={tl(LABELS.uniqueness, lang)} value={lang === 'ru' ? impl.uniquenessRu : impl.uniquenessEn} />
-        <Fact label={tl(LABELS.cost, lang)} value={lang === 'ru' ? impl.costRu : impl.costEn} />
+        <Fact label={tl(LABELS.structure, lang)} value={tl(impl.structure, lang)} />
+        <Fact label={tl(LABELS.order, lang)} value={tl(impl.order, lang)} />
+        <Fact label={tl(LABELS.uniqueness, lang)} value={tl(impl.uniqueness, lang)} />
+        <Fact label={tl(LABELS.cost, lang)} value={tl(impl.cost, lang)} />
         <Fact label={tl(LABELS.size, lang)} value={String(impl.size)} />
       </div>
       <LinkedNodes nodes={nodes} />
       {impl.values.length === 0 && <span style={emptyStyle}>{tl(LABELS.empty, lang)}</span>}
       <div style={resultStyle}>
         <span style={resultLabelStyle}>{tl(LABELS.result, lang)}:</span>{' '}
-        {lang === 'ru' ? impl.lastResult.detailRu : impl.lastResult.detailEn}
+        {tl(impl.lastResult.detail, lang)}
       </div>
     </div>
   );

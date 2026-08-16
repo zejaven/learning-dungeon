@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import type { VisualizerProps } from '@app/engine/traceTypes';
 import { ArrayGrid, type ArrayCell } from '@app/primitives/ArrayGrid';
 import { LinkedNodes, type LinkedNode } from '@app/primitives/LinkedNodes';
-import { tl, useLang, type Localized } from '@app/i18n';
+import { tl, useLang, type Localized, type Lang } from '@app/i18n';
 
 const LABELS = {
   runHint: {
@@ -149,7 +149,7 @@ export default function JavaThreadPoolVisualizer({ event }: VisualizerProps) {
   );
 }
 
-function poolCells(pool: PoolSnapshot, highlight: Set<string>, lang: 'en' | 'ru'): ArrayCell[] {
+function poolCells(pool: PoolSnapshot, highlight: Set<string>, lang: Lang): ArrayCell[] {
   return [
     {
       key: `${pool.name}-workers`,
@@ -175,7 +175,7 @@ function poolCells(pool: PoolSnapshot, highlight: Set<string>, lang: 'en' | 'ru'
   ];
 }
 
-function workerNodes(pool: PoolSnapshot, highlight: Set<string>, lang: 'en' | 'ru'): LinkedNode[] {
+function workerNodes(pool: PoolSnapshot, highlight: Set<string>, lang: Lang): LinkedNode[] {
   return pool.workers.map((worker) => {
     const status = STATE_LABELS[worker.state] ?? { en: worker.state, ru: worker.state };
     const current = worker.currentTask
@@ -190,7 +190,7 @@ function workerNodes(pool: PoolSnapshot, highlight: Set<string>, lang: 'en' | 'r
   });
 }
 
-function taskNodes(tasks: TaskSnapshot[], highlight: Set<string>, lang: 'en' | 'ru'): LinkedNode[] {
+function taskNodes(tasks: TaskSnapshot[], highlight: Set<string>, lang: Lang): LinkedNode[] {
   return tasks.map((task) => {
     const status = STATE_LABELS[task.state] ?? { en: task.state, ru: task.state };
     const reason = task.rejectionReason

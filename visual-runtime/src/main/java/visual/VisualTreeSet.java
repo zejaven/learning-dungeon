@@ -178,9 +178,7 @@ public class VisualTreeSet<E> {
     private Object state(String opKind, String probe, String result, Object range) {
         Map<String, Object> s = new LinkedHashMap<>();
         s.put("name", name);
-        s.put("order", orderDescriptionEn);
-        s.put("orderEn", orderDescriptionEn);
-        s.put("orderRu", orderDescriptionRu);
+        s.put("order", Trace.text(orderDescriptionEn, orderDescriptionRu));
         s.put("size", set.size());
 
         List<Object> values = new ArrayList<>();

@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import type { VisualizerProps } from '@app/engine/traceTypes';
 import { BoxGroup, type Box } from '@app/primitives/BoxGroup';
-import { tl, useLang } from '@app/i18n';
+import { tl, useLang, type Lang } from '@app/i18n';
 
 const LABELS = {
   types: { en: 'Types', ru: 'Типы' },
@@ -120,20 +120,20 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function typeSubtitle(type: TypeNode, lang: 'en' | 'ru'): string {
+function typeSubtitle(type: TypeNode, lang: Lang): string {
   if (type.needsOuter) return tl(LABELS.needsOuter, lang);
   if (type.id === 'type:static') return tl(LABELS.noHiddenOuter, lang);
   return tl(LABELS.enclosingType, lang);
 }
 
-function nestedSubtitle(obj: SceneObject, outerById: Map<string, SceneObject>, lang: 'en' | 'ru'): string {
+function nestedSubtitle(obj: SceneObject, outerById: Map<string, SceneObject>, lang: Lang): string {
   const relation = obj.outerRef
     ? `${tl(LABELS.outerRef, lang)} -> ${outerById.get(obj.outerRef)?.label ?? obj.outerRef}`
     : tl(LABELS.noHiddenOuter, lang);
   return `${obj.type} · ${relation}${fieldSuffix(obj, lang)}`;
 }
 
-function fieldSuffix(obj: SceneObject, lang: 'en' | 'ru'): string {
+function fieldSuffix(obj: SceneObject, lang: Lang): string {
   if (obj.fields.length === 0) return '';
   return ` · ${tl(LABELS.fields, lang)}: ${obj.fields.map((f) => `${f.name}=${f.value}`).join(', ')}`;
 }

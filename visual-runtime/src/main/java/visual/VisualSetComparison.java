@@ -268,8 +268,7 @@ public class VisualSetComparison<E> {
         s.put("name", name);
         s.put("operation", operation);
         s.put("probe", probe);
-        s.put("noteEn", noteEn);
-        s.put("noteRu", noteRu);
+        s.put("note", Trace.text(noteEn, noteRu));
 
         List<Object> implementations = new ArrayList<>();
         implementations.add(implState("hashset", "HashSet", "hash table",
@@ -299,14 +298,10 @@ public class VisualSetComparison<E> {
         Map<String, Object> impl = new LinkedHashMap<>();
         impl.put("id", id);
         impl.put("title", title);
-        impl.put("structureEn", structureEn);
-        impl.put("structureRu", structureRu);
-        impl.put("orderEn", orderEn);
-        impl.put("orderRu", orderRu);
-        impl.put("uniquenessEn", uniquenessEn);
-        impl.put("uniquenessRu", uniquenessRu);
-        impl.put("costEn", costEn);
-        impl.put("costRu", costRu);
+        impl.put("structure", Trace.text(structureEn, structureRu));
+        impl.put("order", Trace.text(orderEn, orderRu));
+        impl.put("uniqueness", Trace.text(uniquenessEn, uniquenessRu));
+        impl.put("cost", Trace.text(costEn, costRu));
         impl.put("size", values.size());
 
         List<Object> serialized = new ArrayList<>();
@@ -321,8 +316,7 @@ public class VisualSetComparison<E> {
 
         Map<String, Object> lastResult = new LinkedHashMap<>();
         lastResult.put("status", outcome.status);
-        lastResult.put("detailEn", outcome.detailEn);
-        lastResult.put("detailRu", outcome.detailRu);
+        lastResult.put("detail", Trace.text(outcome.detailEn, outcome.detailRu));
         impl.put("lastResult", lastResult);
         return impl;
     }

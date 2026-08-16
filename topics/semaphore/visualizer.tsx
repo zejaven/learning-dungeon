@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import type { VisualizerProps } from '@app/engine/traceTypes';
 import { ArrayGrid, type ArrayCell } from '@app/primitives/ArrayGrid';
 import { LinkedNodes, type LinkedNode } from '@app/primitives/LinkedNodes';
-import { tl, useLang, type Localized } from '@app/i18n';
+import { tl, useLang, type Localized, type Lang } from '@app/i18n';
 
 const LABELS = {
   runHint: {
@@ -142,7 +142,7 @@ export default function SemaphoreVisualizer({ event }: VisualizerProps) {
   );
 }
 
-function permitNodes(count: number, highlight: Set<string>, lang: 'en' | 'ru'): LinkedNode[] {
+function permitNodes(count: number, highlight: Set<string>, lang: Lang): LinkedNode[] {
   return Array.from({ length: count }, (_, index) => ({
     id: `permit-${index}`,
     title: `P${index + 1}`,
@@ -151,7 +151,7 @@ function permitNodes(count: number, highlight: Set<string>, lang: 'en' | 'ru'): 
   }));
 }
 
-function holderNodes(holders: PermitHolder[], highlight: Set<string>, lang: 'en' | 'ru'): LinkedNode[] {
+function holderNodes(holders: PermitHolder[], highlight: Set<string>, lang: Lang): LinkedNode[] {
   return holders.map((holder) => ({
     id: holder.thread,
     title: holder.thread,
@@ -160,7 +160,7 @@ function holderNodes(holders: PermitHolder[], highlight: Set<string>, lang: 'en'
   }));
 }
 
-function waiterNodes(waiters: PermitHolder[], highlight: Set<string>, lang: 'en' | 'ru'): LinkedNode[] {
+function waiterNodes(waiters: PermitHolder[], highlight: Set<string>, lang: Lang): LinkedNode[] {
   return waiters.map((waiter) => ({
     id: waiter.thread,
     title: waiter.thread,

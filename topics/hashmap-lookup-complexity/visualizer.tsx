@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import type { VisualizerProps } from '@app/engine/traceTypes';
 import { ArrayGrid, type ArrayCell } from '@app/primitives/ArrayGrid';
 import { LinkedNodes, type LinkedNode } from '@app/primitives/LinkedNodes';
-import { tl, useLang } from '@app/i18n';
+import { tl, useLang, type Lang } from '@app/i18n';
 
 const LABELS = {
   map: { en: 'map', ru: 'мапа' },
@@ -72,7 +72,7 @@ export default function HashMapLookupComplexityVisualizer({ event }: VisualizerP
   );
 }
 
-function nodesFor(bucket: Bucket, highlight: Set<string>, lang: 'en' | 'ru'): LinkedNode[] {
+function nodesFor(bucket: Bucket, highlight: Set<string>, lang: Lang): LinkedNode[] {
   return bucket.nodes.map((node) => ({
     id: `${bucket.index}-${node.key}`,
     title: `${node.key} -> ${node.value}`,

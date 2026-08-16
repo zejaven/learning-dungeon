@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { VisualizerProps } from '@app/engine/traceTypes';
 import { ArrayGrid, type ArrayCell } from '@app/primitives/ArrayGrid';
-import { tl, useLang } from '@app/i18n';
+import { tl, useLang, type Lang } from '@app/i18n';
 
 const LABELS = {
   stackBudget: { en: 'stack budget', ru: 'бюджет стека' },
@@ -131,7 +131,7 @@ export default function StackOverflowFewerCallsVisualizer({ event }: VisualizerP
   );
 }
 
-function FrameBlock({ frame, lang, highlighted }: { frame: Frame; lang: 'en' | 'ru'; highlighted: boolean }) {
+function FrameBlock({ frame, lang, highlighted }: { frame: Frame; lang: Lang; highlighted: boolean }) {
   return (
     <div style={{ ...frameContentStyle, ...(highlighted ? frameHotStyle : {}) }}>
       <div style={frameHeaderStyle}>

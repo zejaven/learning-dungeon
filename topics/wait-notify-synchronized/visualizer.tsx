@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import type { VisualizerProps } from '@app/engine/traceTypes';
 import { ArrayGrid, type ArrayCell } from '@app/primitives/ArrayGrid';
 import { LinkedNodes, type LinkedNode } from '@app/primitives/LinkedNodes';
-import { tl, useLang, type Localized } from '@app/i18n';
+import { tl, useLang, type Localized, type Lang } from '@app/i18n';
 
 const LABELS = {
   runHint: {
@@ -163,7 +163,7 @@ function waitSetNodes(waiters: Waiter[], highlight: Set<string>): LinkedNode[] {
   }));
 }
 
-function entrySetNodes(entries: Entry[], highlight: Set<string>, lang: 'en' | 'ru'): LinkedNode[] {
+function entrySetNodes(entries: Entry[], highlight: Set<string>, lang: Lang): LinkedNode[] {
   return entries.map((entry) => {
     const reason = REASON_LABELS[entry.reason] ?? { en: entry.reason, ru: entry.reason };
     return {
@@ -182,7 +182,7 @@ function ThreadChips({
 }: {
   threads: ThreadInfo[];
   highlight: Set<string>;
-  lang: 'en' | 'ru';
+  lang: Lang;
 }) {
   return (
     <div style={chipsStyle}>

@@ -39,17 +39,24 @@ const FRAME_STATUS_LABELS: Record<string, { en: string; ru: string }> = {
 function roleText(frame: Frame, lang: Lang): string {
   switch (frame.roleKind) {
     case 'START':
-      return lang === 'ru' ? `открывает ${frame.physicalTx}` : `starts ${frame.physicalTx}`;
+      return tl({ en: `starts ${frame.physicalTx}`, ru: `открывает ${frame.physicalTx}` }, lang);
     case 'JOIN':
-      return lang === 'ru' ? `присоединяется к ${frame.physicalTx}` : `joins ${frame.physicalTx}`;
+      return tl(
+        { en: `joins ${frame.physicalTx}`, ru: `присоединяется к ${frame.physicalTx}` },
+        lang,
+      );
     case 'SAVEPOINT':
-      return lang === 'ru'
-        ? `savepoint ${frame.savepoint} в ${frame.physicalTx}`
-        : `savepoint ${frame.savepoint} in ${frame.physicalTx}`;
+      return tl(
+        {
+          en: `savepoint ${frame.savepoint} in ${frame.physicalTx}`,
+          ru: `savepoint ${frame.savepoint} в ${frame.physicalTx}`,
+        },
+        lang,
+      );
     case 'NONE':
-      return lang === 'ru' ? 'без транзакции' : 'no transaction';
+      return tl({ en: 'no transaction', ru: 'без транзакции' }, lang);
     case 'ERROR':
-      return lang === 'ru' ? 'ошибка распространения' : 'propagation error';
+      return tl({ en: 'propagation error', ru: 'ошибка распространения' }, lang);
     default:
       return '';
   }

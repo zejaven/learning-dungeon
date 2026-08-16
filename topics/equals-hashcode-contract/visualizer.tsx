@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import type { VisualizerProps } from '@app/engine/traceTypes';
 import { ArrayGrid, type ArrayCell } from '@app/primitives/ArrayGrid';
 import { LinkedNodes, type LinkedNode } from '@app/primitives/LinkedNodes';
-import { tl, useLang, type Localized } from '@app/i18n';
+import { tl, useLang, type Localized, type Lang } from '@app/i18n';
 
 const LABELS = {
   title: { en: 'HashSet-style buckets', ru: 'Бакеты в стиле HashSet' },
@@ -121,7 +121,7 @@ export default function EqualityContractVisualizer({ event }: VisualizerProps) {
   );
 }
 
-function LastOperation({ op, lang }: { op: LastOp; lang: 'en' | 'ru' }) {
+function LastOperation({ op, lang }: { op: LastOp; lang: Lang }) {
   const rows = operationRows(op, lang);
   return (
     <div style={opStyle}>
@@ -138,7 +138,7 @@ function LastOperation({ op, lang }: { op: LastOp; lang: 'en' | 'ru' }) {
   );
 }
 
-function operationRows(op: LastOp, lang: 'en' | 'ru') {
+function operationRows(op: LastOp, lang: Lang) {
   const rows: Array<{ label: string; value: string }> = [];
   const push = (label: Localized, value: unknown) => {
     if (value !== undefined && value !== null && value !== '') {
@@ -165,7 +165,7 @@ function hashPair(op: LastOp) {
   return op.hash;
 }
 
-function resultText(result: string, lang: 'en' | 'ru') {
+function resultText(result: string, lang: Lang) {
   return RESULTS[result] ? tl(RESULTS[result], lang) : result;
 }
 

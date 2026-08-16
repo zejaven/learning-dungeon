@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { VisualizerProps } from '@app/engine/traceTypes';
 import { ArrayGrid, type ArrayCell } from '@app/primitives/ArrayGrid';
-import { tl, useLang } from '@app/i18n';
+import { tl, useLang, type Lang } from '@app/i18n';
 
 const LABELS = {
   runHint: {
@@ -187,15 +187,15 @@ function Stat({ label, value, highlight }: { label: string; value: number | stri
   );
 }
 
-function stageLabel(id: string, lang: 'en' | 'ru') {
+function stageLabel(id: string, lang: Lang) {
   return tl(STAGES[id] ?? { en: id, ru: id }, lang);
 }
 
-function statLabel(id: string, lang: 'en' | 'ru') {
+function statLabel(id: string, lang: Lang) {
   return tl(STAT_LABELS[id] ?? { en: id, ru: id }, lang);
 }
 
-function statusLabel(status: string, lang: 'en' | 'ru') {
+function statusLabel(status: string, lang: Lang) {
   return tl(STATUSES[status] ?? { en: status, ru: status }, lang);
 }
 

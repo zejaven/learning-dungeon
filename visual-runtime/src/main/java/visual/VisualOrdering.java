@@ -199,9 +199,7 @@ public class VisualOrdering<T> {
     ) {
         Map<String, Object> s = new LinkedHashMap<>();
         s.put("name", name);
-        s.put("order", orderEn);
-        s.put("orderEn", orderEn);
-        s.put("orderRu", orderRu);
+        s.put("order", Trace.text(orderEn, orderRu));
         s.put("source", source);
         s.put("operation", operation);
 
@@ -260,8 +258,7 @@ public class VisualOrdering<T> {
             m.put("right", right);
             m.put("result", result);
             m.put("sign", sign);
-            m.put("meaningEn", meaningEn(sign));
-            m.put("meaningRu", meaningRu(sign));
+            m.put("meaning", Trace.text(meaningEn(sign), meaningRu(sign)));
             return m;
         }
     }

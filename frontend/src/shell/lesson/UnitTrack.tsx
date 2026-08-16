@@ -7,7 +7,7 @@ import {
 } from '@app/engine/lessonStore';
 import type { LessonUnit } from '@app/engine/lessonTypes';
 import { useStore } from '@app/engine/store';
-import { ui, useLang } from '@app/i18n';
+import { ui, useLang, type Lang } from '@app/i18n';
 
 interface Props {
   units: LessonUnit[];
@@ -68,7 +68,7 @@ function circleIcon(unit: LessonUnit, done: boolean, mistake: boolean): string {
   return unit.kind === 'discovery' ? '◆' : '●';
 }
 
-function unitLabel(unit: LessonUnit, lang: 'en' | 'ru'): string {
+function unitLabel(unit: LessonUnit, lang: Lang): string {
   const phase =
     unit.kind === 'discovery'
       ? ui('discoveryPhase', lang)

@@ -1,19 +1,66 @@
 import { create } from 'zustand';
+import { DEFAULT_UI_LANG, FALLBACK_LANG, LANG_CODES, isUiLang, type Lang } from './languages';
 
-export type Lang = 'en' | 'ru';
-export const LANGS: Lang[] = ['en', 'ru'];
+export type { Lang };
+/** Interface languages, in registry order. */
+export const LANGS: Lang[] = LANG_CODES;
 
-/** A string available in both supported languages (matches the backend DTO). */
-export interface Localized {
-  en: string;
-  ru: string;
-}
+/**
+ * A string in the languages it exists in. Keys are language codes, so a value
+ * may carry one language, all of them, or any subset — `{ en, ru }` literals
+ * stay valid.
+ */
+export type Localized = Partial<Record<Lang, string>>;
 
-/** Picks the active language out of a Localized value (or passes a plain string). */
+/**
+ * Reads a LABEL: the active language, else any language the value has. Use for
+ * titles, categories, summaries and anything that must render something rather
+ * than nothing. For body text use {@link tlStrict}, which reports the gap.
+ */
 export function tl(value: Localized | string | null | undefined, lang: Lang): string {
   if (value == null) return '';
   if (typeof value === 'string') return value;
-  return value[lang] || value.en || value.ru || '';
+  if (value[lang]) return value[lang] as string;
+  for (const code of LANG_CODES) {
+    if (value[code]) return value[code] as string;
+  }
+  return '';
+}
+
+/**
+ * Reads BODY content: only the active language, or null when it is missing, so
+ * the caller can show the "not available in this language" state instead of
+ * silently rendering another language.
+ */
+export function tlStrict(value: Localized | string | null | undefined, lang: Lang): string | null {
+  if (value == null) return null;
+  if (typeof value === 'string') return value;
+  const text = value[lang];
+  return text && text.trim() ? text : null;
+}
+
+/** Reads a per-language list leniently (accepted answers, word-bank tokens). */
+export function tlList(
+  value: Partial<Record<Lang, string[]>> | null | undefined,
+  lang: Lang,
+): string[] {
+  if (value == null) return [];
+  if (value[lang]?.length) return value[lang] as string[];
+  for (const code of LANG_CODES) {
+    if (value[code]?.length) return value[code] as string[];
+  }
+  return [];
+}
+
+/** The languages a value actually carries, in registry order. */
+export function langsOf(
+  value: Localized | Partial<Record<Lang, string[]>> | null | undefined,
+): Lang[] {
+  if (value == null) return [];
+  return LANG_CODES.filter((code) => {
+    const v = (value as Record<string, unknown>)[code];
+    return Array.isArray(v) ? v.length > 0 : typeof v === 'string' && v.trim().length > 0;
+  });
 }
 
 interface LangState {
@@ -21,10 +68,10 @@ interface LangState {
   setLang: (lang: Lang) => void;
 }
 
-const stored = (typeof localStorage !== 'undefined' && localStorage.getItem('lang')) as Lang | null;
+const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('lang') : null;
 
 export const useLang = create<LangState>((set) => ({
-  lang: stored === 'en' || stored === 'ru' ? stored : 'ru',
+  lang: isUiLang(stored) ? stored : DEFAULT_UI_LANG,
   setLang: (lang) => {
     try {
       localStorage.setItem('lang', lang);
@@ -37,6 +84,11 @@ export const useLang = create<LangState>((set) => ({
 
 /** Fixed UI chrome strings. The app name is intentionally not translated. */
 const UI: Record<string, Localized> = {
+  stepPattern: { en: 'Step {0} / {1}', ru: 'Шаг {0} / {1}' },
+  questionPattern: { en: 'Question {0} / {1}', ru: 'Вопрос {0} / {1}' },
+  status_running: { en: 'running', ru: 'выполняется' },
+  status_done: { en: 'done', ru: 'готово' },
+  status_error: { en: 'error', ru: 'ошибка' },
   askAI: { en: '💬 Ask AI', ru: '💬 Спросить ИИ' },
   askAbout: { en: 'Ask AI about ', ru: 'Спросить ИИ про ' },
   askAboutSelection: { en: 'Ask AI about the selected text', ru: 'Спросить ИИ про выделенный текст' },
@@ -58,11 +110,16 @@ const UI: Record<string, Localized> = {
     en: 'Run the code to see what happens, step by step.',
     ru: 'Запустите код, чтобы увидеть, что происходит, шаг за шагом.',
   },
-  settingsGenLangs: { en: 'Generation languages:', ru: 'Языки генерации:' },
-  settingsGenLangsDesc: {
-    en: 'Languages the AI writes when generating topics, lessons, and theory versions. At least one stays selected.',
-    ru: 'Языки, на которых ИИ пишет темы, уроки и версии теории при генерации. Хотя бы один язык всегда выбран.',
+  genLangsLabel: { en: 'Languages', ru: 'Языки' },
+  allLanguages: { en: 'All', ru: 'Все' },
+  addLanguage: { en: 'Generate this language', ru: 'Сгенерировать этот язык' },
+  noContentInLang: {
+    en: 'This topic has no text in {0} yet.',
+    ru: 'У этой темы пока нет текста на языке {0}.',
   },
+  showInLang: { en: 'Show in {0}', ru: 'Показать на {0}' },
+  generateInLang: { en: '✨ Generate in {0}', ru: '✨ Сгенерировать на {0}' },
+  generatingInLang: { en: 'Generating…', ru: 'Генерируется…' },
   errorBoundary: {
     en: 'Something went wrong while rendering this panel.',
     ru: 'Что-то пошло не так при отрисовке этой панели.',
@@ -396,24 +453,35 @@ const UI: Record<string, Localized> = {
   },
 };
 
+/**
+ * A chrome string. Falls back to another translated language rather than
+ * rendering "undefined" when a UI language has no entry for the key.
+ */
 export function ui(key: keyof typeof UI | string, lang: Lang): string {
   const entry = UI[key];
-  return entry ? entry[lang] : key;
+  if (!entry) return key;
+  return entry[lang] ?? entry[FALLBACK_LANG] ?? tl(entry, lang) ?? key;
+}
+
+/** Fills {0}, {1}, … in a UI pattern. */
+function fmt(pattern: string, ...args: (string | number)[]): string {
+  return pattern.replace(/\{(\d+)\}/g, (m, i) => String(args[Number(i)] ?? m));
+}
+
+/** A chrome string with {0}, {1}, … placeholders filled in. */
+export function fmtUi(key: string, lang: Lang, ...args: (string | number)[]): string {
+  return fmt(ui(key, lang), ...args);
 }
 
 export function stepLabel(lang: Lang, current: number, total: number): string {
-  return lang === 'ru' ? `Шаг ${current} / ${total}` : `Step ${current} / ${total}`;
+  return fmt(ui('stepPattern', lang), current, total);
 }
 
 export function questionLabel(lang: Lang, current: number, total: number): string {
-  return lang === 'ru' ? `Вопрос ${current} / ${total}` : `Question ${current} / ${total}`;
+  return fmt(ui('questionPattern', lang), current, total);
 }
 
 export function statusLabel(lang: Lang, status: string): string {
-  const map: Record<string, Localized> = {
-    running: { en: 'running', ru: 'выполняется' },
-    done: { en: 'done', ru: 'готово' },
-    error: { en: 'error', ru: 'ошибка' },
-  };
-  return map[status] ? map[status][lang] : status;
+  const key = `status_${status}`;
+  return UI[key] ? ui(key, lang) : status;
 }

@@ -166,8 +166,8 @@ export interface ManualQuestion {
 export interface TheoryVersion {
   versionNo: number;
   style: string;
-  en: string;
-  ru: string;
+  /** Explanation per language; a language the version lacks is absent. */
+  texts: Localized;
   createdAt: string | null;
   aiProvider: string;
   aiModel: string;

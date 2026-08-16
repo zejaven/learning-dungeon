@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { shuffled } from '@app/engine/grading';
 import type { AnswerValue, WordBankExercise } from '@app/engine/lessonTypes';
-import { ui, useLang } from '@app/i18n';
+import { tlList, ui, useLang } from '@app/i18n';
 
 interface Props {
   exercise: WordBankExercise;
@@ -19,9 +19,8 @@ interface Props {
 export function WordBank({ exercise, answer, onChange, showResult, correct }: Props) {
   const lang = useLang((s) => s.lang);
   const pool = useMemo(() => {
-    const tokens = exercise.tokens[lang] ?? exercise.tokens.en ?? exercise.tokens.ru ?? [];
-    const distractors =
-      exercise.distractors?.[lang] ?? exercise.distractors?.en ?? exercise.distractors?.ru ?? [];
+    const tokens = tlList(exercise.tokens, lang);
+    const distractors = tlList(exercise.distractors, lang);
     return shuffled([...tokens, ...distractors].map((word, i) => ({ key: `${i}:${word}`, word })));
   }, [exercise.id, lang]);
 
@@ -79,7 +78,7 @@ export function WordBank({ exercise, answer, onChange, showResult, correct }: Pr
       </div>
       {showResult && !correct && (
         <div className="ex-fill-answer">
-          → <code>{(exercise.tokens[lang] ?? exercise.tokens.en ?? exercise.tokens.ru ?? []).join(' ')}</code>
+          → <code>{tlList(exercise.tokens, lang).join(' ')}</code>
         </div>
       )}
     </div>

@@ -11,6 +11,7 @@ import type {
   TopicSummary,
 } from './traceTypes';
 import type { AiProviderStatus } from './aiStore';
+import type { Localized } from '../i18n';
 import type {
   AnswerValue,
   LearningAtoms,
@@ -319,6 +320,8 @@ export interface GenerateBody {
   styleName?: string;
   /** Content languages to generate ('en'/'ru'); omitted = both. */
   languages?: string[];
+  /** Subject area the new topic belongs to; omitted = java. */
+  domainId?: string;
 }
 
 /** Lists a topic's theory versions (v1 = on-disk, 2+ = restyled regenerations). */
@@ -343,6 +346,24 @@ export async function regenerateVersion(
   });
   if (!res.ok) throw new Error(await res.text().catch(() => `Regenerate failed (${res.status})`));
   return res.json();
+}
+
+/** Translates an existing version into one more language, in place. */
+export async function addVersionLanguage(
+  topicId: string,
+  versionNo: number,
+  lang: string,
+  provider: string,
+): Promise<void> {
+  const res = await fetch(
+    `/api/topics/${encodeURIComponent(topicId)}/versions/${versionNo}/languages`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lang, provider }),
+    },
+  );
+  if (!res.ok) throw new Error(await res.text().catch(() => `Translation failed (${res.status})`));
 }
 
 export interface StyleDto {
@@ -483,7 +504,7 @@ export type BulkItemStatus = 'pending' | 'running' | 'done' | 'error' | 'skipped
 /** One unit of work; theory items carry the same fields startGeneration takes. */
 export interface BulkItemInput {
   id: string;
-  label: { en: string; ru: string };
+  label: Localized;
   question?: string;
   catalogId?: string;
   categoryId?: string;
@@ -494,7 +515,7 @@ export interface BulkItemInput {
 
 export interface BulkItemView {
   id: string;
-  label: { en: string; ru: string };
+  label: Localized;
   status: BulkItemStatus;
   taskKey: string | null;
 }

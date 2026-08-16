@@ -1,6 +1,7 @@
 package com.interviewlearning.topics;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.interviewlearning.lang.ContentLanguages;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
 import org.yaml.snakeyaml.Yaml;
@@ -91,9 +92,16 @@ class TopicContractTest {
         // Only the declared languages need an explanation file (default: both).
         for (String lang : langs) {
             requireNonEmptyFile(dir.resolve("explanation." + lang + ".md"), errs);
+            validateImageLinks(dir.resolve("explanation." + lang + ".md"), errs);
         }
-        validateImageLinks(dir.resolve("explanation.en.md"), errs);
-        validateImageLinks(dir.resolve("explanation.ru.md"), errs);
+        // A file the topic does not declare would render nowhere; usually it means
+        // `languages:` was not updated when a translation was added.
+        for (String lang : ContentLanguages.ALL) {
+            if (!langs.contains(lang) && Files.exists(dir.resolve("explanation." + lang + ".md"))) {
+                errs.add("explanation." + lang + ".md exists but topic.yaml `languages:` "
+                        + "does not declare " + lang);
+            }
+        }
         if (!structural && !theory && !sqlMode && !challenge) {
             // Behavioural topics drive a visualizer from trace events; the other
             // modes render a class diagram / a result table / nothing.
@@ -241,7 +249,8 @@ class TopicContractTest {
     private void validateBossFight(Map<String, Object> quiz, List<String> langs, List<String> errs) {
         Object raw = quiz.get("bossFight");
         if (!(raw instanceof List<?> list) || list.isEmpty()) {
-            errs.add("quiz.yaml: bossFight must be a non-empty list of { id, en, ru }");
+            errs.add("quiz.yaml: bossFight must be a non-empty list of "
+                    + "{ id, <lang> per declared language }");
             return;
         }
         Set<String> ids = new HashSet<>();
@@ -313,25 +322,26 @@ class TopicContractTest {
      * validated to be a non-empty subset of [en, ru]; absent = both.
      */
     private List<String> declaredLanguages(Map<String, Object> meta, List<String> errs) {
-        List<String> all = List.of("en", "ru");
         Object raw = meta == null ? null : meta.get("languages");
         if (raw == null) {
-            return all;
+            return ContentLanguages.LEGACY_DEFAULT;
         }
         if (!(raw instanceof List<?> list) || list.isEmpty()) {
-            errs.add("topic.yaml: languages must be a non-empty list drawn from [en, ru]");
-            return all;
+            errs.add("topic.yaml: languages must be a non-empty list drawn from "
+                    + ContentLanguages.ALL);
+            return ContentLanguages.LEGACY_DEFAULT;
         }
         List<String> result = new ArrayList<>();
         for (Object o : list) {
-            String lang = String.valueOf(o).trim().toLowerCase();
-            if (!all.contains(lang)) {
-                errs.add("topic.yaml: languages entry '" + o + "' is not one of [en, ru]");
+            String lang = ContentLanguages.normalizeCode(String.valueOf(o));
+            if (lang == null) {
+                errs.add("topic.yaml: languages entry '" + o + "' is not a supported content "
+                        + "language " + ContentLanguages.ALL);
             } else if (!result.contains(lang)) {
                 result.add(lang);
             }
         }
-        return result.isEmpty() ? all : result;
+        return result.isEmpty() ? ContentLanguages.LEGACY_DEFAULT : result;
     }
 
     // --- io / parsing ------------------------------------------------------

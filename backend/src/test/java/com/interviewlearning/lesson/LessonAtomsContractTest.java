@@ -1,6 +1,7 @@
 package com.interviewlearning.lesson;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.interviewlearning.lang.ContentLanguages;
 import com.interviewlearning.lesson.LessonDtos.Atom;
 import com.interviewlearning.lesson.LessonDtos.Exercise;
 import com.interviewlearning.lesson.LessonDtos.LearningAtoms;
@@ -61,7 +62,7 @@ class LessonAtomsContractTest {
     }
 
     /** Languages the current topic declares; localized checks require only these. */
-    private List<String> langs = List.of("en", "ru");
+    private List<String> langs = ContentLanguages.LEGACY_DEFAULT;
 
     private void validate(Path dir) {
         String name = dir.getFileName().toString();
@@ -194,11 +195,11 @@ class LessonAtomsContractTest {
             return;
         }
         if (ex.text() != null) {
-            if (langs.contains("en") && countBlanks(ex.text().en()) != expected) {
-                errs.add(where + ".text.en: must contain exactly " + expected + " ___");
-            }
-            if (langs.contains("ru") && countBlanks(ex.text().ru()) != expected) {
-                errs.add(where + ".text.ru: must contain exactly " + expected + " ___");
+            for (String lang : langs) {
+                String text = ex.text().get(lang);
+                if (text != null && countBlanks(text) != expected) {
+                    errs.add(where + ".text." + lang + ": must contain exactly " + expected + " ___");
+                }
             }
         }
     }
@@ -250,8 +251,9 @@ class LessonAtomsContractTest {
             errs.add(where + ": missing");
             return;
         }
-        if (langs.contains("en") && blank(v.en())) errs.add(where + ".en: missing");
-        if (langs.contains("ru") && blank(v.ru())) errs.add(where + ".ru: missing");
+        for (String lang : langs) {
+            if (v.get(lang) == null) errs.add(where + "." + lang + ": missing");
+        }
     }
 
     private void localizedList(LocalizedList v, String where, List<String> errs) {
@@ -259,11 +261,10 @@ class LessonAtomsContractTest {
             errs.add(where + ": missing");
             return;
         }
-        if (langs.contains("en") && badList(v.en())) {
-            errs.add(where + ".en: must be a non-empty list of non-blank strings");
-        }
-        if (langs.contains("ru") && badList(v.ru())) {
-            errs.add(where + ".ru: must be a non-empty list of non-blank strings");
+        for (String lang : langs) {
+            if (badList(v.get(lang))) {
+                errs.add(where + "." + lang + ": must be a non-empty list of non-blank strings");
+            }
         }
     }
 
@@ -273,28 +274,28 @@ class LessonAtomsContractTest {
 
     /**
      * The topic's declared content languages ({@code languages:} in topic.yaml);
-     * absent/invalid = both. Values themselves are validated by TopicContractTest.
+     * absent/invalid = the legacy bilingual pair. Values themselves are validated
+     * by TopicContractTest.
      */
     private static List<String> declaredLanguages(Path dir) {
-        List<String> all = List.of("en", "ru");
         Path yaml = dir.resolve("topic.yaml");
         if (!Files.exists(yaml)) {
-            return all;
+            return ContentLanguages.LEGACY_DEFAULT;
         }
         try {
             Object parsed = new Yaml().load(Files.readString(yaml, StandardCharsets.UTF_8));
             if (parsed instanceof java.util.Map<?, ?> map && map.get("languages") instanceof List<?> list) {
                 List<String> result = list.stream()
-                        .map(o -> String.valueOf(o).trim().toLowerCase())
-                        .filter(all::contains)
+                        .map(o -> ContentLanguages.normalizeCode(String.valueOf(o)))
+                        .filter(java.util.Objects::nonNull)
                         .distinct()
                         .toList();
-                return result.isEmpty() ? all : result;
+                return result.isEmpty() ? ContentLanguages.LEGACY_DEFAULT : result;
             }
         } catch (IOException | RuntimeException ignored) {
             // a broken topic.yaml is TopicContractTest's failure to report
         }
-        return all;
+        return ContentLanguages.LEGACY_DEFAULT;
     }
 
     private static int countBlanks(String s) {

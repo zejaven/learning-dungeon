@@ -1,9 +1,15 @@
 package com.interviewlearning.lesson;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonValue;
+import com.interviewlearning.lang.ContentLanguages;
 import com.interviewlearning.topics.TopicDtos.Localized;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /** Data transfer objects for the "Learn by micro-actions" lesson mode. */
 public final class LessonDtos {
@@ -98,9 +104,54 @@ public final class LessonDtos {
     public record Option(String id, Localized text, boolean correct, Localized feedback) {
     }
 
-    /** A per-language list of strings (fill-blank answers, word-bank tokens). */
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public record LocalizedList(List<String> en, List<String> ru) {
+    /**
+     * A per-language list of strings (fill-blank answers, word-bank tokens),
+     * keyed by language code. Serializes as a bare {@code {"en": [...]}} object,
+     * matching learning-atoms.json; a language the lesson lacks is absent.
+     */
+    public record LocalizedList(Map<String, List<String>> byLang) {
+
+        public LocalizedList {
+            byLang = byLang == null
+                    ? Map.of()
+                    : Collections.unmodifiableMap(new LinkedHashMap<>(byLang));
+        }
+
+        @JsonCreator(mode = JsonCreator.Mode.DELEGATING)
+        public static LocalizedList fromJson(Map<String, List<String>> map) {
+            return new LocalizedList(map);
+        }
+
+        @JsonValue
+        public Map<String, List<String>> json() {
+            return byLang;
+        }
+
+        /** The list for {@code lang}, or an empty list when it is absent. */
+        public List<String> get(String lang) {
+            List<String> list = lang == null ? null : byLang.get(lang);
+            return list == null ? List.of() : list;
+        }
+
+        public boolean has(String lang) {
+            return !get(lang).isEmpty();
+        }
+
+        /** Languages actually carried, registered ones first, then any extras. */
+        public List<String> languages() {
+            List<String> result = new java.util.ArrayList<>();
+            for (String code : ContentLanguages.ALL) {
+                if (has(code)) {
+                    result.add(code);
+                }
+            }
+            for (String code : byLang.keySet()) {
+                if (!result.contains(code) && has(code)) {
+                    result.add(code);
+                }
+            }
+            return result;
+        }
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

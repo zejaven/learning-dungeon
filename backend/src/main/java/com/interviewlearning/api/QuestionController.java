@@ -25,6 +25,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 
 /**
@@ -120,8 +121,9 @@ public class QuestionController {
     }
 
     private static QuestionDto toDto(ManualQuestion q) {
+        // manual_question is an en/ru table by design (java-domain catalog only).
         return new QuestionDto("manual-" + q.id(), q.categoryId(), q.categoryName(),
-                q.difficulty(), new Localized(q.en(), q.ru()));
+                q.difficulty(), Localized.fromJson(Map.of("en", q.en(), "ru", q.ru())));
     }
 
     private static int clampDifficulty(int d) {

@@ -1,6 +1,7 @@
 package com.interviewlearning.topics;
 
 import com.interviewlearning.config.RepoPaths;
+import com.interviewlearning.lang.ContentLanguages;
 import com.interviewlearning.topics.TopicDtos.BossQuestion;
 import com.interviewlearning.topics.TopicDtos.Example;
 import com.interviewlearning.topics.TopicDtos.Localized;
@@ -18,8 +19,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Stream;
 
@@ -129,17 +132,25 @@ public class TopicRepository {
         ));
     }
 
-    /** Reads explanation.en.md / explanation.ru.md, falling back to explanation.md. */
+    /**
+     * Reads one explanation.&lt;lang&gt;.md per registered language, falling back to a
+     * legacy explanation.md. A language with no file is left absent rather than
+     * filled from another one, so the UI can say the translation is missing.
+     */
     private Localized readExplanation(Path topicDir) {
-        String en = readFile(topicDir.resolve("explanation.en.md"));
-        String ru = readFile(topicDir.resolve("explanation.ru.md"));
-        if (en.isEmpty() && ru.isEmpty()) {
-            String legacy = readFile(topicDir.resolve("explanation.md"));
-            return new Localized(legacy, legacy);
+        Map<String, String> texts = new LinkedHashMap<>();
+        for (String lang : ContentLanguages.ALL) {
+            String text = readFile(topicDir.resolve("explanation." + lang + ".md"));
+            if (!text.isBlank()) {
+                texts.put(lang, text);
+            }
         }
-        if (en.isEmpty()) en = ru;
-        if (ru.isEmpty()) ru = en;
-        return new Localized(en, ru);
+        if (texts.isEmpty()) {
+            // Pre-bilingual topics: one file that serves every language.
+            String legacy = readFile(topicDir.resolve("explanation.md"));
+            return legacy.isBlank() ? Localized.empty() : Localized.of(legacy);
+        }
+        return new Localized(texts);
     }
 
     @SuppressWarnings("unchecked")
@@ -237,31 +248,40 @@ public class TopicRepository {
                     if (item instanceof Map<?, ?> m) {
                         Map<String, Object> qm = (Map<String, Object>) m;
                         String id = str(qm, "id", "q" + i);
-                        String en = str(qm, "en", "");
-                        String ru = str(qm, "ru", en);
-                        // Single-language quiz files fill only one key; mirror it so
-                        // in-memory Localized values are always fully populated.
-                        if (en.isEmpty()) en = ru;
-                        result.add(new BossQuestion(id, new Localized(en, ru)));
+                        Map<String, String> texts = new LinkedHashMap<>();
+                        for (String lang : ContentLanguages.ALL) {
+                            String text = str(qm, lang, "");
+                            if (!text.isBlank()) {
+                                texts.put(lang, text);
+                            }
+                        }
+                        result.add(new BossQuestion(id, new Localized(texts)));
                     }
                 }
             } else if (raw instanceof Map<?, ?> m) {
-                List<String> en = stringList(m.get("en"));
-                List<String> ru = stringList(m.get("ru"));
-                int n = Math.max(en.size(), ru.size());
+                Map<String, List<String>> perLang = new LinkedHashMap<>();
+                int n = 0;
+                for (String lang : ContentLanguages.ALL) {
+                    List<String> questions = stringList(m.get(lang));
+                    perLang.put(lang, questions);
+                    n = Math.max(n, questions.size());
+                }
                 for (int i = 0; i < n; i++) {
-                    String e = i < en.size() ? en.get(i) : "";
-                    String r = i < ru.size() ? ru.get(i) : "";
-                    if (e.isEmpty()) e = r;
-                    if (r.isEmpty()) r = e;
-                    result.add(new BossQuestion("q" + (i + 1), new Localized(e, r)));
+                    Map<String, String> texts = new LinkedHashMap<>();
+                    for (String lang : ContentLanguages.ALL) {
+                        List<String> questions = perLang.get(lang);
+                        if (i < questions.size() && !questions.get(i).isBlank()) {
+                            texts.put(lang, questions.get(i));
+                        }
+                    }
+                    result.add(new BossQuestion("q" + (i + 1), new Localized(texts)));
                 }
             } else if (raw instanceof List<?> list) {
                 int i = 0;
                 for (Object o : list) {
                     i++;
-                    String s = String.valueOf(o);
-                    result.add(new BossQuestion("q" + i, new Localized(s, s)));
+                    // A bare list has no language at all: the same text serves every one.
+                    result.add(new BossQuestion("q" + i, Localized.of(String.valueOf(o))));
                 }
             }
             return result;
@@ -367,31 +387,38 @@ public class TopicRepository {
 
     /**
      * Reads the topic's declared content languages ({@code languages:} in
-     * topic.yaml): a subset of [en, ru]; absent/invalid means both.
+     * topic.yaml). Absent or invalid means the legacy bilingual pair, NOT every
+     * registered language: a newly registered language must not be claimed
+     * retroactively by topics that carry no text in it.
      */
     private static List<String> languages(Map<String, Object> meta) {
         List<String> declared = stringList(meta.get("languages")).stream()
-                .map(s -> s.trim().toLowerCase())
-                .filter(s -> s.equals("en") || s.equals("ru"))
+                .map(ContentLanguages::normalizeCode)
+                .filter(Objects::nonNull)
+                .distinct()
                 .toList();
-        return declared.isEmpty() ? List.of("en", "ru") : declared;
+        return declared.isEmpty() ? ContentLanguages.LEGACY_DEFAULT : declared;
     }
 
     /**
-     * Reads a translatable field: either a plain scalar (used for both languages)
-     * or a {@code { en: ..., ru: ... }} map.
+     * Reads a translatable field: a {@code { <lang>: ... }} map carrying one entry
+     * per language it was written in, or a plain scalar, which means the same text
+     * serves every language (that is how single-language topics are authored).
      */
     private static Localized loc(Map<String, Object> map, String key, String fallback) {
         Object v = map.get(key);
         if (v instanceof Map<?, ?> m) {
-            Object en = m.get("en");
-            Object ru = m.get("ru");
-            String enStr = en == null ? fallback : String.valueOf(en).trim();
-            String ruStr = ru == null ? enStr : String.valueOf(ru).trim();
-            return new Localized(enStr, ruStr);
+            Map<String, String> texts = new LinkedHashMap<>();
+            for (String lang : ContentLanguages.ALL) {
+                Object text = m.get(lang);
+                if (text != null && !String.valueOf(text).isBlank()) {
+                    texts.put(lang, String.valueOf(text).trim());
+                }
+            }
+            return texts.isEmpty() ? Localized.of(fallback) : new Localized(texts);
         }
         String s = v == null ? fallback : String.valueOf(v).trim();
-        return new Localized(s, s);
+        return Localized.of(s);
     }
 
     private static List<String> stringList(Object raw) {

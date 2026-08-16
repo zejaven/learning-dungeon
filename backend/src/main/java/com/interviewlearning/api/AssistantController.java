@@ -2,6 +2,7 @@ package com.interviewlearning.api;
 
 import com.interviewlearning.ai.AiCliService;
 import com.interviewlearning.ai.AiTask;
+import com.interviewlearning.lang.ContentLanguages;
 import com.interviewlearning.topics.TopicDtos.TopicDetail;
 import com.interviewlearning.topics.TopicRepository;
 import org.springframework.http.MediaType;
@@ -92,7 +93,7 @@ public class AssistantController {
         Optional<TopicDetail> topic = request.topicId() == null
                 ? Optional.empty()
                 : topics.getTopic(request.topicId());
-        boolean ru = "ru".equalsIgnoreCase(request.lang());
+        String lang = replyLanguage(request.lang());
         DomainVoice voice = voiceFor(topic);
 
         StringBuilder sb = new StringBuilder();
@@ -100,20 +101,14 @@ public class AssistantController {
         sb.append("Answer the user's question directly and practically, with a short ")
                 .append("interview-ready explanation and a tiny example if helpful. ")
                 .append("Do not create or edit any files; just answer in text. ");
-        sb.append(ru
-                ? "Reply in Russian, but keep code, identifiers and technical terms "
-                        + "like " + voice.termsExample() + " in their original form.\n\n"
-                : "Reply in English.\n\n");
+        sb.append("Reply in ").append(ContentLanguages.englishName(lang))
+                .append(", but keep code, identifiers and technical terms like ")
+                .append(voice.termsExample()).append(" in their original form.\n\n");
 
         topic.ifPresent(t -> {
-            String title = ru ? t.title().ru() : t.title().en();
-            String category = ru ? t.category().ru() : t.category().en();
-            String explanation = ru ? t.explanation().ru() : t.explanation().en();
-            sb.append("Current topic: ").append(title)
-                    .append(" (").append(category).append(").\n\n");
-            if (!explanation.isBlank()) {
-                sb.append("Topic reference material:\n").append(explanation).append("\n\n");
-            }
+            sb.append("Current topic: ").append(t.title().label(lang))
+                    .append(" (").append(t.category().label(lang)).append(").\n\n");
+            appendReference(sb, "Topic reference material", t, lang);
         });
 
         if (request.code() != null && !request.code().isBlank()) {
@@ -129,7 +124,7 @@ public class AssistantController {
         Optional<TopicDetail> topic = request.topicId() == null
                 ? Optional.empty()
                 : topics.getTopic(request.topicId());
-        boolean ru = "ru".equalsIgnoreCase(request.lang());
+        String lang = replyLanguage(request.lang());
         DomainVoice voice = voiceFor(topic);
 
         StringBuilder sb = new StringBuilder();
@@ -153,21 +148,15 @@ public class AssistantController {
                 .append("specific explanation: what was correct, what was wrong or missing ")
                 .append("WITHIN THE SCOPE of the question, and — only if relevant — an ")
                 .append("optional extras note. Do not create or edit files.\n");
-        sb.append(ru
-                ? "Write the explanation in Russian, but keep code, identifiers and "
-                        + "technical terms like " + voice.termsExample() + " in their original form. "
-                        + "The SCORE line stays in English exactly as specified.\n\n"
-                : "Write the explanation in English.\n\n");
+        sb.append("Write the explanation in ").append(ContentLanguages.englishName(lang))
+                .append(", but keep code, identifiers and technical terms like ")
+                .append(voice.termsExample()).append(" in their original form. ")
+                .append("The SCORE line stays in English exactly as specified.\n\n");
 
         topic.ifPresent(t -> {
-            String title = ru ? t.title().ru() : t.title().en();
-            String category = ru ? t.category().ru() : t.category().en();
-            String explanation = ru ? t.explanation().ru() : t.explanation().en();
-            sb.append("Topic: ").append(title).append(" (").append(category).append(").\n\n");
-            if (!explanation.isBlank()) {
-                sb.append("Topic reference material (ground truth):\n")
-                        .append(explanation).append("\n\n");
-            }
+            sb.append("Topic: ").append(t.title().label(lang))
+                    .append(" (").append(t.category().label(lang)).append(").\n\n");
+            appendReference(sb, "Topic reference material (ground truth)", t, lang);
         });
 
         sb.append("Interview question:\n")
@@ -177,5 +166,32 @@ public class AssistantController {
                 .append(request.answer() == null ? "" : request.answer().trim())
                 .append("\n");
         return sb.toString();
+    }
+
+    /** The requested reply language, or the default one when it is unknown. */
+    private static String replyLanguage(String requested) {
+        String lang = ContentLanguages.normalizeCode(requested);
+        return lang == null ? ContentLanguages.defaultLanguage() : lang;
+    }
+
+    /**
+     * Appends the topic's explanation in {@code lang}. A topic may not carry the
+     * reply language (the QA domain has Russian-only topics), so fall back to a
+     * language it does have and tell the model to answer in {@code lang} anyway.
+     */
+    private static void appendReference(StringBuilder sb, String heading, TopicDetail topic, String lang) {
+        String explanation = topic.explanation().get(lang);
+        if (explanation == null) {
+            String source = topic.explanation().languages().stream().findFirst().orElse(null);
+            if (source == null) {
+                return;
+            }
+            explanation = topic.explanation().get(source);
+            sb.append("(The reference material below is in ")
+                    .append(ContentLanguages.englishName(source))
+                    .append("; answer in ").append(ContentLanguages.englishName(lang))
+                    .append(" anyway.)\n\n");
+        }
+        sb.append(heading).append(":\n").append(explanation).append("\n\n");
     }
 }

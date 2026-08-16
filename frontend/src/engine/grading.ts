@@ -1,4 +1,5 @@
-import type { Lang } from '../i18n';
+import { tlList, type Lang } from '../i18n';
+import { LANG_CODES } from '../languages';
 import type { AnswerValue, FillBlankExercise, LocalizedList } from './lessonTypes';
 import type { Exercise } from './lessonTypes';
 
@@ -36,17 +37,17 @@ export function grade(exercise: Exercise, answer: AnswerValue, lang: Lang): bool
       const blanks = fillBlanks(exercise);
       const typed = textValues(answer);
       if (blanks.length === 0 || typed.length !== blanks.length) return false;
-      // Technical tokens are usually identical in both languages; accepting
-      // either list is deliberately forgiving.
+      // Technical tokens are usually identical across languages; accepting any
+      // language's list is deliberately forgiving.
       return blanks.every((b, i) => {
-        const accepted = [...(b[lang] ?? []), ...(b.en ?? []), ...(b.ru ?? [])].map(normalize);
+        const accepted = LANG_CODES.flatMap((code) => b[code] ?? []).map(normalize);
         return accepted.includes(normalize(typed[i] ?? ''));
       });
     }
     case 'word_bank': {
       if (answer.kind !== 'tokens') return false;
-      // Single-language lessons fill only one key — fall back across both.
-      const correct = exercise.tokens[lang] ?? exercise.tokens.en ?? exercise.tokens.ru ?? [];
+      // A lesson may carry only some languages; fall back to one it has.
+      const correct = tlList(exercise.tokens, lang);
       return answer.tokens.length === correct.length
         && answer.tokens.every((t, i) => t === correct[i]);
     }

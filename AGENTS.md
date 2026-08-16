@@ -184,9 +184,9 @@ If a command cannot be run, say exactly why and what remains unverified.
   language pair: read text with `Localized.label()` / `tl()` for short labels and
   `Localized.get()` / `tlStrict()` for body content, which reports a missing
   translation instead of silently substituting another language.
-- A topic carries content in the languages it declares in `languages:`; an
-  absent key means `[en, ru]` (every legacy topic) — see Topic Authoring. UI
-  chrome strings (`i18n.ts`) are translated for the languages flagged `ui: true`.
+- A topic carries content in the languages it declares in `languages:`, which is
+  required in every topic.yaml — see Topic Authoring. UI chrome strings
+  (`i18n.ts`) are translated for the languages flagged `ui: true`.
 - Files contain UTF-8 Cyrillic content. Preserve UTF-8 and avoid bulk rewrites
   caused only by console encoding/mojibake.
 - Use stable, deterministic data for examples, tests, SQL seeds, and trace states.
@@ -399,8 +399,8 @@ shape per exercise type — trust it over hand-written JSON.
 For all topics:
 
 - Every visible string must exist in every language the topic declares.
-  `languages:` in topic.yaml is a non-empty subset of the registry; absent means
-  `[en, ru]` (all legacy topics). A single-language topic writes translatable
+  `languages:` in topic.yaml is required and is a non-empty list of registered
+  codes; most topics carry `[en, ru]`. A single-language topic writes translatable
   YAML fields as plain strings, has only `explanation.<lang>.md`, and fills only
   that language's key in bossFight entries and `learning-atoms.json`. Loaders no
   longer mirror one language into another: short labels fall back at read time,

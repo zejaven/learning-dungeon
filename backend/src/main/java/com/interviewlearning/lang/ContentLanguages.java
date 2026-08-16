@@ -32,9 +32,12 @@ public final class ContentLanguages {
     public static final List<String> ALL = REGISTRY.stream().map(ContentLanguage::code).toList();
 
     /**
-     * What a topic without an explicit {@code languages:} carries. Deliberately
-     * NOT {@link #ALL}: every legacy topic is bilingual, and registering a new
-     * language must not make 272 topics suddenly claim content they lack.
+     * Assumed coverage for a topic whose {@code languages:} is missing or
+     * unreadable. Every topic is required to declare its own languages
+     * (TopicContractTest enforces it), so this is a defensive fallback for a
+     * broken file — not a rule anyone should rely on. Deliberately NOT
+     * {@link #ALL}: registering a new language must never make a topic claim
+     * content it does not have.
      */
     public static final List<String> LEGACY_DEFAULT = List.of("en", "ru");
 

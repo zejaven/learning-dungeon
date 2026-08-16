@@ -387,9 +387,8 @@ public class TopicRepository {
 
     /**
      * Reads the topic's declared content languages ({@code languages:} in
-     * topic.yaml). Absent or invalid means the legacy bilingual pair, NOT every
-     * registered language: a newly registered language must not be claimed
-     * retroactively by topics that carry no text in it.
+     * topic.yaml). Every topic is required to declare them; a file that does not
+     * is broken and falls back to the legacy pair so the app still renders it.
      */
     private static List<String> languages(Map<String, Object> meta) {
         List<String> declared = stringList(meta.get("languages")).stream()

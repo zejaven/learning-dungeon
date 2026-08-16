@@ -318,12 +318,15 @@ class TopicContractTest {
     }
 
     /**
-     * The topic's declared content languages ({@code languages:} in topic.yaml):
-     * validated to be a non-empty subset of [en, ru]; absent = both.
+     * The topic's declared content languages: a required, non-empty list of
+     * registered codes. Every topic states its own coverage, so no reader has to
+     * know a historical default.
      */
     private List<String> declaredLanguages(Map<String, Object> meta, List<String> errs) {
         Object raw = meta == null ? null : meta.get("languages");
         if (raw == null) {
+            errs.add("topic.yaml: languages is missing — list the content languages this "
+                    + "topic carries, e.g. `languages: " + ContentLanguages.LEGACY_DEFAULT + "`");
             return ContentLanguages.LEGACY_DEFAULT;
         }
         if (!(raw instanceof List<?> list) || list.isEmpty()) {

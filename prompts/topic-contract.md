@@ -18,8 +18,8 @@ topics/<id>/
 ## Content languages
 
 A topic carries every user-visible string in each language it declares. The
-languages are listed in `languages:` in topic.yaml; when the key is absent the
-topic carries `[en, ru]`, which is what every legacy topic does.
+languages are listed in `languages:` in topic.yaml, which every topic must set —
+most carry `[en, ru]`.
 
 - Translatable YAML fields use a `{ <lang>: … }` map with one key per declared
   language — or a plain string, which means the same text serves every language
@@ -39,6 +39,7 @@ the examples below, which show a topic declaring `[en, ru]`.
 
 ```yaml
 id: <kebab-id>                  # must equal the folder name
+languages: [en, ru]             # REQUIRED: the content languages this topic carries
 title:
   en: <Human Title>
   ru: <Заголовок>
@@ -79,8 +80,9 @@ assistantExample:                # one example question, shown as the Ask AI pla
 missionsFile: quiz.yaml
 ```
 
-(A plain scalar instead of an `{en, ru}` map is accepted and used for both
-languages, but new topics should provide both.)
+(A plain scalar instead of a language map is accepted and used for every declared
+language — that is how a single-language topic is written. A topic declaring more
+than one language gives each translatable field a key per language.)
 
 ## Catalog placement (categoryId, difficulty, catalogId)
 

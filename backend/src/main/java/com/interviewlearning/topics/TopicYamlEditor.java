@@ -34,7 +34,6 @@ public class TopicYamlEditor {
     /** {@code languages:} followed by {@code   - en} item lines. */
     private static final Pattern BLOCK_HEAD = Pattern.compile("^([ \\t]*)languages:[ \\t]*$");
     private static final Pattern BLOCK_ITEM = Pattern.compile("^([ \\t]*)-[ \\t]*(\\S+)[ \\t]*$");
-    private static final Pattern ID_LINE = Pattern.compile("^id:[ \\t]*\\S.*$");
 
     /**
      * Declares {@code lang} in the topic's {@code languages:}.
@@ -56,7 +55,10 @@ public class TopicYamlEditor {
             return false;
         }
         if (keyIndex < 0) {
-            return writeIfChanged(topicYaml, content, insertKey(lines, code));
+            // Every topic declares `languages:` (TopicContractTest requires it), so
+            // a file without the key is broken rather than merely terse.
+            log.warn("Refusing to edit {}: no `languages:` key", topicYaml);
+            return false;
         }
         String edited = editExistingKey(lines, keyIndex, code, topicYaml);
         return edited != null && writeIfChanged(topicYaml, content, edited);
@@ -76,29 +78,6 @@ public class TopicYamlEditor {
             }
         }
         return found;
-    }
-
-    /**
-     * No {@code languages:} key: the topic implicitly carries the legacy pair, so
-     * only a language outside that pair needs the key spelled out. Unreachable
-     * while the registry holds exactly the legacy languages.
-     */
-    private String insertKey(List<String> lines, String code) {
-        List<String> declared = new ArrayList<>(ContentLanguages.LEGACY_DEFAULT);
-        if (declared.contains(code)) {
-            return String.join("", lines); // already covered by the default
-        }
-        declared.add(code);
-        int at = 0;
-        for (int i = 0; i < lines.size(); i++) {
-            if (ID_LINE.matcher(stripEol(lines.get(i))).matches()) {
-                at = i + 1;
-                break;
-            }
-        }
-        String eol = lineEnding(lines, at);
-        lines.add(at, "languages: [" + String.join(", ", declared) + "]" + eol);
-        return String.join("", lines);
     }
 
     /** Returns the edited file, or null when the shape is not one we handle. */

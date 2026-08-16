@@ -65,15 +65,12 @@ class TopicYamlEditorTest {
     }
 
     @Test
-    void aFileWithoutTheKeyAlreadyCarriesTheLegacyLanguages() throws IOException {
-        // No `languages:` means the legacy bilingual pair, so adding one of those
-        // is a no-op. (Spelling the key out is only needed for a language outside
-        // that pair, which cannot happen until a third one is registered.)
+    void refusesAFileWithoutTheKey() throws IOException {
+        // Every topic declares `languages:`, so a file without it is broken and
+        // guessing what it carries would be worse than refusing.
         String before = "id: t\ndomainId: qa\ntitle: x\n";
         Path file = write(before);
-        assertTrue(editor.addLanguage(file, "en"));
-        assertEquals(before, read(file));
-        assertTrue(editor.addLanguage(file, "ru"));
+        assertFalse(editor.addLanguage(file, "en"));
         assertEquals(before, read(file));
     }
 

@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -47,8 +48,11 @@ public class LessonGenController {
      * @param comment   for "augment": what to add (required); for "full": things the
      *                  lesson must cover (optional, an extra requirement — not the basis
      *                  for the whole lesson)
+     * @param languages content languages to generate ("en"/"ru"); null/empty = both;
+     *                  always narrowed to the languages the topic itself declares
      */
-    public record GenerateAtomsRequest(String provider, Integer versionNo, String mode, String comment) {
+    public record GenerateAtomsRequest(String provider, Integer versionNo, String mode, String comment,
+                                       List<String> languages) {
     }
 
     @PostMapping("/api/topics/{id}/atoms/generate")
@@ -71,7 +75,8 @@ public class LessonGenController {
         }
 
         GenerationTask task = generation.startOrGet("atoms:" + id, provider,
-                prompts.build(topic, provider, versionNo, explanation, augment, comment, existingAtoms),
+                prompts.build(topic, provider, versionNo, explanation, augment, comment, existingAtoms,
+                        request.languages()),
                 AiTask.GENERATE_ATOMS);
         return ResponseEntity.ok(Map.of("taskId", task.id(), "key", task.key(), "status", task.status()));
     }

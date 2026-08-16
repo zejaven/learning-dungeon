@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import type { VisualizerProps } from '@app/engine/traceTypes';
 import { ArrayGrid, type ArrayCell } from '@app/primitives/ArrayGrid';
 import { LinkedNodes, type LinkedNode } from '@app/primitives/LinkedNodes';
-import { tl, useLang, type Localized } from '@app/i18n';
+import { tl, useLang, type Localized, type Lang } from '@app/i18n';
 
 const LABELS = {
   runHint: {
@@ -251,17 +251,17 @@ function actionLabel(type: string): Localized {
   return ACTION_LABELS[type] ?? { en: type, ru: type };
 }
 
-function actionSubtitle(action: ActionSnapshot, lang: 'en' | 'ru') {
+function actionSubtitle(action: ActionSnapshot, lang: Lang) {
   const value = formatValue(action.value, lang);
   return value ? `${action.target}=${value}` : action.target;
 }
 
-function actionText(action: ActionSnapshot | undefined, lang: 'en' | 'ru') {
+function actionText(action: ActionSnapshot | undefined, lang: Lang) {
   if (!action) return '?';
   return `${action.thread}:${action.id} ${tl(actionLabel(action.type), lang)}`;
 }
 
-function formatValue(value: string | number | boolean, lang: 'en' | 'ru') {
+function formatValue(value: string | number | boolean, lang: Lang) {
   if (value === 'unset') return tl(LABELS.unset, lang);
   if (value === '') return '';
   return String(value);

@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { VisualizerProps } from '@app/engine/traceTypes';
 import { ArrayGrid, type ArrayCell } from '@app/primitives/ArrayGrid';
-import { tl, useLang, type Localized } from '@app/i18n';
+import { tl, useLang, type Localized, type Lang } from '@app/i18n';
 
 const LABELS = {
   title: { en: 'ArrayList backing Object[]', ru: 'Внутренний Object[] ArrayList' },
@@ -87,7 +87,7 @@ export default function ArrayListInternalsVisualizer({ event }: VisualizerProps)
   );
 }
 
-function costText(op: LastOp, lang: 'en' | 'ru'): string {
+function costText(op: LastOp, lang: Lang): string {
   if (op.costKind === 'none' || op.costKind === 'direct') {
     return tl(COST_KIND[op.costKind], lang);
   }

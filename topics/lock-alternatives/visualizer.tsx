@@ -3,7 +3,7 @@ import type { VisualizerProps } from '@app/engine/traceTypes';
 import { ArrayGrid, type ArrayCell } from '@app/primitives/ArrayGrid';
 import { BoxGroup, type Box } from '@app/primitives/BoxGroup';
 import { LinkedNodes, type LinkedNode } from '@app/primitives/LinkedNodes';
-import { tl, useLang, type Localized } from '@app/i18n';
+import { tl, useLang, type Localized, type Lang } from '@app/i18n';
 
 const LABELS = {
   runHint: {
@@ -231,7 +231,7 @@ function Owner({ state, highlight }: { state: LockState; highlight: Set<string> 
   );
 }
 
-function readerBoxes(readers: Reader[], highlight: Set<string>, lang: 'en' | 'ru'): Box[] {
+function readerBoxes(readers: Reader[], highlight: Set<string>, lang: Lang): Box[] {
   return readers.map((reader) => ({
     id: reader.thread,
     title: reader.thread,
@@ -240,7 +240,7 @@ function readerBoxes(readers: Reader[], highlight: Set<string>, lang: 'en' | 'ru
   }));
 }
 
-function writerBoxes(writer: string | null, highlight: Set<string>, lang: 'en' | 'ru'): Box[] {
+function writerBoxes(writer: string | null, highlight: Set<string>, lang: Lang): Box[] {
   if (!writer) {
     return [];
   }
@@ -254,7 +254,7 @@ function writerBoxes(writer: string | null, highlight: Set<string>, lang: 'en' |
   ];
 }
 
-function queueNodes(queue: QueueItem[], highlight: Set<string>, lang: 'en' | 'ru'): LinkedNode[] {
+function queueNodes(queue: QueueItem[], highlight: Set<string>, lang: Lang): LinkedNode[] {
   return queue.map((item) => {
     const mode = MODE_LABELS[item.mode] ?? { en: item.mode, ru: item.mode };
     return {
@@ -269,7 +269,7 @@ function queueNodes(queue: QueueItem[], highlight: Set<string>, lang: 'en' | 'ru
 function optimisticBoxes(
   reads: OptimisticRead[],
   highlight: Set<string>,
-  lang: 'en' | 'ru',
+  lang: Lang,
 ): Box[] {
   return reads.map((read) => ({
     id: `${read.thread}-${read.stamp}`,

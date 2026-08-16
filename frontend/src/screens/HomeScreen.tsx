@@ -5,6 +5,7 @@ import { useAi } from '@app/engine/aiStore';
 import { useBulk } from '@app/engine/bulkStore';
 import { useDomain } from '@app/engine/domainStore';
 import { startAtomsGeneration, type BulkKind } from '@app/engine/api';
+import { genLanguages } from '@app/engine/genLangStore';
 import { useGeneration } from '@app/engine/generationStore';
 import { useReview } from '@app/engine/reviewStore';
 import {
@@ -16,9 +17,10 @@ import {
 } from '@app/engine/router';
 import { useStore } from '@app/engine/store';
 import { useStyle } from '@app/engine/styleStore';
-import { tl, ui, useLang } from '@app/i18n';
+import { langsOf, tl, tlStrict, ui, useLang } from '@app/i18n';
+import { LANG_CODES, langChip, langName } from '@app/languages';
 import { AddQuestionDialog } from '@app/shell/AddQuestionDialog';
-import { AddTopicDialog } from '@app/shell/AddTopicDialog';
+import { AddTopicDialog, addTopicKey } from '@app/shell/AddTopicDialog';
 import { AiProviderSelector } from '@app/shell/AiProviderSelector';
 import { AssistantDialog } from '@app/shell/AssistantDialog';
 import { BossFightDialog } from '@app/shell/BossFightDialog';
@@ -32,6 +34,8 @@ import { LessonPanel } from '@app/shell/lesson/LessonPanel';
 import { Markdown } from '@app/shell/Markdown';
 import { SelectionAsk } from '@app/shell/SelectionAsk';
 import { SettingsButton } from '@app/shell/SettingsButton';
+import { LanguageSelect } from '@app/shell/LanguageSelect';
+import { MissingLanguage } from '@app/shell/MissingLanguage';
 import { StyleSelector } from '@app/shell/StyleSelector';
 import { ThemeSwitcher } from '@app/shell/ThemeSwitcher';
 import { UsageBar } from '@app/shell/UsageBar';
@@ -48,15 +52,18 @@ export function HomeScreen() {
   const topics = useStore((s) => s.topics);
   const topic = useStore((s) => s.topic);
   const loadingTopic = useStore((s) => s.loadingTopic);
+  const topicsError = useStore((s) => s.topicsError);
+  const runError = useStore((s) => s.runError);
   const theoryVersions = useStore((s) => s.theoryVersions);
   const activeVersionNo = useStore((s) => s.activeVersionNo);
   const generatingVersion = useStore((s) => s.generatingVersion);
+  const addingLanguage = useStore((s) => s.addingLanguage);
+  const addVersionLanguage = useStore((s) => s.addVersionLanguage);
   const setActiveVersion = useStore((s) => s.setActiveVersion);
   const regenerateTheory = useStore((s) => s.regenerateTheory);
 
   const route = useRoute();
   const startGen = useGeneration((s) => s.start);
-  const addTask = useGeneration((s) => s.tasks['add-topic']);
 
   const [showAdd, setShowAdd] = useState(false);
   const [showAddQuestion, setShowAddQuestion] = useState(false);
@@ -81,6 +88,8 @@ export function HomeScreen() {
   const domainId = useDomain((s) => s.domainId);
   const setDomain = useDomain((s) => s.setDomain);
   const domain = domainById(domainId);
+  // The free-form generation is keyed per domain, so each domain tracks its own run.
+  const addTask = useGeneration((s) => s.tasks[addTopicKey(domainId)]);
 
   // Bulk generation: the backend runs the loop; here we only know what is
   // missing in the active domain and whether a run exists (drives the strip).
@@ -182,6 +191,9 @@ export function HomeScreen() {
         topic.id,
         useAi.getState().selectedProvider,
         useStore.getState().activeVersionNo,
+        'full',
+        '',
+        genLanguages(),
       );
       useGeneration.getState().attach(ref.taskId, ref.key);
     } catch {
@@ -202,9 +214,7 @@ export function HomeScreen() {
   }
 
   const activeVersion = theoryVersions.find((v) => v.versionNo === activeVersionNo);
-  const activeExplanation = activeVersion
-    ? { en: activeVersion.en, ru: activeVersion.ru }
-    : topic?.explanation;
+  const activeExplanation = activeVersion?.texts ?? topic?.explanation;
 
   return (
     <div className={`app${bulkVisible ? ' app-bulk' : ''}`}>
@@ -243,11 +253,10 @@ export function HomeScreen() {
             <span className="review-badge">{reviewSummary.poolSize}</span>
           )}
         </button>
-        {domainId === 'java' && (
-          <button className="accent" onClick={() => setShowAdd(true)}>
-            {addTask?.status === 'running' ? ui('generating', lang) : ui('addTopic', lang)}
-          </button>
-        )}
+        {/* Every domain can grow topics; the dialog generates into the open one. */}
+        <button className="accent" onClick={() => setShowAdd(true)}>
+          {addTask?.status === 'running' ? ui('generating', lang) : ui('addTopic', lang)}
+        </button>
       </header>
 
       <BulkGenBar />
@@ -314,6 +323,7 @@ export function HomeScreen() {
             )}
           </div>
           <div className="panel-body" ref={contentRef}>
+            {topicsError && <div className="output error">{topicsError}</div>}
             {!entry && <p className="home-hint">{ui('selectQuestion', lang)}</p>}
 
             {entry && !entry.topicId && (
@@ -324,7 +334,10 @@ export function HomeScreen() {
                 ) : (
                   <>
                     <p className="home-hint">{ui('noTheoryYet', lang)}</p>
-                    <StyleSelector />
+                    <div className="gen-params">
+                      <StyleSelector />
+                      <LanguageSelect />
+                    </div>
                     <button className="primary" onClick={generateForSelected}>
                       {ui('generateTheory', lang)}
                     </button>
@@ -333,7 +346,10 @@ export function HomeScreen() {
               </div>
             )}
 
-            {entry?.topicId && !theoryReady && <p className="home-hint">{ui('openingTheory', lang)}</p>}
+            {entry?.topicId && !theoryReady && !runError && (
+              <p className="home-hint">{ui('openingTheory', lang)}</p>
+            )}
+            {entry?.topicId && !theoryReady && runError && <div className="output error">{runError}</div>}
 
             {theoryReady && showLesson && <LessonPanel />}
 
@@ -345,14 +361,6 @@ export function HomeScreen() {
                       {ui('backToLesson', lang)}
                     </button>
                   )}
-                  {!lessonReady
-                    && (atomsTask?.status === 'running' ? (
-                      <span className="home-hint">{ui('generatingLesson', lang)}</span>
-                    ) : (
-                      <button className="accent" title={ui('lessonGenHint', lang)} onClick={generateLesson}>
-                        {ui('generateLesson', lang)}
-                      </button>
-                    ))}
                   {/* Boss Fight moves inside the lesson once one exists. */}
                   {topic!.mode === 'theory' ? (
                     !lessonReady
@@ -374,8 +382,6 @@ export function HomeScreen() {
                   )}
                 </div>
 
-                {!lessonReady && atomsTask?.status === 'running' && <GenerationView taskKey={atomsKey} />}
-
                 {theoryVersions.length > 0 && (
                   <div className="version-bar">
                     <span className="style-label">{ui('version', lang)}</span>
@@ -395,7 +401,32 @@ export function HomeScreen() {
                     >
                       {activeVersion?.aiProvider || topic!.aiProvider || 'claude'}
                     </span>
+                    {/* Which languages this version carries, and a button per
+                        missing one that translates it into this same version. */}
+                    {langsOf(activeExplanation).map((code) => (
+                      <span
+                        key={code}
+                        className={`version-lang${code === lang ? ' active' : ''}`}
+                        title={langName(code)}
+                      >
+                        {langChip(code)}
+                      </span>
+                    ))}
+                    {LANG_CODES.filter((code) => !langsOf(activeExplanation).includes(code)).map(
+                      (code) => (
+                        <button
+                          key={code}
+                          className="version-lang missing"
+                          title={ui('addLanguage', lang)}
+                          disabled={addingLanguage !== null}
+                          onClick={() => addVersionLanguage(activeVersionNo, code)}
+                        >
+                          {addingLanguage === code ? '…' : `+${langChip(code)}`}
+                        </button>
+                      ),
+                    )}
                     <StyleSelector />
+                    <LanguageSelect />
                     <button
                       onClick={() =>
                         regenerateTheory(useStyle.getState().instruction(), useStyle.getState().currentName())
@@ -407,9 +438,41 @@ export function HomeScreen() {
                   </div>
                 )}
 
-                <Markdown className="markdown" assetBase={`/api/topics/${topic!.id}/assets`}>
-                  {tl(activeExplanation, lang)}
-                </Markdown>
+                {/* Lesson generation is its own row: it takes the same language
+                    parameter as the version above, and crowding it next to Boss
+                    Fight made two unrelated actions look like a pair. */}
+                {!lessonReady && (
+                  <div className="home-lesson-gen">
+                    {atomsTask?.status === 'running' ? (
+                      <span className="home-hint">{ui('generatingLesson', lang)}</span>
+                    ) : (
+                      <>
+                        <LanguageSelect />
+                        <button
+                          className="accent"
+                          title={ui('lessonGenHint', lang)}
+                          onClick={generateLesson}
+                        >
+                          {ui('generateLesson', lang)}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {!lessonReady && atomsTask?.status === 'running' && <GenerationView taskKey={atomsKey} />}
+
+                {tlStrict(activeExplanation, lang) === null ? (
+                  <MissingLanguage
+                    available={langsOf(activeExplanation)}
+                    generating={addingLanguage !== null}
+                    onGenerate={() => addVersionLanguage(activeVersionNo, lang)}
+                  />
+                ) : (
+                  <Markdown className="markdown" assetBase={`/api/topics/${topic!.id}/assets`}>
+                    {tlStrict(activeExplanation, lang)!}
+                  </Markdown>
+                )}
               </div>
             )}
           </div>

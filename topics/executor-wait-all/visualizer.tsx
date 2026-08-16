@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import type { VisualizerProps } from '@app/engine/traceTypes';
 import { ArrayGrid, type ArrayCell } from '@app/primitives/ArrayGrid';
 import { LinkedNodes, type LinkedNode } from '@app/primitives/LinkedNodes';
-import { tl, useLang, type Localized } from '@app/i18n';
+import { tl, useLang, type Localized, type Lang } from '@app/i18n';
 
 const LABELS = {
   runHint: {
@@ -190,7 +190,7 @@ export default function ExecutorWaitAllVisualizer({ event }: VisualizerProps) {
   );
 }
 
-function MainStatus({ main, lang }: { main: MainSnapshot; lang: 'en' | 'ru' }) {
+function MainStatus({ main, lang }: { main: MainSnapshot; lang: Lang }) {
   const label = STATE_LABELS[main.state] ?? { en: main.state, ru: main.state };
   return (
     <span>
@@ -205,7 +205,7 @@ function MainStatus({ main, lang }: { main: MainSnapshot; lang: 'en' | 'ru' }) {
   );
 }
 
-function LatchStatus({ latch, lang }: { latch: LatchSnapshot; lang: 'en' | 'ru' }) {
+function LatchStatus({ latch, lang }: { latch: LatchSnapshot; lang: Lang }) {
   return (
     <span>
       <strong style={monoStyle}>{latch.name}</strong>
@@ -218,7 +218,7 @@ function LatchStatus({ latch, lang }: { latch: LatchSnapshot; lang: 'en' | 'ru' 
   );
 }
 
-function executorCells(executor: ExecutorSnapshot, highlight: Set<string>, lang: 'en' | 'ru'): ArrayCell[] {
+function executorCells(executor: ExecutorSnapshot, highlight: Set<string>, lang: Lang): ArrayCell[] {
   return [
     {
       key: 'workers',
@@ -239,7 +239,7 @@ function executorCells(executor: ExecutorSnapshot, highlight: Set<string>, lang:
   ];
 }
 
-function workerNodes(workers: WorkerSnapshot[], highlight: Set<string>, lang: 'en' | 'ru'): LinkedNode[] {
+function workerNodes(workers: WorkerSnapshot[], highlight: Set<string>, lang: Lang): LinkedNode[] {
   return workers.map((worker) => {
     const status = STATE_LABELS[worker.state] ?? { en: worker.state, ru: worker.state };
     const detail = worker.currentTask
@@ -254,7 +254,7 @@ function workerNodes(workers: WorkerSnapshot[], highlight: Set<string>, lang: 'e
   });
 }
 
-function taskNodes(tasks: TaskSnapshot[], highlight: Set<string>, lang: 'en' | 'ru'): LinkedNode[] {
+function taskNodes(tasks: TaskSnapshot[], highlight: Set<string>, lang: Lang): LinkedNode[] {
   return tasks.map((task) => {
     const status = STATE_LABELS[task.state] ?? { en: task.state, ru: task.state };
     return {
@@ -266,7 +266,7 @@ function taskNodes(tasks: TaskSnapshot[], highlight: Set<string>, lang: 'en' | '
   });
 }
 
-function futureNodes(futures: FutureSnapshot[], highlight: Set<string>, lang: 'en' | 'ru'): LinkedNode[] {
+function futureNodes(futures: FutureSnapshot[], highlight: Set<string>, lang: Lang): LinkedNode[] {
   return futures.map((future) => {
     const status = future.done ? tl(LABELS.done, lang) : tl(STATE_LABELS[future.state] ?? { en: future.state, ru: future.state }, lang);
     const result = future.result === undefined ? '' : ` - ${tl(LABELS.result, lang)} ${String(future.result)}`;

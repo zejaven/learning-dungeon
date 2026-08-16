@@ -1,4 +1,4 @@
-# System-tray launcher for the Java Interview Dungeon.
+﻿# System-tray launcher for the Java Interview Dungeon.
 #
 # Starts the packaged backend (which also serves the built frontend), waits for
 # it to come up, opens the browser, and keeps a tray icon alive. Choosing
@@ -14,7 +14,10 @@ $ErrorActionPreference = 'Stop'
 
 $root       = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $port       = 18080
-$url        = "http://localhost:$port"
+# 127.0.0.1, never "localhost": the backend binds the IPv4 loopback only
+# (server.address in application.yml), while localhost resolves to ::1 first and
+# a probe there stalls past its own timeout instead of failing over to IPv4.
+$url        = "http://127.0.0.1:$port"
 $iconPath   = Join-Path $PSScriptRoot 'icon.ico'
 $logPath    = Join-Path $PSScriptRoot 'app.log'
 $title      = 'Java Interview Dungeon'
@@ -61,6 +64,15 @@ if (-not $javaw) {
     if ($cmd) { $javaw = $cmd.Source }
 }
 if (-not $javaw) {
+    # Fall back to the bundled tools\jdk-21 next to the repo.
+    $bundled = Get-ChildItem (Join-Path $root '..\tools') -Directory -Filter 'jdk-21*' -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if ($bundled) {
+        $cand = Join-Path $bundled.FullName 'bin\javaw.exe'
+        if (Test-Path $cand) { $javaw = $cand }
+    }
+}
+if (-not $javaw) {
     Show-Error 'javaw.exe not found. Set JAVA_HOME or add a JDK 21 bin to PATH.'
     return
 }
@@ -71,7 +83,21 @@ try {
     $listening = [bool](Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction Stop)
 } catch { $listening = $false }
 if ($listening) {
-    Start-Process $url
+    # The port answers, but is it *our* app? A foreign service on 18080 must not
+    # be silently opened in the browser as if it were the Dungeon.
+    $ours = $false
+    try {
+        $status = Invoke-RestMethod "http://127.0.0.1:$port/api/system/status" -TimeoutSec 5
+        $ours = [bool]$status.bootId
+    } catch { $ours = $false }
+    if ($ours) {
+        Start-Process $url
+        return
+    }
+    $owner = (Get-NetTCPConnection -LocalPort $port -State Listen |
+        Select-Object -First 1).OwningProcess
+    Show-Error ("Port $port is already occupied by another application (PID $owner)." +
+        "`n`nFree the port or close that application, then start the Dungeon again.")
     return
 }
 
@@ -129,8 +155,8 @@ $openApp = { Start-Process $url }
 $openItem.add_Click($openApp)
 $notify.add_DoubleClick($openApp)
 $logItem.add_Click({
-    if (Test-Path $startupLog) { Start-Process $startupLog }
-    elseif (Test-Path $logPath) { Start-Process $logPath }
+    if (Test-Path $logPath) { Start-Process $logPath }
+    elseif (Test-Path $startupLog) { Start-Process $startupLog }
 })
 
 $shutdown = {

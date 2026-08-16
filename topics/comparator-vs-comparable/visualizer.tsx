@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import type { VisualizerProps } from '@app/engine/traceTypes';
 import { ArrayGrid, type ArrayCell } from '@app/primitives/ArrayGrid';
 import { BoxGroup, type Box } from '@app/primitives/BoxGroup';
-import { tl, useLang, type Localized } from '@app/i18n';
+import { tl, useLang, type Localized, type Lang } from '@app/i18n';
 
 const LABELS = {
   order: { en: 'order', ru: 'порядок' },
@@ -45,8 +45,7 @@ interface LastComparison {
   right: string;
   result: number;
   sign: number;
-  meaningEn: string;
-  meaningRu: string;
+  meaning: Localized;
 }
 
 interface SafeCompare {
@@ -62,9 +61,7 @@ interface SafeCompare {
 
 interface OrderingState {
   name: string;
-  order: string;
-  orderEn?: string;
-  orderRu?: string;
+  order: Localized;
   source: string;
   operation: string;
   values: ValueItem[];
@@ -124,7 +121,7 @@ export default function ComparatorVsComparableVisualizer({ event }: VisualizerPr
         <Stat label={tl(LABELS.source, lang)} value={state.source} />
         <Stat
           label={tl(LABELS.order, lang)}
-          value={lang === 'ru' ? state.orderRu ?? state.order : state.orderEn ?? state.order}
+          value={tl(state.order, lang)}
         />
         <Stat label={tl(LABELS.operation, lang)} value={operationLabel(state.operation, lang)} highlight />
         {state.lastComparison && (
@@ -160,11 +157,11 @@ export default function ComparatorVsComparableVisualizer({ event }: VisualizerPr
   );
 }
 
-function localizedMeaning(comparison: LastComparison, lang: 'en' | 'ru'): string {
-  return lang === 'ru' ? comparison.meaningRu : comparison.meaningEn;
+function localizedMeaning(comparison: LastComparison, lang: Lang): string {
+  return tl(comparison.meaning, lang);
 }
 
-function operationLabel(kind: string, lang: 'en' | 'ru'): string {
+function operationLabel(kind: string, lang: Lang): string {
   return tl(OP_LABELS[kind] ?? { en: kind, ru: kind }, lang);
 }
 

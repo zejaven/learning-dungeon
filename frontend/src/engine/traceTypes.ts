@@ -166,8 +166,8 @@ export interface ManualQuestion {
 export interface TheoryVersion {
   versionNo: number;
   style: string;
-  en: string;
-  ru: string;
+  /** Explanation per language; a language the version lacks is absent. */
+  texts: Localized;
   createdAt: string | null;
   aiProvider: string;
   aiModel: string;
@@ -202,6 +202,8 @@ export interface TopicDetail {
   hasAtoms: boolean;
   /** Subject area this topic belongs to (e.g. 'java', 'ndm'); 'java' by default. */
   domainId: string;
+  /** Content languages the topic declares (subset of ['en', 'ru']); default both. */
+  languages: string[];
 }
 
 /** Props every topic visualizer receives. */

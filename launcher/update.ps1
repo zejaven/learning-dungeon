@@ -1,4 +1,4 @@
-# Detached updater, invoked by tray.ps1 when the backend left an update.flag on
+﻿# Detached updater, invoked by tray.ps1 when the backend left an update.flag on
 # exit. Optionally pulls the latest commits from GitHub, rebuilds the packaged
 # app (launcher\build-app.ps1), then relaunches the tray (launch.vbs), which
 # starts the freshly built jar. Runs windowless and independent of the tray, so
@@ -38,7 +38,10 @@ try {
     }
     if ($ok) {
         '[update] build-app.ps1' | Add-Content $log
-        & (Join-Path $scriptDir 'build-app.ps1') *>> $log
+        # Run as a child process: build-app.ps1 exits with a real code on
+        # failure, and its `exit` must not take this updater down with it.
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass `
+            -File (Join-Path $scriptDir 'build-app.ps1') *>> $log
         if ($LASTEXITCODE -ne 0) {
             $ok = $false
             "[update] build failed (exit $LASTEXITCODE)" | Add-Content $log

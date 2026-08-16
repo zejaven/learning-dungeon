@@ -1,6 +1,7 @@
 import { getVisualizer } from '@app/engine/topicRegistry';
 import { useStore } from '@app/engine/store';
 import { EventLog } from '@app/primitives/EventLog';
+import { ErrorBoundary } from '@app/shell/ErrorBoundary';
 import { stepLabel, ui, useLang } from '@app/i18n';
 
 export function VisualizationCanvas() {
@@ -21,7 +22,10 @@ export function VisualizationCanvas() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div>
         {Visualizer ? (
-          <Visualizer event={currentEvent} />
+          // key resets the boundary when the user steps to another event
+          <ErrorBoundary key={stepIndex}>
+            <Visualizer event={currentEvent} />
+          </ErrorBoundary>
         ) : (
           <div style={{ opacity: 0.6, fontSize: 13 }}>{ui('noVisualizer', lang)}</div>
         )}

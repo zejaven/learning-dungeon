@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import type { VisualizerProps } from '@app/engine/traceTypes';
 import { ArrayGrid, type ArrayCell } from '@app/primitives/ArrayGrid';
 import { LinkedNodes, type LinkedNode } from '@app/primitives/LinkedNodes';
-import { tl, useLang, type Localized } from '@app/i18n';
+import { tl, useLang, type Localized, type Lang } from '@app/i18n';
 
 const LABELS = {
   runHint: {
@@ -157,7 +157,7 @@ export default function CompareAndSetVisualizer({ event }: VisualizerProps) {
   );
 }
 
-function threadSubtitle(thread: ThreadSnapshot, lang: 'en' | 'ru') {
+function threadSubtitle(thread: ThreadSnapshot, lang: Lang) {
   const parts: string[] = [];
   const status = STATUS_LABELS[thread.status] ?? { en: thread.status, ru: thread.status };
   parts.push(tl(status, lang));

@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import type { VisualizerProps } from '@app/engine/traceTypes';
 import { ArrayGrid, type ArrayCell } from '@app/primitives/ArrayGrid';
 import { BoxGroup, type Box } from '@app/primitives/BoxGroup';
-import { tl, useLang } from '@app/i18n';
+import { tl, useLang, type Lang } from '@app/i18n';
 
 const LABELS = {
   bytes: { en: 'bytes', ru: 'байт' },
@@ -150,7 +150,7 @@ export default function PrimitiveSizesVisualizer({ event }: VisualizerProps) {
   );
 }
 
-function storageBoxes(lang: 'en' | 'ru'): Box[] {
+function storageBoxes(lang: Lang): Box[] {
   return [
     {
       id: 'value-width',

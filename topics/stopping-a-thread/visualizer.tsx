@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import type { VisualizerProps } from '@app/engine/traceTypes';
 import { ArrayGrid, type ArrayCell } from '@app/primitives/ArrayGrid';
 import { LinkedNodes, type LinkedNode } from '@app/primitives/LinkedNodes';
-import { tl, useLang, type Localized } from '@app/i18n';
+import { tl, useLang, type Localized, type Lang } from '@app/i18n';
 
 const LABELS = {
   runHint: {
@@ -136,7 +136,7 @@ export default function StoppingAThreadVisualizer({ event }: VisualizerProps) {
   );
 }
 
-function workerNodes(workers: WorkerSnapshot[], highlight: Set<string>, lang: 'en' | 'ru'): LinkedNode[] {
+function workerNodes(workers: WorkerSnapshot[], highlight: Set<string>, lang: Lang): LinkedNode[] {
   return workers.map((worker) => {
     const state = STATE_LABELS[worker.state] ?? { en: worker.state, ru: worker.state };
     const joined = worker.joined ? tl(LABELS.joined, lang) : tl(LABELS.notJoined, lang);
@@ -154,7 +154,7 @@ function workerNodes(workers: WorkerSnapshot[], highlight: Set<string>, lang: 'e
   });
 }
 
-function signalNodes(signals: SignalSnapshot[], highlight: Set<string>, lang: 'en' | 'ru'): LinkedNode[] {
+function signalNodes(signals: SignalSnapshot[], highlight: Set<string>, lang: Lang): LinkedNode[] {
   return signals.flatMap((signal) => [
     signalNode(signal.worker, 'stop', LABELS.stopFlag, signal.stopRequested, highlight, lang),
     signalNode(signal.worker, 'interrupt', LABELS.interruptSignal, signal.interruptSignalSent, highlight, lang),
@@ -170,7 +170,7 @@ function signalNode(
   label: Localized,
   active: boolean,
   highlight: Set<string>,
-  lang: 'en' | 'ru',
+  lang: Lang,
 ): LinkedNode {
   return {
     id: `${worker}-${key}`,

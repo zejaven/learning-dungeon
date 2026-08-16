@@ -111,6 +111,8 @@ public class BulkGenerationService {
         final double capPercent;
         final double weeklyCapPercent;
         final List<Item> items;
+        /** Content languages to generate; null/empty = both. */
+        final List<String> languages;
         final Instant startedAt = Instant.now();
 
         volatile int currentIndex = -1;
@@ -126,7 +128,8 @@ public class BulkGenerationService {
         volatile Instant weeklyResetsAt;
 
         BulkRun(String kind, String provider, String domainId, Instant endTime,
-                double capPercent, double weeklyCapPercent, List<Item> items) {
+                double capPercent, double weeklyCapPercent, List<Item> items,
+                List<String> languages) {
             this.kind = kind;
             this.provider = provider;
             this.domainId = domainId;
@@ -134,6 +137,7 @@ public class BulkGenerationService {
             this.capPercent = capPercent;
             this.weeklyCapPercent = weeklyCapPercent;
             this.items = items;
+            this.languages = languages;
         }
 
         boolean isFinished() {
@@ -181,7 +185,8 @@ public class BulkGenerationService {
         BulkRun run = new BulkRun(kind, provider,
                 request.domainId() == null ? "" : request.domainId(),
                 endTime, maxPercent, maxWeeklyPercent,
-                request.items().stream().map(Item::new).toList());
+                request.items().stream().map(Item::new).toList(),
+                request.languages());
         current = run;
         executor.submit(() -> runLoop(run));
         return status();
@@ -361,7 +366,7 @@ public class BulkGenerationService {
                         ? item.spec.id() : item.spec.catalogId().trim();
                 String prompt = topicPrompts.build(new TopicGenSpec(item.spec.question(), catalogId,
                         item.spec.categoryId(), item.spec.difficulty(), item.spec.style(),
-                        item.spec.styleName(), run.provider));
+                        item.spec.styleName(), run.provider, run.languages, run.domainId));
                 return generation.startOrGet("catalog:" + catalogId, run.provider, prompt,
                         AiTask.GENERATE_TOPIC);
             }
@@ -371,7 +376,8 @@ public class BulkGenerationService {
                 return null;
             }
             return generation.startOrGet("atoms:" + topic.id(), run.provider,
-                    atomsPrompts.buildFull(topic, run.provider, 1), AiTask.GENERATE_ATOMS);
+                    atomsPrompts.buildFull(topic, run.provider, 1, run.languages),
+                    AiTask.GENERATE_ATOMS);
         } catch (RuntimeException e) {
             log.warn("Bulk item {} could not start: {}", item.spec.id(), e.getMessage());
             return null;

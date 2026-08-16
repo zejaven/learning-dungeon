@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { fillBlanks, textValues } from '@app/engine/grading';
 import type { AnswerValue, FillBlankExercise } from '@app/engine/lessonTypes';
-import { tl, ui, useLang } from '@app/i18n';
+import { tl, tlList, ui, useLang } from '@app/i18n';
 
 interface Props {
   exercise: FillBlankExercise;
@@ -59,7 +59,7 @@ export function FillBlank({ exercise, answer, onChange, showResult, correct, onE
           {blanks.map((b, i) => (
             <span key={i}>
               {i > 0 && ', '}
-              <code>{filled(i) || '∅'}</code> → <code>{b[lang]?.[0] ?? b.en[0]}</code>
+              <code>{filled(i) || '∅'}</code> → <code>{tlList(b, lang)[0]}</code>
             </span>
           ))}
         </div>

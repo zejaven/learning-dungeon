@@ -1,5 +1,7 @@
 package com.interviewlearning.generation;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -8,6 +10,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -21,6 +24,8 @@ import java.util.Set;
 public class GenerationTask {
 
     private static final Logger log = LoggerFactory.getLogger(GenerationTask.class);
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private record Event(String name, String data) {
     }
@@ -62,8 +67,15 @@ public class GenerationTask {
         if ("done".equals(newStatus) || "error".equals(newStatus)) {
             this.status = newStatus;
         }
-        String json = "{\"status\":\"" + newStatus + "\",\"message\":\""
-                + message.replace("\"", "'") + "\"}";
+        String json;
+        try {
+            json = MAPPER.writeValueAsString(Map.of(
+                    "status", newStatus, "message", String.valueOf(message)));
+        } catch (JsonProcessingException e) {
+            // Never hand-build JSON with the message inside: a Windows path or
+            // control characters in it would produce invalid JSON.
+            json = "{\"status\":\"" + newStatus + "\"}";
+        }
         add(new Event("status", json));
         if (isTerminal()) {
             for (SseEmitter emitter : new ArrayList<>(subscribers)) {

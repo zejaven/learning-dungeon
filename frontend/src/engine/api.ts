@@ -11,6 +11,7 @@ import type {
   TopicSummary,
 } from './traceTypes';
 import type { AiProviderStatus } from './aiStore';
+import type { Localized } from '../i18n';
 import type {
   AnswerValue,
   LearningAtoms,
@@ -317,6 +318,10 @@ export interface GenerateBody {
   style?: string;
   /** Display name of the chosen style (recorded in the topic), e.g. 'Sports'. */
   styleName?: string;
+  /** Content languages to generate ('en'/'ru'); omitted = both. */
+  languages?: string[];
+  /** Subject area the new topic belongs to; omitted = java. */
+  domainId?: string;
 }
 
 /** Lists a topic's theory versions (v1 = on-disk, 2+ = restyled regenerations). */
@@ -332,14 +337,33 @@ export async function regenerateVersion(
   style: string,
   styleName: string,
   provider: string,
+  languages?: string[],
 ): Promise<TheoryVersion> {
   const res = await fetch(`/api/topics/${encodeURIComponent(topicId)}/versions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ style, styleName, provider }),
+    body: JSON.stringify({ style, styleName, provider, languages }),
   });
   if (!res.ok) throw new Error(await res.text().catch(() => `Regenerate failed (${res.status})`));
   return res.json();
+}
+
+/** Translates an existing version into one more language, in place. */
+export async function addVersionLanguage(
+  topicId: string,
+  versionNo: number,
+  lang: string,
+  provider: string,
+): Promise<void> {
+  const res = await fetch(
+    `/api/topics/${encodeURIComponent(topicId)}/versions/${versionNo}/languages`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lang, provider }),
+    },
+  );
+  if (!res.ok) throw new Error(await res.text().catch(() => `Translation failed (${res.status})`));
 }
 
 export interface StyleDto {
@@ -461,11 +485,12 @@ export async function startAtomsGeneration(
   versionNo: number,
   mode: 'full' | 'augment' = 'full',
   comment = '',
+  languages?: string[],
 ): Promise<GenTaskRef> {
   const res = await fetch(`/api/topics/${encodeURIComponent(topicId)}/atoms/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ provider, versionNo, mode, comment }),
+    body: JSON.stringify({ provider, versionNo, mode, comment, languages }),
   });
   if (!res.ok) throw new Error(`Failed to start lesson generation (${res.status})`);
   return res.json();
@@ -479,7 +504,7 @@ export type BulkItemStatus = 'pending' | 'running' | 'done' | 'error' | 'skipped
 /** One unit of work; theory items carry the same fields startGeneration takes. */
 export interface BulkItemInput {
   id: string;
-  label: { en: string; ru: string };
+  label: Localized;
   question?: string;
   catalogId?: string;
   categoryId?: string;
@@ -490,7 +515,7 @@ export interface BulkItemInput {
 
 export interface BulkItemView {
   id: string;
-  label: { en: string; ru: string };
+  label: Localized;
   status: BulkItemStatus;
   taskKey: string | null;
 }
@@ -537,6 +562,8 @@ export interface StartBulkBody {
   /** Cap for the 7-day window; reaching it ends the run instead of pausing. */
   maxWeeklyPercent: number;
   items: BulkItemInput[];
+  /** Content languages to generate ('en'/'ru'); omitted = both. */
+  languages?: string[];
 }
 
 /** Starts the bulk loop; throws with the server's message on 400/409. */

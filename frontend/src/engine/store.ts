@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import {
   addQuestion,
+  addVersionLanguage,
   analyzeProject,
   fetchProgress,
   fetchQuestions,
@@ -14,6 +15,7 @@ import {
   saveMissions,
 } from './api';
 import { useAi } from './aiStore';
+import { genLanguages } from './genLangStore';
 import { evaluateStructureMission } from './structure';
 import type {
   ClassGraph,
@@ -104,6 +106,10 @@ interface AppState {
   loadVersions: (topicId: string) => Promise<void>;
   setActiveVersion: (versionNo: number) => void;
   regenerateTheory: (style: string, styleName: string) => Promise<void>;
+  /** Translates a version into one more language, in place. */
+  addVersionLanguage: (versionNo: number, lang: string) => Promise<void>;
+  /** Language currently being translated, or null. */
+  addingLanguage: string | null;
 }
 
 function persistActiveVersion(topicId: string | undefined, versionNo: number): void {
@@ -215,6 +221,9 @@ function defaultCodeFor(topic: TopicDetail): string {
   return (def ?? topic.examples[0])?.code ?? '';
 }
 
+/** Monotonic counter of selectTopic calls; only the latest one may apply its result. */
+let selectSeq = 0;
+
 export const useStore = create<AppState>((set, get) => ({
   topics: [],
   topicsError: null,
@@ -244,6 +253,7 @@ export const useStore = create<AppState>((set, get) => ({
   theoryVersions: [],
   activeVersionNo: 1,
   generatingVersion: false,
+  addingLanguage: null,
 
   async loadTopics() {
     // Loads the list of generated topics (used for completion flags and to know
@@ -269,9 +279,12 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   async selectTopic(id) {
-    set({ loadingTopic: true });
+    const req = ++selectSeq;
+    // Clear a stale runError so HomeScreen shows "opening theory", not an old failure.
+    set({ loadingTopic: true, runError: null });
     try {
       const topic = await fetchTopic(id);
+      if (req !== selectSeq) return; // a newer topic was selected meanwhile
       const structural = topic.mode === 'structural';
       const files = structural ? (loadProject(id) ?? seedFiles(topic)) : {};
       const sqlQuery = topic.mode === 'sql' ? (loadSql(id) ?? seedSqlQuery(topic)) : '';
@@ -328,6 +341,7 @@ export const useStore = create<AppState>((set, get) => ({
         /* progress is optional; ignore if the DB is unavailable */
       }
     } catch (e) {
+      if (req !== selectSeq) return; // a newer topic manages loadingTopic itself
       set({ loadingTopic: false, runError: (e as Error).message });
     }
   },
@@ -358,6 +372,7 @@ export const useStore = create<AppState>((set, get) => ({
     set({ running: true, runError: null });
     try {
       const result = await runCode(topic.id, code);
+      if (get().topic?.id !== topic.id) return; // a newer topic was selected meanwhile
       const completed = { ...get().completedMissions };
       const newlyCompleted: string[] = [];
       for (const mission of topic.missions) {
@@ -380,6 +395,7 @@ export const useStore = create<AppState>((set, get) => ({
         });
       }
     } catch (e) {
+      if (get().topic?.id !== topic.id) return; // a newer topic was selected meanwhile
       set({ running: false, runError: (e as Error).message });
     }
   },
@@ -469,6 +485,7 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       const projectFiles = Object.entries(files).map(([path, content]) => ({ path, content }));
       const res = await analyzeProject(topic.id, projectFiles);
+      if (get().topic?.id !== topic.id) return; // a newer topic was selected meanwhile
       // Re-check structure missions against the fresh graph (sticky, like trace
       // missions: once achieved they stay completed and are persisted).
       const completed = { ...get().completedMissions };
@@ -491,6 +508,7 @@ export const useStore = create<AppState>((set, get) => ({
         });
       }
     } catch (e) {
+      if (get().topic?.id !== topic.id) return; // a newer topic was selected meanwhile
       set({ analyzing: false, analyzeError: (e as Error).message });
     }
   },
@@ -506,6 +524,7 @@ export const useStore = create<AppState>((set, get) => ({
     set({ runningSql: true });
     try {
       const res = await runSqlQuery(topic.id, sqlQuery);
+      if (get().topic?.id !== topic.id) return; // a newer topic was selected meanwhile
       // Mission flags come from the server (it compares to each expectedSql).
       const completed = { ...get().completedMissions };
       const newly: string[] = [];
@@ -526,6 +545,7 @@ export const useStore = create<AppState>((set, get) => ({
         });
       }
     } catch (e) {
+      if (get().topic?.id !== topic.id) return; // a newer topic was selected meanwhile
       set({ runningSql: false, sqlResult: { columns: [], rows: [], error: (e as Error).message } });
     }
   },
@@ -536,6 +556,7 @@ export const useStore = create<AppState>((set, get) => ({
     set({ runningTests: true });
     try {
       const res = await runChallenge(topic.id, code);
+      if (get().topic?.id !== topic.id) return; // a newer topic was selected meanwhile
       const completed = { ...get().completedMissions };
       const newly: string[] = [];
       for (const [id, pass] of Object.entries(res.missions)) {
@@ -555,6 +576,7 @@ export const useStore = create<AppState>((set, get) => ({
         });
       }
     } catch (e) {
+      if (get().topic?.id !== topic.id) return; // a newer topic was selected meanwhile
       set({
         runningTests: false,
         testResults: [{ name: 'error', passed: false, expected: '', actual: (e as Error).message }],
@@ -585,13 +607,30 @@ export const useStore = create<AppState>((set, get) => ({
     if (!topic) return;
     set({ generatingVersion: true });
     try {
-      const v = await regenerateVersion(topic.id, style, styleName, useAi.getState().selectedProvider);
+      const v = await regenerateVersion(
+        topic.id, style, styleName, useAi.getState().selectedProvider, genLanguages());
       if (get().topic?.id !== topic.id) return; // switched away meanwhile
       const versions = [...get().theoryVersions, v];
       set({ theoryVersions: versions, activeVersionNo: v.versionNo, generatingVersion: false });
       persistActiveVersion(topic.id, v.versionNo);
     } catch (e) {
       set({ generatingVersion: false, runError: (e as Error).message });
+    }
+  },
+
+  async addVersionLanguage(versionNo, lang) {
+    const topic = get().topic;
+    if (!topic || get().addingLanguage) return;
+    set({ addingLanguage: lang, runError: null });
+    try {
+      await addVersionLanguage(topic.id, versionNo, lang, useAi.getState().selectedProvider);
+      if (get().topic?.id !== topic.id) return; // switched away meanwhile
+      set({ addingLanguage: null });
+      await get().loadVersions(topic.id);
+      // Version 1 is the on-disk explanation, so the topic itself changed too.
+      if (versionNo <= 1) await get().selectTopic(topic.id);
+    } catch (e) {
+      set({ addingLanguage: null, runError: (e as Error).message });
     }
   },
 }));

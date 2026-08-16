@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { VisualizerProps } from '@app/engine/traceTypes';
 import { ArrayGrid, type ArrayCell } from '@app/primitives/ArrayGrid';
-import { tl, useLang } from '@app/i18n';
+import { tl, useLang, type Lang } from '@app/i18n';
 
 const LABELS = {
   runHint: {
@@ -177,12 +177,12 @@ export default function EqualityVisualizer({ event }: VisualizerProps) {
   );
 }
 
-function resultText(value: boolean | undefined, lang: 'en' | 'ru') {
+function resultText(value: boolean | undefined, lang: Lang) {
   if (value === undefined) return tl(LABELS.missing, lang);
   return value ? tl(LABELS.trueValue, lang) : tl(LABELS.falseValue, lang);
 }
 
-function kindText(kind: string, lang: 'en' | 'ru') {
+function kindText(kind: string, lang: Lang) {
   if (kind === 'symmetry') return tl(LABELS.symmetry, lang);
   if (kind === 'transitivity') return tl(LABELS.transitivity, lang);
   return kind;

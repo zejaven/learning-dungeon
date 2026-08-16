@@ -32,8 +32,10 @@ is not a production-grade sandbox.
 
 The app is multi-domain: a "domain" is a subject area above categories, and the
 home screen shows one domain at a time. Current domains: `java` (the original
-interview prep, with the static question catalog) and `ndm` (the IT8516
-"Network Design and Management" university course, imported as theory topics).
+interview prep, with the static question catalog), `ndm` (the IT8516
+"Network Design and Management" university course, imported as theory topics),
+and `qa` (QA interview prep, theory topics parsed from the user's question
+base; ids prefixed `qa-`).
 
 - A topic declares its domain via `domainId` in `topic.yaml`. An absent
   `domainId` means `java`, so all legacy topics are unaffected.
@@ -44,9 +46,15 @@ interview prep, with the static question catalog) and `ndm` (the IT8516
   domain's title. A deep link to a topic of another domain (`#/q/ndm-...`)
   auto-switches the domain.
 - Only the `java` domain has the static `CATALOG`, manual questions, and the
-  "Add topic"/"Add question" buttons; other domains build their category tree
-  purely from their topics' `categoryId`/`categoryName`, and their content is
-  imported rather than AI-generated (`prompts/add-topic.md` stays Java-only).
+  "Add question" button; other domains build their category tree purely from
+  their topics' `categoryId`/`categoryName`.
+- "Add topic" works in every domain: the request carries `domainId`, and
+  `TopicPromptBuilder.appendDomain` adds a block that overrides the Java-shaped
+  `prompts/add-topic.md` — it sets `domainId`, requires the `<domain>-` id
+  prefix, forces `mode: theory`, suppresses the Java category/mode heuristics,
+  and lists the categories that domain already uses. Cross-link context is
+  filtered to the same domain, and the generation task is keyed
+  `add-topic:<domainId>` so two domains cannot attach to each other's run.
 - Progress tables still key by `topic_id` only — topic ids are a single global
   namespace, so new domains use an id prefix (e.g. `ndm-`) by convention.
 - The global review pool is filtered to the active domain on the frontend; the
@@ -120,8 +128,10 @@ launcher\build-app.ps1
 This is the mode the in-app settings gear self-updates: the tray supervisor
 (`launcher/tray.ps1`) launches the jar with `-Dapp.launcher=tray`, and on a
 flagged exit hands off to `launcher/update.ps1` to rebuild and relaunch (see
-Backend Notes — the `system` package). Editing `tray.ps1`/`update.ps1`/backend
-startup args only takes effect after a fresh `build-app.ps1` + relaunch.
+Backend Notes — the `system` package). `launch.vbs` runs `launcher/tray.ps1`
+straight from disk, so edits to `tray.ps1`/`update.ps1` apply on the next launch
+with no rebuild; changes to backend or frontend sources need a fresh
+`build-app.ps1` because they are baked into the jar.
 
 Validation commands:
 
@@ -168,7 +178,15 @@ If a command cannot be run, say exactly why and what remains unverified.
 - Prefer existing patterns and module boundaries. Do not redesign the shell,
   runner, topic system, or build setup unless the task explicitly requires it.
 - Keep Java source, Java comments, identifiers, and technical tokens in English.
-- User-facing topic content is bilingual: English and Russian.
+- The set of content languages lives in one registry per side —
+  `backend/.../lang/ContentLanguages.java` and `frontend/src/languages.ts` —
+  and adding a language is a one-line change there. Nothing else may hardcode a
+  language pair: read text with `Localized.label()` / `tl()` for short labels and
+  `Localized.get()` / `tlStrict()` for body content, which reports a missing
+  translation instead of silently substituting another language.
+- A topic carries content in the languages it declares in `languages:`, which is
+  required in every topic.yaml — see Topic Authoring. UI chrome strings
+  (`i18n.ts`) are translated for the languages flagged `ui: true`.
 - Files contain UTF-8 Cyrillic content. Preserve UTF-8 and avoid bulk rewrites
   caused only by console encoding/mojibake.
 - Use stable, deterministic data for examples, tests, SQL seeds, and trace states.
@@ -177,6 +195,11 @@ If a command cannot be run, say exactly why and what remains unverified.
 ## Backend Notes
 
 - Main package: `com.interviewlearning`.
+- `server.address: 127.0.0.1` in `application.yml` keeps the run endpoint off the
+  LAN, and it binds the IPv4 loopback ONLY. Anything that talks to the backend
+  from outside a browser (launcher probes, the Vite `/api` proxy, scripts) must
+  address it as `127.0.0.1`: on Windows `localhost` resolves to `::1` first, and
+  connecting there stalls for ~2s rather than failing over.
 - Controllers live mostly under `backend/src/main/java/com/interviewlearning/api`.
 - Topic loading is in `topics/TopicRepository`. It rereads `topics/` from disk on
   requests so new folders appear without a backend restart. It reads `domainId`
@@ -333,7 +356,8 @@ sorting by difficulty. Explanations may embed images: put files under
 `topics/<id>/images/` and reference them with relative links
 (`![...](images/x.png)`) — `TopicContractTest` fails on links to missing files.
 
-Known modes:
+Known modes (the required explanation files are one per declared language —
+both `explanation.en.md` and `explanation.ru.md` unless `languages:` narrows it):
 
 - `trace` (default): runnable `Playground` examples plus trace visualizer.
   Required: `topic.yaml`, `explanation.en.md`, `explanation.ru.md`,
@@ -374,7 +398,26 @@ shape per exercise type — trust it over hand-written JSON.
 
 For all topics:
 
-- Every visible string must exist in both English and Russian.
+- Every visible string must exist in every language the topic declares.
+  `languages:` in topic.yaml is required and is a non-empty list of registered
+  codes; most topics carry `[en, ru]`. A single-language topic writes translatable
+  YAML fields as plain strings, has only `explanation.<lang>.md`, and fills only
+  that language's key in bossFight entries and `learning-atoms.json`. Loaders no
+  longer mirror one language into another: short labels fall back at read time,
+  while theory, lessons and boss questions show a "no text in this language"
+  state instead. The language picker sits next to the style selector in every
+  generation row (topic, new theory version, lesson, Add topic); the choice is
+  global and persisted, and at least one language always stays selected. For an
+  existing topic it is narrowed to what the topic has
+  (`ContentLanguages.effective`), except when regenerating a version, which may
+  add a language the topic lacks.
+- A theory version stores its text per language (`theory_version_text`); the
+  version bar shows a chip per language it has and a `+XX` button that
+  translates it into a missing one. For version 1 that writes
+  `explanation.<lang>.md` and adds the code to topic.yaml through
+  `TopicYamlEditor`, which edits that single line and leaves the rest of the
+  file byte-identical (never a snakeyaml re-dump — it would destroy comments and
+  block scalars).
 - `bossFight` questions need stable unique ids. Do not reuse an old id for a new
   question.
 - YAML values containing `: `, `#`, quotes, or leading punctuation should be
@@ -393,6 +436,7 @@ Use these as templates:
 - Structural topic: `topics/strategy/`
 - Theory topic: `topics/design-patterns-overview/`
 - Non-Java (domain) theory topic with images: `topics/ndm-scalability/`
+- Single-language topic (`languages: [ru]`): `topics/qa-test-estimation-task/`
 - SQL topic: `topics/sql-many-to-many/`
 - Challenge topic: `topics/algo-max-pair-product/`
 - `learning-atoms.json` (micro-actions lesson): `topics/hashmap/learning-atoms.json`

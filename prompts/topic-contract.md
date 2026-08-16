@@ -15,18 +15,31 @@ topics/<id>/
   quiz.yaml           missions (event-checked) + bossFight questions
 ```
 
-## Bilingual rule
+## Content languages
 
-Everything shown in the UI must exist in **both English and Russian**. Keep code,
-identifiers and technical terms (Java, HashMap, hashCode, resize, …) untranslated.
-Translatable YAML fields use a `{ en, ru }` map; explanation is two files.
-Java source code (including comments) stays in English — only the trace
-*descriptions* are bilingual.
+A topic carries every user-visible string in each language it declares. The
+languages are listed in `languages:` in topic.yaml, which every topic must set —
+most carry `[en, ru]`.
+
+- Translatable YAML fields use a `{ <lang>: … }` map with one key per declared
+  language — or a plain string, which means the same text serves every language
+  (this is how a single-language topic is written).
+- There is one `explanation.<lang>.md` per declared language.
+- quiz.yaml bossFight entries keep their stable `id` and carry one key per
+  declared language.
+- Code, identifiers and technical terms (Java, HashMap, hashCode, resize, …)
+  stay untranslated, and Java source including comments stays English — only the
+  trace *descriptions* are per-language.
+
+**The generation prompt always ends with a LANGUAGES directive naming the exact
+languages to write. It is authoritative** and overrides any bilingual wording in
+the examples below, which show a topic declaring `[en, ru]`.
 
 ## topic.yaml
 
 ```yaml
 id: <kebab-id>                  # must equal the folder name
+languages: [en, ru]             # REQUIRED: the content languages this topic carries
 title:
   en: <Human Title>
   ru: <Заголовок>
@@ -67,8 +80,9 @@ assistantExample:                # one example question, shown as the Ask AI pla
 missionsFile: quiz.yaml
 ```
 
-(A plain scalar instead of an `{en, ru}` map is accepted and used for both
-languages, but new topics should provide both.)
+(A plain scalar instead of a language map is accepted and used for every declared
+language — that is how a single-language topic is written. A topic declaring more
+than one language gives each translatable field a key per language.)
 
 ## Catalog placement (categoryId, difficulty, catalogId)
 

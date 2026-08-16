@@ -1,4 +1,4 @@
-# Starts the backend (Spring Boot) and the frontend (Vite) for local development.
+﻿# Starts the backend (Spring Boot) and the frontend (Vite) for local development.
 # Backend: http://localhost:18080   Frontend (open this): http://localhost:15173
 #
 # Usage:  ./dev.ps1
@@ -9,6 +9,17 @@
 
 $root = $PSScriptRoot
 $pidFile = Join-Path $root '.dev-pids'
+
+# --- JDK: fall back to the bundled tools\jdk-21 when JAVA_HOME is not set ---
+# (child windows inherit this process environment, so gradlew picks it up too)
+if (-not $env:JAVA_HOME) {
+    $bundled = Get-ChildItem (Join-Path $root '..\tools') -Directory -Filter 'jdk-21*' -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if ($bundled -and (Test-Path (Join-Path $bundled.FullName 'bin\java.exe'))) {
+        $env:JAVA_HOME = $bundled.FullName
+        Write-Host "JAVA_HOME not set — using bundled JDK: $env:JAVA_HOME" -ForegroundColor DarkGray
+    }
+}
 
 # --- Cleanup: stop anything a previous ./dev.ps1 run left behind ----------
 

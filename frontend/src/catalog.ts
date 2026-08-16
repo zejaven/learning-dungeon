@@ -1,4 +1,5 @@
 import type { Localized } from './i18n';
+import { LANG_CODES } from './languages';
 import type { ManualQuestion, TopicSummary } from './engine/traceTypes';
 import { DOMAINS, domainOf } from './domains';
 
@@ -36,8 +37,8 @@ export function compareEntries(a: CatalogEntry, b: CatalogEntry): number {
 
 export interface CatalogCategory {
   id: string;
-  /** English label (kept identical in both languages). */
-  name: string;
+  /** Tree label, per language. */
+  name: Localized;
   entries: CatalogEntry[];
 }
 
@@ -69,7 +70,7 @@ export const CATEGORY_IDS = [
 export const CATALOG: CatalogCategory[] = [
   {
     id: 'java-core',
-    name: 'Java Core',
+    name: { en: 'Java Core', ru: 'Ядро Java' },
     entries: [
       { id: 'java-core-1', difficulty: 1, question: { en: `Are strings in Java mutable or immutable? What happens at the memory level if we change a character in a string?`, ru: `Строки в Java мутабельные или иммутабельные? Что произойдёт на уровне памяти, если мы поменяем символ в строке?` } },
       { id: 'java-core-2', difficulty: 1, question: { en: `When you take a variable in Java — what does it hold and where?`, ru: `Если взять переменную в Java — что она хранит и где?` } },
@@ -97,7 +98,7 @@ export const CATALOG: CatalogCategory[] = [
   },
   {
     id: 'java-collections',
-    name: 'Java Collections',
+    name: { en: 'Java Collections', ru: 'Коллекции Java' },
     entries: [
       { id: 'java-collections-1', difficulty: 1, topicId: 'arraylist-vs-linkedlist', question: { en: `What is the difference between ArrayList and LinkedList?`, ru: `В чём разница между ArrayList и LinkedList?` } },
       { id: 'java-collections-2', difficulty: 1, question: { en: `What is HashMap and how is it implemented in Java?`, ru: `Что такое HashMap и как он реализован в Java?` } },
@@ -115,7 +116,7 @@ export const CATALOG: CatalogCategory[] = [
   },
   {
     id: 'concurrency',
-    name: 'Java Multithreading & Concurrency',
+    name: { en: 'Java Multithreading & Concurrency', ru: 'Многопоточность и конкурентность' },
     entries: [
       { id: 'concurrency-1', difficulty: 1, question: { en: `What is a critical section?`, ru: `Что такое критическая секция?` } },
       { id: 'concurrency-2', difficulty: 1, question: { en: `What is the difference between Thread and Runnable?`, ru: `Чем отличается Thread от Runnable?` } },
@@ -139,7 +140,7 @@ export const CATALOG: CatalogCategory[] = [
   },
   {
     id: 'memory-gc',
-    name: 'Java Memory Model & Garbage Collection',
+    name: { en: 'Java Memory Model & Garbage Collection', ru: 'Модель памяти и сборка мусора' },
     entries: [
       { id: 'memory-gc-1', difficulty: 1, question: { en: `When another method is called from the current one, do the new method's variables go into the same stack or a different one?`, ru: `При вызове другого метода из текущего переменные нового метода попадут в этот же стек или в какой-то другой?` } },
       { id: 'memory-gc-2', difficulty: 2, topicId: 'heap-generations', question: { en: `How does garbage collection happen? What exactly must happen to memory for GC to start?`, ru: `Как происходит сборка мусора? Что именно должно произойти с памятью, чтобы началась сборка мусора?` } },
@@ -155,7 +156,7 @@ export const CATALOG: CatalogCategory[] = [
   },
   {
     id: 'oop-design',
-    name: 'Principles of OOP & Design',
+    name: { en: 'Principles of OOP & Design', ru: 'Принципы ООП и проектирования' },
     entries: [
       { id: 'oop-design-1', difficulty: 1, question: { en: `What are the basic OOP principles and what do they represent?`, ru: `Какие есть базовые принципы ООП и что они из себя представляют?` } },
       { id: 'oop-design-2', difficulty: 1, question: { en: `What is your understanding of the principles of object-oriented programming?`, ru: `Каково ваше понимание принципов объектно-ориентированного программирования?` } },
@@ -165,7 +166,7 @@ export const CATALOG: CatalogCategory[] = [
   },
   {
     id: 'exceptions',
-    name: 'Java Exceptions & Error Handling',
+    name: { en: 'Java Exceptions & Error Handling', ru: 'Исключения и обработка ошибок' },
     entries: [
       { id: 'exceptions-1', difficulty: 1, question: { en: `How are exceptions related to resources handled?`, ru: `Как обрабатываются исключения, связанные с ресурсами?` } },
       { id: 'exceptions-2', difficulty: 1, question: { en: `What is a StackOverflow? What is the simplest method that triggers this error?`, ru: `Что такое StackOverflow? Какой простейший метод вызовет эту ошибку?` } },
@@ -177,7 +178,7 @@ export const CATALOG: CatalogCategory[] = [
   },
   {
     id: 'streams',
-    name: 'Java Streams & Lambda Expressions',
+    name: { en: 'Java Streams & Lambda Expressions', ru: 'Stream API и лямбда-выражения' },
     entries: [
       { id: 'streams-1', difficulty: 1, question: { en: `Can you write a function that takes a lambda expression as a parameter? For example, doSomeLogic(() -> System.out.println("Hello"));`, ru: `Можете ли вы написать функцию с параметром в виде лямбда-выражения? Например, doSomeLogic(() -> System.out.println("Hello"));` } },
       { id: 'streams-2', difficulty: 2, question: { en: `Will performance improve when using Java Streams instead of ordinary loops?`, ru: `Улучшится ли производительность при использовании Java Streams вместо обычных циклов?` } },
@@ -186,7 +187,7 @@ export const CATALOG: CatalogCategory[] = [
   },
   {
     id: 'algorithms',
-    name: 'Algorithms and Data Structures',
+    name: { en: 'Algorithms and Data Structures', ru: 'Алгоритмы и структуры данных' },
     entries: [
       { id: 'algorithms-1', difficulty: 1, question: { en: `What is the complexity of finding an element in an array by index and by value?`, ru: `Какая сложность поиска элемента в массиве по индексу и по значению?` } },
       { id: 'algorithms-2', difficulty: 1, question: { en: `What will the search complexity be after sorting the array?`, ru: `Какая будет сложность поиска после сортировки массива?` } },
@@ -204,7 +205,7 @@ export const CATALOG: CatalogCategory[] = [
   },
   {
     id: 'databases',
-    name: 'Databases and SQL',
+    name: { en: 'Databases and SQL', ru: 'Базы данных и SQL' },
     entries: [
       { id: 'databases-1', difficulty: 1, question: { en: `Have you worked with Prepared Statements?`, ru: `Приходилось ли работать с Prepared Statements?` } },
       { id: 'databases-2', difficulty: 1, question: { en: `Which fields are you necessarily interested in when querying?`, ru: `Какие поля обязательно интересуют при запросах?` } },
@@ -231,7 +232,7 @@ export const CATALOG: CatalogCategory[] = [
   },
   {
     id: 'spring',
-    name: 'Spring Framework',
+    name: { en: 'Spring Framework', ru: 'Spring Framework' },
     entries: [
       { id: 'spring-1', difficulty: 2, question: { en: `What is the difference between the @Bean and @Component annotations?`, ru: `В чём разница между аннотациями @Bean и @Component?` } },
       { id: 'spring-2', difficulty: 2, question: { en: `What bean scopes are there?`, ru: `Какие есть скоупы бинов?` } },
@@ -251,7 +252,7 @@ export const CATALOG: CatalogCategory[] = [
   },
   {
     id: 'hibernate',
-    name: 'Hibernate & JPA',
+    name: { en: 'Hibernate & JPA', ru: 'Hibernate и JPA' },
     entries: [
       { id: 'hibernate-1', difficulty: 2, question: { en: `What is the default loading strategy for loading entities from the database?`, ru: `Какова стратегия загрузки по умолчанию для загрузки сущностей из базы данных?` } },
       { id: 'hibernate-2', difficulty: 2, question: { en: `If the default strategy is lazy, how do you load entities eagerly for a specific query?`, ru: `Если по умолчанию установлена стратегия lazy, как для конкретного запроса загрузить сущности по стратегии eager?` } },
@@ -264,7 +265,7 @@ export const CATALOG: CatalogCategory[] = [
   },
   {
     id: 'design-patterns',
-    name: 'Design Patterns',
+    name: { en: 'Design Patterns', ru: 'Паттерны проектирования' },
     entries: [
       { id: 'design-patterns-1', difficulty: 2, question: { en: `What design patterns exist?`, ru: `Какие существуют шаблоны проектирования?` } },
       { id: 'design-patterns-2', difficulty: 2, question: { en: `How do you implement a Singleton, and how do you make it thread-safe (enum, double-checked locking)?`, ru: `Как реализовать Singleton и как сделать его потокобезопасным (enum, double-checked locking)?` } },
@@ -280,7 +281,7 @@ export const CATALOG: CatalogCategory[] = [
   },
   {
     id: 'microservices',
-    name: 'Microservices & Architecture',
+    name: { en: 'Microservices & Architecture', ru: 'Микросервисы и архитектура' },
     entries: [
       { id: 'microservices-1', difficulty: 1, question: { en: `What is the difference between synchronous and asynchronous communication?`, ru: `В чём разница между синхронной и асинхронной коммуникацией?` } },
       { id: 'microservices-2', difficulty: 2, question: { en: `Why are microservices needed?`, ru: `Зачем нужны микросервисы?` } },
@@ -301,7 +302,7 @@ export const CATALOG: CatalogCategory[] = [
   },
   {
     id: 'rest',
-    name: 'RESTful API & Web Services',
+    name: { en: 'RESTful API & Web Services', ru: 'RESTful API и веб-сервисы' },
     entries: [
       { id: 'rest-1', difficulty: 1, question: { en: `How would you share endpoints with others, e.g. within your organization?`, ru: `Как бы вы поделились эндпоинтами с другими, например, внутри вашей организации?` } },
       { id: 'rest-2', difficulty: 1, question: { en: `What is the difference between the PUT and PATCH methods?`, ru: `В чём разница между методами PUT и PATCH?` } },
@@ -317,7 +318,7 @@ export const CATALOG: CatalogCategory[] = [
   },
   {
     id: 'networking',
-    name: 'Real-time & Networking',
+    name: { en: 'Real-time & Networking', ru: 'Real-time и сети' },
     entries: [
       { id: 'networking-1', difficulty: 2, question: { en: `How does a server notify a browser client of an event in real time? What technologies fit (polling, long polling, SSE, WebSocket)?`, ru: `Как сервер уведомляет браузерный клиент о событии в реальном времени? Какие технологии подходят (polling, long polling, SSE, WebSocket)?` } },
       { id: 'networking-2', difficulty: 2, question: { en: `What is long polling and how does it differ from regular HTTP requests?`, ru: `Что такое long polling и чем он отличается от обычных HTTP-запросов?` } },
@@ -332,7 +333,7 @@ export const CATALOG: CatalogCategory[] = [
   },
   {
     id: 'security',
-    name: 'Security & Authentication',
+    name: { en: 'Security & Authentication', ru: 'Безопасность и аутентификация' },
     entries: [
       { id: 'security-1', difficulty: 1, question: { en: `What is cross-site scripting (XSS)?`, ru: `Что такое межсайтовый скриптинг (XSS)?` } },
       { id: 'security-2', difficulty: 1, question: { en: `What is CSRF (cross-site request forgery)?`, ru: `Что такое CSRF (межсайтовая подделка запроса)?` } },
@@ -347,7 +348,7 @@ export const CATALOG: CatalogCategory[] = [
   },
   {
     id: 'devops',
-    name: 'DevOps / CI/CD / Kubernetes / Docker',
+    name: { en: 'DevOps / CI/CD / Kubernetes / Docker', ru: 'DevOps / CI-CD / Kubernetes / Docker' },
     entries: [
       { id: 'devops-1', difficulty: 2, question: { en: `How do you build a Docker image from your Spring Boot application?`, ru: `Как создать Docker-образ из вашего Spring Boot приложения?` } },
       { id: 'devops-2', difficulty: 2, question: { en: `Which variables have higher priority — those in application.properties or environment variables?`, ru: `Какие переменные имеют более высокий приоритет — в application.properties или переменные окружения?` } },
@@ -361,7 +362,7 @@ export const CATALOG: CatalogCategory[] = [
   },
   {
     id: 'performance',
-    name: 'Performance Optimization & Troubleshooting',
+    name: { en: 'Performance Optimization & Troubleshooting', ru: 'Производительность и диагностика' },
     entries: [
       { id: 'performance-1', difficulty: 2, question: { en: `How do you find the cause of a slow website?`, ru: `Как найти причину медленной работы сайта?` } },
       { id: 'performance-2', difficulty: 2, question: { en: `What application metrics do you know?`, ru: `Какие метрики приложения ты знаешь?` } },
@@ -371,14 +372,14 @@ export const CATALOG: CatalogCategory[] = [
   },
   {
     id: 'kotlin',
-    name: 'Kotlin',
+    name: { en: 'Kotlin', ru: 'Kotlin' },
     entries: [
       { id: 'kotlin-1', difficulty: 2, question: { en: `How do Kotlin Coroutines work?`, ru: `Как работают Kotlin Coroutines?` } },
     ],
   },
   {
     id: 'messaging',
-    name: 'Queues and Message Brokers',
+    name: { en: 'Queues and Message Brokers', ru: 'Очереди и брокеры сообщений' },
     entries: [
       { id: 'messaging-1', difficulty: 2, question: { en: `How do queues like RabbitMQ work?`, ru: `Как работают очереди типа RabbitMQ?` } },
       { id: 'messaging-2', difficulty: 2, question: { en: `What is the difference between a binding key and a routing key in RabbitMQ?`, ru: `В чём разница между binding key и routing key в RabbitMQ?` } },
@@ -418,6 +419,18 @@ function prettifyCategoryId(id: string): string {
 }
 
 /**
+ * Label for a category invented by a topic. The topic's own `category` field is
+ * already per-language, so prefer it over the flat `categoryName` — that is what
+ * gives the QA and NDM trees Russian labels without duplicating them in every
+ * topic.yaml.
+ */
+function categoryLabel(category: Localized | undefined, name: string, id: string): Localized {
+  if (category && Object.values(category).some((v) => v && v.trim())) return category;
+  const fallback = name?.trim() ? name : prettifyCategoryId(id);
+  return LANG_CODES.reduce<Localized>((acc, code) => ({ ...acc, [code]: fallback }), {});
+}
+
+/**
  * Merges generated topics into the static catalog:
  *  - a topic whose {@link TopicSummary.catalogId} matches a question attaches its
  *    theory to that entry;
@@ -451,7 +464,11 @@ export function buildCatalog(
   for (const q of isJava ? manualQuestions : []) {
     let cat = byCategory.get(q.categoryId);
     if (!cat) {
-      cat = { id: q.categoryId, name: q.categoryName || prettifyCategoryId(q.categoryId), entries: [] };
+      cat = {
+        id: q.categoryId,
+        name: categoryLabel(undefined, q.categoryName ?? '', q.categoryId),
+        entries: [],
+      };
       cats.push(cat);
       byCategory.set(cat.id, cat);
     }
@@ -480,7 +497,11 @@ export function buildCatalog(
     let cat = byCategory.get(t.categoryId);
     if (!cat) {
       // A category the AI invented because nothing existing fit.
-      cat = { id: t.categoryId, name: t.categoryName || prettifyCategoryId(t.categoryId), entries: [] };
+      cat = {
+        id: t.categoryId,
+        name: categoryLabel(t.category, t.categoryName, t.categoryId),
+        entries: [],
+      };
       cats.push(cat);
       byCategory.set(cat.id, cat);
     }

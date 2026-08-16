@@ -3,6 +3,7 @@ package com.interviewlearning.generation;
 import com.interviewlearning.ai.AiCliService;
 import com.interviewlearning.ai.AiTask;
 import com.interviewlearning.config.RepoPaths;
+import com.interviewlearning.lang.ContentLanguages;
 import com.interviewlearning.theory.TheoryVersionRepository;
 import com.interviewlearning.topics.TopicDtos.BossQuestion;
 import com.interviewlearning.topics.TopicDtos.Localized;
@@ -38,8 +39,8 @@ public class AtomsPromptBuilder {
     }
 
     /** A full (non-augment) lesson generation from the given theory version. */
-    public String buildFull(TopicDetail topic, String provider, int versionNo) {
-        return build(topic, provider, versionNo, explanationOf(topic, versionNo), false, "", null);
+    public String buildFull(TopicDetail topic, String provider, int versionNo, List<String> languages) {
+        return build(topic, provider, versionNo, explanationOf(topic, versionNo), false, "", null, languages);
     }
 
     /** The current learning-atoms.json contents, or null if there is no lesson to augment. */
@@ -63,14 +64,17 @@ public class AtomsPromptBuilder {
             return versions.list(topic.id()).stream()
                     .filter(v -> v.versionNo() == versionNo)
                     .findFirst()
-                    .map(v -> new Localized(v.en(), v.ru()))
+                    .map(TheoryVersionRepository.TheoryVersion::texts)
                     .orElse(topic.explanation());
         }
         return topic.explanation();
     }
 
     public String build(TopicDetail topic, String provider, int versionNo, Localized explanation,
-                        boolean augment, String comment, String existingAtoms) {
+                        boolean augment, String comment, String existingAtoms,
+                        List<String> requestedLanguages) {
+        // A lesson can only exist in languages the topic itself has content in.
+        List<String> languages = ContentLanguages.effective(topic.languages(), requestedLanguages);
         Path promptFile = repoPaths.promptsDir().resolve("generate-learning-atoms.md");
         String contract;
         try {
@@ -87,10 +91,13 @@ public class AtomsPromptBuilder {
         Path output = repoPaths.topicsDir().resolve(topic.id()).resolve("learning-atoms.json");
 
         StringBuilder sb = new StringBuilder(contract);
+        appendLanguages(sb, languages);
         sb.append("\n\n---\n\nTOPIC:\n")
-                .append("- id: ").append(topic.id()).append("\n")
-                .append("- title (en): ").append(topic.title().en()).append("\n")
-                .append("- title (ru): ").append(topic.title().ru()).append("\n");
+                .append("- id: ").append(topic.id()).append("\n");
+        for (String lang : languages) {
+            sb.append("- title (").append(lang).append("): ")
+                    .append(topic.title().label(lang)).append("\n");
+        }
 
         sb.append("\nVALUES TO SET IN THE JSON:\n")
                 .append("- topicId: ").append(topic.id()).append("\n")
@@ -102,7 +109,7 @@ public class AtomsPromptBuilder {
         if (boss != null && !boss.isEmpty()) {
             sb.append("\nBOSS-FIGHT QUESTIONS (context only — prepare for them, do not restate or include):\n");
             for (BossQuestion q : boss) {
-                sb.append("- ").append(q.text().en()).append("\n");
+                sb.append("- ").append(q.text().label(languages.get(0))).append("\n");
             }
         }
 
@@ -123,10 +130,34 @@ public class AtomsPromptBuilder {
                     .append("faithfully covering the full source explanation below:\n").append(comment);
         }
 
-        sb.append("\n---\n\nSOURCE EXPLANATION (ENGLISH):\n\n").append(explanation.en())
-                .append("\n\n---\n\nSOURCE EXPLANATION (RUSSIAN):\n\n").append(explanation.ru())
-                .append("\n\n---\n\nOUTPUT FILE (write the JSON exactly here):\n")
+        for (String lang : languages) {
+            String source = explanation.get(lang);
+            if (source == null) {
+                continue; // no text to derive this language's exercises from
+            }
+            sb.append("\n---\n\nSOURCE EXPLANATION (").append(ContentLanguages.displayName(lang))
+                    .append("):\n\n").append(source).append("\n");
+        }
+        sb.append("\n---\n\nOUTPUT FILE (write the JSON exactly here):\n")
                 .append(output.toAbsolutePath());
         return sb.toString();
+    }
+
+    /**
+     * States exactly which languages the lesson must carry. Always emitted: the
+     * contract's "both languages" wording says nothing once more than two
+     * languages are possible.
+     */
+    private void appendLanguages(StringBuilder sb, List<String> languages) {
+        String keys = String.join(", ", languages);
+        sb.append("\n\n---\n\nLANGUAGES: ")
+                .append(languages.stream().map(ContentLanguages::displayName)
+                        .collect(java.util.stream.Collectors.joining(", ")))
+                .append(" — exactly these, no others. This overrides every bilingual or "
+                        + "two-language statement in the contract above.\n")
+                .append("- Every localized field in the JSON (text objects and string-list "
+                        + "objects alike) must contain exactly these keys: ").append(keys)
+                .append(" — omit every other language key.\n")
+                .append("- Code, identifiers, and technical tokens stay in English as usual.\n");
     }
 }

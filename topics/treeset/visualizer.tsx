@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { VisualizerProps } from '@app/engine/traceTypes';
 import { ArrayGrid, type ArrayCell } from '@app/primitives/ArrayGrid';
-import { tl, useLang, type Localized } from '@app/i18n';
+import { tl, useLang, type Localized, type Lang } from '@app/i18n';
 
 const LABELS = {
   order: { en: 'order', ru: 'порядок' },
@@ -46,9 +46,7 @@ interface RangeState {
 
 interface TreeSetState {
   name: string;
-  order: string;
-  orderEn?: string;
-  orderRu?: string;
+  order: Localized;
   size: number;
   values: ValueItem[];
   lastOp: LastOp;
@@ -85,7 +83,7 @@ export default function TreeSetVisualizer({ event }: VisualizerProps) {
   return (
     <div style={wrapStyle}>
       <div style={statsStyle}>
-        <Stat label={tl(LABELS.order, lang)} value={lang === 'ru' ? state.orderRu ?? state.order : state.orderEn ?? state.order} />
+        <Stat label={tl(LABELS.order, lang)} value={tl(state.order, lang)} />
         <Stat label={tl(LABELS.size, lang)} value={String(state.size)} />
         <Stat label={tl(LABELS.lastOp, lang)} value={operationLabel(state.lastOp.kind, lang)} highlight />
         {state.lastOp.result && <Stat label={tl(LABELS.result, lang)} value={state.lastOp.result} />}
@@ -103,7 +101,7 @@ export default function TreeSetVisualizer({ event }: VisualizerProps) {
   );
 }
 
-function operationLabel(kind: string, lang: 'en' | 'ru'): string {
+function operationLabel(kind: string, lang: Lang): string {
   if (kind.startsWith('navigate:')) {
     return kind.slice('navigate:'.length);
   }

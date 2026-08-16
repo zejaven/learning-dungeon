@@ -32,6 +32,22 @@ public final class Trace {
     }
 
     /**
+     * A piece of trace state that differs per language, e.g.
+     * {@code s.put("order", Trace.text("ascending", "по возрастанию"))}. The
+     * frontend reads it with {@code tl(...)} like any other localized value, so
+     * a visualizer never branches on the language itself.
+     *
+     * @param en English text
+     * @param ru Russian text
+     */
+    public static Map<String, String> text(String en, String ru) {
+        Map<String, String> map = new java.util.LinkedHashMap<>();
+        map.put("en", en);
+        map.put("ru", ru);
+        return map;
+    }
+
+    /**
      * Emits a single trace event with a bilingual description.
      *
      * @param event     event type code (not translated, e.g. HASHMAP_PUT)

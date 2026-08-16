@@ -29,8 +29,8 @@ class LessonUnitsTest {
                 atom("c", List.of(), List.of(ex("c1"), ex("c2")))
         ));
         List<BossQuestion> boss = List.of(
-                new BossQuestion("q-one", new Localized("?", "?")),
-                new BossQuestion("q-two", new Localized("?", "?")));
+                new BossQuestion("q-one", Localized.of("?")),
+                new BossQuestion("q-two", Localized.of("?")));
 
         List<UnitRef> units = LessonUnits.derive(atoms, boss);
 
@@ -74,7 +74,7 @@ class LessonUnitsTest {
                 atom("a", List.of(ex("a-d1")), List.of(ex("a1"), ex("a2"))),
                 atom("b", List.of(ex("b-d1")), List.of(ex("b1"), ex("b2"))),
                 atom("cap", List.of(ex("cap-d1")), List.of(ex("s1"), ex("s2")), true)));
-        List<BossQuestion> boss = List.of(new BossQuestion("q", new Localized("?", "?")));
+        List<BossQuestion> boss = List.of(new BossQuestion("q", Localized.of("?")));
 
         List<UnitRef> units = LessonUnits.derive(atoms, boss);
 
@@ -96,14 +96,14 @@ class LessonUnitsTest {
     }
 
     private static Atom atom(String id, List<Exercise> discovery, List<Exercise> practice, boolean capstone) {
-        Localized text = new Localized(id, id);
+        Localized text = Localized.of(id);
         return new Atom(id, text, text, discovery, practice, capstone);
     }
 
     private static Exercise ex(String id) {
         // Positional: id, type, prompt, code, codeLang, mermaid, reveal, feedback,
         // options, answer, text, answers, blanks, tokens, distractors, steps, pairs.
-        return new Exercise(id, "true_false", new Localized("?", "?"),
+        return new Exercise(id, "true_false", Localized.of("?"),
                 null, null, null, null, null, null, Boolean.TRUE, null, null, null, null, null, null, null);
     }
 }

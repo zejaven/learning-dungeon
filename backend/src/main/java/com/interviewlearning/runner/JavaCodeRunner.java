@@ -22,9 +22,15 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -42,6 +48,9 @@ public class JavaCodeRunner {
 
     private static final Pattern PUBLIC_CLASS = Pattern.compile("public\\s+(?:final\\s+)?class\\s+(\\w+)");
     private static final Pattern ANY_CLASS = Pattern.compile("\\bclass\\s+(\\w+)");
+
+    /** Cap on captured output lines — protects the backend heap from a runaway println loop. */
+    private static final int MAX_OUTPUT_LINES = 10_000;
 
     private final RepoPaths repoPaths;
     private final ObjectMapper mapper;
@@ -213,9 +222,32 @@ public class JavaCodeRunner {
                     fm.getJavaFileObjectsFromFiles(srcs.stream().map(Path::toFile).toList());
             List<String> options = List.of(
                     "-classpath", classpath,
-                    "-d", outDir.toString()
+                    "-d", outDir.toString(),
+                    "-proc:none"
             );
-            boolean ok = compiler.getTask(null, fm, diagnostics, options, null, units).call();
+            // javac runs in-process; give it a wall-clock budget so pathological
+            // sources cannot pin an HTTP thread. The pool thread is a daemon, so a
+            // stuck compile cannot block JVM shutdown either.
+            ExecutorService pool = Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "javac");
+                t.setDaemon(true);
+                return t;
+            });
+            boolean ok;
+            long compileTimeout = timeoutSeconds * 3L;
+            try {
+                ok = pool.submit(compiler.getTask(null, fm, diagnostics, options, null, units)::call)
+                        .get(compileTimeout, TimeUnit.SECONDS);
+            } catch (TimeoutException e) {
+                return "Compilation timed out after " + compileTimeout + "s.";
+            } catch (ExecutionException e) {
+                return "Compiler error: " + e.getCause();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return "Compilation interrupted.";
+            } finally {
+                pool.shutdownNow();
+            }
             if (ok) {
                 return null;
             }
@@ -254,18 +286,26 @@ public class JavaCodeRunner {
                 .redirectErrorStream(true);
 
         TraceCollector collector = new TraceCollector(mapper);
+        Process process = null;
         try {
-            Process process = pb.start();
+            process = pb.start();
 
             // Drain output on a separate thread so the child never blocks on a
-            // full pipe while we wait for the timeout.
-            List<String> lines = new ArrayList<>();
+            // full pipe while we wait for the timeout. The buffer is capped so a
+            // runaway println loop cannot exhaust the backend heap.
+            Process child = process;
+            List<String> lines = Collections.synchronizedList(new ArrayList<>());
+            AtomicBoolean truncated = new AtomicBoolean(false);
             Thread reader = new Thread(() -> {
                 try (BufferedReader br = new BufferedReader(
-                        new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                        new InputStreamReader(child.getInputStream(), StandardCharsets.UTF_8))) {
                     String line;
                     while ((line = br.readLine()) != null) {
-                        lines.add(line);
+                        if (lines.size() < MAX_OUTPUT_LINES) {
+                            lines.add(line);
+                        } else {
+                            truncated.set(true);
+                        }
                     }
                 } catch (IOException ignored) {
                     // process ended / stream closed
@@ -278,13 +318,13 @@ public class JavaCodeRunner {
             if (!finished) {
                 process.destroyForcibly();
                 reader.join(1000);
-                lines.forEach(collector::accept);
+                drain(lines, truncated, collector);
                 return new RunResult(false, collector.output(), collector.events(),
                         "Execution timed out after " + timeoutSeconds + "s (possible infinite loop).");
             }
 
             reader.join(2000);
-            lines.forEach(collector::accept);
+            drain(lines, truncated, collector);
 
             int exit = process.exitValue();
             if (exit != 0) {
@@ -296,8 +336,23 @@ public class JavaCodeRunner {
             return RunResult.failure("Failed to start JVM: " + e.getMessage());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            if (process != null) {
+                process.destroyForcibly();
+            }
             return RunResult.failure("Run interrupted.");
         }
+    }
+
+    /** Feeds the captured lines to the collector, appending a marker if output was truncated. */
+    private static void drain(List<String> lines, AtomicBoolean truncated, TraceCollector collector) {
+        List<String> snapshot;
+        synchronized (lines) {
+            snapshot = new ArrayList<>(lines);
+        }
+        if (truncated.get()) {
+            snapshot.add("[output truncated after " + MAX_OUTPUT_LINES + " lines]");
+        }
+        snapshot.forEach(collector::accept);
     }
 
     private void deleteRecursively(Path dir) {

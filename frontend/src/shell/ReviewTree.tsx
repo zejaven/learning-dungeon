@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { buildAllCatalogs, compareEntries, stars, type CatalogCategory } from '@app/catalog';
 import { useReview } from '@app/engine/reviewStore';
 import { useStore } from '@app/engine/store';
-import { tl, ui, useLang } from '@app/i18n';
+import { tl, ui, uiAll, useLang } from '@app/i18n';
 
 /**
  * Left-hand tree of the review screen: the same category grouping as the home
@@ -45,7 +45,7 @@ export function ReviewTree() {
   if (orphans.length > 0) {
     cats.push({
       id: '__review_other__',
-      name: ui('reviewOther', lang),
+      name: uiAll('reviewOther'),
       entries: orphans.map((t) => ({ id: `topic-${t.topicId}`, question: t.title, difficulty: 2, topicId: t.topicId })),
     });
   }
@@ -63,7 +63,7 @@ export function ReviewTree() {
               onClick={() => setCollapsed((c) => ({ ...c, [cat.id]: !c[cat.id] }))}
             >
               <span className="tree-caret">{open ? '▾' : '▸'}</span>
-              <span className="tree-cat-name">{cat.name}</span>
+              <span className="tree-cat-name">{tl(cat.name, lang)}</span>
               <span className="tree-cat-count">{cat.entries.length}</span>
             </button>
             {open && (

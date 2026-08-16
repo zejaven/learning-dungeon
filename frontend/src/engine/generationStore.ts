@@ -7,6 +7,8 @@ import {
 } from './api';
 import { useAi } from './aiStore';
 import { parseActivity } from './aiStream';
+import { useDomain } from './domainStore';
+import { genLanguages } from './genLangStore';
 import { useStore } from './store';
 import { ui, useLang } from '../i18n';
 
@@ -46,7 +48,12 @@ export const useGeneration = create<GenerationState>((set, get) => ({
       tasks: { ...s.tasks, [key]: { taskId: '', key, status: 'running', message: '', log: [] } },
     }));
     try {
-      const ref = await startGeneration({ ...body, provider: useAi.getState().selectedProvider });
+      const ref = await startGeneration({
+        ...body,
+        provider: useAi.getState().selectedProvider,
+        languages: genLanguages(),
+        domainId: body.domainId ?? useDomain.getState().domainId,
+      });
       set((s) => ({
         tasks: { ...s.tasks, [key]: { ...s.tasks[key], taskId: ref.taskId, status: 'running' } },
       }));

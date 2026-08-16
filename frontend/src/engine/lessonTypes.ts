@@ -1,4 +1,4 @@
-import type { Localized } from '../i18n';
+import type { Lang, Localized } from '../i18n';
 
 /**
  * Types for the "Learn by micro-actions" lesson mode. They mirror the backend
@@ -20,11 +20,11 @@ export interface ExerciseOption {
   feedback?: Localized | null;
 }
 
-/** A per-language list of strings (fill-blank answers, word-bank tokens). */
-export interface LocalizedList {
-  en: string[];
-  ru: string[];
-}
+/**
+ * A per-language list of strings (fill-blank answers, word-bank tokens); a
+ * language the lesson was not generated in is simply absent.
+ */
+export type LocalizedList = Partial<Record<Lang, string[]>>;
 
 export interface SortStep {
   id: string;

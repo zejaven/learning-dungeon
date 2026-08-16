@@ -47,7 +47,7 @@ export function CategoryTree({
               onClick={() => setCollapsed((c) => ({ ...c, [cat.id]: !c[cat.id] }))}
             >
               <span className="tree-caret">{open ? '▾' : '▸'}</span>
-              <span className="tree-cat-name">{cat.name}</span>
+              <span className="tree-cat-name">{tl(cat.name, lang)}</span>
               <span className="tree-cat-count">{entries.length}</span>
             </button>
             {open && (

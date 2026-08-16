@@ -1,6 +1,7 @@
 package com.interviewlearning.topics;
 
 import com.interviewlearning.config.RepoPaths;
+import com.interviewlearning.lang.ContentLanguages;
 import com.interviewlearning.topics.TopicDtos.BossQuestion;
 import com.interviewlearning.topics.TopicDtos.Example;
 import com.interviewlearning.topics.TopicDtos.Localized;
@@ -18,8 +19,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Stream;
 
@@ -79,6 +82,9 @@ public class TopicRepository {
     }
 
     public Optional<TopicDetail> getTopic(String id) {
+        if (id == null || !id.matches("[a-zA-Z0-9_-]+")) {
+            return Optional.empty(); // guard against path traversal in the topic id
+        }
         Path topicDir = repoPaths.topicsDir().resolve(id);
         Path yaml = topicDir.resolve("topic.yaml");
         if (!Files.exists(yaml)) {
@@ -121,26 +127,36 @@ public class TopicRepository {
                 str(meta, "aiProvider", "claude"),
                 str(meta, "aiModel", ""),
                 Files.exists(topicDir.resolve("learning-atoms.json")),
-                str(meta, "domainId", "java")
+                str(meta, "domainId", "java"),
+                languages(meta)
         ));
     }
 
-    /** Reads explanation.en.md / explanation.ru.md, falling back to explanation.md. */
+    /**
+     * Reads one explanation.&lt;lang&gt;.md per registered language, falling back to a
+     * legacy explanation.md. A language with no file is left absent rather than
+     * filled from another one, so the UI can say the translation is missing.
+     */
     private Localized readExplanation(Path topicDir) {
-        String en = readFile(topicDir.resolve("explanation.en.md"));
-        String ru = readFile(topicDir.resolve("explanation.ru.md"));
-        if (en.isEmpty() && ru.isEmpty()) {
-            String legacy = readFile(topicDir.resolve("explanation.md"));
-            return new Localized(legacy, legacy);
+        Map<String, String> texts = new LinkedHashMap<>();
+        for (String lang : ContentLanguages.ALL) {
+            String text = readFile(topicDir.resolve("explanation." + lang + ".md"));
+            if (!text.isBlank()) {
+                texts.put(lang, text);
+            }
         }
-        if (en.isEmpty()) en = ru;
-        if (ru.isEmpty()) ru = en;
-        return new Localized(en, ru);
+        if (texts.isEmpty()) {
+            // Pre-bilingual topics: one file that serves every language.
+            String legacy = readFile(topicDir.resolve("explanation.md"));
+            return legacy.isBlank() ? Localized.empty() : Localized.of(legacy);
+        }
+        return new Localized(texts);
     }
 
     @SuppressWarnings("unchecked")
     private List<Example> loadExamples(Path topicDir, Map<String, Object> meta) {
         List<Example> examples = new ArrayList<>();
+        Path examplesDir = topicDir.resolve("examples");
         Object raw = meta.get("examples");
         if (raw instanceof List<?> list) {
             for (Object item : list) {
@@ -149,7 +165,7 @@ public class TopicRepository {
                     String file = str(ex, "file", "");
                     String code = file.isEmpty()
                             ? str(ex, "code", "")
-                            : readFile(topicDir.resolve("examples").resolve(file));
+                            : readContainedFile(examplesDir, file);
                     examples.add(new Example(
                             str(ex, "id", file),
                             loc(ex, "title", file),
@@ -162,9 +178,29 @@ public class TopicRepository {
         return examples;
     }
 
+    /** Reads {@code rel} inside {@code baseDir}, refusing paths that escape it (e.g. {@code ../}). */
+    private String readContainedFile(Path baseDir, String rel) {
+        Path p = baseDir.resolve(rel).normalize();
+        if (!p.startsWith(baseDir)) {
+            log.warn("Refusing file outside topic dir: {}", rel);
+            return "";
+        }
+        return readFile(p);
+    }
+
+    /** Resolves missionsFile inside the topic dir, falling back to quiz.yaml if it escapes. */
+    private Path resolveMissionsFile(Path topicDir, Map<String, Object> meta) {
+        Path p = topicDir.resolve(str(meta, "missionsFile", "quiz.yaml")).normalize();
+        if (!p.startsWith(topicDir)) {
+            log.warn("missionsFile escapes topic dir, using quiz.yaml instead");
+            return topicDir.resolve("quiz.yaml");
+        }
+        return p;
+    }
+
     @SuppressWarnings("unchecked")
     private List<Mission> loadMissions(Path topicDir, Map<String, Object> meta) {
-        Path quiz = topicDir.resolve(str(meta, "missionsFile", "quiz.yaml"));
+        Path quiz = resolveMissionsFile(topicDir, meta);
         if (!Files.exists(quiz)) {
             return List.of();
         }
@@ -198,7 +234,7 @@ public class TopicRepository {
      */
     @SuppressWarnings("unchecked")
     private List<BossQuestion> loadBossFight(Path topicDir, Map<String, Object> meta) {
-        Path quiz = topicDir.resolve(str(meta, "missionsFile", "quiz.yaml"));
+        Path quiz = resolveMissionsFile(topicDir, meta);
         if (!Files.exists(quiz)) {
             return List.of();
         }
@@ -212,28 +248,40 @@ public class TopicRepository {
                     if (item instanceof Map<?, ?> m) {
                         Map<String, Object> qm = (Map<String, Object>) m;
                         String id = str(qm, "id", "q" + i);
-                        String en = str(qm, "en", "");
-                        String ru = str(qm, "ru", en);
-                        result.add(new BossQuestion(id, new Localized(en, ru)));
+                        Map<String, String> texts = new LinkedHashMap<>();
+                        for (String lang : ContentLanguages.ALL) {
+                            String text = str(qm, lang, "");
+                            if (!text.isBlank()) {
+                                texts.put(lang, text);
+                            }
+                        }
+                        result.add(new BossQuestion(id, new Localized(texts)));
                     }
                 }
             } else if (raw instanceof Map<?, ?> m) {
-                List<String> en = stringList(m.get("en"));
-                List<String> ru = stringList(m.get("ru"));
-                int n = Math.max(en.size(), ru.size());
+                Map<String, List<String>> perLang = new LinkedHashMap<>();
+                int n = 0;
+                for (String lang : ContentLanguages.ALL) {
+                    List<String> questions = stringList(m.get(lang));
+                    perLang.put(lang, questions);
+                    n = Math.max(n, questions.size());
+                }
                 for (int i = 0; i < n; i++) {
-                    String e = i < en.size() ? en.get(i) : "";
-                    String r = i < ru.size() ? ru.get(i) : "";
-                    if (e.isEmpty()) e = r;
-                    if (r.isEmpty()) r = e;
-                    result.add(new BossQuestion("q" + (i + 1), new Localized(e, r)));
+                    Map<String, String> texts = new LinkedHashMap<>();
+                    for (String lang : ContentLanguages.ALL) {
+                        List<String> questions = perLang.get(lang);
+                        if (i < questions.size() && !questions.get(i).isBlank()) {
+                            texts.put(lang, questions.get(i));
+                        }
+                    }
+                    result.add(new BossQuestion("q" + (i + 1), new Localized(texts)));
                 }
             } else if (raw instanceof List<?> list) {
                 int i = 0;
                 for (Object o : list) {
                     i++;
-                    String s = String.valueOf(o);
-                    result.add(new BossQuestion("q" + i, new Localized(s, s)));
+                    // A bare list has no language at all: the same text serves every one.
+                    result.add(new BossQuestion("q" + i, Localized.of(String.valueOf(o))));
                 }
             }
             return result;
@@ -338,20 +386,38 @@ public class TopicRepository {
     }
 
     /**
-     * Reads a translatable field: either a plain scalar (used for both languages)
-     * or a {@code { en: ..., ru: ... }} map.
+     * Reads the topic's declared content languages ({@code languages:} in
+     * topic.yaml). Every topic is required to declare them; a file that does not
+     * is broken and falls back to the legacy pair so the app still renders it.
+     */
+    private static List<String> languages(Map<String, Object> meta) {
+        List<String> declared = stringList(meta.get("languages")).stream()
+                .map(ContentLanguages::normalizeCode)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        return declared.isEmpty() ? ContentLanguages.LEGACY_DEFAULT : declared;
+    }
+
+    /**
+     * Reads a translatable field: a {@code { <lang>: ... }} map carrying one entry
+     * per language it was written in, or a plain scalar, which means the same text
+     * serves every language (that is how single-language topics are authored).
      */
     private static Localized loc(Map<String, Object> map, String key, String fallback) {
         Object v = map.get(key);
         if (v instanceof Map<?, ?> m) {
-            Object en = m.get("en");
-            Object ru = m.get("ru");
-            String enStr = en == null ? fallback : String.valueOf(en).trim();
-            String ruStr = ru == null ? enStr : String.valueOf(ru).trim();
-            return new Localized(enStr, ruStr);
+            Map<String, String> texts = new LinkedHashMap<>();
+            for (String lang : ContentLanguages.ALL) {
+                Object text = m.get(lang);
+                if (text != null && !String.valueOf(text).isBlank()) {
+                    texts.put(lang, String.valueOf(text).trim());
+                }
+            }
+            return texts.isEmpty() ? Localized.of(fallback) : new Localized(texts);
         }
         String s = v == null ? fallback : String.valueOf(v).trim();
-        return new Localized(s, s);
+        return Localized.of(s);
     }
 
     private static List<String> stringList(Object raw) {

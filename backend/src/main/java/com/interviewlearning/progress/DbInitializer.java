@@ -138,8 +138,6 @@ public class DbInitializer {
                     style      TEXT        NOT NULL DEFAULT 'Default',
                     ai_provider TEXT       NOT NULL DEFAULT 'claude',
                     ai_model    TEXT       NOT NULL DEFAULT '',
-                    en         TEXT        NOT NULL,
-                    ru         TEXT        NOT NULL,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                     UNIQUE (topic_id, version_no)
                 )
@@ -153,6 +151,39 @@ public class DbInitializer {
                 ALTER TABLE theory_version
                     ADD COLUMN IF NOT EXISTS ai_model TEXT NOT NULL DEFAULT ''
                 """);
+
+        // A version's text, one row per language, so a version can carry any
+        // subset of languages and gain a translation later.
+        jdbc.execute("""
+                CREATE TABLE IF NOT EXISTS theory_version_text (
+                    version_id BIGINT      NOT NULL REFERENCES theory_version(id) ON DELETE CASCADE,
+                    lang       TEXT        NOT NULL,
+                    text       TEXT        NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    PRIMARY KEY (version_id, lang)
+                )
+                """);
+
+        // Migration from the fixed en/ru columns. Guarded by the columns still
+        // existing, so it is a no-op on a fresh database and on later starts.
+        jdbc.execute("""
+                DO $$
+                BEGIN
+                    IF EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name = 'theory_version' AND column_name = 'en') THEN
+                        INSERT INTO theory_version_text (version_id, lang, text)
+                            SELECT id, 'en', en FROM theory_version
+                            WHERE en IS NOT NULL AND en <> ''
+                            ON CONFLICT (version_id, lang) DO NOTHING;
+                        INSERT INTO theory_version_text (version_id, lang, text)
+                            SELECT id, 'ru', ru FROM theory_version
+                            WHERE ru IS NOT NULL AND ru <> ''
+                            ON CONFLICT (version_id, lang) DO NOTHING;
+                    END IF;
+                END $$
+                """);
+        jdbc.execute("ALTER TABLE theory_version DROP COLUMN IF EXISTS en");
+        jdbc.execute("ALTER TABLE theory_version DROP COLUMN IF EXISTS ru");
 
         // --- "Learn by micro-actions" lesson mode --------------------------
 

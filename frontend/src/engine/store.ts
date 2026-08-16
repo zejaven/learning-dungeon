@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import {
   addQuestion,
+  addVersionLanguage,
   analyzeProject,
   fetchProgress,
   fetchQuestions,
@@ -105,6 +106,10 @@ interface AppState {
   loadVersions: (topicId: string) => Promise<void>;
   setActiveVersion: (versionNo: number) => void;
   regenerateTheory: (style: string, styleName: string) => Promise<void>;
+  /** Translates a version into one more language, in place. */
+  addVersionLanguage: (versionNo: number, lang: string) => Promise<void>;
+  /** Language currently being translated, or null. */
+  addingLanguage: string | null;
 }
 
 function persistActiveVersion(topicId: string | undefined, versionNo: number): void {
@@ -248,6 +253,7 @@ export const useStore = create<AppState>((set, get) => ({
   theoryVersions: [],
   activeVersionNo: 1,
   generatingVersion: false,
+  addingLanguage: null,
 
   async loadTopics() {
     // Loads the list of generated topics (used for completion flags and to know
@@ -609,6 +615,22 @@ export const useStore = create<AppState>((set, get) => ({
       persistActiveVersion(topic.id, v.versionNo);
     } catch (e) {
       set({ generatingVersion: false, runError: (e as Error).message });
+    }
+  },
+
+  async addVersionLanguage(versionNo, lang) {
+    const topic = get().topic;
+    if (!topic || get().addingLanguage) return;
+    set({ addingLanguage: lang, runError: null });
+    try {
+      await addVersionLanguage(topic.id, versionNo, lang, useAi.getState().selectedProvider);
+      if (get().topic?.id !== topic.id) return; // switched away meanwhile
+      set({ addingLanguage: null });
+      await get().loadVersions(topic.id);
+      // Version 1 is the on-disk explanation, so the topic itself changed too.
+      if (versionNo <= 1) await get().selectTopic(topic.id);
+    } catch (e) {
+      set({ addingLanguage: null, runError: (e as Error).message });
     }
   },
 }));

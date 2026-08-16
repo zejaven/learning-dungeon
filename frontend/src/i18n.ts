@@ -468,6 +468,11 @@ function fmt(pattern: string, ...args: (string | number)[]): string {
   return pattern.replace(/\{(\d+)\}/g, (m, i) => String(args[Number(i)] ?? m));
 }
 
+/** A chrome string in every UI language, for places that need a Localized value. */
+export function uiAll(key: string): Localized {
+  return LANG_CODES.reduce<Localized>((acc, code) => ({ ...acc, [code]: ui(key, code) }), {});
+}
+
 /** A chrome string with {0}, {1}, … placeholders filled in. */
 export function fmtUi(key: string, lang: Lang, ...args: (string | number)[]): string {
   return fmt(ui(key, lang), ...args);

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.interviewlearning.ai.AiCliService;
 import com.interviewlearning.ai.AiTask;
 import com.interviewlearning.config.RepoPaths;
+import com.interviewlearning.lang.ContentLanguages;
 import com.interviewlearning.questions.QuestionRepository;
 import com.interviewlearning.questions.QuestionRepository.ManualQuestion;
 import com.interviewlearning.topics.TopicDtos.Localized;
@@ -24,6 +25,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -96,10 +98,18 @@ public class QuestionController {
             String categoryId = text(c, "categoryId", "other");
             String categoryName = c.hasNonNull("categoryName") ? c.get("categoryName").asText() : null;
             int difficulty = clampDifficulty(c.path("difficulty").asInt(2));
-            String en = text(c, "en", request.text().trim());
-            String ru = text(c, "ru", en);
+            // One entry per language the classifier translated the question into;
+            // the language the user typed in is the fallback for the first one.
+            Map<String, String> texts = new LinkedHashMap<>();
+            String fallback = request.text().trim();
+            for (String lang : ContentLanguages.ALL) {
+                String value = text(c, lang, texts.isEmpty() ? fallback : "");
+                if (!value.isBlank()) {
+                    texts.put(lang, value);
+                }
+            }
 
-            ManualQuestion saved = questions.add(categoryId, categoryName, difficulty, en, ru);
+            ManualQuestion saved = questions.add(categoryId, categoryName, difficulty, texts);
             return ResponseEntity.ok(toDto(saved));
         } catch (IOException e) {
             return ResponseEntity.internalServerError().body("Classification failed: " + e.getMessage());
@@ -121,9 +131,8 @@ public class QuestionController {
     }
 
     private static QuestionDto toDto(ManualQuestion q) {
-        // manual_question is an en/ru table by design (java-domain catalog only).
         return new QuestionDto("manual-" + q.id(), q.categoryId(), q.categoryName(),
-                q.difficulty(), Localized.fromJson(Map.of("en", q.en(), "ru", q.ru())));
+                q.difficulty(), q.question());
     }
 
     private static int clampDifficulty(int d) {
@@ -136,18 +145,26 @@ public class QuestionController {
     }
 
     private String classifyPrompt(String question, Path jsonPath) {
+        String textFields = ContentLanguages.ALL.stream()
+                .map(lang -> "\"" + lang + "\":\"<question in "
+                        + ContentLanguages.englishName(lang) + ">\"")
+                .collect(java.util.stream.Collectors.joining(","));
+        String langList = ContentLanguages.ALL.stream()
+                .map(ContentLanguages::englishName)
+                .collect(java.util.stream.Collectors.joining(" and "));
         return "Classify a Java interview question for a catalog. Write a JSON object (UTF-8) to the "
                 + "file:\n" + jsonPath.toAbsolutePath() + "\n"
                 + "with exactly these fields and nothing else:\n"
                 + "{\"categoryId\":\"<id>\",\"categoryName\":\"<only if categoryId is a NEW id>\","
-                + "\"difficulty\":<1|2|3>,\"en\":\"<question in English>\",\"ru\":\"<question in Russian>\"}\n"
+                + "\"difficulty\":<1|2|3>," + textFields + "}\n"
                 + "Rules:\n"
                 + "- categoryId: pick the single best fit from: " + CATEGORY_IDS + ". If none truly fits, "
                 + "invent a NEW kebab-case id (not in that list) and set categoryName to a short human label "
                 + "(otherwise omit categoryName).\n"
                 + "- difficulty: 1 = Junior, 2 = Middle, 3 = Senior.\n"
-                + "- en / ru: the question in English and Russian (translate the input; keep code and "
-                + "technical terms like Java, HashMap, hashCode untranslated).\n"
+                + "- " + String.join(" / ", ContentLanguages.ALL) + ": the question in " + langList
+                + " (translate the input; keep code and technical terms like Java, HashMap, hashCode "
+                + "untranslated).\n"
                 + "Write ONLY the JSON to that file; print nothing to stdout.\n\n"
                 + "QUESTION:\n" + question;
     }

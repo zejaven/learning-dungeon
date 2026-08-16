@@ -4,7 +4,8 @@ import { useAi } from '@app/engine/aiStore';
 import { parseTextDelta } from '@app/engine/aiStream';
 import { useStore } from '@app/engine/store';
 import type { BossQuestion } from '@app/engine/traceTypes';
-import { tl, ui, useLang, type Lang } from '@app/i18n';
+import { langsOf, tlStrict, ui, useLang, type Lang } from '@app/i18n';
+import { MissingLanguage } from '@app/shell/MissingLanguage';
 import { Markdown } from './Markdown';
 
 export const PASS_SCORE = 6;
@@ -83,13 +84,17 @@ export function BossQuestionForm({ topicId, question, onPassed, onBusyChange }: 
     onBusyChange?.(value);
   }
 
-  const questionText = tl(question.text, lang);
+  // Strict: answering a question shown in another language would be graded
+  // against a question the learner did not actually read.
+  const questionText = tlStrict(question.text, lang);
   const displayedScore = busy ? liveScore : stored?.score ?? null;
   const passed = !busy && !!stored?.passed;
   const failed = !busy && stored != null && !stored.passed;
 
   async function evaluate() {
-    if (!draft.trim() || busy) return;
+    // questionText is null when the topic lacks this language; the form renders
+    // the empty state then, so there is nothing to grade.
+    if (!draft.trim() || busy || questionText === null) return;
     const answer = draft;
     setStream('');
     setLiveScore(null);
@@ -156,6 +161,14 @@ export function BossQuestionForm({ topicId, question, onPassed, onBusyChange }: 
       setEvalError(true);
       setBusy(false);
     }
+  }
+
+  if (questionText === null) {
+    return (
+      <div className="boss-question-form">
+        <MissingLanguage available={langsOf(question.text)} />
+      </div>
+    );
   }
 
   return (

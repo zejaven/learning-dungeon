@@ -7,7 +7,9 @@ import { previousPosition, useLesson } from '@app/engine/lessonStore';
 import { navigate, routeForTheory } from '@app/engine/router';
 import { useStore } from '@app/engine/store';
 import { tl, ui, useLang } from '@app/i18n';
+import { orderLangs } from '@app/languages';
 import { GenerationView } from '@app/shell/GenerationView';
+import { MissingLanguage } from '@app/shell/MissingLanguage';
 import { BossFightUnit } from './BossFightUnit';
 import { ExerciseCard } from './ExerciseCard';
 import { RegenerateLessonDialog, type RegenerateOptions } from './RegenerateLessonDialog';
@@ -92,6 +94,18 @@ export function LessonPanel() {
           : unit.kind === 'capstone'
             ? `★ ${ui('capstonePhase', lang)}`
             : `● ${ui('practicePhase', lang)}`;
+
+  // A lesson exists only in the languages its topic was generated in. Gate the
+  // whole panel rather than each field: half-translated exercise cards would be
+  // worse than an honest empty state.
+  const topicLangs = orderLangs(topic?.languages ?? []);
+  if (topicLangs.length && !topicLangs.includes(lang)) {
+    return (
+      <div className="lesson-panel">
+        <MissingLanguage available={topicLangs} />
+      </div>
+    );
+  }
 
   return (
     <div className="lesson-panel">

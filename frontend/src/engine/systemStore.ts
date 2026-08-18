@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { fetchSystemStatus, postSystemUpdate, type SystemStatus } from './api';
+import { useOffline } from './offlineStore';
 
 /**
  * Polls /api/system/status for the settings gear: whether rebuild/restart is
@@ -36,8 +37,13 @@ export const useSystem = create<SystemState>((set, get) => ({
     try {
       const status = await fetchSystemStatus();
       set({ status });
+      // This poll never comes from a cache (the worker excludes /api/system/),
+      // so it doubles as the app's liveness check on the backend.
+      useOffline.getState().reportBackend(true);
     } catch {
-      // Transient failure — keep the previous reading.
+      // Transient failure — keep the previous reading, but stop claiming the
+      // backend is there: on a phone this is what "the PC is asleep" looks like.
+      useOffline.getState().reportBackend(false);
     }
   },
   start: () => {

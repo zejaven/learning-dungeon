@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import {
   frontierIndex,
   isUnitDone,
@@ -31,8 +32,16 @@ export function UnitTrack({ units, results, currentUnitId, onSelect }: Props) {
   const cleared = mistakesCleared(units, results);
   const frontier = frontierIndex(units, results, passedBoss, cleared);
 
+  // Keep the current unit visible: a long lesson overflows the track, and on a
+  // phone only a handful of circles fit, so it would otherwise sit off-screen.
+  const trackRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const circle = trackRef.current?.querySelector('.unit-circle.current');
+    circle?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+  }, [currentUnitId]);
+
   return (
-    <div className="unit-track">
+    <div className="unit-track" ref={trackRef}>
       {units.map((unit, i) => {
         const done = isUnitDone(unit, results, passedBoss, cleared);
         const mistake = done && unitHasMistake(unit, results);

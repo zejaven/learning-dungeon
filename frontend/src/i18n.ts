@@ -317,7 +317,12 @@ const UI: Record<string, Localized> = {
   lessonCompleted: { en: '🏆 Lesson completed!', ru: '🏆 Урок пройден!' },
   typeAnswerPlaceholder: { en: 'Type your answer…', ru: 'Введите ответ…' },
   wordBankHint: { en: 'Tap the words in the right order.', ru: 'Нажимайте слова в правильном порядке.' },
-  sortStepsHint: { en: 'Drag the steps into order.', ru: 'Перетащите шаги, чтобы расставить их по порядку.' },
+  sortStepsHint: {
+    en: 'Put the steps in order — drag them or use the arrows.',
+    ru: 'Расставьте шаги по порядку — перетаскиванием или стрелками.',
+  },
+  moveUp: { en: 'Move up', ru: 'Переместить вверх' },
+  moveDown: { en: 'Move down', ru: 'Переместить вниз' },
   matchPairsHint: { en: 'Match each item on the left with one on the right.', ru: 'Соотнесите элементы слева с элементами справа.' },
   trueLabel: { en: 'True', ru: 'Верно' },
   falseLabel: { en: 'False', ru: 'Неверно' },
@@ -376,6 +381,44 @@ const UI: Record<string, Localized> = {
     ru: 'Приложение отвечает дольше обычного. Обычно оно ещё пересобирается — обновите страницу для проверки.',
   },
   settingsReloadNow: { en: 'Reload now', ru: 'Обновить страницу' },
+
+  // --- Offline (PWA) ---
+  offlineTitle: { en: '📶 Offline', ru: '📶 Офлайн' },
+  offlineHint: {
+    en: 'No connection — answers are kept on the device and sent later.',
+    ru: 'Нет связи — ответы сохраняются на устройстве и уйдут позже.',
+  },
+  offlinePendingHint: {
+    en: 'Answers are waiting to be sent. Tap to send them now.',
+    ru: 'Есть несохранённые на сервере ответы. Нажмите, чтобы отправить.',
+  },
+  offlineSyncing: { en: 'Sending…', ru: 'Отправка…' },
+  offlineDownload: { en: '⬇️ Download this domain', ru: '⬇️ Скачать этот раздел' },
+  offlineDownloadDesc: {
+    en: 'Stores every topic of the open domain — theory, lessons, images — so they work with no connection.',
+    ru: 'Сохраняет все темы открытого раздела — теорию, уроки, картинки — чтобы они работали без связи.',
+  },
+  offlineDownloading: { en: 'Downloading…', ru: 'Скачивание…' },
+  offlineStored: { en: 'stored responses', ru: 'сохранённых ответов сервера' },
+  offlineNothingStored: {
+    en: 'Nothing downloaded yet.',
+    ru: 'Пока ничего не скачано.',
+  },
+  offlineClear: { en: 'Clear', ru: 'Очистить' },
+  offlineClearDesc: {
+    en: 'Removes the downloaded copies (the app itself keeps working offline).',
+    ru: 'Удаляет скачанные копии (само приложение продолжит открываться офлайн).',
+  },
+  offlinePending: { en: 'waiting to be sent', ru: 'ждут отправки' },
+  offlineSyncNow: { en: '⟳ Send now', ru: '⟳ Отправить сейчас' },
+  offlineUnsupported: {
+    en: 'Offline storage needs the installed app (an https:// or localhost address).',
+    ru: 'Офлайн-хранилище работает только в установленном приложении (адрес https:// или localhost).',
+  },
+  offlineBossUnavailable: {
+    en: 'Boss Fight grading needs a connection — the answer is checked by AI on the PC.',
+    ru: 'Проверка Битвы с боссом требует связи — ответ оценивает ИИ на компьютере.',
+  },
   bulkDialogTitleTheory: {
     en: 'Generate theory for all questions without it',
     ru: 'Сгенерировать теорию для всех вопросов без неё',

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { saveBossAnswer, streamSse } from '@app/engine/api';
 import { useAi } from '@app/engine/aiStore';
 import { parseTextDelta } from '@app/engine/aiStream';
+import { useOffline } from '@app/engine/offlineStore';
 import { useStore } from '@app/engine/store';
 import type { BossQuestion } from '@app/engine/traceTypes';
 import { langsOf, tlStrict, ui, useLang, type Lang } from '@app/i18n';
@@ -55,6 +56,8 @@ export function BossQuestionForm({ topicId, question, onPassed, onBusyChange }: 
   const alreadyCompleted = useStore((s) => s.topicCompleted);
   const provider = useAi((s) => s.selectedProvider);
   const lang = useLang((s) => s.lang);
+  // AI grading runs on the PC, so this one screen genuinely needs the network.
+  const online = useOffline((s) => s.online);
 
   const qid = question.id;
   const stored = results[qid];
@@ -205,8 +208,10 @@ export function BossQuestionForm({ topicId, question, onPassed, onBusyChange }: 
         </>
       )}
 
+      {!online && <div className="boss-verdict-pill fail">📴 {ui('offlineBossUnavailable', lang)}</div>}
+
       <div className="boss-form-actions">
-        <button className="primary" onClick={evaluate} disabled={busy || !draft.trim()}>
+        <button className="primary" onClick={evaluate} disabled={busy || !draft.trim() || !online}>
           {busy ? ui('evaluating', lang) : stored ? ui('reEvaluate', lang) : ui('submitAnswer', lang)}
         </button>
       </div>

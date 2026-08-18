@@ -7,6 +7,7 @@ import {
   saveExerciseAnswer,
 } from './api';
 import { grade, shuffled } from './grading';
+import { pendingAnswers } from './offline/outbox';
 import type { AnswerValue, Exercise, LearningAtoms, LessonUnit } from './lessonTypes';
 import { deriveUnits } from './lessonUnits';
 import { useStore } from './store';
@@ -217,6 +218,17 @@ export const useLesson = create<LessonSlice>((set, get) => ({
           /* skip an unparseable saved answer */
         }
       }
+      // Answers given offline are not in the server state yet (and the state
+      // itself may be a cached copy), so replay the outbox over it — later
+      // entries win, which is the same order the server will apply them in.
+      for (const queued of await pendingAnswers(topicId)) {
+        if (!queued) continue;
+        try {
+          results[queued.exerciseId] = { answer: JSON.parse(queued.answerJson), correct: queued.correct };
+        } catch {
+          /* ignore a corrupt queue entry */
+        }
+      }
 
       const exerciseById: Record<string, Exercise> = {};
       const atomIdByExerciseId: Record<string, string> = {};
@@ -303,7 +315,10 @@ export const useLesson = create<LessonSlice>((set, get) => ({
         useStore.getState().markTopicCompleted();
       }
     } catch {
-      /* completion is recomputed again on the next answer/boss pass */
+      // Offline: the same rule the server applies, over the answers we hold.
+      // The server recomputes from the replayed answers once it hears them.
+      const local = lessonComplete(get().units, get().results, passedBossIds());
+      if (local) set({ lessonCompleted: true });
     }
   },
 

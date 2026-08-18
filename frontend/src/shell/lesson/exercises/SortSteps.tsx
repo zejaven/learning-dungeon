@@ -10,7 +10,11 @@ interface Props {
   showResult: boolean;
 }
 
-/** Reorder shuffled steps by dragging rows. */
+/**
+ * Reorder shuffled steps by dragging rows — or with the per-row arrow buttons,
+ * which are the only way that works on touch (HTML5 drag-and-drop does not fire
+ * for touch input at all).
+ */
 export function SortSteps({ exercise, answer, onChange, showResult }: Props) {
   const lang = useLang((s) => s.lang);
   const initial = useMemo(
@@ -79,6 +83,26 @@ export function SortSteps({ exercise, answer, onChange, showResult }: Props) {
           >
             <span className="ex-sort-num">{i + 1}.</span>
             <span className="ex-sort-text">{tl(step?.text, lang)}</span>
+            {!showResult && (
+              <span className="ex-sort-move">
+                <button
+                  className="ex-sort-btn"
+                  title={ui('moveUp', lang)}
+                  disabled={i === 0}
+                  onClick={() => reorder(i, i - 1)}
+                >
+                  ↑
+                </button>
+                <button
+                  className="ex-sort-btn"
+                  title={ui('moveDown', lang)}
+                  disabled={i === order.length - 1}
+                  onClick={() => reorder(i, i + 1)}
+                >
+                  ↓
+                </button>
+              </span>
+            )}
             {!showResult && <span className="ex-sort-handle">⠿</span>}
           </div>
         );

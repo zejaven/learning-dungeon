@@ -33,6 +33,7 @@ import { LangSwitcher } from '@app/shell/LangSwitcher';
 import { LessonPanel } from '@app/shell/lesson/LessonPanel';
 import { Markdown } from '@app/shell/Markdown';
 import { SelectionAsk } from '@app/shell/SelectionAsk';
+import { OfflineBadge } from '@app/shell/OfflineBadge';
 import { SettingsButton } from '@app/shell/SettingsButton';
 import { LanguageSelect } from '@app/shell/LanguageSelect';
 import { MissingLanguage } from '@app/shell/MissingLanguage';
@@ -242,6 +243,7 @@ export function HomeScreen() {
           </div>
         )}
         <SettingsButton />
+        <OfflineBadge />
         <div className="spacer" />
         <AiProviderSelector />
         <UsageBar />
@@ -259,7 +261,9 @@ export function HomeScreen() {
 
       <BulkGenBar />
 
-      <div className="home-main">
+      {/* `has-detail` is what the single-column (mobile) profile keys off: with a
+          question selected the tree steps aside for the theory/lesson panel. */}
+      <div className={`home-main${entry ? ' has-detail' : ''}`}>
         {/* Left: question catalog tree */}
         <section className="panel home-tree-panel">
           <div className="panel-title tree-panel-title">
@@ -267,7 +271,7 @@ export function HomeScreen() {
             <div className="tree-title-actions">
               {selectedProvider === 'claude' && bulkMissing.theory.length > 0 && (
                 <button
-                  className="tree-add-btn"
+                  className="tree-add-btn desktop-only"
                   title={`${ui('bulkDialogTitleTheory', lang)} (${bulkMissing.theory.length})`}
                   disabled={bulkActive}
                   onClick={() => setBulkKind('theory')}
@@ -277,7 +281,7 @@ export function HomeScreen() {
               )}
               {selectedProvider === 'claude' && bulkMissing.atoms.length > 0 && (
                 <button
-                  className="tree-add-btn"
+                  className="tree-add-btn desktop-only"
                   title={`${ui('bulkDialogTitleAtoms', lang)} (${bulkMissing.atoms.length})`}
                   disabled={bulkActive}
                   onClick={() => setBulkKind('atoms')}
@@ -305,8 +309,11 @@ export function HomeScreen() {
         </section>
 
         {/* Right: theory or generate action */}
-        <section className="panel home-theory-panel">
+        <section className="panel home-theory-panel home-detail-panel">
           <div className="panel-title tree-panel-title">
+            <button className="mobile-only panel-back-btn" onClick={() => navigate('/')}>
+              {ui('backToCatalog', lang)}
+            </button>
             <span>{theoryReady ? tl(topic!.category, lang) : ui('theory', lang)}</span>
             {theoryReady && (
               <button

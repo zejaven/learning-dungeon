@@ -19,6 +19,7 @@ import type {
   ReviewItem,
   ReviewTopic,
 } from './lessonTypes';
+import { send } from './offline/outbox';
 
 export interface AiProvidersResponse {
   defaultProvider: string;
@@ -456,17 +457,21 @@ export interface ExerciseAnswerPayload {
   correct: boolean;
 }
 
-/** Best-effort append-only answer log; a failure never blocks the lesson flow. */
+/**
+ * Best-effort append-only answer log; a failure never blocks the lesson flow.
+ * Offline the write goes to the outbox instead, which also lets a cold start
+ * restore answers the server has not seen yet.
+ */
 export async function saveExerciseAnswer(topicId: string, payload: ExerciseAnswerPayload): Promise<void> {
-  try {
-    await fetch(`/api/lesson/${encodeURIComponent(topicId)}/answer`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...payload, answer: undefined, answerJson: JSON.stringify(payload.answer) }),
-    });
-  } catch {
-    /* offline logging is not worth interrupting the lesson */
-  }
+  const answerJson = JSON.stringify(payload.answer);
+  await send({
+    kind: 'lesson-answer',
+    url: `/api/lesson/${encodeURIComponent(topicId)}/answer`,
+    body: { ...payload, answer: undefined, answerJson },
+    topicId,
+    answer: { exerciseId: payload.exerciseId, answerJson, correct: payload.correct },
+    ts: Date.now(),
+  });
 }
 
 /** Recomputes lesson completion from the persisted answers + boss passes. */
@@ -607,12 +612,13 @@ export async function fetchReviewTopics(): Promise<ReviewTopic[]> {
 }
 
 export async function setReviewTopicEnabled(topicId: string, enabled: boolean): Promise<void> {
-  const res = await fetch(`/api/review/topics/${encodeURIComponent(topicId)}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ enabled }),
+  await send({
+    kind: 'review-topic',
+    url: `/api/review/topics/${encodeURIComponent(topicId)}`,
+    body: { enabled },
+    topicId,
+    ts: Date.now(),
   });
-  if (!res.ok) throw new Error(`Failed to update review topic (${res.status})`);
 }
 
 /** The current review list: pending exercises of enabled topics (client shuffles). */
@@ -622,30 +628,36 @@ export async function fetchReviewList(): Promise<ReviewItem[]> {
   return res.json();
 }
 
-/** Records a review answer; a correct answer drops the exercise from the list. */
+/**
+ * Records a review answer; a correct answer drops the exercise from the list.
+ * Grading already happened on the client, so this is pure persistence and can
+ * wait in the outbox until the backend is reachable.
+ */
 export async function markReviewAnswer(
   topicId: string,
   exerciseId: string,
   correct: boolean,
 ): Promise<void> {
-  const res = await fetch('/api/review/answer', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ topicId, exerciseId, correct }),
+  await send({
+    kind: 'review-answer',
+    url: '/api/review/answer',
+    body: { topicId, exerciseId, correct },
+    topicId,
+    ts: Date.now(),
   });
-  if (!res.ok) throw new Error(`Failed to save review answer (${res.status})`);
 }
 
 /** Per-topic "start again": returns the topic's answered exercises to the list. */
 export async function restartReviewTopic(topicId: string): Promise<void> {
-  const res = await fetch(`/api/review/topics/${encodeURIComponent(topicId)}/restart`, {
-    method: 'POST',
+  await send({
+    kind: 'review-restart',
+    url: `/api/review/topics/${encodeURIComponent(topicId)}/restart`,
+    topicId,
+    ts: Date.now(),
   });
-  if (!res.ok) throw new Error(`Failed to restart topic (${res.status})`);
 }
 
 /** Global "start again": returns every answered exercise, across all topics, to the list. */
 export async function restartReviewAll(): Promise<void> {
-  const res = await fetch('/api/review/restart', { method: 'POST' });
-  if (!res.ok) throw new Error(`Failed to restart review (${res.status})`);
+  await send({ kind: 'review-restart', url: '/api/review/restart', ts: Date.now() });
 }

@@ -195,11 +195,13 @@ If a command cannot be run, say exactly why and what remains unverified.
 ## Backend Notes
 
 - Main package: `com.interviewlearning`.
-- `server.address: 127.0.0.1` in `application.yml` keeps the run endpoint off the
-  LAN, and it binds the IPv4 loopback ONLY. Anything that talks to the backend
-  from outside a browser (launcher probes, the Vite `/api` proxy, scripts) must
-  address it as `127.0.0.1`: on Windows `localhost` resolves to `::1` first, and
-  connecting there stalls for ~2s rather than failing over.
+- `server.address: ${app.bind-address:127.0.0.1}` in `application.yml` keeps the
+  run endpoint off the LAN by default, and it binds the IPv4 loopback ONLY.
+  Anything that talks to the backend from outside a browser (launcher probes,
+  the Vite `/api` proxy, scripts) must address it as `127.0.0.1`: on Windows
+  `localhost` resolves to `::1` first, and connecting there stalls for ~2s
+  rather than failing over. Binding elsewhere is only safe together with the
+  `remote` package below.
 - Controllers live mostly under `backend/src/main/java/com/interviewlearning/api`.
 - Topic loading is in `topics/TopicRepository`. It rereads `topics/` from disk on
   requests so new folders appear without a backend restart. It reads `domainId`
@@ -272,6 +274,25 @@ If a command cannot be run, say exactly why and what remains unverified.
     ES_SYSTEM_REQUIRED)` and releases it ~90s after the last run ends. Display
     sleep stays allowed; non-Windows is a no-op. Every AI code path must keep
     funneling through `runProcess` for this to hold.
+- The `remote` package (`backend/src/main/java/com/interviewlearning/remote/`)
+  is the only thing standing between this app and a remote shell, because
+  `/api/run`, `/api/sql`, `/api/challenge` and `/api/analyze` execute what the
+  caller sends and the generation endpoints drive an AI CLI that writes files:
+  - `RemoteAccessFilter` refuses every non-loopback request unless
+    `app.remote.mode` is set (`direct` = the server itself is bound to the LAN;
+    `proxied` = a local proxy such as Tailscale Serve or the Vite dev server
+    forwards to 127.0.0.1). The token arrives once as `?token=...` and then
+    lives in an HttpOnly cookie, so the SPA's same-origin fetches carry it with
+    no frontend changes. `X-Forwarded-For` is trusted in `proxied` mode ONLY —
+    a directly exposed server would let anyone forge it.
+  - Even an authenticated remote client cannot reach the code-execution paths
+    unless `app.remote.allow-code-execution` is on. Adding a new endpoint that
+    compiles, executes or shells out means adding it to
+    `CODE_EXECUTION_PATHS`.
+  - Settings live in `config/secret.yml` (`remote.*`, `app.bind-address`),
+    written by `launcher/remote.ps1` into a managed block. The policy is a pure
+    function (`RemoteAccessFilter.decide`) pinned by `RemoteAccessFilterTest` —
+    change the tests deliberately, never to make a new case pass.
 
 ## visual-runtime Rules
 
@@ -334,6 +355,49 @@ When adding or changing a `visual.Visual*` model:
   `#/q/<id>/practice` (trace/structural/sql/challenge workspace — the "Go to
   practice" button is hidden for `trace` topics once a lesson exists, but the
   route still works), `#/review` (global review).
+- Mobile/touch profile: the same components in one column, driven entirely by
+  the media queries at the end of `frontend/src/styles.css` — there is no
+  second UI and no JS width check. Rules:
+  - A screen whose desktop shape is "list + detail" (home, review) puts
+    `has-detail` on its `.home-main` container; under 860px that hides
+    `.home-tree-panel` or `.home-detail-panel` so exactly one is on screen.
+    The home screen derives it from the selected question, the review screen
+    from a `☰` toggle.
+  - Elements that belong to only one profile use `.mobile-only` /
+    `.desktop-only` instead of conditional rendering.
+  - The workspace `.main` stacks into one scrolling column; Monaco needs an
+    explicit `.editor-wrap` height there because it fills its container.
+  - Any new interaction must work without a mouse: HTML5 drag-and-drop never
+    fires on touch, which is why `SortSteps` also has arrow buttons. Inputs
+    stay >= 16px on phones or iOS zooms the page on focus, and full-viewport
+    boxes use `dvh` plus `env(safe-area-inset-*)`.
+- PWA / offline (`frontend/src/engine/offline/`, `offlineStore.ts`, and the
+  `VitePWA` block in `vite.config.ts`). The app installs to a phone home screen
+  and keeps working with the PC switched off. Rules that are easy to break:
+  - The service worker only exists in a **secure context**: `https://` (what
+    Tailscale Serve provides) or `localhost`. Over plain `http://<lan-ip>` there
+    is no worker and no offline — the settings dialog says so instead of
+    offering buttons that would do nothing. `npm run dev` generates no worker
+    either; use `npm run preview` (port 4173, same `/api` proxy) to exercise it.
+  - `runtimeCaching` matchers are inlined into the generated worker **as source
+    text**: a matcher that references anything from `vite.config.ts` throws at
+    match time and silently stops serving from the cache. Keep every matcher
+    self-contained.
+  - Cache names are a contract between `vite.config.ts` (what the worker reads)
+    and `engine/offline/cache.ts` (what "Download this domain" writes). Renaming
+    one without the other leaves a full cache nothing reads.
+  - `?token=...` is in `navigateFallbackDenylist`: that navigation must reach
+    `RemoteAccessFilter` to get the cookie, and a precached shell would 401 on
+    every call instead.
+  - Only pure-persistence writes may go through `engine/offline/outbox.ts`
+    (lesson/review answers — grading is deterministic and already done on the
+    client). Anything whose response the UI needs — AI grading, generation,
+    running code — stays online-only and must fail loudly instead of queueing.
+    `lessonStore.loadLesson` replays the queue over the server state, so an
+    answer given offline survives a cold start.
+  - Online-ness means "the backend answered", not `navigator.onLine`: the normal
+    case is a phone happily on Wi-Fi while the PC is asleep. `offlineStore`
+    combines both, fed by outbox results and the `/api/system/status` poll.
 
 ## Topic Authoring
 

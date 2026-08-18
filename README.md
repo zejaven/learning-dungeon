@@ -99,12 +99,69 @@ Then launch from the icon. The tray keeps the server alive and, via the in-app
 **settings gear**, can rebuild and restart itself — or pull the latest commits
 from GitHub first (see "Self-update" below).
 
-### Access from other devices on the LAN
+### Access from other devices (phone, tablet, headset)
 
-Both servers listen on all interfaces, so another device on the same Wi-Fi (a
-laptop, phone, or VR-headset browser) can open the app by the host PC's IP:
-`http://<pc-ip>:18080` for the packaged run, or `http://<pc-ip>:15173` for the dev
-server. Allow the port through the firewall on the host.
+The backend answers **loopback requests only** by default. `/api/run`,
+`/api/sql`, `/api/challenge` and `/api/analyze` compile and execute whatever is
+sent to them, and the generation endpoints drive an AI CLI that writes files, so
+remote access is opt-in and token-gated:
+
+```powershell
+launcher\remote.ps1              # show what is configured right now
+launcher\remote.ps1 lan          # same Wi-Fi: bind 0.0.0.0 + token
+launcher\remote.ps1 tailscale    # from anywhere: Tailscale Serve + token, over HTTPS
+launcher\remote.ps1 off          # back to loopback only
+```
+
+The script writes a managed block into `config/secret.yml` (git-ignored),
+generates the token and prints the address to open **once** on the phone:
+
+```
+http://<pc-ip>:18080/?token=<token>
+```
+
+From then on the token lives in an HttpOnly cookie and every request carries it.
+Restart the app after changing this (tray: gear → Restart).
+
+|            | `lan`                         | `tailscale`                                  |
+|------------|-------------------------------|----------------------------------------------|
+| reachable  | same Wi-Fi                    | anywhere both devices are signed in           |
+| binding    | `0.0.0.0:18080`               | stays `127.0.0.1`; `tailscale serve` proxies  |
+| transport  | plain HTTP                    | HTTPS with a real certificate                 |
+
+Even with a valid token a remote client cannot run code: the four endpoints
+above return 403 unless `allow-code-execution: true` is set. The phone UI
+(lesson, review, theory, Boss Fight) never calls them.
+
+Caveat for the dev server: Vite on `:15173` listens on all interfaces and
+proxies to the backend over loopback. In `lan` mode that proxy looks local to
+the backend, so **the dev server is not token-gated** — use the packaged app
+from the phone, or `tailscale`/`proxied` mode, which gates it too.
+
+### Install on the phone (PWA, works offline)
+
+Over an **https** address — which `launcher\remote.ps1 tailscale` gives you —
+the app is installable: Chrome offers "Add to home screen" (iOS: Share → Add to
+Home Screen) and it then runs full-screen with its own icon, no browser chrome.
+
+Offline is opt-in per subject area: **gear → Offline → Download this domain**
+stores that domain's topics, lessons, theory and images on the device. After
+that the app opens and the whole lesson flow works with the PC switched off:
+
+| Works offline                                   | Needs the PC |
+|-------------------------------------------------|--------------|
+| Catalog, theory, images, micro-action lessons    | Boss Fight (AI grading) |
+| Review queue, all exercise types, mistake loops  | Generating topics/lessons |
+| Progress — kept on the device and sent later     | Run / SQL / tests (desktop anyway) |
+
+Answers given offline go into a queue on the device; the header shows 📴 with
+how many are waiting. They are replayed in order the moment the backend answers
+again, and the same queue is what restores your answers if you close and reopen
+the app while still offline.
+
+Plain `http://<lan-ip>` addresses cannot install a service worker (browsers only
+allow one in a secure context), so `lan` mode gives you the mobile UI but no
+offline. That is the practical reason to prefer `tailscale` mode.
 
 ## How it works
 

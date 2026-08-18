@@ -3,6 +3,7 @@ import { buildAllCatalogs, findCatalogEntry } from './catalog';
 import { useAi } from './engine/aiStore';
 import { useBulk } from './engine/bulkStore';
 import { useGeneration } from './engine/generationStore';
+import { useOffline } from './engine/offlineStore';
 import { navigate, routeForQuestion, useRoute } from './engine/router';
 import { useStore } from './engine/store';
 import { useStyle } from './engine/styleStore';
@@ -28,6 +29,9 @@ export function App() {
   const startSystemPolling = useSystem((s) => s.start);
 
   useEffect(() => {
+    // Connectivity + the write queue first: everything below may fail offline,
+    // and the queue from a previous session goes out as soon as we are online.
+    useOffline.getState().init();
     loadTopics();
     // Hand-added catalog questions.
     loadQuestions();

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { domainById } from '@app/domains';
 import { useDomain } from '@app/engine/domainStore';
 import { currentReviewItem, useReview } from '@app/engine/reviewStore';
@@ -6,6 +6,7 @@ import { navigate } from '@app/engine/router';
 import { tl, ui, useLang } from '@app/i18n';
 import { ExerciseCard } from '@app/shell/lesson/ExerciseCard';
 import { LangSwitcher } from '@app/shell/LangSwitcher';
+import { OfflineBadge } from '@app/shell/OfflineBadge';
 import { ReviewTree } from '@app/shell/ReviewTree';
 import { SettingsButton } from '@app/shell/SettingsButton';
 import { ThemeSwitcher } from '@app/shell/ThemeSwitcher';
@@ -26,6 +27,9 @@ export function ReviewScreen() {
   const item = currentReviewItem(review.queue);
   const domainId = useDomain((s) => s.domainId);
   const domain = domainById(domainId);
+  // Single-column profile: the topic filter is a sheet over the exercise, not a
+  // sidebar. On desktop both panels show and this flag is inert.
+  const [showTopics, setShowTopics] = useState(false);
 
   // Review is scoped to the active domain; restart if it changes.
   useEffect(() => {
@@ -45,6 +49,14 @@ export function ReviewScreen() {
           {ui('reviewTitle', lang)} · {domain.icon} {tl(domain.title, lang)}
         </h1>
         <SettingsButton />
+        <OfflineBadge />
+        <button
+          className="mobile-only"
+          title={ui('reviewTopicsTitle', lang)}
+          onClick={() => setShowTopics((v) => !v)}
+        >
+          ☰
+        </button>
         <div className="spacer" />
         {item && (
           <span className="review-progress">
@@ -55,20 +67,25 @@ export function ReviewScreen() {
         <LangSwitcher />
       </header>
 
-      <div className="home-main">
+      <div className={`home-main${showTopics ? '' : ' has-detail'}`}>
         {/* Left: the pooled-topics tree with per-topic checkboxes + restart. */}
         <section className="panel home-tree-panel">
           <div className="panel-title tree-panel-title">
             <span>{ui('reviewTopicsTitle', lang)}</span>
-            {poolExists && (
-              <button
-                className="tree-add-btn"
-                title={ui('reviewRestartAll', lang)}
-                onClick={() => void review.restartAll()}
-              >
-                ↺
+            <div className="tree-title-actions">
+              {poolExists && (
+                <button
+                  className="tree-add-btn"
+                  title={ui('reviewRestartAll', lang)}
+                  onClick={() => void review.restartAll()}
+                >
+                  ↺
+                </button>
+              )}
+              <button className="mobile-only tree-add-btn" onClick={() => setShowTopics(false)}>
+                ✕
               </button>
-            )}
+            </div>
           </div>
           <div className="panel-body tree-body">
             {poolExists ? (
@@ -80,7 +97,7 @@ export function ReviewScreen() {
         </section>
 
         {/* Right: the current review exercise. */}
-        <section className="panel">
+        <section className="panel home-detail-panel">
           <div className="review-main">
             {review.loading && <p className="home-hint">{ui('loading', lang)}</p>}
             {review.error && <p className="home-hint">⚠️ {review.error}</p>}

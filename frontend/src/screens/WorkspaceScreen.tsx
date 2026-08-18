@@ -16,6 +16,7 @@ import { AiProviderSelector } from '@app/shell/AiProviderSelector';
 import { BossFightDialog } from '@app/shell/BossFightDialog';
 import { FileTree } from '@app/shell/FileTree';
 import { LangSwitcher } from '@app/shell/LangSwitcher';
+import { OfflineBadge } from '@app/shell/OfflineBadge';
 import { SettingsButton } from '@app/shell/SettingsButton';
 import { ThemeSwitcher } from '@app/shell/ThemeSwitcher';
 import { UsageBar } from '@app/shell/UsageBar';
@@ -52,6 +53,7 @@ export function WorkspaceScreen() {
         </button>
         <h1 className="workspace-title">{topic ? tl(topic.title, lang) : tl(domain.title, lang)}</h1>
         <SettingsButton />
+        <OfflineBadge />
         {topicCompleted && <span className="completed-badge">{ui('topicCompleted', lang)}</span>}
         <div className="spacer" />
         <AiProviderSelector />

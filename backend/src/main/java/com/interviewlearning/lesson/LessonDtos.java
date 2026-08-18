@@ -188,10 +188,6 @@ public final class LessonDtos {
     public record RecomputeResponse(boolean lessonCompleted) {
     }
 
-    /** Home-screen badge payload for the global review mode ({@code poolSize} = pending∩enabled). */
-    public record ReviewSummary(int poolSize, int topicCount) {
-    }
-
     /**
      * One topic that has practice exercises in the review pool: how many are
      * still in the list ({@code pending}), the topic total, and whether it is

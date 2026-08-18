@@ -7,7 +7,7 @@ import { useDomain } from '@app/engine/domainStore';
 import { startAtomsGeneration, type BulkKind } from '@app/engine/api';
 import { genLanguages } from '@app/engine/genLangStore';
 import { useGeneration } from '@app/engine/generationStore';
-import { useReview } from '@app/engine/reviewStore';
+import { useReview, useReviewBadge } from '@app/engine/reviewStore';
 import {
   navigate,
   routeForPractice,
@@ -177,12 +177,12 @@ export function HomeScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [atomsTask?.status]);
 
-  // Review-pool badge for the header button.
-  const reviewSummary = useReview((s) => s.summary);
-  const loadReviewSummary = useReview((s) => s.loadSummary);
+  // Review-pool badge for the header button; counts the active domain only.
+  const reviewPending = useReviewBadge();
+  const loadReviewPool = useReview((s) => s.loadPool);
   useEffect(() => {
-    void loadReviewSummary();
-  }, [loadReviewSummary]);
+    void loadReviewPool();
+  }, [loadReviewPool]);
 
   async function generateLesson() {
     if (!topic) return;
@@ -249,9 +249,7 @@ export function HomeScreen() {
         <LangSwitcher />
         <button onClick={() => navigate(routeForReview())}>
           {ui('review', lang)}
-          {reviewSummary && reviewSummary.poolSize > 0 && (
-            <span className="review-badge">{reviewSummary.poolSize}</span>
-          )}
+          {reviewPending > 0 && <span className="review-badge">{reviewPending}</span>}
         </button>
         {/* Every domain can grow topics; the dialog generates into the open one. */}
         <button className="accent" onClick={() => setShowAdd(true)}>

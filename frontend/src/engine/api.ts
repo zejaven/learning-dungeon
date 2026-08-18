@@ -17,7 +17,6 @@ import type {
   LearningAtoms,
   LessonState,
   ReviewItem,
-  ReviewSummary,
   ReviewTopic,
 } from './lessonTypes';
 
@@ -599,12 +598,6 @@ export async function dismissBulk(): Promise<void> {
 }
 
 // --- Global review ----------------------------------------------------------
-
-export async function fetchReviewSummary(): Promise<ReviewSummary> {
-  const res = await fetch('/api/review/summary');
-  if (!res.ok) throw new Error(`Failed to load review summary (${res.status})`);
-  return res.json();
-}
 
 /** Topics with pooled exercises, each flagged whether it participates in review. */
 export async function fetchReviewTopics(): Promise<ReviewTopic[]> {

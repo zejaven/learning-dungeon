@@ -167,11 +167,6 @@ export type AnswerValue =
 
 // --- Global review ---------------------------------------------------------
 
-export interface ReviewSummary {
-  poolSize: number;
-  topicCount: number;
-}
-
 /**
  * A topic with pooled practice exercises: how many are still in the review list
  * ({@link pending}), the topic {@link total}, and whether it participates.

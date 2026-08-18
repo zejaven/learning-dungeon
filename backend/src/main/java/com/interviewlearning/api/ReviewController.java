@@ -6,7 +6,6 @@ import com.interviewlearning.lesson.LessonDtos.Exercise;
 import com.interviewlearning.lesson.LessonDtos.LearningAtoms;
 import com.interviewlearning.lesson.LessonDtos.ReviewItem;
 import com.interviewlearning.lesson.LessonDtos.ReviewMarkRequest;
-import com.interviewlearning.lesson.LessonDtos.ReviewSummary;
 import com.interviewlearning.lesson.LessonDtos.ReviewTopic;
 import com.interviewlearning.lesson.LessonDtos.ReviewTopicPrefRequest;
 import com.interviewlearning.lesson.ReviewRepository;
@@ -60,13 +59,6 @@ public class ReviewController {
 
     /** A resolved pool row: its exercise (against current atoms) plus its pending flag. */
     private record Resolved(ReviewItem item, boolean pending) {
-    }
-
-    @GetMapping("/summary")
-    public ReviewSummary summary() {
-        List<ReviewItem> list = reviewList();
-        long topicCount = list.stream().map(ReviewItem::topicId).distinct().count();
-        return new ReviewSummary(list.size(), (int) topicCount);
     }
 
     /**

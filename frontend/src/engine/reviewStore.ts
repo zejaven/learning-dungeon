@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { create } from 'zustand';
 import { domainOf } from '../domains';
 import { useLang } from '../i18n';
@@ -5,7 +6,6 @@ import { useDomain } from './domainStore';
 import { useStore } from './store';
 import {
   fetchReviewList,
-  fetchReviewSummary,
   fetchReviewTopics,
   markReviewAnswer,
   restartReviewAll,
@@ -14,7 +14,8 @@ import {
   setReviewTopicEnabled,
 } from './api';
 import { grade } from './grading';
-import type { AnswerValue, ReviewItem, ReviewSummary, ReviewTopic } from './lessonTypes';
+import type { AnswerValue, ReviewItem, ReviewTopic } from './lessonTypes';
+import type { TopicSummary } from './traceTypes';
 
 export type ReviewPhase = 'answering' | 'feedback';
 
@@ -27,7 +28,13 @@ export type ReviewPhase = 'answering' | 'feedback';
  * mutates the server state, then reloads the list.
  */
 interface ReviewSlice {
-  summary: ReviewSummary | null;
+  /**
+   * Every topic with pooled exercises, UNFILTERED by domain — the source of the
+   * home-screen badge, which counts only the active domain (see
+   * {@link useReviewBadge}). Kept raw so switching domains re-counts without a
+   * refetch.
+   */
+  pool: ReviewTopic[];
   /** Topics with pooled exercises (for the review tree), with pending/total/enabled. */
   topics: ReviewTopic[];
   /** The remaining items to review; the head is the current question. */
@@ -40,7 +47,8 @@ interface ReviewSlice {
   /** Answers submitted in this run (for the "answered / left" header). */
   answered: number;
 
-  loadSummary: () => Promise<void>;
+  /** Loads the pooled topics of every domain (for the badge). */
+  loadPool: () => Promise<void>;
   /** Loads the list + topics and shuffles the list into the queue. */
   start: () => Promise<void>;
   submit: (answer: AnswerValue) => Promise<void>;
@@ -83,32 +91,53 @@ function shuffled<T>(arr: T[]): T[] {
  */
 async function rebuild(
   preserve: ReviewItem | null,
-): Promise<{ queue: ReviewItem[]; topics: ReviewTopic[] }> {
+): Promise<{ queue: ReviewItem[]; topics: ReviewTopic[]; pool: ReviewTopic[] }> {
   const [allItems, allTopics] = await Promise.all([fetchReviewList(), fetchReviewTopics()]);
   const inDomain = activeDomainFilter();
   const items = allItems.filter((i) => inDomain(i.topicId));
   const topics = allTopics.filter((t) => inDomain(t.topicId));
   const keep = preserve && items.some((i) => sameItem(i, preserve)) ? preserve : null;
   const rest = shuffled(keep ? items.filter((i) => !sameItem(i, keep)) : items);
-  return { queue: keep ? [keep, ...rest] : rest, topics };
+  return { queue: keep ? [keep, ...rest] : rest, topics, pool: allTopics };
 }
 
 /**
- * Review is scoped to the active subject area: only exercises of topics in the
- * current domain take part. Topics missing from the loaded summaries count as
- * 'java' (same default as {@link domainOf}); before summaries load nothing is
- * filtered out, which only ever shows extra items briefly.
+ * Review is scoped to a subject area: only exercises of topics in {@link domainId}
+ * take part. Topics missing from the loaded summaries count as 'java' (same
+ * default as {@link domainOf}); before summaries load nothing is filtered out,
+ * which only ever shows extra items briefly.
  */
-function activeDomainFilter(): (topicId: string) => boolean {
-  const summaries = useStore.getState().topics;
+function domainFilter(summaries: TopicSummary[], domainId: string): (topicId: string) => boolean {
   if (summaries.length === 0) return () => true;
-  const domainId = useDomain.getState().domainId;
   const byId = new Map(summaries.map((t) => [t.id, t]));
   return (topicId) => domainOf(byId.get(topicId) ?? {}) === domainId;
 }
 
+/** {@link domainFilter} for the domain the app currently shows. */
+function activeDomainFilter(): (topicId: string) => boolean {
+  return domainFilter(useStore.getState().topics, useDomain.getState().domainId);
+}
+
+/**
+ * How many exercises the active domain has waiting for review — the header
+ * badge. Counts pending exercises of enabled topics only, which is exactly what
+ * a review run would ask. Recomputes when the domain switches, so the badge
+ * follows the domain pills without a refetch; 0 until topic summaries load,
+ * since without them the domain of a pooled topic is unknown.
+ */
+export function useReviewBadge(): number {
+  const pool = useReview((s) => s.pool);
+  const summaries = useStore((s) => s.topics);
+  const domainId = useDomain((s) => s.domainId);
+  return useMemo(() => {
+    if (summaries.length === 0) return 0;
+    const inDomain = domainFilter(summaries, domainId);
+    return pool.reduce((n, t) => (t.enabled && inDomain(t.topicId) ? n + t.pending : n), 0);
+  }, [pool, summaries, domainId]);
+}
+
 export const useReview = create<ReviewSlice>((set, get) => ({
-  summary: null,
+  pool: [],
   topics: [],
   queue: [],
   loading: false,
@@ -118,9 +147,9 @@ export const useReview = create<ReviewSlice>((set, get) => ({
   lastAnswer: null,
   answered: 0,
 
-  async loadSummary() {
+  async loadPool() {
     try {
-      set({ summary: await fetchReviewSummary() });
+      set({ pool: await fetchReviewTopics() });
     } catch {
       /* badge is a nice-to-have */
     }
@@ -129,8 +158,8 @@ export const useReview = create<ReviewSlice>((set, get) => ({
   async start() {
     set({ loading: true, error: null, phase: 'answering', lastAnswer: null, answered: 0 });
     try {
-      const { queue, topics } = await rebuild(null);
-      set({ queue, topics, loading: false });
+      const { queue, topics, pool } = await rebuild(null);
+      set({ queue, topics, pool, loading: false });
     } catch (e) {
       set({ loading: false, error: (e as Error).message });
     }
@@ -167,12 +196,13 @@ export const useReview = create<ReviewSlice>((set, get) => ({
     // Correct → the item leaves the list (and its topic's pending count drops);
     // wrong → it goes to the tail to be retried later this run.
     const queue = s.lastCorrect ? tail : [...tail, head];
-    const topics = s.lastCorrect
-      ? s.topics.map((t) =>
-          t.topicId === head.topicId ? { ...t, pending: Math.max(0, t.pending - 1) } : t,
-        )
-      : s.topics;
-    set({ queue, topics, phase: 'answering', lastAnswer: null });
+    const drop = (list: ReviewTopic[]) =>
+      list.map((t) =>
+        t.topicId === head.topicId ? { ...t, pending: Math.max(0, t.pending - 1) } : t,
+      );
+    const topics = s.lastCorrect ? drop(s.topics) : s.topics;
+    const pool = s.lastCorrect ? drop(s.pool) : s.pool;
+    set({ queue, topics, pool, phase: 'answering', lastAnswer: null });
   },
 
   async toggleTopic(topicId, enabled) {
@@ -212,8 +242,8 @@ export const useReview = create<ReviewSlice>((set, get) => ({
   async reload(preserveCurrent) {
     try {
       const preserve = preserveCurrent ? currentReviewItem(get().queue) : null;
-      const { queue, topics } = await rebuild(preserve);
-      set({ queue, topics, phase: 'answering', lastAnswer: null });
+      const { queue, topics, pool } = await rebuild(preserve);
+      set({ queue, topics, pool, phase: 'answering', lastAnswer: null });
     } catch (e) {
       set({ error: (e as Error).message });
     }

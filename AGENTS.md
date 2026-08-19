@@ -363,6 +363,14 @@ When adding or changing a `visual.Visual*` model:
   `#/q/<id>/practice` (trace/structural/sql/challenge workspace — the "Go to
   practice" button is hidden for `trace` topics once a lesson exists, but the
   route still works), `#/review` (global review).
+- Colour tokens carry a ROLE, not just a hue, and the light theme is where
+  getting that wrong shows: `--accent` paints a surface (a filled button, a
+  progress bar) so it must stay light, `--accent-ink` writes or draws on one so
+  it must stay dark, and `--mark-*` are the vivid variants for pure decoration
+  (difficulty stars), which only need 3:1 rather than the 4.5:1 of text. Using a
+  single accent for all three is what made the light theme muddy. Never hardcode
+  a palette value in a rule — a literal `rgba(86, 211, 100, …)` is a dark-theme
+  green that silently follows the user into the light theme.
 - Mobile/touch profile: the same components in one column, driven entirely by
   the media queries at the end of `frontend/src/styles.css` — there is no
   second UI and no JS width check. Rules:

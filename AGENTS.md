@@ -273,6 +273,15 @@ If a command cannot be run, say exactly why and what remains unverified.
     the flagged exit and hands off to `launcher/update.ps1`, which optionally
     `git pull`s, runs `launcher/build-app.ps1`, and relaunches. The frontend
     polls `GET /api/system/status` and reloads once `bootId` changes.
+  - `update.ps1` must never wait on anything a build leaves behind. A Gradle
+    daemon outlives the build by hours and inherits its handles, so both
+    `& child *>> $log` (waits for end-of-stream) and `Start-Process -Wait`
+    (waits for the process AND its descendants) hang forever, one line short of
+    restarting the app — which is exactly how the Restart button broke. Run each
+    step through `Invoke-Step`, which redirects with cmd and waits on that one
+    process. For the same reason the relaunch happens BEFORE any failure dialog:
+    a modal box in a process with no visible window is invisible to the user and
+    would keep the app down until someone dismisses it.
   - `api/SystemController` serves `GET /api/system/status` and
     `POST /api/system/update {pull}` (the latter 409s unless `supervised` and
     the requested capability is present). No PostgreSQL state is involved.

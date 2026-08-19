@@ -58,15 +58,35 @@ export function setReachabilityReporter(fn: (ok: boolean) => void): void {
   reportReachable = fn;
 }
 
-async function enqueue(op: OutboxOp): Promise<void> {
-  if (!idbAvailable()) return; // nothing we can do; the write is simply lost
+/**
+ * Called with the topics the server has just accepted writes for. Their cached
+ * lesson state is now out of date by exactly those answers, and a stale copy is
+ * what makes progress look lost the next time the app opens offline.
+ */
+let reportFlushed: ((topics: string[]) => void) | null = null;
+
+export function setFlushedListener(fn: (topics: string[]) => void): void {
+  reportFlushed = fn;
+}
+
+async function enqueue(op: OutboxOp, notify = true): Promise<number | null> {
+  if (!idbAvailable()) return null; // nothing we can do; the write is simply lost
   try {
-    await run('readwrite', (store) => store.add(op) as IDBRequest<IDBValidKey>);
-    changed();
+    const key = await run('readwrite', (store) => store.add(op) as IDBRequest<IDBValidKey>);
+    if (notify) changed();
+    return typeof key === 'number' ? key : null;
   } catch {
     /* a full or unavailable database must not break the lesson */
+    return null;
   }
 }
+
+/**
+ * Entries currently being sent. They are already in the store (that is the
+ * point), but showing them in the header would make the badge blink on every
+ * single answer, so the count ignores them.
+ */
+const inFlight = new Set<number>();
 
 export async function all(): Promise<OutboxOp[]> {
   if (!idbAvailable()) return [];
@@ -81,7 +101,8 @@ export async function all(): Promise<OutboxOp[]> {
 export async function pendingCount(): Promise<number> {
   if (!idbAvailable()) return 0;
   try {
-    return await run<number>('readonly', (store) => store.count());
+    const total = await run<number>('readonly', (store) => store.count());
+    return Math.max(0, total - inFlight.size);
   } catch {
     return 0;
   }
@@ -123,24 +144,66 @@ function requestInit(op: OutboxOp): RequestInit {
 }
 
 /**
- * Sends the write, queueing it if the network refuses. A 4xx other than 401 is
- * the server rejecting the content itself: replaying it forever would wedge the
- * queue, so it is dropped.
+ * How long a write may take before the backend counts as unreachable. An
+ * unreachable host does not refuse the connection — it swallows the packets, so
+ * without a deadline the request hangs for minutes and reports nothing.
+ */
+const SEND_TIMEOUT_MS = 8000;
+
+async function post(op: OutboxOp): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
+  try {
+    return await fetch(op.url, { ...requestInit(op), signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * The server rejected the CONTENT itself, so replaying it forever would wedge
+ * the queue and it is dropped instead.
+ *
+ * Deliberately narrow. A 401/403 is about who is asking, not about what was
+ * sent: an expired token cookie, or a proxy the backend has been misconfigured
+ * to distrust. Treating those as permanent is how a month of answers can
+ * disappear without a trace, so they stay queued and stay visible.
+ */
+function permanentFailure(status: number): boolean {
+  const retryable = [401, 403, 408, 425, 429];
+  return status >= 400 && status < 500 && !retryable.includes(status);
+}
+
+/**
+ * Records the write, then delivers it.
+ *
+ * The order is the whole point. Storing the entry BEFORE touching the network
+ * means a request that never returns cannot take the answer with it: reload the
+ * page mid-flight, kill the app, close the lid — the answer is already on disk
+ * and the next flush sends it. Delivery goes through the same ordered flush as
+ * the backlog, so a fresh answer can never overtake an older queued one.
  */
 export async function send(op: OutboxOp): Promise<void> {
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-    await enqueue(op);
+  const id = await enqueue(op, false);
+  if (id == null) {
+    // No IndexedDB (private mode, quota): best effort, nothing to fall back on.
+    try {
+      await post(op);
+      reportReachable?.(true);
+    } catch {
+      reportReachable?.(false);
+    }
     return;
   }
+  // Registered as in-flight before anyone is notified, so the header does not
+  // blink a "pending write" badge on every single answer.
+  inFlight.add(id);
+  changed();
   try {
-    const res = await fetch(op.url, requestInit(op));
-    reportReachable?.(true);
-    if (res.ok) return;
-    if (res.status >= 400 && res.status < 500 && res.status !== 401 && res.status !== 408) return;
-    await enqueue(op);
-  } catch {
-    reportReachable?.(false);
-    await enqueue(op);
+    await flush();
+  } finally {
+    inFlight.delete(id);
+    changed();
   }
 }
 
@@ -168,32 +231,55 @@ export function flush(): Promise<FlushResult> {
 }
 
 async function doFlush(): Promise<FlushResult> {
-  const entries = await all();
   const topics = new Set<string>();
   let sent = 0;
 
-  for (const op of entries) {
-    let ok = false;
-    let drop = false;
-    try {
-      const res = await fetch(op.url, requestInit(op));
-      reportReachable?.(true);
-      ok = res.ok;
-      drop = !res.ok && res.status >= 400 && res.status < 500 && res.status !== 401 && res.status !== 408;
-    } catch {
-      reportReachable?.(false);
-      break; // still offline: keep this entry and everything after it
-    }
-    if (!ok && !drop) break; // 5xx / 401: try again later, in order
+  // The one case we can be sure of without spending a timeout on it.
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return { sent, remaining: await pendingCount(), topics: [] };
+  }
 
-    if (op.id != null) await remove(op.id);
-    if (ok) {
-      sent++;
-      if (op.topicId) topics.add(op.topicId);
+  // Answers given while a pass is running land behind it; the next pass takes
+  // them. Bounded so a pathological loop cannot spin forever.
+  for (let pass = 0; pass < 50; pass++) {
+    const entries = await all();
+    if (entries.length === 0) break;
+
+    let progressed = false;
+    let stop = false;
+    for (const op of entries) {
+      let ok = false;
+      let drop = false;
+      try {
+        const res = await post(op);
+        reportReachable?.(true);
+        ok = res.ok;
+        drop = !res.ok && permanentFailure(res.status);
+        if (drop) console.warn('[outbox] dropping a rejected write', res.status, op.url);
+      } catch {
+        reportReachable?.(false);
+        stop = true; // still unreachable: keep this entry and everything after it
+        break;
+      }
+      if (!ok && !drop) {
+        stop = true; // 5xx / 401: try again later, in order
+        break;
+      }
+      if (op.id != null) {
+        await remove(op.id);
+        inFlight.delete(op.id);
+      }
+      progressed = true;
+      if (ok) {
+        sent++;
+        if (op.topicId) topics.add(op.topicId);
+      }
     }
+    if (stop || !progressed) break;
   }
 
   const remaining = await pendingCount();
-  if (sent > 0 || entries.length !== remaining) changed();
+  changed();
+  if (topics.size > 0) reportFlushed?.([...topics]);
   return { sent, remaining, topics: [...topics] };
 }

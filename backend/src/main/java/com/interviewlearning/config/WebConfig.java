@@ -9,9 +9,13 @@ import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /**
- * Allows the Vite dev server (port 15173) to call the API during local
- * development. In a packaged build the frontend is served same-origin, so this
- * is harmless.
+ * Allows the Vite dev server (15173) and the preview server that exercises the
+ * service worker (4173) to call the API during local development.
+ *
+ * A packaged run serves the frontend same-origin, so nothing here applies to it
+ * — PROVIDED the app can tell that it is the same origin. Behind a proxy that
+ * terminates TLS it cannot, unless server.forward-headers-strategy is set; that
+ * combination once rejected every write the phone made.
  */
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
@@ -19,7 +23,9 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/api/**")
-                .allowedOrigins("http://localhost:15173", "http://127.0.0.1:15173")
+                .allowedOrigins(
+                        "http://localhost:15173", "http://127.0.0.1:15173",
+                        "http://localhost:4173", "http://127.0.0.1:4173")
                 .allowedMethods("GET", "POST", "OPTIONS");
     }
 

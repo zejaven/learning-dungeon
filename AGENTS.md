@@ -202,6 +202,14 @@ If a command cannot be run, say exactly why and what remains unverified.
   `localhost` resolves to `::1` first, and connecting there stalls for ~2s
   rather than failing over. Binding elsewhere is only safe together with the
   `remote` package below.
+- `server.forward-headers-strategy: framework` is what makes the app usable
+  behind Tailscale Serve. That proxy terminates TLS, so the browser sends
+  `Origin: https://<host>` while the app sees plain http; without the forwarded
+  headers Spring calls that cross-origin and answers every POST with 403
+  "Invalid CORS request". Reads keep working (browsers send no Origin on
+  same-origin GETs), which is what made it look like the phone was fine while
+  silently recording nothing. Do not narrow this without testing a write from
+  the phone.
 - Controllers live mostly under `backend/src/main/java/com/interviewlearning/api`.
 - Topic loading is in `topics/TopicRepository`. It rereads `topics/` from disk on
   requests so new folders appear without a backend restart. It reads `domainId`
@@ -395,6 +403,13 @@ When adding or changing a `visual.Visual*` model:
     running code — stays online-only and must fail loudly instead of queueing.
     `lessonStore.loadLesson` replays the queue over the server state, so an
     answer given offline survives a cold start.
+  - The outbox writes to IndexedDB BEFORE it touches the network, every request
+    carries a timeout, and 401/403 are retryable rather than dropped. Each of
+    those three rules exists because breaking it silently destroyed a full
+    lesson of progress: an unreachable host does not refuse a connection, it
+    swallows the request, so a queue that only fills on `fetch` rejection stays
+    empty while the answers live in a tab that is about to be reloaded; and a
+    permission error is about who is asking, not about what was sent.
   - Online-ness means "the backend answered", not `navigator.onLine`: the normal
     case is a phone happily on Wi-Fi while the PC is asleep. `offlineStore`
     combines both, fed by outbox results and the `/api/system/status` poll.

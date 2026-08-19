@@ -15,8 +15,35 @@ import {
   flush,
   onOutboxChange,
   pendingCount,
+  setFlushedListener,
   setReachabilityReporter,
 } from './offline/outbox';
+
+/**
+ * Re-reads the lesson state of topics the server just accepted answers for, so
+ * the copy the service worker holds matches what was actually recorded. Batched:
+ * finishing a unit produces a burst of answers, and they all touch one topic.
+ */
+const staleStates = new Set<string>();
+let staleTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleStateRefresh(topicIds: string[]): void {
+  for (const id of topicIds) staleStates.add(id);
+  if (staleTimer) clearTimeout(staleTimer);
+  staleTimer = setTimeout(() => {
+    const ids = [...staleStates];
+    staleStates.clear();
+    staleTimer = null;
+    void Promise.all(
+      ids.map((id) =>
+        fetch(`/api/lesson/${encodeURIComponent(id)}/state`, {
+          cache: 'reload',
+          credentials: 'same-origin',
+        }).catch(() => undefined),
+      ),
+    );
+  }, 8000);
+}
 
 /**
  * Offline state of the app: whether the backend is reachable, how many writes
@@ -116,6 +143,7 @@ export const useOffline = create<OfflineSlice>((set, get) => ({
     });
     window.addEventListener('offline', () => set({ networkUp: false, online: false }));
     setReachabilityReporter((ok) => get().reportBackend(ok));
+    setFlushedListener(scheduleStateRefresh);
     // Coming back to the app is exactly when the answer may have changed —
     // the phone was in a pocket, the PC went to sleep. Losing a VPN or a
     // tunnel raises no browser event at all, so without this the header would
@@ -137,13 +165,19 @@ export const useOffline = create<OfflineSlice>((set, get) => ({
   },
 
   async ping() {
+    // With a deadline: an unreachable host hangs instead of failing, and a
+    // liveness check that can hang forever is not a liveness check.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6000);
     try {
       // /api/system/ is excluded from the service worker's caches, so this
       // always reflects the network rather than a stored copy.
-      const res = await fetch('/api/system/status', { cache: 'no-store' });
+      const res = await fetch('/api/system/status', { cache: 'no-store', signal: controller.signal });
       get().reportBackend(res.ok);
     } catch {
       get().reportBackend(false);
+    } finally {
+      clearTimeout(timer);
     }
   },
 
@@ -160,19 +194,9 @@ export const useOffline = create<OfflineSlice>((set, get) => ({
     if (get().syncing) return;
     set({ syncing: true });
     try {
-      const result = await flush();
-      // The server now knows about these answers, but the cached lesson state
-      // still predates them: refresh it so a later offline start is correct.
-      for (const topicId of result.topics) {
-        try {
-          await fetch(`/api/lesson/${encodeURIComponent(topicId)}/state`, {
-            credentials: 'same-origin',
-            cache: 'reload',
-          });
-        } catch {
-          /* the next online load will do it */
-        }
-      }
+      // The refresh of any lesson state this touches is handled by the flushed
+      // listener above, for both this path and a plain answer sent while online.
+      await flush();
     } finally {
       set({ syncing: false });
       await get().refresh();

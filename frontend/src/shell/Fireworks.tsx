@@ -62,9 +62,13 @@ export function Fireworks() {
 
     function frame(now: number) {
       raf = requestAnimationFrame(frame);
-      // Trailing fade for light streaks.
-      ctx.fillStyle = 'rgba(13, 17, 23, 0.22)';
+      // Trailing fade for light streaks: erase part of what is already drawn
+      // instead of painting a dark veil over it, so the canvas stays transparent
+      // and the effect reads on a light background too.
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
       ctx.fillRect(0, 0, width, height);
+      ctx.globalCompositeOperation = 'source-over';
 
       if (now - lastLaunch > 450) {
         lastLaunch = now;

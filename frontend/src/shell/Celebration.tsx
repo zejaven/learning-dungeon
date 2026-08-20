@@ -3,9 +3,10 @@ import { ui, useLang } from '@app/i18n';
 import { Fireworks } from './Fireworks';
 
 /**
- * Fireworks + congratulations overlay shown when a topic is completed (every
- * boss-fight question passed). Driven by the global `celebrating` flag, so it
- * works wherever the Boss Fight is hosted (workspace or home/theory).
+ * Fireworks + congratulations overlay shown once a topic is finished — the last
+ * unit of its lesson, or its last boss-fight question when it has no lesson.
+ * Driven by the global `celebrating` flag (raised by `celebrateTopic`), so it
+ * works wherever the finish happens (workspace, home/theory or lesson).
  */
 export function Celebration() {
   const celebrating = useStore((s) => s.celebrating);

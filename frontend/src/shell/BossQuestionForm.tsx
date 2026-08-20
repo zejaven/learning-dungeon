@@ -53,7 +53,12 @@ export function BossQuestionForm({ topicId, question, onPassed, onBusyChange }: 
   const results = useStore((s) => s.bossFightResults);
   const setResult = useStore((s) => s.setBossFightResult);
   const markTopicCompleted = useStore((s) => s.markTopicCompleted);
+  const celebrateTopic = useStore((s) => s.celebrateTopic);
   const alreadyCompleted = useStore((s) => s.topicCompleted);
+  // A topic that has a lesson celebrates when the LESSON is finished (its boss
+  // units are that lesson's last step, and the recompute there is what knows
+  // it); for a topic without one, passing every question IS the finish.
+  const hasLesson = useStore((s) => !!s.topic?.hasAtoms);
   const provider = useAi((s) => s.selectedProvider);
   const lang = useLang((s) => s.lang);
   // AI grading runs on the PC, so this one screen genuinely needs the network.
@@ -149,7 +154,10 @@ export function BossQuestionForm({ topicId, question, onPassed, onBusyChange }: 
               passed: isPassed,
             })
               .then((res) => {
-                if (res.topicCompleted && !wasCompleted) markTopicCompleted();
+                if (res.topicCompleted && !wasCompleted) {
+                  markTopicCompleted();
+                  if (!hasLesson) celebrateTopic();
+                }
                 if (isPassed) onPassed?.();
               })
               .catch(() => {

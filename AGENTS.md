@@ -359,6 +359,16 @@ When adding or changing a `visual.Visual*` model:
   `exercises/*` per exercise type), and `BossFightUnit`. The Boss Fight
   grading form itself is shared with the standalone dialog via
   `frontend/src/shell/BossQuestionForm.tsx` — do not duplicate that logic.
+- The completion fireworks (`shell/Celebration.tsx`) are raised only by
+  `celebrateTopic()` in `store.ts`, which fires once per topic per session:
+  finishing a topic is reported twice, by the boss answer response and by the
+  lesson recompute that follows it, so the trigger must be idempotent rather
+  than a flag flip. A topic that has a lesson celebrates from `finishLesson`
+  in `lessonStore.ts` when the LESSON completes; one without a lesson from
+  `BossQuestionForm` when the last boss question passes. Both are gated on
+  "it was not already finished when it was opened" — which is why `loadLesson`
+  takes the boss half of lesson completion from the server instead of deriving
+  it from boss results that are still being fetched.
 - `ReviewScreen` (`#/review`) reuses `ExerciseCard` outside the lesson context.
 - The settings gear (`frontend/src/shell/SettingsButton.tsx`, in every screen's
   header) opens `SettingsDialog` (Update = git pull + rebuild + restart; Restart

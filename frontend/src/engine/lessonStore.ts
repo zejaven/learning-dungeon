@@ -27,6 +27,12 @@ interface LessonSlice {
   atoms: LearningAtoms | null;
   units: LessonUnit[];
   lessonCompleted: boolean;
+  /**
+   * Whether the lesson was already complete when it was loaded. The completion
+   * fireworks key off this, so reopening a finished lesson — or walking back
+   * through its units — never re-fires them.
+   */
+  completedOnLoad: boolean;
   /** The unit open in the panel; null while loading or when there is no lesson. */
   currentUnitId: string | null;
   exerciseIndex: number;
@@ -116,11 +122,19 @@ export function lessonComplete(
   results: Record<string, ExerciseResult>,
   passedBossIds: Record<string, boolean>,
 ): boolean {
+  if (!allExercisesAnswered(units, results)) return false;
+  return units.filter((u) => u.kind === 'boss').every((u) => !!passedBossIds[u.id.slice(2)]);
+}
+
+/** The exercise half of that rule: every non-boss unit answered through. */
+function allExercisesAnswered(
+  units: LessonUnit[],
+  results: Record<string, ExerciseResult>,
+): boolean {
   const required = units
     .filter((u) => u.kind === 'discovery' || u.kind === 'practice' || u.kind === 'capstone')
     .flatMap((u) => u.exerciseIds);
-  if (required.length === 0 || !required.every((id) => results[id] != null)) return false;
-  return units.filter((u) => u.kind === 'boss').every((u) => !!passedBossIds[u.id.slice(2)]);
+  return required.length > 0 && required.every((id) => results[id] != null);
 }
 
 /** True when any exercise of a (non-boss) unit was answered incorrectly. */
@@ -174,13 +188,14 @@ function passedBossIds(): Record<string, boolean> {
 
 const EMPTY: Pick<
   LessonSlice,
-  | 'atoms' | 'units' | 'lessonCompleted' | 'currentUnitId' | 'exerciseIndex'
+  | 'atoms' | 'units' | 'lessonCompleted' | 'completedOnLoad' | 'currentUnitId' | 'exerciseIndex'
   | 'results' | 'mistakesQueue' | 'mistakesPhase' | 'mistakesLastCorrect'
   | 'mistakesLastAnswer' | 'exerciseById' | 'atomIdByExerciseId' | 'pendingSave'
 > = {
   atoms: null,
   units: [],
   lessonCompleted: false,
+  completedOnLoad: false,
   currentUnitId: null,
   exerciseIndex: 0,
   results: {},
@@ -192,6 +207,22 @@ const EMPTY: Pick<
   atomIdByExerciseId: {},
   pendingSave: null,
 };
+
+/**
+ * The lesson is finished: mirror that into the topic (answering every unit
+ * implies passing every boss question) and fire the completion fireworks, once,
+ * unless the lesson was already complete when it was opened. Both recompute
+ * callers funnel through here and every step is idempotent, so reporting the
+ * same finish twice — which the boss answer and the recompute after it do —
+ * changes nothing. Reports for a topic that is no longer open are dropped.
+ */
+function finishLesson(topicId: string) {
+  const lesson = useLesson.getState();
+  if (lesson.topicId !== topicId || useStore.getState().topic?.id !== topicId) return;
+  useLesson.setState({ lessonCompleted: true });
+  useStore.getState().markTopicCompleted();
+  if (!lesson.completedOnLoad) useStore.getState().celebrateTopic();
+}
 
 export const useLesson = create<LessonSlice>((set, get) => ({
   topicId: null,
@@ -239,6 +270,16 @@ export const useLesson = create<LessonSlice>((set, get) => ({
         }
       }
 
+      // The boss half of the rule comes from the server: this runs while the
+      // topic's boss results are still being fetched, so deriving it here would
+      // read an empty set and call a finished lesson unfinished — the false
+      // negative that made the next recompute look like a fresh finish and
+      // re-fire the fireworks. The exercise half stays local, so a lesson that
+      // GREW since it was finished is unfinished again despite the stored flag.
+      const completed = state
+        ? state.lessonCompleted && allExercisesAnswered(units, results)
+        : lessonComplete(units, results, passedBossIds());
+
       const cleared = mistakesCleared(units, results);
       const frontier = frontierIndex(units, results, passedBossIds(), cleared);
       const currentUnitId = units.length === 0 ? null : units[Math.min(frontier, units.length - 1)].id;
@@ -248,7 +289,8 @@ export const useLesson = create<LessonSlice>((set, get) => ({
         loading: false,
         atoms,
         units,
-        lessonCompleted: lessonComplete(units, results, passedBossIds()),
+        lessonCompleted: completed,
+        completedOnLoad: completed,
         currentUnitId,
         results,
         mistakesQueue,
@@ -309,16 +351,11 @@ export const useLesson = create<LessonSlice>((set, get) => ({
     try {
       await s.pendingSave; // make sure the last answer is persisted before recompute
       const res = await recomputeLesson(s.topicId);
-      set({ lessonCompleted: res.lessonCompleted || get().lessonCompleted });
-      if (res.lessonCompleted && !s.lessonCompleted) {
-        // Lesson completion implies the boss-driven topic completion.
-        useStore.getState().markTopicCompleted();
-      }
+      if (res.lessonCompleted) finishLesson(s.topicId);
     } catch {
       // Offline: the same rule the server applies, over the answers we hold.
       // The server recomputes from the replayed answers once it hears them.
-      const local = lessonComplete(get().units, get().results, passedBossIds());
-      if (local) set({ lessonCompleted: true });
+      if (lessonComplete(get().units, get().results, passedBossIds())) finishLesson(s.topicId);
     }
   },
 
@@ -399,10 +436,7 @@ export const useLesson = create<LessonSlice>((set, get) => ({
     if (!s.topicId) return;
     try {
       const res = await recomputeLesson(s.topicId);
-      set({ lessonCompleted: res.lessonCompleted || get().lessonCompleted });
-      if (res.lessonCompleted && !s.lessonCompleted) {
-        useStore.getState().markTopicCompleted();
-      }
+      if (res.lessonCompleted) finishLesson(s.topicId);
     } catch {
       /* best-effort; the pass itself is already stored in boss_fight_answer */
     }

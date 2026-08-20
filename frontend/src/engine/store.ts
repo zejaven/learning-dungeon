@@ -51,6 +51,11 @@ interface AppState {
   topicCompleted: boolean;
   /** Drives the celebration overlay when a topic is finished. */
   celebrating: boolean;
+  /**
+   * Topics whose fireworks already played in this session, so they play exactly
+   * once (see {@link celebrateTopic}).
+   */
+  celebratedTopics: string[];
 
   // --- Structural (design-pattern) topics: a multi-file project + class graph ---
   /** Virtual filesystem (path → content) for the current structural topic. */
@@ -89,6 +94,8 @@ interface AppState {
   stepPrev: () => void;
   setBossFightResult: (questionId: string, result: BossFightResult) => void;
   markTopicCompleted: () => void;
+  /** Fires the completion fireworks once per topic. */
+  celebrateTopic: () => void;
   setCelebrating: (value: boolean) => void;
 
   selectFile: (path: string) => void;
@@ -240,6 +247,7 @@ export const useStore = create<AppState>((set, get) => ({
   bossFightResults: {},
   topicCompleted: false,
   celebrating: false,
+  celebratedTopics: [],
   files: {},
   activePath: null,
   graph: null,
@@ -420,19 +428,24 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   markTopicCompleted() {
+    if (get().topicCompleted) return; // several callers report the same news
     const id = get().topic?.id;
-    // Celebrate only on the real first-time transition. Reopening an already
-    // completed topic (topicCompleted restored from saved progress) must not
-    // re-fire the fireworks — the derived lesson flag can lag behind the loaded
-    // boss results, so callers can't reliably detect the transition themselves.
-    const alreadyCompleted = get().topicCompleted;
     set({
       topicCompleted: true,
-      celebrating: !alreadyCompleted,
       topics: id
         ? get().topics.map((t) => (t.id === id ? { ...t, completed: true } : t))
         : get().topics,
     });
+  },
+
+  celebrateTopic() {
+    const id = get().topic?.id;
+    // Once per topic, because finishing one is reported by two racing callers:
+    // the boss answer response and the lesson recompute that follows it. What
+    // counts as finished is the caller's call — the last unit of the lesson for
+    // a topic that has one, the last boss question for a topic that doesn't.
+    if (!id || get().celebratedTopics.includes(id)) return;
+    set({ celebrating: true, celebratedTopics: [...get().celebratedTopics, id] });
   },
 
   setCelebrating(value) {

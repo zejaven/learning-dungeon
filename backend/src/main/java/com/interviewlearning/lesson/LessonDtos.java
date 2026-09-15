@@ -188,23 +188,49 @@ public final class LessonDtos {
     public record RecomputeResponse(boolean lessonCompleted) {
     }
 
+    /** When one not-yet-mastered exercise falls due and when its window shuts (ISO-8601). */
+    public record ReviewDue(String dueAt, String expiresAt) {
+    }
+
     /**
-     * One topic that has practice exercises in the review pool: how many are
-     * still in the list ({@code pending}), the topic total, and whether it is
-     * enabled (its pending exercises take part in review).
+     * One topic that has practice exercises in the review pool: the topic total,
+     * how many have walked the whole repetition ladder, whether it is enabled,
+     * and when each remaining exercise comes up.
+     *
+     * <p>How many are due right now is deliberately NOT a field: that changes
+     * with the clock, so the client counts {@code schedule} against its own time
+     * and this response stays cacheable. The schedule is carried here rather than
+     * read from {@code /list} so the home-screen badge does not have to download
+     * every exercise body.
      */
-    public record ReviewTopic(String topicId, Localized title, int pending, int total, boolean enabled) {
+    public record ReviewTopic(String topicId, Localized title, int total, int mastered,
+                              boolean enabled, List<ReviewDue> schedule) {
     }
 
     /** Toggles whether a topic's exercises participate in review sessions. */
     public record ReviewTopicPrefRequest(boolean enabled) {
     }
 
-    /** One review-list exercise, self-contained so the review screen never loads topics. */
-    public record ReviewItem(String topicId, Localized topicTitle, String atomId, Exercise exercise) {
+    /**
+     * One pooled exercise, self-contained so the review screen never loads topics,
+     * with its position on the repetition ladder. {@code dueAt}/{@code expiresAt}
+     * are ISO-8601 instants: the client compares them against its own clock to
+     * decide what to offer, which is what keeps this response cacheable and makes
+     * offline review honest.
+     */
+    public record ReviewItem(String topicId, Localized topicTitle, String atomId, Exercise exercise,
+                             int step, int totalSteps, String dueAt, String expiresAt, boolean mastered) {
     }
 
-    /** Records a review answer; a correct answer drops the exercise from the list. */
-    public record ReviewMarkRequest(String topicId, String exerciseId, boolean correct) {
+    /**
+     * Records a review answer and advances the repetition schedule.
+     *
+     * @param answeredAt ISO-8601 instant the answer was actually given; null for
+     *                   an outbox entry queued before this field existed
+     * @param answerId   identity of this answer so a redelivery is a no-op; may
+     *                   be null for the same reason
+     */
+    public record ReviewMarkRequest(String topicId, String exerciseId, boolean correct,
+                                    String answeredAt, String answerId) {
     }
 }

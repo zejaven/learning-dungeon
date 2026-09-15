@@ -281,12 +281,61 @@ public class DbInitializer {
                 )
                 """);
 
-        // Whether a pooled exercise is currently in the review list. Answering it
-        // correctly clears the flag (it leaves the list); a wrong answer keeps it
-        // set. A per-topic or global "start again" sets it back to TRUE. This is
-        // the persistent membership of the review list — there is no session
-        // snapshot; ordering/requeue is a client concern over this live set.
+        // Superseded by the spaced-repetition columns below, but kept for one
+        // release as a read-only witness: the migration that replaces it cannot
+        // be tested (this project has no database tests) and it is the only
+        // record of what had already been answered.
         jdbc.execute("ALTER TABLE review_pool ADD COLUMN IF NOT EXISTS pending BOOLEAN NOT NULL DEFAULT TRUE");
+
+        // Spaced repetition. A pooled exercise walks a ladder of intervals
+        // (see ReviewSchedule): srs_step is the rung it is about to be served
+        // at, due_at is when that happens, and it stays answerable for a window
+        // after due_at — missing that window is a lapse and restarts the ladder.
+        //
+        // expires_at is deliberately NOT stored: it is a pure function of due_at
+        // and srs_step, and the ladder will be tuned — a stored copy would drift
+        // out of agreement with the code. last_answer_id makes an answer
+        // idempotent: the offline outbox aborts a request after 8s and keeps it
+        // queued even though the server may have processed it, and replaying an
+        // answer would climb the ladder twice.
+        jdbc.execute("ALTER TABLE review_pool ADD COLUMN IF NOT EXISTS srs_step INT NOT NULL DEFAULT 0");
+        jdbc.execute("ALTER TABLE review_pool ADD COLUMN IF NOT EXISTS due_at TIMESTAMPTZ NOT NULL DEFAULT now()");
+        jdbc.execute("ALTER TABLE review_pool ADD COLUMN IF NOT EXISTS graduated_at TIMESTAMPTZ");
+        jdbc.execute("ALTER TABLE review_pool ADD COLUMN IF NOT EXISTS lapse_count INT NOT NULL DEFAULT 0");
+        jdbc.execute("ALTER TABLE review_pool ADD COLUMN IF NOT EXISTS last_answer_id TEXT");
+
+        // One-shot backfill from the old boolean, guarded by a marker column
+        // because there is no schema versioning here and this must not re-run:
+        // a second pass would shove every row's due date forward again.
+        // Exercises answered before the switch are credited with the first rung
+        // and staggered by the second interval, so the upgrade does not greet
+        // the user with a wall of several hundred due questions.
+        jdbc.execute("""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'review_pool'
+                          AND column_name = 'srs_migrated'
+                    ) THEN
+                        ALTER TABLE review_pool ADD COLUMN srs_migrated BOOLEAN NOT NULL DEFAULT TRUE;
+                        UPDATE review_pool
+                           SET srs_step = 1, due_at = now() + INTERVAL '8 hours'
+                         WHERE pending = FALSE;
+                        UPDATE review_pool
+                           SET srs_step = 0, due_at = now()
+                         WHERE pending = TRUE;
+                    END IF;
+                END $$
+                """);
+
+        // The pool is read whole and filtered by date in Java (so the interval
+        // ladder stays in one testable place), which leaves this index only one
+        // job: keep the graduated rows cheap to skip as they pile up.
+        jdbc.execute("""
+                CREATE INDEX IF NOT EXISTS ix_review_pool_live
+                    ON review_pool (topic_id, exercise_id) WHERE graduated_at IS NULL
+                """);
 
         // Migration: progress is now keyed by stable exercise ids, so the
         // atoms_hash columns (and the hash-scoped lesson_unit_progress table)
@@ -306,7 +355,7 @@ public class DbInitializer {
                 )
                 """);
 
-        // The review list is now persistent per-exercise state (review_pool.pending)
+        // The review list is now per-exercise schedule state on review_pool
         // rather than a shuffled session snapshot. Drop the obsolete session table.
         jdbc.execute("DROP TABLE IF EXISTS review_session");
     }

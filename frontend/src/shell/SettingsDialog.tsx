@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { domainById } from '@app/domains';
 import { useDomain } from '@app/engine/domainStore';
 import { useOffline } from '@app/engine/offlineStore';
 import { cacheAvailable } from '@app/engine/offline/cache';
+import { useReview } from '@app/engine/reviewStore';
 import { useSystem } from '@app/engine/systemStore';
 import { tl, ui, useLang } from '@app/i18n';
 
@@ -65,11 +67,68 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
 
           <OfflineSection />
 
+          <ReviewSection />
+
           {status?.version && <p className="settings-version">{status.version}</p>}
         </div>
         <div className="dialog-foot">
           <button onClick={onClose}>{ui('close', lang)}</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Spaced-repetition section. The only destructive action left for review, and
+ * deliberately buried here: under the schedule, "bring the answered questions
+ * back" is no longer a useful button but a way to throw away every repetition
+ * date the app has assigned. Drilling one topic without that cost is what ▶ in
+ * the review tree is for.
+ *
+ * Two-step on purpose, and never queued offline — a wipe replayed an hour later
+ * would silently discard a session the user had just finished.
+ */
+function ReviewSection() {
+  const lang = useLang((s) => s.lang);
+  const pool = useReview((s) => s.pool);
+  const resetSchedule = useReview((s) => s.resetSchedule);
+  const [armed, setArmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+
+  // The home screen only loads `pool`, so this must not depend on `topics`.
+  if (pool.length === 0) return null;
+
+  async function reset() {
+    setBusy(true);
+    try {
+      await resetSchedule();
+      setDone(true);
+    } catch {
+      /* the store surfaces the error; keep the dialog usable */
+    } finally {
+      setBusy(false);
+      setArmed(false);
+    }
+  }
+
+  return (
+    <div className="settings-review">
+      <div className="panel-title settings-section-title">{ui('settingsReviewTitle', lang)}</div>
+      <div className="settings-action">
+        {armed ? (
+          <button className="settings-action-btn danger" disabled={busy} onClick={() => void reset()}>
+            {ui('settingsReviewResetConfirm', lang)}
+          </button>
+        ) : (
+          <button className="settings-action-btn" disabled={busy} onClick={() => setArmed(true)}>
+            {ui('settingsReviewReset', lang)}
+          </button>
+        )}
+        <p className="settings-action-desc">
+          {done ? ui('settingsReviewResetDone', lang) : ui('settingsReviewResetDesc', lang)}
+        </p>
       </div>
     </div>
   );

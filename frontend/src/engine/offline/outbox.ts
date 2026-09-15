@@ -11,17 +11,23 @@ import { OUTBOX_STORE, idbAvailable, run } from './db';
  * (AI grading, generation, running code) is online-only and is NOT queued.
  *
  * Entries replay in insertion order, so re-answering the same exercise ends up
- * with the last answer winning on the server too.
+ * with the last answer winning on the server too. A review answer additionally
+ * carries the time it was given and its own id, so a delayed or duplicated
+ * delivery still schedules the next repetition correctly.
+ *
+ * Resetting the repetition schedule is NOT queued here even though it is a
+ * write: it destroys state rather than recording it, and a wipe replayed after
+ * a session would silently discard that session.
  */
 
-export type OutboxKind = 'lesson-answer' | 'review-answer' | 'review-topic' | 'review-restart';
+export type OutboxKind = 'lesson-answer' | 'review-answer' | 'review-topic';
 
 /** A pending write, exactly as it will be replayed. */
 export interface OutboxOp {
   id?: number;
   kind: OutboxKind;
   url: string;
-  /** Omitted for POSTs that carry no body (the "start again" endpoints). */
+  /** Omitted for POSTs that carry no body. */
   body?: unknown;
   /** Topic the write belongs to; drives the lesson overlay and post-sync refresh. */
   topicId?: string;

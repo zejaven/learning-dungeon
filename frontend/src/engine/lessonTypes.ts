@@ -167,22 +167,49 @@ export type AnswerValue =
 
 // --- Global review ---------------------------------------------------------
 
+/** When one not-yet-mastered exercise falls due and when its answering window shuts. */
+export interface ReviewDue {
+  /** ISO-8601 instant. */
+  dueAt: string;
+  /** ISO-8601 instant; past it the exercise has lapsed and restarts the ladder. */
+  expiresAt: string;
+}
+
 /**
- * A topic with pooled practice exercises: how many are still in the review list
- * ({@link pending}), the topic {@link total}, and whether it participates.
+ * A topic with pooled practice exercises: the topic {@link total}, how many have
+ * walked the whole repetition ladder ({@link mastered}), whether it participates,
+ * and when each remaining exercise comes up.
+ *
+ * How many are due is NOT a field — it moves with the clock. Count
+ * {@link schedule} instead, so the response stays cacheable and the counts stay
+ * honest when the tab has been open all night.
  */
 export interface ReviewTopic {
   topicId: string;
   title: Localized;
-  pending: number;
   total: number;
+  mastered: number;
   enabled: boolean;
+  schedule: ReviewDue[];
 }
 
-/** One review-list exercise, self-contained (topic title included for the header). */
+/**
+ * One pooled exercise, self-contained (topic title included for the header),
+ * with its position on the repetition ladder.
+ */
 export interface ReviewItem {
   topicId: string;
   topicTitle: Localized;
   atomId: string;
   exercise: Exercise;
+  /** Rung it is about to be served at, 0-based. */
+  step: number;
+  /** Rungs in the ladder; reaching it means mastered. */
+  totalSteps: number;
+  /** ISO-8601 instant. */
+  dueAt: string;
+  /** ISO-8601 instant, or null once mastered. */
+  expiresAt: string | null;
+  /** The whole ladder is walked; out of the schedule until deliberately practised. */
+  mastered: boolean;
 }

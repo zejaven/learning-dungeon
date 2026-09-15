@@ -1,16 +1,20 @@
 import { useState } from 'react';
 import { buildAllCatalogs, compareEntries, stars, type CatalogCategory } from '@app/catalog';
-import { useReview } from '@app/engine/reviewStore';
+import { topicCounts, useReview } from '@app/engine/reviewStore';
 import { useStore } from '@app/engine/store';
 import { tl, ui, uiAll, useLang } from '@app/i18n';
 
 /**
  * Left-hand tree of the review screen: the same category grouping as the home
  * catalog, but restricted to the topics that currently have practice exercises
- * in the review pool. Each topic shows how many exercises are still in the list
- * (pending / total) and carries a checkbox — unchecking it removes the topic's
- * pending exercises from the review list, re-checking restores the same ones.
- * The ↺ button returns the topic's already-answered exercises to the list.
+ * in the review pool.
+ *
+ * Each topic shows where its exercises stand on the repetition ladder — due now
+ * / still waiting for their date / mastered — and carries a checkbox that takes
+ * the whole topic in or out of review without touching its schedule. The ▶
+ * button drills the topic ahead of schedule, which is the safe replacement for
+ * the old ↺ "return this topic's answered exercises": it asks the questions
+ * without moving a single repetition date.
  */
 export function ReviewTree() {
   const lang = useLang((s) => s.lang);
@@ -18,9 +22,10 @@ export function ReviewTree() {
   const manualQuestions = useStore((s) => s.manualQuestions);
   const poolTopics = useReview((s) => s.topics);
   const toggleTopic = useReview((s) => s.toggleTopic);
+  const startAhead = useReview((s) => s.startAhead);
+  const clock = useReview((s) => s.clock);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
-  const restartTopic = useReview((s) => s.restartTopic);
   const poolById = new Map(poolTopics.map((t) => [t.topicId, t]));
 
   // Group pooled topics under their catalog categories (across every domain —
@@ -70,6 +75,7 @@ export function ReviewTree() {
               <div className="tree-entries">
                 {cat.entries.map((e) => {
                   const pt = poolById.get(e.topicId!)!;
+                  const counts = topicCounts(pt, clock);
                   return (
                     <div key={e.id} className="tree-entry review-tree-entry">
                       <label className="review-tree-label" title={tl(e.question, lang)}>
@@ -84,16 +90,20 @@ export function ReviewTree() {
                         </span>
                         <span className="tree-q">{tl(e.question, lang)}</span>
                       </label>
-                      <span className="review-tree-count" title={ui('reviewTopicCount', lang)}>
-                        {pt.pending}/{pt.total}
+                      <span className="review-tree-count" title={ui('reviewCounts', lang)}>
+                        <b data-due={counts.due > 0 ? '1' : undefined}>{counts.due}</b>
+                        {' · '}
+                        {counts.waiting}
+                        {' · '}
+                        {counts.mastered}
                       </span>
                       <button
                         className="review-tree-restart"
-                        title={ui('reviewRestartTopic', lang)}
-                        disabled={pt.pending >= pt.total}
-                        onClick={() => void restartTopic(pt.topicId)}
+                        title={ui('reviewAhead', lang)}
+                        disabled={counts.waiting + counts.mastered === 0}
+                        onClick={() => void startAhead(pt.topicId)}
                       >
-                        ↺
+                        ▶
                       </button>
                     </div>
                   );

@@ -72,13 +72,57 @@ reinforcement `practice` exercises (multiple choice, true/false, fill-blank,
 word-bank, sort-steps, match-pairs). The lesson UI derives a sequence of units
 (discovery → practice → boss) rendered as a horizontal, sequentially-unlocked
 circle track; Boss Fight units reuse the topic's existing `bossFight` questions
-and AI-grading flow. Progress is scoped by a hash of `learning-atoms.json`, so
-regenerating the file resets discovery/practice progress but not Boss Fight
-progress (keyed by stable question ids). Practice exercises of a fully
-completed lesson join a global, cross-topic review pool (`#/review`) with
-wrong-answer requeueing. The full design, DB schema, and a worked example live
-in `plans/learn-by-micro-actions.md`. The long-form explanation still exists as
-a "📖 Reference" view; it is not the primary path once a lesson exists.
+and AI-grading flow. Progress is keyed by the STABLE exercise and boss-question
+ids, so editing `learning-atoms.json` only marks the changed exercises
+unanswered. Practice exercises of a fully completed lesson join a global,
+cross-topic review pool (`#/review`) on a spaced-repetition schedule (see
+Spaced repetition below). The original design and a worked example live in
+`plans/learn-by-micro-actions.md` — treat its DDL and review sections as
+historical, since the review pool has been reshaped since and `atomsHash`
+scoping is gone. The long-form explanation still exists as a "📖 Reference"
+view; it is not the primary path once a lesson exists.
+
+### Spaced repetition
+
+`#/review` is not a one-pass list. Each pooled exercise walks a ladder of
+intervals (1h → 8h → 1d → 3d → 1w → 3w → 2mo) and is offered only when its date
+arrives, for a window of `clamp(interval, 12h, 14d)`. Answering correctly inside
+that window climbs a rung; answering wrongly drops to the bottom; letting the
+window pass is a lapse, which re-offers the exercise immediately but makes even a
+correct answer only re-earn rung 0. Walking all seven rungs masters the exercise
+and it leaves the list for good.
+
+The invariants that are easy to break:
+
+- The ladder lives ONLY in `backend/.../lesson/ReviewSchedule.java`. The
+  frontend is handed `step`/`dueAt`/`expiresAt` already computed, so there is no
+  mirrored copy to keep in sync (unlike `lessonUnits.ts`). `ReviewScheduleTest`
+  pins the policy and is the only safety net the feature has — the migration
+  that feeds it cannot be tested, since the project has no database tests.
+- `GET /api/review/list` and `/topics` are **invariant over time**: they never
+  say what is "due now", they hand over due/expiry instants and the client
+  decides against its own clock. That is what lets the PWA cache them, lets the
+  per-domain filter and the session cap apply client-side, and makes offline
+  review correct. A server-side due filter would also break the domain filter —
+  the 30 most overdue could all be `ndm-*` while the user is in `java`, leaving
+  an empty queue next to a tree full of due topics.
+- A review answer carries `answeredAt` (so an answer queued offline schedules
+  from when it was given, not from when the queue drained) and `answerId` (so a
+  redelivery is a no-op — the outbox abandons a request after 8s and keeps it
+  queued even when the server did process it).
+- The FIRST attempt decides the schedule. A wrong answer still requeues in the
+  session, but that retry must not be sent again or a correct answer a minute
+  later would undo the step reset the mistake earned (`gradedIds` in
+  `reviewStore`).
+- "Nothing due" is the normal state, not an empty pool. There is no "bring the
+  answered questions back" button on the screen any more: ▶ in the review tree
+  drills a topic's not-yet-due and mastered exercises WITHOUT touching their
+  dates, and the only destructive reset lives in the settings dialog behind a
+  two-step confirmation.
+- `app.review.speed` (default 1.0) multiplies every interval and window so the
+  whole ladder can be walked by hand in a minute. The backend warns on startup
+  while it is set; rows answered at a fake speed keep fake dates, so a schedule
+  reset has to follow.
 
 ## Prerequisites
 
@@ -237,20 +281,34 @@ If a command cannot be run, say exactly why and what remains unverified.
 - The `lesson` package (`backend/src/main/java/com/interviewlearning/lesson/`)
   is the "Learn by micro-actions" domain:
   - `LearningAtomsRepository` reads `topics/<id>/learning-atoms.json` per
-    request (same no-restart philosophy as `TopicRepository`) and returns it
-    with a sha-256 hash of the file bytes (`atomsHash`) that scopes progress.
+    request (same no-restart philosophy as `TopicRepository`). It returns empty
+    for a missing file, an IO error, a parse error and an empty atom list
+    alike — `ReviewController.resolvedRows` must therefore never treat empty as
+    "this topic has no exercises" and prune, or a request landing mid
+    regeneration would delete the topic's whole repetition schedule.
   - `LessonUnits.derive(...)` turns atoms + boss-fight questions into the
     ordered unit sequence (discovery per atom, practice chunked round-robin
     across atoms in groups of `PRACTICE_CHUNK` = 5, one boss unit per
     question). This algorithm is mirrored in
     `frontend/src/engine/lessonUnits.ts` — a change to one requires the same
     change to the other, and `LessonUnitsTest` pins the exact output.
-  - `LessonProgressRepository` and `ReviewRepository` persist answers, unit
-    completion, lesson completion, and the global review pool/session in
-    PostgreSQL (tables added in `progress/DbInitializer`: `lesson_exercise_answer`,
-    `lesson_unit_progress`, `lesson_progress`, `review_pool`, `review_session`).
-  - `api/LessonController` serves atoms/state/answer/unit-complete;
-    `api/ReviewController` serves the review pool/session; `api/LessonGenController`
+  - `ReviewSchedule` is the spaced-repetition policy: a `final` class of pure
+    static methods with `now` and `speed` as parameters (same shape as
+    `bulk/BulkPlanner`), pinned by `ReviewScheduleTest`. `ReviewRepository`
+    stays a thin persister — `recordAnswer` is a `@Transactional`
+    read-then-write only so the interval table can live in that testable class
+    instead of in SQL.
+  - `LessonProgressRepository` and `ReviewRepository` persist answers, lesson
+    completion, and the global review pool in PostgreSQL (tables in
+    `progress/DbInitializer`: `lesson_exercise_answer`, `lesson_progress`,
+    `review_pool`, `review_topic_pref`). `review_pool` carries the schedule
+    (`srs_step`, `due_at`, `graduated_at`, `lapse_count`, `last_answer_id`);
+    `expires_at` is deliberately derived, not stored, so tuning the ladder
+    cannot leave the database disagreeing with the code. The old `pending`
+    column is kept one release as a read-only witness because nothing can test
+    the backfill. `lesson_unit_progress` and `review_session` are dropped.
+  - `api/LessonController` serves atoms/state/answer/recompute;
+    `api/ReviewController` serves the review list/topics/answer/reset; `api/LessonGenController`
     starts atoms generation via the existing detached-SSE `GenerationService`
     (task key `atoms:<topicId>`, `AiTask.GENERATE_ATOMS`), reusing
     `GET /api/topics/generate/{taskId}/events` for streaming.
@@ -258,7 +316,8 @@ If a command cannot be run, say exactly why and what remains unverified.
     frontend; these endpoints only persist results (same trust model as trace
     mission completion). Boss Fight units reuse the existing AI-graded
     `POST /api/assistant/evaluate` flow and `boss_fight_answer` persistence
-    unchanged — Boss Fight progress is not scoped by `atomsHash`.
+    unchanged — Boss Fight questions are not part of the review pool or its
+    schedule.
 - The `system` package (`backend/src/main/java/com/interviewlearning/system/`)
   is the settings-gear self-update/restart domain:
   - `SystemService` detects deployment capabilities (`supervised` — set only
@@ -348,10 +407,18 @@ When adding or changing a `visual.Visual*` model:
 - The lesson mode lives in `frontend/src/engine/lessonStore.ts` (current lesson,
   unit/exercise navigation, saved answers keyed by exercise id so revisiting a
   unit restores what was answered) and `frontend/src/engine/reviewStore.ts`
-  (global review session). Types are in `lessonTypes.ts`; grading is
-  deterministic and shared between the lesson and review via `grading.ts`; unit
-  derivation is mirrored from the backend in `lessonUnits.ts` (see Backend
-  Notes — keep both in sync).
+  (global review run, its `due`/`ahead` modes, and the derived schedule state).
+  Types are in `lessonTypes.ts`; grading is deterministic and shared between the
+  lesson and review via `grading.ts`; unit derivation is mirrored from the
+  backend in `lessonUnits.ts` (see Backend Notes — keep both in sync). The
+  repetition ladder is NOT mirrored: the server sends the dates already computed.
+- What is due grows with the wall clock, so `reviewStore` keeps a `clock` field
+  bumped by a timer plus `visibilitychange`/`focus`, and every derived count
+  (`topicCounts`, `useReviewBadge`) reads it. Without that the badge reads 0 all
+  night while forty exercises come due behind it.
+- `engine/duration.ts` formats countdowns ("3 ч 12 м"). Unit abbreviations are
+  i18n keys, never a `lang === 'ru'` check — that would be a second place to
+  edit when a language is added.
 - Lesson UI components live under `frontend/src/shell/lesson/`: `LessonPanel`
   (default view of a topic's right panel once `TopicDetail.hasAtoms` is true),
   `UnitTrack` (the circle row; locked/current/done, and done-with-a-mistake
@@ -370,6 +437,10 @@ When adding or changing a `visual.Visual*` model:
   takes the boss half of lesson completion from the server instead of deriving
   it from boss results that are still being fetched.
 - `ReviewScreen` (`#/review`) reuses `ExerciseCard` outside the lesson context.
+  Its idle state is not "you are done" but one of three: a backlog left over
+  from the batch cap, nothing due plus when the next repetition lands, or an
+  empty pool. `ReviewTree` shows `due · waiting · mastered` per topic and a ▶
+  that drills one ahead of schedule.
 - The settings gear (`frontend/src/shell/SettingsButton.tsx`, in every screen's
   header) opens `SettingsDialog` (Update = git pull + rebuild + restart; Restart
   = rebuild from local files + restart). `frontend/src/engine/systemStore.ts`
@@ -428,6 +499,10 @@ When adding or changing a `visual.Visual*` model:
     (lesson/review answers — grading is deterministic and already done on the
     client). Anything whose response the UI needs — AI grading, generation,
     running code — stays online-only and must fail loudly instead of queueing.
+    So is anything DESTRUCTIVE: resetting the repetition schedule is a plain
+    online-only fetch, because a wipe sitting in the queue would land an hour
+    later, after a review session, and silently discard it. (The old
+    `review-restart` kind is gone for exactly that reason.)
     `lessonStore.loadLesson` replays the queue over the server state, so an
     answer given offline survives a cold start.
   - The outbox writes to IndexedDB BEFORE it touches the network, every request

@@ -621,7 +621,11 @@ export async function setReviewTopicEnabled(topicId: string, enabled: boolean): 
   });
 }
 
-/** The current review list: pending exercises of enabled topics (client shuffles). */
+/**
+ * Every pooled exercise with its place on the repetition ladder — mastered ones
+ * and disabled topics included. The client decides what is due against its own
+ * clock, which is what keeps this response cacheable for offline review.
+ */
 export async function fetchReviewList(): Promise<ReviewItem[]> {
   const res = await fetch('/api/review/list');
   if (!res.ok) throw new Error(`Failed to load review list (${res.status})`);
@@ -629,35 +633,52 @@ export async function fetchReviewList(): Promise<ReviewItem[]> {
 }
 
 /**
- * Records a review answer; a correct answer drops the exercise from the list.
+ * Records a review answer and moves the exercise along the repetition ladder.
  * Grading already happened on the client, so this is pure persistence and can
  * wait in the outbox until the backend is reachable.
+ *
+ * `answeredAt` is what makes an answer given offline schedule from when it was
+ * actually given rather than from when the queue finally drained; `answerId`
+ * makes a redelivery a no-op, since the outbox abandons a request after 8s and
+ * keeps it queued even when the server did process it.
  */
 export async function markReviewAnswer(
   topicId: string,
   exerciseId: string,
   correct: boolean,
 ): Promise<void> {
+  const ts = Date.now();
   await send({
     kind: 'review-answer',
     url: '/api/review/answer',
-    body: { topicId, exerciseId, correct },
+    body: {
+      topicId,
+      exerciseId,
+      correct,
+      answeredAt: new Date(ts).toISOString(),
+      answerId: newAnswerId(),
+    },
     topicId,
-    ts: Date.now(),
+    ts,
   });
 }
 
-/** Per-topic "start again": returns the topic's answered exercises to the list. */
-export async function restartReviewTopic(topicId: string): Promise<void> {
-  await send({
-    kind: 'review-restart',
-    url: `/api/review/topics/${encodeURIComponent(topicId)}/restart`,
-    topicId,
-    ts: Date.now(),
-  });
-}
-
-/** Global "start again": returns every answered exercise, across all topics, to the list. */
+/**
+ * Puts every exercise back on the first rung of the ladder.
+ *
+ * Deliberately NOT queued through the outbox: this is a destructive wipe, and
+ * one sitting in an offline queue would land an hour later — after a review
+ * session — and silently discard it. It is online-only and fails loudly.
+ */
 export async function restartReviewAll(): Promise<void> {
-  await send({ kind: 'review-restart', url: '/api/review/restart', ts: Date.now() });
+  const res = await fetch('/api/review/restart', { method: 'POST' });
+  if (!res.ok) throw new Error(`Failed to reset the repetition schedule (${res.status})`);
+}
+
+/** Identity of one answer, so a replayed outbox entry is ignored server-side. */
+function newAnswerId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }

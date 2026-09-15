@@ -1,3 +1,4 @@
+import { formatUntil } from '@app/engine/duration';
 import { useUsage } from '@app/engine/usageStore';
 import { ui, useLang, type Lang } from '@app/i18n';
 
@@ -54,7 +55,7 @@ function UsageMeter({
 }) {
   const pct = Math.max(0, Math.min(100, Math.round(value)));
   const level = pct >= 90 ? 'high' : pct >= 70 ? 'mid' : 'low';
-  const reset = resetsAt ? formatReset(resetsAt, lang) : '';
+  const reset = resetsAt ? formatUntil(resetsAt, lang) : '';
   const title = `${label}: ${pct}%${reset ? ` · ${ui('usageResets', lang)} ${reset}` : ''}`;
 
   return (
@@ -73,14 +74,3 @@ function UsageMeter({
   );
 }
 
-/** Short "in 3h 12m" / "через 3 ч 12 м" until the window resets. */
-function formatReset(iso: string, lang: Lang): string {
-  const ms = new Date(iso).getTime() - Date.now();
-  if (!Number.isFinite(ms) || ms <= 0) return lang === 'ru' ? 'скоро' : 'soon';
-  const totalMin = Math.round(ms / 60_000);
-  const h = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-  const hUnit = lang === 'ru' ? 'ч' : 'h';
-  const mUnit = lang === 'ru' ? 'м' : 'm';
-  return h > 0 ? `${h}${hUnit} ${m}${mUnit}` : `${m}${mUnit}`;
-}

@@ -138,21 +138,32 @@ public class ReviewController {
 
     /**
      * Every pool row resolved to its exercise against the CURRENT atoms files,
-     * carrying its pending flag. Rows that no longer resolve are deleted
-     * (regeneration renamed or removed them — re-completing the lesson
-     * repopulates the pool).
+     * carrying its pending flag. A row whose exercise is gone from an atoms file
+     * that DID load is deleted (regeneration renamed or removed it —
+     * re-completing the lesson repopulates the pool).
+     *
+     * <p>A topic whose atoms file could not be read at all is skipped instead:
+     * its rows are left out of this response but never pruned. {@code load()}
+     * returns empty for a missing file, an IO error, a parse error and an empty
+     * atom list alike, and the file is rewritten in place by the AI CLI with no
+     * atomic move — so a request landing mid-regeneration would otherwise wipe
+     * the topic's whole pool, and with it its repetition schedule, from a plain
+     * read endpoint.
      */
     private List<Resolved> resolvedRows() {
         List<PoolRow> rows = reviews.pool();
-        Map<String, Map<String, ReviewItem>> byTopic = new HashMap<>();
+        Map<String, Optional<Map<String, ReviewItem>>> byTopic = new HashMap<>();
         Map<String, Localized> titles = topicTitles();
 
         List<Long> stale = new ArrayList<>();
         List<Resolved> items = new ArrayList<>();
         for (PoolRow row : rows) {
-            Map<String, ReviewItem> resolved = byTopic.computeIfAbsent(row.topicId(),
+            Optional<Map<String, ReviewItem>> resolved = byTopic.computeIfAbsent(row.topicId(),
                     topicId -> practiceExercises(topicId, titles.getOrDefault(topicId, Localized.of(topicId))));
-            ReviewItem item = resolved.get(row.exerciseId());
+            if (resolved.isEmpty()) {
+                continue;
+            }
+            ReviewItem item = resolved.get().get(row.exerciseId());
             if (item == null) {
                 stale.add(row.id());
             } else {
@@ -166,13 +177,18 @@ public class ReviewController {
         return items;
     }
 
-    /** Practice exercises of the topic's current atoms file, keyed by exercise id. */
-    private Map<String, ReviewItem> practiceExercises(String topicId, Localized title) {
-        Map<String, ReviewItem> out = new HashMap<>();
+    /**
+     * Practice exercises of the topic's current atoms file, keyed by exercise id,
+     * or empty when the atoms could not be read — which callers must NOT treat as
+     * "this topic has no exercises" (see {@link #resolvedRows()}).
+     */
+    private Optional<Map<String, ReviewItem>> practiceExercises(String topicId, Localized title) {
         Optional<LearningAtoms> atoms = atomsRepository.load(topicId);
         if (atoms.isEmpty()) {
-            return out;
+            log.warn("Review: atoms for topic '{}' could not be read; keeping its pool rows untouched", topicId);
+            return Optional.empty();
         }
+        Map<String, ReviewItem> out = new HashMap<>();
         for (Atom atom : atoms.get().atoms()) {
             if (atom.practice() == null) {
                 continue;
@@ -181,7 +197,7 @@ public class ReviewController {
                 out.put(ex.id(), new ReviewItem(topicId, title, atom.id(), ex));
             }
         }
-        return out;
+        return Optional.of(out);
     }
 
     private Map<String, Localized> topicTitles() {

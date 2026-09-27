@@ -42,21 +42,32 @@ class RemoteAccessFilterTest {
     }
 
     @Test
-    void forwardedForIsIgnoredUnlessProxied() {
-        // A directly exposed server must not let a caller claim to be local.
-        assertFalse(RemoteAccessFilter.isLocal(RemoteAccessMode.DIRECT, "192.168.88.5", "127.0.0.1"));
-        assertFalse(RemoteAccessFilter.isLocal(RemoteAccessMode.OFF, "192.168.88.5", "127.0.0.1"));
+    void aCallerThatIsNotOnLoopbackIsRemoteWhateverItClaims() {
+        // With the server bound to the LAN, a device there must not become local
+        // by writing the header itself.
+        assertFalse(RemoteAccessFilter.isLocal("192.168.88.5", "127.0.0.1"));
+        assertFalse(RemoteAccessFilter.isLocal("192.168.88.5", "100.101.102.103, 127.0.0.1"));
+        assertFalse(RemoteAccessFilter.isLocal("192.168.88.5"));
     }
 
     @Test
-    void proxiedReadsTheClientFromForwardedFor() {
+    void aLoopbackProxySpeaksForItsClient() {
         // Tailscale Serve / the Vite proxy connect over loopback themselves.
-        assertFalse(RemoteAccessFilter.isLocal(RemoteAccessMode.PROXIED, "127.0.0.1", "100.101.102.103"));
-        assertTrue(RemoteAccessFilter.isLocal(RemoteAccessMode.PROXIED, "127.0.0.1", "127.0.0.1"));
-        assertTrue(RemoteAccessFilter.isLocal(RemoteAccessMode.PROXIED, "127.0.0.1", null));
-        // Only the first (original client) entry counts.
-        assertFalse(RemoteAccessFilter.isLocal(RemoteAccessMode.PROXIED, "127.0.0.1",
-                "100.101.102.103, 127.0.0.1"));
+        assertFalse(RemoteAccessFilter.isLocal("127.0.0.1", "100.101.102.103"));
+        assertFalse(RemoteAccessFilter.isLocal("127.0.0.1", "192.168.88.5"));
+        assertTrue(RemoteAccessFilter.isLocal("127.0.0.1", "127.0.0.1"));
+        // A browser on this PC talking to the backend straight away.
+        assertTrue(RemoteAccessFilter.isLocal("127.0.0.1"));
+        assertTrue(RemoteAccessFilter.isLocal("0:0:0:0:0:0:0:1"));
+    }
+
+    @Test
+    void onlyTheEntryOurProxyAppendedCounts() {
+        // Vite appends to whatever the client sent, so the left entries are the
+        // client's own words: a phone on the dev server claiming loopback.
+        assertFalse(RemoteAccessFilter.isLocal("127.0.0.1", "127.0.0.1, 192.168.88.5"));
+        assertFalse(RemoteAccessFilter.isLocal("127.0.0.1", "127.0.0.1", "100.101.102.103"));
+        assertTrue(RemoteAccessFilter.isLocal("127.0.0.1", "100.101.102.103, 127.0.0.1"));
     }
 
     // --- the policy ----------------------------------------------------------

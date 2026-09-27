@@ -3,6 +3,8 @@
 #   launcher\remote.ps1                 show what is configured right now
 #   launcher\remote.ps1 lan             home Wi-Fi: bind to 0.0.0.0 + token
 #   launcher\remote.ps1 tailscale       from anywhere: Tailscale Serve + token
+#   launcher\remote.ps1 tailscale -Lan  both at once: Tailscale Serve AND the
+#                                       Wi-Fi (e.g. a VR headset without Tailscale)
 #   launcher\remote.ps1 off             back to loopback only
 #
 # Everything it writes goes into the managed block at the end of
@@ -16,7 +18,8 @@
 param(
     [ValidateSet('status', 'lan', 'tailscale', 'off')]
     [string]$Action = 'status',
-    [switch]$AllowCodeExecution
+    [switch]$AllowCodeExecution,
+    [switch]$Lan
 )
 
 $ErrorActionPreference = 'Stop'
@@ -94,6 +97,20 @@ function Test-Elevated {
         [Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+function Add-LanFirewallRule {
+    $ruleName = 'Java Interview Dungeon (LAN)'
+    $existing = Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
+    if ($existing) { return }
+    if (Test-Elevated) {
+        New-NetFirewallRule -DisplayName $ruleName -Direction Inbound -Protocol TCP `
+            -LocalPort $port -Action Allow -Profile Private | Out-Null
+        Write-Host "Firewall rule added: $ruleName (private networks only)" -ForegroundColor Green
+    } else {
+        Write-Host 'Not elevated — add the firewall rule from an admin PowerShell:' -ForegroundColor Yellow
+        Write-Host "  New-NetFirewallRule -DisplayName '$ruleName' -Direction Inbound -Protocol TCP -LocalPort $port -Action Allow -Profile Private"
+    }
+}
+
 function Set-ManagedBlock([string]$mode, [string]$token, [bool]$bindAll) {
     $text = Read-SecretText
     $text = Remove-ManagedBlock $text
@@ -147,15 +164,16 @@ function Show-Status {
 
     if ($mode -ne 'off' -and $token) {
         Write-Host ''
-        Write-Host 'Open once on the phone (the token then lives in a cookie):' -ForegroundColor Green
-        if ($mode -eq 'direct') {
+        Write-Host 'Open once on the device (the token then lives in a cookie):' -ForegroundColor Green
+        if ($bindAll) {
             $lan = Get-LanAddress
-            if ($lan) { Write-Host "  http://${lan}:$port/?token=$token" }
-        } else {
+            if ($lan) { Write-Host "  same Wi-Fi: http://${lan}:$port/?token=$token" }
+        }
+        if ($mode -eq 'proxied') {
             $ts = Get-TailscaleExe
             if ($ts) {
                 $dns = (& $ts status --json | ConvertFrom-Json).Self.DNSName
-                if ($dns) { Write-Host "  https://$($dns.TrimEnd('.'))/?token=$token" }
+                if ($dns) { Write-Host "  Tailscale:  https://$($dns.TrimEnd('.'))/?token=$token" }
             }
         }
     }
@@ -172,19 +190,7 @@ switch ($Action) {
         $token = Get-ExistingToken (Read-SecretText)
         if (-not $token) { $token = New-Token }
         Set-ManagedBlock -mode 'direct' -token $token -bindAll $true
-
-        $ruleName = 'Java Interview Dungeon (LAN)'
-        $existing = Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
-        if (-not $existing) {
-            if (Test-Elevated) {
-                New-NetFirewallRule -DisplayName $ruleName -Direction Inbound -Protocol TCP `
-                    -LocalPort $port -Action Allow -Profile Private | Out-Null
-                Write-Host "Firewall rule added: $ruleName (private networks only)" -ForegroundColor Green
-            } else {
-                Write-Host 'Not elevated — add the firewall rule from an admin PowerShell:' -ForegroundColor Yellow
-                Write-Host "  New-NetFirewallRule -DisplayName '$ruleName' -Direction Inbound -Protocol TCP -LocalPort $port -Action Allow -Profile Private"
-            }
-        }
+        Add-LanFirewallRule
 
         Write-Host ''
         Write-Host 'LAN access configured. Restart the app for it to take effect.' -ForegroundColor Green
@@ -220,11 +226,19 @@ switch ($Action) {
             exit 1
         }
 
-        # Keep the server on loopback: Tailscale Serve is the only way in.
-        Set-ManagedBlock -mode 'proxied' -token $token -bindAll $false
+        # Without -Lan the server stays on loopback and Tailscale Serve is the only
+        # way in. With it the Wi-Fi reaches the port too. That is safe because the
+        # backend honours forwarding headers from a loopback peer only, so a LAN
+        # device cannot pose as the proxy (see RemoteAccessFilter.isLocal).
+        Set-ManagedBlock -mode 'proxied' -token $token -bindAll $Lan.IsPresent
+        if ($Lan) { Add-LanFirewallRule }
 
         Write-Host ''
-        Write-Host 'Tailscale access configured. Restart the app for the token to take effect.' -ForegroundColor Green
+        if ($Lan) {
+            Write-Host 'Tailscale + Wi-Fi access configured. Restart the app for it to take effect.' -ForegroundColor Green
+        } else {
+            Write-Host 'Tailscale access configured. Restart the app for the token to take effect.' -ForegroundColor Green
+        }
         Write-Host 'The address is HTTPS, which is also what a future PWA needs to install.' -ForegroundColor DarkGray
         Show-Status
     }

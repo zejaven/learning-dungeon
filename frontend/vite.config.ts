@@ -33,7 +33,7 @@ const apiProxy = {
     changeOrigin: true,
     // Pass the real client on: the proxy itself connects over loopback, so
     // without this every phone hitting the dev server would look local to
-    // RemoteAccessFilter. Only honoured when app.remote.mode=proxied.
+    // RemoteAccessFilter, which reads the entry this proxy appends.
     xfwd: true,
   },
 };

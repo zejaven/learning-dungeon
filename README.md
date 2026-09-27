@@ -110,6 +110,7 @@ remote access is opt-in and token-gated:
 launcher\remote.ps1              # show what is configured right now
 launcher\remote.ps1 lan          # same Wi-Fi: bind 0.0.0.0 + token
 launcher\remote.ps1 tailscale    # from anywhere: Tailscale Serve + token, over HTTPS
+launcher\remote.ps1 tailscale -Lan  # both: Tailscale Serve AND the Wi-Fi at once
 launcher\remote.ps1 off          # back to loopback only
 ```
 
@@ -123,20 +124,26 @@ http://<pc-ip>:18080/?token=<token>
 From then on the token lives in an HttpOnly cookie and every request carries it.
 Restart the app after changing this (tray: gear → Restart).
 
-|            | `lan`                         | `tailscale`                                  |
-|------------|-------------------------------|----------------------------------------------|
-| reachable  | same Wi-Fi                    | anywhere both devices are signed in           |
-| binding    | `0.0.0.0:18080`               | stays `127.0.0.1`; `tailscale serve` proxies  |
-| transport  | plain HTTP                    | HTTPS with a real certificate                 |
+|            | `lan`                         | `tailscale`                                  | `tailscale -Lan`                  |
+|------------|-------------------------------|----------------------------------------------|-----------------------------------|
+| reachable  | same Wi-Fi                    | anywhere both devices are signed in           | both                              |
+| binding    | `0.0.0.0:18080`               | stays `127.0.0.1`; `tailscale serve` proxies  | `0.0.0.0:18080` + `tailscale serve` |
+| transport  | plain HTTP                    | HTTPS with a real certificate                 | HTTPS via Tailscale, HTTP on Wi-Fi |
+
+`tailscale -Lan` is for a device that cannot run Tailscale — a VR headset's
+browser, a TV — while the phone keeps its HTTPS address. It is safe because the
+backend believes forwarding headers (`X-Forwarded-For`, `-Proto`, `-Host`) only
+from a proxy on the PC itself: a Wi-Fi device that writes them is still remote
+and still asked for the token.
 
 Even with a valid token a remote client cannot run code: the four endpoints
 above return 403 unless `allow-code-execution: true` is set. The phone UI
 (lesson, review, theory, Boss Fight) never calls them.
 
-Caveat for the dev server: Vite on `:15173` listens on all interfaces and
-proxies to the backend over loopback. In `lan` mode that proxy looks local to
-the backend, so **the dev server is not token-gated** — use the packaged app
-from the phone, or `tailscale`/`proxied` mode, which gates it too.
+The dev server (Vite on `:15173`) listens on all interfaces too and is gated
+the same way in every mode: it proxies to the backend over loopback and passes
+the device's address on in `X-Forwarded-For`, which the backend reads because
+the proxy is local.
 
 ### Install on the phone (PWA, works offline)
 

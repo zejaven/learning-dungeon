@@ -246,14 +246,18 @@ If a command cannot be run, say exactly why and what remains unverified.
   `localhost` resolves to `::1` first, and connecting there stalls for ~2s
   rather than failing over. Binding elsewhere is only safe together with the
   `remote` package below.
-- `server.forward-headers-strategy: framework` is what makes the app usable
-  behind Tailscale Serve. That proxy terminates TLS, so the browser sends
-  `Origin: https://<host>` while the app sees plain http; without the forwarded
-  headers Spring calls that cross-origin and answers every POST with 403
-  "Invalid CORS request". Reads keep working (browsers send no Origin on
-  same-origin GETs), which is what made it look like the phone was fine while
-  silently recording nothing. Do not narrow this without testing a write from
-  the phone.
+- Forwarded headers are what make the app usable behind Tailscale Serve. That
+  proxy terminates TLS, so the browser sends `Origin: https://<host>` while the
+  app sees plain http; without X-Forwarded-Proto/Host applied Spring calls that
+  cross-origin and answers every POST with 403 "Invalid CORS request". Reads
+  keep working (browsers send no Origin on same-origin GETs), which is what made
+  it look like the phone was fine while silently recording nothing. They are
+  applied by `remote/LoopbackForwardedHeaderFilter` for LOOPBACK PEERS ONLY;
+  `server.forward-headers-strategy` is `none` on purpose, because the stock
+  `framework` filter trusts them from any caller and rewrites `getRemoteAddr()`
+  from X-Forwarded-For — with the server on the LAN, `X-Forwarded-For:
+  127.0.0.1` made any Wi-Fi device local. Do not switch it back, and test a
+  write from the phone after touching this.
 - Controllers live mostly under `backend/src/main/java/com/interviewlearning/api`.
 - Topic loading is in `topics/TopicRepository`. It rereads `topics/` from disk on
   requests so new folders appear without a backend restart. It reads `domainId`
@@ -359,8 +363,16 @@ If a command cannot be run, say exactly why and what remains unverified.
     `proxied` = a local proxy such as Tailscale Serve or the Vite dev server
     forwards to 127.0.0.1). The token arrives once as `?token=...` and then
     lives in an HttpOnly cookie, so the SPA's same-origin fetches carry it with
-    no frontend changes. `X-Forwarded-For` is trusted in `proxied` mode ONLY —
-    a directly exposed server would let anyone forge it.
+    no frontend changes. Who is local is decided by the TCP peer, not by the
+    mode: a non-loopback peer is remote whatever it sends, and a loopback peer
+    (Tailscale Serve, Vite) speaks for its client through the LAST
+    `X-Forwarded-For` entry — the one the proxy appended; entries left of it
+    are the client's own words. That is what lets `direct` binding and a
+    Tailscale proxy coexist (`launcher\remote.ps1 tailscale -Lan`).
+    `RemoteAccessFilter` runs at `HIGHEST_PRECEDENCE`, before the forwarded
+    filter, so it sees the request unrewritten — which is also why its
+    bootstrap redirect sets a relative `Location` instead of `sendRedirect()`
+    (Tomcat would make it absolute from the loopback hop).
   - Even an authenticated remote client cannot reach the code-execution paths
     unless `app.remote.allow-code-execution` is on. Adding a new endpoint that
     compiles, executes or shells out means adding it to

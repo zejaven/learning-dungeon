@@ -2,16 +2,19 @@ server:
   # Local single-user app: loopback only. The run endpoint executes arbitrary
   # user code, so listening on 0.0.0.0 would expose it to the whole LAN.
   # Override with `app.bind-address: 0.0.0.0` in config/secret.yml ONLY together
-  # with app.remote.mode=direct + a token (see RemoteAccessFilter); with a
-  # Tailscale Serve proxy in front, leave this alone and use mode=proxied.
+  # with a remote mode + a token (see RemoteAccessFilter). It can be combined
+  # with a Tailscale Serve proxy in front: `launcher\remote.ps1 tailscale -Lan`.
   address: ${app.bind-address:127.0.0.1}
   port: 18080
-  # Honour X-Forwarded-Proto/Host from a local reverse proxy (Tailscale Serve).
-  # Without this the app sees plain http while the browser sends
+  # X-Forwarded-Proto/Host from a local reverse proxy (Tailscale Serve) MUST be
+  # honoured, or the app sees plain http while the browser sends
   # `Origin: https://<host>`, Spring calls that cross-origin, and every POST the
-  # phone makes is refused with "Invalid CORS request" — GETs survive only
-  # because browsers send no Origin on same-origin GETs.
-  forward-headers-strategy: framework
+  # phone makes is refused with "Invalid CORS request". That is done by
+  # remote/LoopbackForwardedHeaderFilter, for loopback peers only. The stock
+  # `framework` strategy stays off: it trusts the headers from ANY caller and
+  # rewrites the client address from X-Forwarded-For, which let a LAN device
+  # pass itself off as local.
+  forward-headers-strategy: none
 
 spring:
   application:
@@ -47,7 +50,8 @@ app:
   # the token never reaches git; see RemoteAccessFilter for the policy and
   # launcher/remote.ps1 for the setup.
   remote:
-    # off | direct (server bound to the LAN) | proxied (Tailscale Serve / Vite in front)
+    # off | direct (server bound to the LAN) | proxied (Tailscale Serve / Vite in front);
+    # both gate identically, app.bind-address decides whether the LAN reaches it
     mode: ${remote.mode:off}
     # Shared secret, >= 16 chars. Presented once as ?token=..., then a cookie.
     token: ${remote.token:}

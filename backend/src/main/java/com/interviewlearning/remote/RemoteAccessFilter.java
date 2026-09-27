@@ -8,6 +8,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -15,6 +17,8 @@ import java.io.IOException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.Collections;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -38,8 +42,14 @@ import java.util.regex.Pattern;
  * <p>Code-execution endpoints stay local-only even for an authenticated remote
  * client unless {@code app.remote.allow-code-execution} is on: a leaked token
  * should not be a remote shell.
+ *
+ * <p>Runs before everything else, {@link LoopbackForwardedHeaderFilter}
+ * included: it has to see the TCP peer and the forwarding headers exactly as
+ * they arrived, before anything rewrites {@code getRemoteAddr()} from a header
+ * the caller wrote.
  */
 @Component
+@Order(Ordered.HIGHEST_PRECEDENCE)
 public class RemoteAccessFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(RemoteAccessFilter.class);
@@ -101,7 +111,8 @@ public class RemoteAccessFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
-        boolean local = isLocal(mode, request.getRemoteAddr(), request.getHeader("X-Forwarded-For"));
+        String peer = request.getRemoteAddr();
+        boolean local = isLocal(peer, request.getHeaders("X-Forwarded-For"));
         // Deliberately not request.getParameter(): that would parse (and consume)
         // a form-encoded body. Only the query string can carry the token.
         String queryToken = queryParam(request.getQueryString(), TOKEN_PARAM);
@@ -111,11 +122,17 @@ public class RemoteAccessFilter extends OncePerRequestFilter {
         switch (decision) {
             case ALLOW -> chain.doFilter(request, response);
             case BOOTSTRAP -> {
-                response.addCookie(tokenCookie(queryToken, request.isSecure()));
+                response.addCookie(tokenCookie(queryToken, isSecure(request, peer)));
                 // Only a typed/opened link should be redirected; an API call that
                 // carried the token in its query just proceeds.
                 if ("GET".equalsIgnoreCase(request.getMethod())) {
-                    response.sendRedirect(withoutToken(request.getRequestURI(), request.getQueryString()));
+                    // Not sendRedirect(): Tomcat makes the Location absolute from the
+                    // request it sees, and this filter runs before the forwarded
+                    // headers are applied — a phone on https://<host>.ts.net would be
+                    // sent to http://127.0.0.1. A relative Location resolves against
+                    // whatever address the browser actually used.
+                    response.setStatus(HttpServletResponse.SC_FOUND);
+                    response.setHeader("Location", withoutToken(request.getRequestURI(), request.getQueryString()));
                 } else {
                     chain.doFilter(request, response);
                 }
@@ -149,18 +166,49 @@ public class RemoteAccessFilter extends OncePerRequestFilter {
     }
 
     /**
-     * Whether the request came from this machine. In {@link RemoteAccessMode#PROXIED}
-     * the real client sits in the first X-Forwarded-For entry, because the proxy
-     * (Tailscale Serve, the Vite dev server) connects over loopback itself. That
-     * header is trusted ONLY in that mode — a directly exposed server would let
-     * anyone claim to be local by sending it.
+     * Whether the request came from this machine. The TCP peer decides first: a
+     * caller that is not on loopback is remote, whatever headers it sends. Only a
+     * loopback peer — a proxy on this machine (Tailscale Serve, the Vite dev
+     * server) — may speak for a client, and then through the LAST X-Forwarded-For
+     * entry: that is the one our proxy appended from the connection it accepted,
+     * while everything left of it came from the client and can say anything.
+     *
+     * <p>This holds in every mode, which is what lets the server be bound to the
+     * LAN and sit behind Tailscale Serve at the same time: the proxy's requests
+     * are recognised by the peer, not by a mode that trusts the header wholesale.
      */
-    static boolean isLocal(RemoteAccessMode mode, String remoteAddr, String forwardedFor) {
-        String client = remoteAddr;
-        if (mode == RemoteAccessMode.PROXIED && forwardedFor != null && !forwardedFor.isBlank()) {
-            client = forwardedFor.split(",")[0];
+    static boolean isLocal(String peer, Enumeration<String> forwardedFor) {
+        if (!isLoopback(peer)) return false;
+        String hop = lastEntry(forwardedFor);
+        return hop == null || isLoopback(hop);
+    }
+
+    static boolean isLocal(String peer, String... forwardedFor) {
+        return isLocal(peer, Collections.enumeration(List.of(forwardedFor)));
+    }
+
+    /** The right-most entry across all X-Forwarded-For headers, or null when there is none. */
+    private static String lastEntry(Enumeration<String> headers) {
+        String last = null;
+        while (headers != null && headers.hasMoreElements()) {
+            String header = headers.nextElement();
+            if (header == null) continue;
+            for (String entry : header.split(",")) {
+                if (!entry.isBlank()) last = entry.trim();
+            }
         }
-        return isLoopback(client);
+        return last;
+    }
+
+    /**
+     * This filter runs before the forwarded headers are applied, so for a request
+     * that arrived through Tailscale Serve {@code isSecure()} still reports the
+     * plain-http hop. The proxy's own X-Forwarded-Proto is trusted for the same
+     * reason its X-Forwarded-For is: it comes from a loopback peer.
+     */
+    private static boolean isSecure(HttpServletRequest request, String peer) {
+        return request.isSecure()
+                || (isLoopback(peer) && "https".equalsIgnoreCase(request.getHeader("X-Forwarded-Proto")));
     }
 
     /**

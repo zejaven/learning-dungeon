@@ -272,6 +272,43 @@ function shuffled<T>(arr: T[]): T[] {
   return out;
 }
 
+/**
+ * Picks up to {@link limit} items by taking turns across topics, most overdue
+ * first within each topic.
+ *
+ * Taking the globally most overdue items instead looks fair but is not: a whole
+ * lesson's exercises enter the pool at the same instant and so share a due
+ * date, which made every batch a single topic (ties fell to the server's
+ * topic_id order) and the next topic only appeared once that one was done.
+ * Ties within a topic are broken randomly, and the topic order is shuffled so
+ * no topic is always first in line when the batch cannot hold one of each.
+ */
+function mixedBatch(items: ReviewItem[], limit: number): ReviewItem[] {
+  const byTopic = new Map<string, ReviewItem[]>();
+  for (const item of shuffled(items)) {
+    const list = byTopic.get(item.topicId);
+    if (list) list.push(item);
+    else byTopic.set(item.topicId, [item]);
+  }
+  // Array.prototype.sort is stable, so equal due dates keep their shuffled order.
+  const lanes = shuffled([...byTopic.values()]).map((list) =>
+    list.sort((a, b) => Date.parse(a.dueAt) - Date.parse(b.dueAt)),
+  );
+
+  const out: ReviewItem[] = [];
+  for (let round = 0; out.length < limit; round++) {
+    let took = false;
+    for (const lane of lanes) {
+      if (round < lane.length && out.length < limit) {
+        out.push(lane[round]);
+        took = true;
+      }
+    }
+    if (!took) break;
+  }
+  return out;
+}
+
 interface Built {
   queue: ReviewItem[];
   offered: number;
@@ -284,9 +321,9 @@ interface Built {
  *
  * The cap is applied AFTER the domain filter on purpose: capping on the server
  * would hand back thirty ndm exercises while the user is in the java domain and
- * leave the screen claiming there is nothing to review. Within the cap the most
- * overdue win, so a backlog drains oldest-first, but the batch itself is
- * shuffled so it does not replay in pool order.
+ * leave the screen claiming there is nothing to review. The batch is drawn
+ * across topics (see {@link mixedBatch}) and then shuffled, so a run mixes
+ * topics instead of working through them one at a time.
  *
  * Items already answered in this run are excluded: their answers are still
  * travelling through the outbox, so the server would otherwise hand them
@@ -312,8 +349,7 @@ async function build(
 
   const keep = preserve && eligible.some((i) => sameItem(i, preserve)) ? preserve : null;
   const rest = keep ? eligible.filter((i) => !sameItem(i, keep)) : eligible;
-  const byUrgency = [...rest].sort((a, b) => Date.parse(a.dueAt) - Date.parse(b.dueAt));
-  const batch = shuffled(byUrgency.slice(0, SESSION_SIZE - (keep ? 1 : 0)));
+  const batch = shuffled(mixedBatch(rest, SESSION_SIZE - (keep ? 1 : 0)));
 
   return {
     queue: keep ? [keep, ...batch] : batch,

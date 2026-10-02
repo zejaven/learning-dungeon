@@ -19,7 +19,7 @@ import { SettingsButton } from '@app/shell/SettingsButton';
 import { ThemeSwitcher } from '@app/shell/ThemeSwitcher';
 
 /**
- * Global review over the practice exercises of fully completed lessons, driven
+ * Global review over every practice exercise answered in a lesson, driven
  * by a spaced-repetition schedule: an exercise comes back on its own date, stays
  * answerable for a window, and leaves the pool for good once it has walked the
  * whole ladder.

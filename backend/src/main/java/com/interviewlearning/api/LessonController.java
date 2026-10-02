@@ -8,7 +8,7 @@ import com.interviewlearning.lesson.LessonDtos.LearningAtoms;
 import com.interviewlearning.lesson.LessonDtos.LessonState;
 import com.interviewlearning.lesson.LessonDtos.RecomputeResponse;
 import com.interviewlearning.lesson.LessonProgressRepository;
-import com.interviewlearning.lesson.LessonProgressRepository.PoolEntry;
+import com.interviewlearning.lesson.ReviewEnrollment;
 import com.interviewlearning.topics.TopicDtos.BossQuestion;
 import com.interviewlearning.topics.TopicRepository;
 import org.springframework.http.ResponseEntity;
@@ -18,6 +18,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -34,13 +36,16 @@ public class LessonController {
     private final LearningAtomsRepository atomsRepository;
     private final LessonProgressRepository progress;
     private final TopicRepository topics;
+    private final ReviewEnrollment enrollment;
 
     public LessonController(LearningAtomsRepository atomsRepository,
                             LessonProgressRepository progress,
-                            TopicRepository topics) {
+                            TopicRepository topics,
+                            ReviewEnrollment enrollment) {
         this.atomsRepository = atomsRepository;
         this.progress = progress;
         this.topics = topics;
+        this.enrollment = enrollment;
     }
 
     /** 404 when the topic has no (valid) learning-atoms.json yet. */
@@ -61,18 +66,24 @@ public class LessonController {
                 progress.isLessonCompleted(topicId), progress.lessonAnswers(topicId)));
     }
 
-    /** Append-only answer log (upserted per exercise); correctness is trusted from the client. */
+    /**
+     * Append-only answer log (upserted per exercise); correctness is trusted from
+     * the client. A lesson answer to a practice exercise also enrolls it in
+     * spaced repetition right away, whether or not the lesson is ever finished.
+     */
     @PostMapping("/api/lesson/{topicId}/answer")
     public ResponseEntity<Void> answer(@PathVariable String topicId,
                                        @RequestBody ExerciseAnswerRequest req) {
         progress.recordAnswer(topicId, req);
+        if (req.context() == null || req.context().isBlank() || "lesson".equals(req.context())) {
+            enrollment.onLessonAnswer(topicId, req.exerciseId(), parseInstant(req.answeredAt()));
+        }
         return ResponseEntity.ok().build();
     }
 
     /**
      * Recomputes lesson completion from the persisted answers + boss passes
      * (all discovery/practice exercises answered AND all boss questions passed).
-     * On completion the topic's practice exercises join the global review pool.
      */
     @PostMapping("/api/lesson/{topicId}/recompute")
     public ResponseEntity<RecomputeResponse> recompute(@PathVariable String topicId) {
@@ -83,8 +94,7 @@ public class LessonController {
         List<String> bossQids = topics.getTopic(topicId)
                 .map(t -> t.bossFight().stream().map(BossQuestion::id).toList())
                 .orElse(List.of());
-        boolean completed = progress.recomputeLessonCompletion(
-                topicId, requiredExerciseIds(atoms), bossQids, practicePool(atoms));
+        boolean completed = progress.recomputeLessonCompletion(topicId, requiredExerciseIds(atoms), bossQids);
         return ResponseEntity.ok(new RecomputeResponse(completed));
     }
 
@@ -99,18 +109,16 @@ public class LessonController {
         return ids;
     }
 
-    /** All practice exercises of the file — the topic's contribution to the review pool. */
-    private static List<PoolEntry> practicePool(LearningAtoms atoms) {
-        List<PoolEntry> pool = new ArrayList<>();
-        for (Atom atom : atoms.atoms()) {
-            if (atom.practice() == null) {
-                continue;
-            }
-            for (Exercise ex : atom.practice()) {
-                pool.add(new PoolEntry(ex.id(), atom.id()));
-            }
+    /** A malformed client timestamp falls back to server time rather than failing the answer. */
+    private static Instant parseInstant(String iso) {
+        if (iso == null || iso.isBlank()) {
+            return null;
         }
-        return pool;
+        try {
+            return Instant.parse(iso);
+        } catch (DateTimeParseException e) {
+            return null;
+        }
     }
 
     private static List<Exercise> allExercises(Atom atom) {

@@ -263,8 +263,9 @@ public class DbInitializer {
                 )
                 """);
 
-        // Explicit membership of the global review pool: a topic's practice
-        // exercises join when its lesson is fully completed. Stale rows (the
+        // Explicit membership of the global review pool: a practice exercise
+        // joins the first time it is answered in a lesson (ReviewEnrollment),
+        // not when the whole lesson is completed. Stale rows (the
         // exercise no longer exists after an edit) are pruned lazily.
         jdbc.execute("""
                 CREATE TABLE IF NOT EXISTS review_pool (

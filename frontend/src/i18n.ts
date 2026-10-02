@@ -331,8 +331,8 @@ const UI: Record<string, Localized> = {
   review: { en: '🔁 Review', ru: '🔁 Повторение' },
   reviewTitle: { en: 'Review', ru: 'Повторение' },
   reviewEmpty: {
-    en: 'Nothing to review yet — fully complete a lesson (including its Boss Fight) to add its practice exercises here.',
-    ru: 'Пока нечего повторять — полностью пройдите урок (включая Битву с боссом), чтобы его упражнения появились здесь.',
+    en: 'Nothing to review yet — every practice exercise you answer in a lesson lands here, even if you stop halfway through.',
+    ru: 'Пока нечего повторять — сюда попадает каждое практическое упражнение, на которое вы ответили в уроке, даже если урок не пройден до конца.',
   },
   reviewFinished: { en: '🎉 Everything due is answered!', ru: '🎉 Всё, что было к повторению, пройдено!' },
   reviewProgress: { en: 'answered', ru: 'отвечено' },

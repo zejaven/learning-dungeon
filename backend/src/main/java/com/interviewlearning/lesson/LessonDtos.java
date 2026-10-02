@@ -174,14 +174,23 @@ public final class LessonDtos {
     public record SavedAnswer(String exerciseId, boolean correct, String answerJson) {
     }
 
-    /** One answered exercise; {@code context} is {@code lesson} or {@code review}. */
+    /**
+     * One answered exercise; {@code context} is {@code lesson} or {@code review}.
+     *
+     * @param answeredAt ISO-8601 instant the answer was given. A practice answer
+     *                   in a lesson enrolls the exercise in spaced repetition, and
+     *                   its first repetition is timed from this — so an answer
+     *                   queued offline is not timed from when the queue drained.
+     *                   Null for outbox entries queued before the field existed.
+     */
     public record ExerciseAnswerRequest(
             String exerciseId,
             String atomId,
             String unitId,
             String context,
             String answerJson,
-            boolean correct
+            boolean correct,
+            String answeredAt
     ) {
     }
 

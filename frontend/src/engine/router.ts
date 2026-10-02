@@ -10,7 +10,7 @@ import { useEffect, useState } from 'react';
  *   #/q/<id>            home, question <id> selected (lesson when one exists, else theory)
  *   #/q/<id>/theory     home, question <id> selected, reference theory forced open
  *   #/q/<id>/practice   workspace (practice) for that question's topic
- *   #/review            global review over completed lessons' practice exercises
+ *   #/review            global review over answered practice exercises
  *
  * <id> is a catalog entry id (e.g. `java-collections-7`) or a topic id
  * (e.g. `inbox-pattern`); resolution to a catalog entry happens in catalog.ts.

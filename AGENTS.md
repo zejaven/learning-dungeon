@@ -74,8 +74,9 @@ word-bank, sort-steps, match-pairs). The lesson UI derives a sequence of units
 circle track; Boss Fight units reuse the topic's existing `bossFight` questions
 and AI-grading flow. Progress is keyed by the STABLE exercise and boss-question
 ids, so editing `learning-atoms.json` only marks the changed exercises
-unanswered. Practice exercises of a fully completed lesson join a global,
-cross-topic review pool (`#/review`) on a spaced-repetition schedule (see
+unanswered. Each practice exercise joins a global, cross-topic review pool
+(`#/review`) the first time it is answered in a lesson — the lesson does not
+have to be finished — and is reviewed on a spaced-repetition schedule (see
 Spaced repetition below). The original design and a worked example live in
 `plans/learn-by-micro-actions.md` — treat its DDL and review sections as
 historical, since the review pool has been reshaped since and `atomsHash`
@@ -93,6 +94,20 @@ correct answer only re-earn rung 0. Walking all seven rungs masters the exercise
 and it leaves the list for good.
 
 The invariants that are easy to break:
+
+- An exercise enrolls on its FIRST lesson answer, right or wrong
+  (`lesson/ReviewEnrollment`, called from `POST /api/lesson/{id}/answer` for
+  `context: lesson` only), first due one interval after `answeredAt`. Not on
+  lesson completion: waiting for the whole lesson, Boss Fight included, kept
+  everything a half-finished topic had taught out of review. Enrollment is
+  insert-if-absent — revisits, the mistakes loop and re-answers must never
+  touch an existing row's schedule. Only PRACTICE exercises enroll, decided
+  from the current atoms file: discovery exercises are asked before their
+  concept is taught and lean on their reveal card, so they do not stand on
+  their own out of context. On every startup `ReviewEnrollment` also enrolls
+  any practice answer that still has no pool row (answers from before this
+  rule, or ones skipped while an atoms file was mid-rewrite), as if answered
+  then — never at their stored time, or they would arrive already lapsed.
 
 - The ladder lives ONLY in `backend/.../lesson/ReviewSchedule.java`. The
   frontend is handed `step`/`dueAt`/`expiresAt` already computed, so there is no

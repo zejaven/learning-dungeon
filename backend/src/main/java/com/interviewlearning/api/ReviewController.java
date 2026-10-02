@@ -35,7 +35,8 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Global review over the practice exercises of fully completed lessons, on a
+ * Global review over every practice exercise answered in a lesson (it enrolls on
+ * that first answer, see {@link com.interviewlearning.lesson.ReviewEnrollment}), on a
  * spaced-repetition schedule ({@link ReviewSchedule}). Each pooled exercise
  * walks a ladder of intervals and leaves the pool once the ladder is walked.
  *

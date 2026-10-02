@@ -2,13 +2,10 @@ package com.interviewlearning.lesson;
 
 import com.interviewlearning.lesson.LessonDtos.ExerciseAnswerRequest;
 import com.interviewlearning.lesson.LessonDtos.SavedAnswer;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.sql.Timestamp;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -26,11 +23,9 @@ import java.util.Set;
 public class LessonProgressRepository {
 
     private final JdbcTemplate jdbc;
-    private final double speed;
 
-    public LessonProgressRepository(JdbcTemplate jdbc, @Value("${app.review.speed:1.0}") double speed) {
+    public LessonProgressRepository(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
-        this.speed = speed;
     }
 
     // --- answers ------------------------------------------------------------
@@ -97,20 +92,19 @@ public class LessonProgressRepository {
         return ids;
     }
 
-    /** A practice exercise to (re)register in the review pool on lesson completion. */
-    public record PoolEntry(String exerciseId, String atomId) {
-    }
-
     /**
      * Recomputes lesson completion from stable ids: every discovery/practice
-     * exercise must have an answer AND every boss question must be passed. On
-     * completion the topic's practice exercises join the global review pool.
+     * exercise must have an answer AND every boss question must be passed.
+     *
+     * <p>Completion no longer feeds the review pool: an exercise enrolls in
+     * spaced repetition the moment it is answered (see
+     * {@link ReviewRepository#enroll}), so a half-finished lesson — or one whose
+     * Boss Fight is skipped — still gets everything answered so far reviewed.
      */
     @Transactional
     public boolean recomputeLessonCompletion(String topicId,
                                              List<String> requiredExerciseIds,
-                                             List<String> bossQuestionIds,
-                                             List<PoolEntry> practicePool) {
+                                             List<String> bossQuestionIds) {
         Set<String> answered = answeredExerciseIds(topicId);
         Set<String> passedBoss = passedBossQuestionIds(topicId);
         boolean completed = !requiredExerciseIds.isEmpty()
@@ -127,25 +121,6 @@ public class LessonProgressRepository {
                         WHEN NOT EXCLUDED.completed THEN NULL
                         ELSE lesson_progress.completed_at END
                 """, topicId, completed, completed);
-
-        if (completed) {
-            // First due one interval out, not now: these were just practised, and
-            // the column default (now()) would make a regenerated lesson's ~30 new
-            // exercises all overdue the instant they are pooled.
-            Timestamp firstDue = Timestamp.from(ReviewSchedule.firstDueAt(Instant.now(), speed));
-            for (PoolEntry entry : practicePool) {
-                // The conflict branch must NEVER touch the schedule columns: this
-                // runs again after every boss answer (lessonStore.continueNext /
-                // bossUnitPassed), so resetting them here would hold every
-                // exercise of a completed topic permanently on the first rung.
-                jdbc.update("""
-                        INSERT INTO review_pool (topic_id, exercise_id, atom_id, due_at)
-                        VALUES (?, ?, ?, ?)
-                        ON CONFLICT (topic_id, exercise_id) DO UPDATE SET
-                            atom_id = EXCLUDED.atom_id
-                        """, topicId, entry.exerciseId(), entry.atomId(), firstDue);
-            }
-        }
         return completed;
     }
 }

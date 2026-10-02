@@ -18,9 +18,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Persistence for the global review mode. A {@code review_pool} row (populated
- * on lesson completion, see {@link LessonProgressRepository}) carries a
- * spaced-repetition position: {@code srs_step} is the rung of
+ * Persistence for the global review mode. A {@code review_pool} row (created by
+ * {@link #enroll} the moment a practice exercise is first answered in a lesson)
+ * carries a spaced-repetition position: {@code srs_step} is the rung of
  * {@link ReviewSchedule}'s ladder it is about to be served at and {@code due_at}
  * is when that happens. Whether it is actually offered is derived from those two
  * against the current time, never stored — see {@link ReviewSchedule#stateOf}.
@@ -37,7 +37,7 @@ public class ReviewRepository {
     /** How far back a client-supplied answer time may reach before it is distrusted. */
     private static final Duration MAX_BACKDATE = Duration.ofDays(30);
 
-    /** One review_pool row (an exercise of a fully completed lesson). */
+    /** One review_pool row (a practice exercise answered at least once in a lesson). */
     public record PoolRow(long id, String topicId, String exerciseId, String atomId,
                           int srsStep, Instant dueAt, Instant graduatedAt, int lapseCount) {
     }
@@ -77,6 +77,62 @@ public class ReviewRepository {
                     rs.getString("exercise_id"), rs.getString("atom_id"),
                     rs.getInt("srs_step"), instant(rs.getTimestamp("due_at")),
                     instant(rs.getTimestamp("graduated_at")), rs.getInt("lapse_count")));
+        });
+        return out;
+    }
+
+    /**
+     * Puts a practice exercise on the repetition ladder because it was just
+     * answered in a lesson, first due one interval after {@code answeredAt}.
+     *
+     * <p>A no-op for an exercise that is already enrolled: revisiting a lesson
+     * unit, the mistakes loop, or a re-answer after regeneration all land here
+     * again, and touching the schedule columns would knock a mastered exercise
+     * back onto the first rung. Only {@code atom_id} follows the current file.
+     *
+     * @return whether a new row was created
+     */
+    public boolean enroll(String topicId, String exerciseId, String atomId, Instant answeredAt) {
+        Instant at = trustedAnswerTime(answeredAt);
+        int inserted = jdbc.update("""
+                INSERT INTO review_pool (topic_id, exercise_id, atom_id, added_at, due_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT (topic_id, exercise_id) DO NOTHING
+                """, topicId, exerciseId, atomId, Timestamp.from(at),
+                Timestamp.from(ReviewSchedule.firstDueAt(at, speed)));
+        if (inserted == 0 && atomId != null) {
+            jdbc.update("""
+                    UPDATE review_pool SET atom_id = ?
+                    WHERE topic_id = ? AND exercise_id = ? AND atom_id IS DISTINCT FROM ?
+                    """, atomId, topicId, exerciseId, atomId);
+        }
+        return inserted > 0;
+    }
+
+    /** A lesson answer whose exercise is not in the pool yet, with when it was last answered. */
+    public record Unenrolled(String topicId, String exerciseId, String atomId, Instant answeredAt) {
+    }
+
+    /**
+     * Exercises answered in a lesson that have no pool row. Before enrollment
+     * moved to answer time, only a fully completed lesson (Boss Fight included)
+     * put its exercises in the pool, so a half-finished topic left everything
+     * answered so far out of review; this is how those are found. Discovery
+     * answers come back too — the caller filters to practice exercises.
+     */
+    public List<Unenrolled> unenrolledLessonAnswers() {
+        List<Unenrolled> out = new ArrayList<>();
+        jdbc.query("""
+                SELECT a.topic_id, a.exercise_id, a.atom_id, a.created_at
+                FROM lesson_exercise_answer a
+                WHERE a.context = 'lesson'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM review_pool p
+                      WHERE p.topic_id = a.topic_id AND p.exercise_id = a.exercise_id)
+                ORDER BY a.topic_id, a.exercise_id
+                """, rs -> {
+            out.add(new Unenrolled(rs.getString("topic_id"), rs.getString("exercise_id"),
+                    rs.getString("atom_id"), instant(rs.getTimestamp("created_at"))));
         });
         return out;
     }

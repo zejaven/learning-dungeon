@@ -464,13 +464,17 @@ export interface ExerciseAnswerPayload {
  */
 export async function saveExerciseAnswer(topicId: string, payload: ExerciseAnswerPayload): Promise<void> {
   const answerJson = JSON.stringify(payload.answer);
+  const ts = Date.now();
   await send({
     kind: 'lesson-answer',
     url: `/api/lesson/${encodeURIComponent(topicId)}/answer`,
-    body: { ...payload, answer: undefined, answerJson },
+    // answeredAt: a practice answer enrolls the exercise in spaced repetition,
+    // and its first repetition must be timed from now, not from whenever an
+    // offline queue finally drains.
+    body: { ...payload, answer: undefined, answerJson, answeredAt: new Date(ts).toISOString() },
     topicId,
     answer: { exerciseId: payload.exerciseId, answerJson, correct: payload.correct },
-    ts: Date.now(),
+    ts,
   });
 }
 

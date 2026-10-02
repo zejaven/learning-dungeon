@@ -41,8 +41,8 @@ export const SESSION_SIZE = 30;
 const CLOCK_TICK_MS = 60_000;
 
 /**
- * Global review over the practice exercises of fully completed lessons, on a
- * spaced-repetition schedule.
+ * Global review over every practice exercise answered in a lesson (it enrolls
+ * on that first answer, finished lesson or not), on a spaced-repetition schedule.
  *
  * The server hands over every pooled exercise with its due and expiry instants
  * and never says what is "due now" — that is derived here against the local

@@ -1,6 +1,6 @@
-import { tlList, type Lang } from '../i18n';
+import { tl, tlList, type Lang } from '../i18n';
 import { LANG_CODES } from '../languages';
-import type { AnswerValue, FillBlankExercise, LocalizedList } from './lessonTypes';
+import type { AnswerValue, FillBlankExercise, LocalizedList, MatchPairsExercise } from './lessonTypes';
 import type { Exercise } from './lessonTypes';
 
 /** Accepted answers per blank, from `blanks` or the legacy single-blank `answers`. */
@@ -59,11 +59,36 @@ export function grade(exercise: Exercise, answer: AnswerValue, lang: Lang): bool
     }
     case 'match_pairs': {
       if (answer.kind !== 'pairs') return false;
-      return exercise.pairs.every((p) => answer.matches[p.id] === p.id);
+      const ok = pairResults(exercise, answer.matches, lang);
+      return exercise.pairs.every((p) => ok[p.id]);
     }
     default:
       return false;
   }
+}
+
+/**
+ * Per left item: is it matched to a right item that SAYS the right thing?
+ * Compared by displayed text, not by pair id, because classification pairs
+ * legitimately repeat a right label ("Caller does NOT see it" twice) — two
+ * identical buttons are indistinguishable, so which one was picked cannot
+ * be what decides the grade.
+ */
+export function pairResults(
+  exercise: MatchPairsExercise,
+  matches: Record<string, string>,
+  lang: Lang,
+): Record<string, boolean> {
+  const rightText = (id: string) => {
+    const pair = exercise.pairs.find((p) => p.id === id);
+    return pair ? normalize(tl(pair.right, lang)) : null;
+  };
+  const out: Record<string, boolean> = {};
+  for (const p of exercise.pairs) {
+    const picked = matches[p.id];
+    out[p.id] = picked != null && rightText(picked) === rightText(p.id);
+  }
+  return out;
 }
 
 function normalize(s: string): string {

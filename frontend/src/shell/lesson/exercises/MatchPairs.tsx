@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { shuffled } from '@app/engine/grading';
+import { pairResults, shuffled } from '@app/engine/grading';
 import type { AnswerValue, MatchPairsExercise } from '@app/engine/lessonTypes';
 import { tl, ui, useLang } from '@app/i18n';
 
@@ -38,6 +38,11 @@ export function MatchPairs({ exercise, answer, onChange, showResult }: Props) {
     onChange({ kind: 'pairs', matches: next });
   }
 
+  // Same verdict as grade(): identical right labels are interchangeable.
+  const ok = pairResults(exercise, matches, lang);
+  const holderOf = (rightId: string) =>
+    Object.keys(matches).find((leftId) => matches[leftId] === rightId);
+
   return (
     <div className="ex-match-pairs">
       <div className="ex-wb-hint">{ui('matchPairsHint', lang)}</div>
@@ -45,7 +50,7 @@ export function MatchPairs({ exercise, answer, onChange, showResult }: Props) {
         <div className="ex-mp-col">
           {exercise.pairs.map((p) => {
             let cls = 'ex-option ex-mp-item';
-            if (showResult) cls += matches[p.id] === p.id ? ' correct' : ' wrong';
+            if (showResult) cls += ok[p.id] ? ' correct' : ' wrong';
             else {
               if (matches[p.id] != null) cls += ' matched';
               if (selectedLeft === p.id) cls += ' selected';
@@ -67,7 +72,10 @@ export function MatchPairs({ exercise, answer, onChange, showResult }: Props) {
             const pair = exercise.pairs.find((p) => p.id === id)!;
             const claimed = Object.values(matches).includes(id);
             let cls = 'ex-option ex-mp-item';
-            if (showResult) cls += matches[id] === id ? ' correct' : ' wrong';
+            if (showResult) {
+              const holder = holderOf(id);
+              cls += holder != null && ok[holder] ? ' correct' : ' wrong';
+            }
             else if (claimed) cls += ' matched';
             return (
               <button

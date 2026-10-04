@@ -82,7 +82,7 @@ Exercise types and their extra fields:
 | `fill_blank` | `text`: {en,ru} with ONE OR MORE `___`; `blanks`: an array with one `{ "en": [...], "ru": [...] }` per `___`, in order — short accepted answers (usually a technical token identical in both languages; include casing variants). Use SEVERAL blanks to make the learner type each part of a formula/step. (Legacy single-blank `answers` is still accepted but prefer `blanks`.) |
 | `word_bank` | `tokens`: `{ "en": [...], "ru": [...] }` in the CORRECT order (the UI shuffles); `distractors`: `{ "en": [...], "ru": [...] }` (0-3 wrong tokens, may be empty lists) |
 | `sort_steps` | `steps`: 3-6 of `{ "id", "text": {en,ru} }` in the CORRECT order (the UI shuffles) |
-| `match_pairs` | `pairs`: 3-5 of `{ "id", "left": {en,ru}, "right": {en,ru} }` |
+| `match_pairs` | `pairs`: 3-5 of `{ "id", "left": {en,ru}, "right": {en,ru} }`. Every `left` must be distinct; a `right` label MAY repeat to sort items into categories ("Caller sees it" / "Caller does NOT see it") — identical labels are graded as interchangeable |
 | `predict_output` | same as `multiple_choice` plus a REQUIRED `code` snippet the learner predicts the behaviour/output of |
 | `spot_bug` | same as `multiple_choice` plus a REQUIRED `code` snippet containing a subtle defect |
 

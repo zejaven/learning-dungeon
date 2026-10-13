@@ -8,8 +8,8 @@ import java.time.Instant;
  * clocks — {@code now} is always a parameter, so every rule is unit-testable
  * (same shape as {@link com.interviewlearning.bulk.BulkPlanner}).
  *
- * <p>An exercise enters the pool when its lesson is completed and then walks a
- * fixed ladder of intervals. It is only offered while it is DUE, and it leaves
+ * <p>An exercise enters the pool the first time it is answered in a lesson and
+ * then walks a fixed ladder of intervals. It is only offered while it is DUE, and it leaves
  * the pool for good once the whole ladder is walked.
  *
  * <p>Two rules make this different from "answer it correctly and it is gone":
@@ -35,12 +35,16 @@ public final class ReviewSchedule {
 
     /**
      * Wait from the last answer to the next one, indexed by the step about to be
-     * served. Walking all seven takes about 92 days, which is the point: the
+     * served. Walking all five takes about 92 days, which is the point: the
      * last rungs are what move an answer into long-term memory.
+     *
+     * <p>It starts at a day on purpose. Same-day rungs (1h, 8h) were tried and
+     * dropped: the lesson already repeats each atom within the day, and a
+     * short rung's window is short too, so a missed evening lapsed the
+     * exercise back onto the same short rungs — questions circled the bottom
+     * of the ladder and never reached the long intervals that matter.
      */
     static final Duration[] INTERVALS = {
-            Duration.ofHours(1),
-            Duration.ofHours(8),
             Duration.ofDays(1),
             Duration.ofDays(3),
             Duration.ofDays(7),

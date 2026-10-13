@@ -330,6 +330,33 @@ public class DbInitializer {
                 END $$
                 """);
 
+        // One-shot move to the five-rung ladder (2026-10-13): the 1h and 8h
+        // rungs were dropped, so every step index shifts down by two and the
+        // intervals of the surviving rungs are unchanged — those rows keep
+        // their due dates. Rows on a dropped rung become rung 0 (one day).
+        // Their dates cannot be kept: at the time of the switch every one of
+        // them had lapsed, which is the very problem the change fixes, so they
+        // are spread over the week starting tomorrow instead of arriving as
+        // one wall that would lapse again the next day. The rung-0 update must
+        // run first, or the shift would move rows it just placed.
+        jdbc.execute("""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'review_pool'
+                          AND column_name = 'srs_ladder_v2'
+                    ) THEN
+                        ALTER TABLE review_pool ADD COLUMN srs_ladder_v2 BOOLEAN NOT NULL DEFAULT TRUE;
+                        UPDATE review_pool
+                           SET srs_step = 0,
+                               due_at = now() + INTERVAL '1 day' + random() * INTERVAL '7 days'
+                         WHERE srs_step < 2 AND graduated_at IS NULL;
+                        UPDATE review_pool SET srs_step = srs_step - 2 WHERE srs_step >= 2;
+                    END IF;
+                END $$
+                """);
+
         // The pool is read whole and filtered by date in Java (so the interval
         // ladder stays in one testable place), which leaves this index only one
         // job: keep the graduated rows cheap to skip as they pile up.

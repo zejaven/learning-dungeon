@@ -86,12 +86,16 @@ view; it is not the primary path once a lesson exists.
 ### Spaced repetition
 
 `#/review` is not a one-pass list. Each pooled exercise walks a ladder of
-intervals (1h → 8h → 1d → 3d → 1w → 3w → 2mo) and is offered only when its date
+intervals (1d → 3d → 1w → 3w → 2mo) and is offered only when its date
 arrives, for a window of `clamp(interval, 12h, 14d)`. Answering correctly inside
 that window climbs a rung; answering wrongly drops to the bottom; letting the
 window pass is a lapse, which re-offers the exercise immediately but makes even a
-correct answer only re-earn rung 0. Walking all seven rungs masters the exercise
-and it leaves the list for good.
+correct answer only re-earn rung 0. Walking all five rungs masters the exercise
+and it leaves the list for good. The ladder used to open with 1h and 8h rungs;
+they were dropped because their 12h windows lapsed overnight and kept exercises
+circling the bottom rungs — do not add same-day rungs back.
+`DbInitializer` carries the one-shot `srs_ladder_v2` migration for that change
+(step indices shifted down by two).
 
 The invariants that are easy to break:
 

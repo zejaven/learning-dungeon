@@ -25,8 +25,8 @@ class ReviewScheduleTest {
 
     /** The ladder as documented, so a reordering of INTERVALS fails loudly here. */
     private static final Duration[] EXPECTED_INTERVALS = {
-            Duration.ofHours(1), Duration.ofHours(8), Duration.ofDays(1),
-            Duration.ofDays(3), Duration.ofDays(7), Duration.ofDays(21), Duration.ofDays(60),
+            Duration.ofDays(1), Duration.ofDays(3), Duration.ofDays(7),
+            Duration.ofDays(21), Duration.ofDays(60),
     };
 
     private static State stateAt(Instant now, Instant dueAt, int step) {
@@ -40,8 +40,8 @@ class ReviewScheduleTest {
     // --- the ladder itself ---------------------------------------------------
 
     @Test
-    void ladderIsSevenStepsInTheDocumentedOrder() {
-        assertEquals(7, ReviewSchedule.stepCount());
+    void ladderIsFiveStepsInTheDocumentedOrder() {
+        assertEquals(5, ReviewSchedule.stepCount());
         for (int step = 0; step < EXPECTED_INTERVALS.length; step++) {
             assertEquals(EXPECTED_INTERVALS[step], ReviewSchedule.interval(step, FULL),
                     "interval at step " + step);
@@ -49,26 +49,24 @@ class ReviewScheduleTest {
     }
 
     @Test
-    void aFreshlyPooledExerciseIsNotDueImmediately() {
-        assertEquals(NOW.plus(Duration.ofHours(1)), ReviewSchedule.firstDueAt(NOW, FULL));
+    void aFreshlyPooledExerciseFirstComesUpADayLater() {
+        assertEquals(NOW.plus(Duration.ofDays(1)), ReviewSchedule.firstDueAt(NOW, FULL));
     }
 
     @Test
     void windowIsTheIntervalFlooredAtTwelveHoursAndCappedAtTwoWeeks() {
-        assertEquals(Duration.ofHours(12), ReviewSchedule.window(0, FULL)); // 1h  -> floor
-        assertEquals(Duration.ofHours(12), ReviewSchedule.window(1, FULL)); // 8h  -> floor
-        assertEquals(Duration.ofDays(1), ReviewSchedule.window(2, FULL));   // 1d  -> itself
-        assertEquals(Duration.ofDays(3), ReviewSchedule.window(3, FULL));   // 3d  -> itself
-        assertEquals(Duration.ofDays(7), ReviewSchedule.window(4, FULL));   // 7d  -> itself
-        assertEquals(Duration.ofDays(14), ReviewSchedule.window(5, FULL));  // 21d -> cap
-        assertEquals(Duration.ofDays(14), ReviewSchedule.window(6, FULL));  // 60d -> cap
+        assertEquals(Duration.ofDays(1), ReviewSchedule.window(0, FULL));   // 1d  -> itself
+        assertEquals(Duration.ofDays(3), ReviewSchedule.window(1, FULL));   // 3d  -> itself
+        assertEquals(Duration.ofDays(7), ReviewSchedule.window(2, FULL));   // 7d  -> itself
+        assertEquals(Duration.ofDays(14), ReviewSchedule.window(3, FULL));  // 21d -> cap
+        assertEquals(Duration.ofDays(14), ReviewSchedule.window(4, FULL));  // 60d -> cap
     }
 
     // --- state derivation ----------------------------------------------------
 
     @Test
     void waitsUntilTheInstantItFallsDue() {
-        Instant due = NOW.plus(Duration.ofHours(1));
+        Instant due = NOW.plus(Duration.ofDays(1));
         assertEquals(State.WAITING, stateAt(due.minusNanos(1), due, 0));
         assertEquals(State.DUE, stateAt(due, due, 0));
     }
@@ -76,16 +74,16 @@ class ReviewScheduleTest {
     @Test
     void staysDueThroughTheLastInstantOfItsWindow() {
         Instant due = NOW;
-        Instant expires = ReviewSchedule.expiresAt(due, 2, FULL); // step 2 -> 24h window
+        Instant expires = ReviewSchedule.expiresAt(due, 0, FULL); // step 0 -> 24h window
         assertEquals(due.plus(Duration.ofDays(1)), expires);
-        assertEquals(State.DUE, stateAt(expires, due, 2));
-        assertEquals(State.LAPSED, stateAt(expires.plusNanos(1), due, 2));
+        assertEquals(State.DUE, stateAt(expires, due, 0));
+        assertEquals(State.LAPSED, stateAt(expires.plusNanos(1), due, 0));
     }
 
     @Test
     void graduatedOutranksEveryTimeComparison() {
         Instant due = NOW.minus(Duration.ofDays(365));
-        assertEquals(State.GRADUATED, ReviewSchedule.stateOf(NOW, due, 6, NOW, FULL));
+        assertEquals(State.GRADUATED, ReviewSchedule.stateOf(NOW, due, 4, NOW, FULL));
     }
 
     // --- answering -----------------------------------------------------------
@@ -121,7 +119,7 @@ class ReviewScheduleTest {
 
     @Test
     void recoveringAMissedWindowReEarnsStepZeroEvenWhenAnsweredCorrectly() {
-        Next next = answer(NOW, 5, State.LAPSED, true);
+        Next next = answer(NOW, 3, State.LAPSED, true);
         assertEquals(0, next.step());
         assertTrue(next.lapsed());
         assertFalse(next.graduated());
@@ -145,7 +143,7 @@ class ReviewScheduleTest {
     // --- walking the whole ladder --------------------------------------------
 
     @Test
-    void answeringOnTimeEveryTimeGraduatesAfterSevenAnswers() {
+    void answeringOnTimeEveryTimeGraduatesAfterFiveAnswers() {
         Instant now = NOW;
         Instant due = ReviewSchedule.firstDueAt(now, FULL);
         int step = 0;
@@ -161,18 +159,18 @@ class ReviewScheduleTest {
             step = next.step();
             due = next.dueAt();
         }
-        assertEquals(7, answers);
-        // 1h + 8h + 1d + 3d + 7d + 21d + 60d
-        assertEquals(Duration.ofDays(92).plusHours(9), Duration.between(NOW, now));
+        assertEquals(5, answers);
+        // 1d + 3d + 7d + 21d + 60d
+        assertEquals(Duration.ofDays(92), Duration.between(NOW, now));
     }
 
     @Test
     void sleepingThroughOneWindowCostsTheWholeLadder() {
-        // Due at step 5 (three weeks in), answered a fortnight and a second late.
+        // Due at step 3 (three weeks in), answered a fortnight and a second late.
         Instant due = NOW;
-        Instant late = ReviewSchedule.expiresAt(due, 5, FULL).plusSeconds(1);
-        assertEquals(State.LAPSED, stateAt(late, due, 5));
-        assertEquals(0, answer(late, 5, State.LAPSED, true).step());
+        Instant late = ReviewSchedule.expiresAt(due, 3, FULL).plusSeconds(1);
+        assertEquals(State.LAPSED, stateAt(late, due, 3));
+        assertEquals(0, answer(late, 3, State.LAPSED, true).step());
     }
 
     // --- the speed knob ------------------------------------------------------
@@ -180,9 +178,9 @@ class ReviewScheduleTest {
     @Test
     void speedCompressesIntervalsAndWindowsAlike() {
         double speed = 0.0005;
-        assertEquals(Duration.ofNanos(Math.round(Duration.ofHours(1).toNanos() * speed)),
+        assertEquals(Duration.ofNanos(Math.round(Duration.ofDays(1).toNanos() * speed)),
                 ReviewSchedule.interval(0, speed));
-        assertEquals(Duration.ofNanos(Math.round(Duration.ofHours(12).toNanos() * speed)),
+        assertEquals(Duration.ofNanos(Math.round(Duration.ofDays(1).toNanos() * speed)),
                 ReviewSchedule.window(0, speed), "a window that did not shrink could never be missed");
     }
 
@@ -194,7 +192,7 @@ class ReviewScheduleTest {
 
     @Test
     void aNonPositiveSpeedIsIgnoredRatherThanFreezingTheSchedule() {
-        assertEquals(Duration.ofHours(1), ReviewSchedule.interval(0, 0));
-        assertEquals(Duration.ofHours(1), ReviewSchedule.interval(0, -3));
+        assertEquals(Duration.ofDays(1), ReviewSchedule.interval(0, 0));
+        assertEquals(Duration.ofDays(1), ReviewSchedule.interval(0, -3));
     }
 }

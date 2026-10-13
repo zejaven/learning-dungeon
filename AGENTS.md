@@ -146,6 +146,10 @@ The invariants that are easy to break:
 ## Prerequisites
 
 - JDK 21. The backend uses the JDK compiler API, so a JRE is not enough.
+  `launcher/find-jdk.ps1` (used by `tray.ps1`, `build-app.ps1` and `dev.ps1`)
+  picks a JDK 21 by its `release` file rather than trusting `JAVA_HOME`/`PATH`:
+  another Java installer (a JDK 17 for a game did exactly this) may take over
+  the machine default, and the jar then dies with UnsupportedClassVersionError.
 - Node 18+ and npm.
 - Claude Code CLI on `PATH` for Add Topic, Ask AI, style regeneration, and usage
   meter features.

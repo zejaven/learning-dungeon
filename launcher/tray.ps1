@@ -53,29 +53,16 @@ if (-not $jar) {
     return
 }
 
-# --- locate javaw.exe (windowless java) ---
-$javaw = $null
-if ($env:JAVA_HOME) {
-    $cand = Join-Path $env:JAVA_HOME 'bin\javaw.exe'
-    if (Test-Path $cand) { $javaw = $cand }
-}
-if (-not $javaw) {
-    $cmd = Get-Command javaw.exe -ErrorAction SilentlyContinue
-    if ($cmd) { $javaw = $cmd.Source }
-}
-if (-not $javaw) {
-    # Fall back to the bundled tools\jdk-21 next to the repo.
-    $bundled = Get-ChildItem (Join-Path $root '..\tools') -Directory -Filter 'jdk-21*' -ErrorAction SilentlyContinue |
-        Select-Object -First 1
-    if ($bundled) {
-        $cand = Join-Path $bundled.FullName 'bin\javaw.exe'
-        if (Test-Path $cand) { $javaw = $cand }
-    }
-}
-if (-not $javaw) {
-    Show-Error 'javaw.exe not found. Set JAVA_HOME or add a JDK 21 bin to PATH.'
+# --- locate javaw.exe (windowless java) of a JDK 21, whatever the default is ---
+. (Join-Path $PSScriptRoot 'find-jdk.ps1')
+$jdk = Find-AppJdk $root
+if (-not $jdk) {
+    Show-Error 'JDK 21 not found. Install a JDK 21 (e.g. Microsoft Build of OpenJDK) or set JAVA_HOME to one.'
     return
 }
+$javaw = Join-Path $jdk 'bin\javaw.exe'
+# update.ps1 -> build-app.ps1 inherit this, so Restart builds with the same JDK.
+$env:JAVA_HOME = $jdk
 
 # --- already running? just open it ---
 $listening = $false

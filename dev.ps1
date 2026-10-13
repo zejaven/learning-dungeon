@@ -10,15 +10,16 @@
 $root = $PSScriptRoot
 $pidFile = Join-Path $root '.dev-pids'
 
-# --- JDK: fall back to the bundled tools\jdk-21 when JAVA_HOME is not set ---
+# --- JDK: a JDK 21 whatever the machine default is (see launcher\find-jdk.ps1) ---
 # (child windows inherit this process environment, so gradlew picks it up too)
-if (-not $env:JAVA_HOME) {
-    $bundled = Get-ChildItem (Join-Path $root '..\tools') -Directory -Filter 'jdk-21*' -ErrorAction SilentlyContinue |
-        Select-Object -First 1
-    if ($bundled -and (Test-Path (Join-Path $bundled.FullName 'bin\java.exe'))) {
-        $env:JAVA_HOME = $bundled.FullName
-        Write-Host "JAVA_HOME not set — using bundled JDK: $env:JAVA_HOME" -ForegroundColor DarkGray
-    }
+. (Join-Path $root 'launcher\find-jdk.ps1')
+$jdk = Find-AppJdk $root
+if ($jdk) {
+    $env:JAVA_HOME = $jdk
+    $env:Path = (Join-Path $jdk 'bin') + ';' + $env:Path
+    Write-Host "Using JDK: $jdk" -ForegroundColor DarkGray
+} else {
+    Write-Host 'JDK 21 not found — falling back to JAVA_HOME/PATH.' -ForegroundColor Yellow
 }
 
 # --- Cleanup: stop anything a previous ./dev.ps1 run left behind ----------

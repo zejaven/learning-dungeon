@@ -7,15 +7,12 @@
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 
-# Fall back to the bundled tools\jdk-21 when JAVA_HOME is not set.
-if (-not $env:JAVA_HOME) {
-    $bundled = Get-ChildItem (Join-Path $root '..\tools') -Directory -Filter 'jdk-21*' -ErrorAction SilentlyContinue |
-        Select-Object -First 1
-    if ($bundled -and (Test-Path (Join-Path $bundled.FullName 'bin\java.exe'))) {
-        $env:JAVA_HOME = $bundled.FullName
-        Write-Host "JAVA_HOME not set — using bundled JDK: $env:JAVA_HOME" -ForegroundColor DarkGray
-    }
-}
+# Build with a JDK 21 even when the machine default is another Java.
+. (Join-Path $PSScriptRoot 'find-jdk.ps1')
+$jdk = Find-AppJdk $root
+if (-not $jdk) { throw 'JDK 21 not found. Install one or set JAVA_HOME to it.' }
+$env:JAVA_HOME = $jdk
+Write-Host "Using JDK: $jdk" -ForegroundColor DarkGray
 
 try {
     Write-Host 'Building visual-runtime jar...' -ForegroundColor Cyan

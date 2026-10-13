@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
+import type { Components } from 'react-markdown';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { routeForQuestion } from '@app/engine/router';
@@ -32,6 +33,26 @@ export function Markdown({
   className?: string;
   assetBase?: string;
 }) {
+  // Memoized, not inline: react-markdown uses each entry as a component TYPE,
+  // so a fresh function per render made React unmount and remount everything
+  // under it on every parent re-render — and the parents re-render on timers
+  // (usage meter, status poll, review clock). A remounted diagram falls back to
+  // its short raw source until Mermaid re-renders it, the page shrinks, and
+  // the reader is thrown back to the top of a theory card mid-sentence.
+  const components = useMemo<Components>(
+    () => ({
+      pre: MermaidAwarePre,
+      img(props) {
+        const src = props.src ?? '';
+        const relative = src && !/^([a-z][a-z0-9+.-]*:|\/|#)/i.test(src);
+        const resolved = assetBase && relative ? `${assetBase}/${src}` : src;
+        return <img src={resolved} alt={props.alt ?? ''} loading="lazy" />;
+      },
+      a: XrefLink,
+    }),
+    [assetBase],
+  );
+
   return (
     <div className={className}>
       <ReactMarkdown
@@ -40,39 +61,36 @@ export function Markdown({
         urlTransform={(url) =>
           /^(topic|catalog):/i.test(url) ? url : defaultUrlTransform(url)
         }
-        components={{
-          pre(props) {
-            const mermaid = extractMermaid(props.children);
-            if (mermaid != null) return <MermaidBlock code={mermaid} />;
-            return <pre>{props.children}</pre>;
-          },
-          img(props) {
-            const src = props.src ?? '';
-            const relative = src && !/^([a-z][a-z0-9+.-]*:|\/|#)/i.test(src);
-            const resolved = assetBase && relative ? `${assetBase}/${src}` : src;
-            return <img src={resolved} alt={props.alt ?? ''} loading="lazy" />;
-          },
-          a(props) {
-            const href = props.href ?? '';
-            const m = /^(?:topic|catalog):(.+)$/i.exec(href);
-            if (m) {
-              return (
-                <a className="md-xref" href={`#${routeForQuestion(m[1])}`}>
-                  {props.children}
-                </a>
-              );
-            }
-            return (
-              <a href={href} target="_blank" rel="noreferrer">
-                {props.children}
-              </a>
-            );
-          },
-        }}
+        components={components}
       >
         {children}
       </ReactMarkdown>
     </div>
+  );
+}
+
+/** `pre`, except a ```mermaid``` fence renders as a diagram instead. */
+function MermaidAwarePre(props: { children?: ReactNode }) {
+  const mermaid = extractMermaid(props.children);
+  if (mermaid != null) return <MermaidBlock code={mermaid} />;
+  return <pre>{props.children}</pre>;
+}
+
+/** In-app navigation for `topic:`/`catalog:` hrefs; other links open a new tab. */
+function XrefLink(props: { href?: string; children?: ReactNode }) {
+  const href = props.href ?? '';
+  const m = /^(?:topic|catalog):(.+)$/i.exec(href);
+  if (m) {
+    return (
+      <a className="md-xref" href={`#${routeForQuestion(m[1])}`}>
+        {props.children}
+      </a>
+    );
+  }
+  return (
+    <a href={href} target="_blank" rel="noreferrer">
+      {props.children}
+    </a>
   );
 }
 

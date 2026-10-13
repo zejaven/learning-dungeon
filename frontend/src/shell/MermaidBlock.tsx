@@ -21,16 +21,31 @@ function loadMermaid(): Promise<Mermaid> {
 
 let renderSeq = 0;
 
+/**
+ * Finished SVGs by theme + source. A block that mounts again (revisiting a
+ * unit, reopening a card) starts out drawn instead of flashing its raw source,
+ * which changes the page height and yanks the scroll position.
+ */
+const svgCache = new Map<string, string>();
+const cacheKey = (theme: string, source: string) => `${theme}|${source}`;
+
 export function MermaidBlock({ code }: { code: string }) {
-  const [svg, setSvg] = useState<string | null>(null);
-  const idRef = useRef(`mmd-${++renderSeq}`);
   const theme = useTheme((s) => s.theme);
+  const [svg, setSvg] = useState<string | null>(
+    () => svgCache.get(cacheKey(theme, code.trim())) ?? null,
+  );
+  const idRef = useRef(`mmd-${++renderSeq}`);
 
   useEffect(() => {
     let cancelled = false;
     const source = code.trim();
     if (!source) {
       setSvg(null);
+      return;
+    }
+    const cached = svgCache.get(cacheKey(theme, source));
+    if (cached) {
+      setSvg(cached);
       return;
     }
     (async () => {
@@ -47,6 +62,7 @@ export function MermaidBlock({ code }: { code: string }) {
         // (and doesn't leave error nodes in the DOM).
         await mermaid.parse(source);
         const { svg: out } = await mermaid.render(`${idRef.current}-${++renderSeq}`, source);
+        svgCache.set(cacheKey(theme, source), out);
         if (!cancelled) setSvg(out);
       } catch {
         if (!cancelled) setSvg(null); // fall back to raw code

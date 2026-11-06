@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { buildAllCatalogs, buildCatalog, compareEntries, findCatalogEntry } from '@app/catalog';
+import { buildAllCatalogs, buildCatalog, findCatalogEntry } from '@app/catalog';
 import { DOMAINS, domainById, domainOf } from '@app/domains';
 import { useAi } from '@app/engine/aiStore';
 import { useBulk } from '@app/engine/bulkStore';
@@ -19,6 +19,7 @@ import { useStore } from '@app/engine/store';
 import { useStyle } from '@app/engine/styleStore';
 import { langsOf, tl, tlStrict, ui, useLang } from '@app/i18n';
 import { LANG_CODES, langChip, langName } from '@app/languages';
+import { entriesInTreeOrder, moduleOfTopic } from '@app/roadmap';
 import { AddQuestionDialog } from '@app/shell/AddQuestionDialog';
 import { AddTopicDialog, addTopicKey } from '@app/shell/AddTopicDialog';
 import { AiProviderSelector } from '@app/shell/AiProviderSelector';
@@ -99,13 +100,9 @@ export function HomeScreen() {
   const bulkVisible = useBulk((s) => !!s.status?.run);
   const startBulkRun = useBulk((s) => s.start);
   const bulkMissing = useMemo(() => {
-    // Walk the catalog in the exact order the tree renders it (categories in
-    // catalog order, entries sorted like CategoryTree), so the generation loop
-    // processes topics top to bottom as the user sees them.
-    const catalog = buildCatalog(topics, manualQuestions, domainId);
-    const ordered = catalog.flatMap((c) =>
-      [...c.entries].sort(compareEntries).map((entry) => ({ categoryId: c.id, entry })),
-    );
+    // Walk the catalog in the exact order the tree renders it, so the generation
+    // loop processes topics top to bottom as the user sees them.
+    const ordered = entriesInTreeOrder(buildCatalog(topics, manualQuestions, domainId), domainId);
     const theory = ordered.filter(({ entry }) => !entry.topicId);
     const byId = new Map(topics.map((t) => [t.id, t]));
     const atoms = ordered
@@ -314,7 +311,7 @@ export function HomeScreen() {
             <button className="mobile-only panel-back-btn" onClick={() => navigate('/')}>
               {ui('backToCatalog', lang)}
             </button>
-            <span>{theoryReady ? tl(topic!.category, lang) : ui('theory', lang)}</span>
+            <span>{theoryReady ? tl(moduleOfTopic(topic!.id) ?? topic!.category, lang) : ui('theory', lang)}</span>
             {theoryReady && (
               <button
                 className="theory-ask-btn"

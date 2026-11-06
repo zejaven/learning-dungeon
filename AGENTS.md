@@ -47,7 +47,8 @@ base; ids prefixed `qa-`).
   auto-switches the domain.
 - Only the `java` domain has the static `CATALOG`, manual questions, and the
   "Add question" button; other domains build their category tree purely from
-  their topics' `categoryId`/`categoryName`.
+  their topics' `categoryId`/`categoryName`. The `java` tree is additionally
+  arranged into roadmap stages and modules (see Frontend Notes).
 - "Add topic" works in every domain: the request carries `domainId`, and
   `TopicPromptBuilder.appendDomain` adds a block that overrides the Java-shaped
   `prompts/add-topic.md` — it sets `domainId`, requires the `<domain>-` id
@@ -433,6 +434,20 @@ When adding or changing a `visual.Visual*` model:
   metadata). Use `buildAllCatalogs(...)` for domain-agnostic lookups (route
   resolution in `App.tsx`/`HomeScreen`, review grouping). The review pool is
   scoped to the active domain in `reviewStore.ts` (`activeDomainFilter`).
+- The `java` tree follows a learning path, not categories. `frontend/src/roadmap.json`
+  lists stages → modules → topic ids in learning order, and `groupByRoadmap(...)` in
+  `frontend/src/roadmap.ts` rearranges the catalog into it for `CategoryTree`,
+  `ReviewTree` and the bulk-generation order. It is a layer over the catalog on
+  purpose: `categoryId` still feeds `TopicPromptBuilder`'s mode heuristics, question
+  classification and `manual_question`, so do not replace it with module ids.
+  Entries match by topic id because `manual-N` entry ids differ per database. Reorder
+  or place a topic by editing the JSON; there is no `order:`-style field for it (a
+  topic's `order:` is ignored once it attaches to a catalog question). Anything not
+  listed — a new topic from Add topic, a manual question without a topic — lands in a
+  trailing "Not placed yet" stage, and `RoadmapContractTest` only rejects unknown or
+  repeated ids, so an unplaced topic never fails a build. Modules start collapsed;
+  the one holding the selection opens as a DERIVED value rather than from an effect,
+  or the entry would not be rendered yet when the tree scrolls to it.
 - `shell/Markdown.tsx` takes an optional `assetBase` prop that resolves
   relative image paths (`images/x.png`) against
   `/api/topics/<id>/assets`; the theory panel passes it, dialogs don't.

@@ -339,6 +339,8 @@ const UI: Record<string, Localized> = {
   reviewRemaining: { en: 'left', ru: 'осталось' },
   reviewTopicsTitle: { en: 'Topics in review', ru: 'Топики для повторения' },
   reviewOther: { en: 'Other', ru: 'Другое' },
+  treeModuleEmpty: { en: 'No topics yet', ru: 'Тем пока нет' },
+  treeUnplaced: { en: 'Not placed yet', ru: 'Не разложено' },
   reviewAllOff: { en: 'All topics are off — enable one on the left to review.', ru: 'Все темы выключены — включите тему слева, чтобы повторять.' },
   backHome: { en: '← Home', ru: '← На главную' },
   // --- Spaced repetition ---

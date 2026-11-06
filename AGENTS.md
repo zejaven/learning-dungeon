@@ -455,6 +455,18 @@ When adding or changing a `visual.Visual*` model:
   repeated ids, so an unplaced topic never fails a build. Modules start collapsed;
   the one holding the selection opens as a DERIVED value rather than from an effect,
   or the entry would not be rendered yet when the tree scrolls to it.
+- The roadmap map (`shell/roadmap/RoadmapView.tsx`) is the Java landing page: `#/`
+  shows it, `#/roadmap/<moduleId>` opens a module's panel, and the bare tree moved
+  to `#/tree`. All three stay `view: 'home'`, with `route.map`/`route.moduleId` on
+  the side; the module is NOT in `route.id`, because App selects a topic from that.
+  `HomeScreen` swaps `.home-main` for the map, so the header and dialogs stay shared.
+  Modules carry `pos: [col, row]` (hand-placed, not auto-laid-out, so edges can be
+  kept out from under the nodes: check a screenshot after moving one) and `requires`;
+  `RoadmapContractTest` rejects shared cells, unknown ids and cycles. Progress skips
+  ◇ questions, so a module of only ◇ shows a count instead of `0/0`.
+  `shell/PanZoom.tsx` moves the content with one CSS transform and must capture the
+  pointer only after a real drag: capturing on press retargets the click to the
+  surface, so the node buttons inside could never be pressed.
 - `shell/Markdown.tsx` takes an optional `assetBase` prop that resolves
   relative image paths (`images/x.png`) against
   `/api/topics/<id>/assets`; the theory panel passes it, dialogs don't.

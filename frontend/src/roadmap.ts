@@ -28,10 +28,29 @@ export interface RoadmapStage {
 
 const itemKey = (item: string | { planned: string }) => (typeof item === 'string' ? item : item.planned);
 
-const moduleByItem = new Map<string, Localized>(
+const moduleByItem = new Map<string, { id: string; name: Localized }>(
   data.stages.flatMap((s) =>
-    s.modules.flatMap((m) => (m.topics as (string | { planned: string })[]).map((t) => [itemKey(t), m.name] as const)),
+    s.modules.flatMap((m) =>
+      (m.topics as (string | { planned: string })[]).map((t) => [itemKey(t), { id: m.id, name: m.name }] as const),
+    ),
   ),
+);
+
+export function hasRoadmap(domainId: string): boolean {
+  return domainId === ROADMAP_DOMAIN;
+}
+
+/** Where a module sits on the map: a grid cell, its prerequisites and its stage. */
+export interface ModuleLayout {
+  id: string;
+  col: number;
+  row: number;
+  requires: string[];
+  stageIndex: number;
+}
+
+export const MODULE_LAYOUT: ModuleLayout[] = data.stages.flatMap((s, stageIndex) =>
+  s.modules.map((m) => ({ id: m.id, col: m.pos[0], row: m.pos[1], requires: m.requires, stageIndex })),
 );
 
 /** The key an entry is listed under in the roadmap, if it is listed at all. */
@@ -43,12 +62,35 @@ function keyOfEntry(entry: CatalogEntry): string | undefined {
 /** The name of the module an entry is listed in, if any. */
 export function moduleOfEntry(entry: CatalogEntry): Localized | undefined {
   const key = keyOfEntry(entry);
-  return key ? moduleByItem.get(key) : undefined;
+  return key ? moduleByItem.get(key)?.name : undefined;
+}
+
+export function moduleIdOfEntry(entry: CatalogEntry): string | undefined {
+  const key = keyOfEntry(entry);
+  return key ? moduleByItem.get(key)?.id : undefined;
+}
+
+/** How far a module is. ◇ questions can be skipped, so they do not count towards it. */
+export function moduleProgress(entries: CatalogEntry[], completed: Set<string>): { done: number; total: number } {
+  const required = entries.filter((e) => !e.optional);
+  return { done: required.filter((e) => e.topicId && completed.has(e.topicId)).length, total: required.length };
+}
+
+/**
+ * Where to carry on: the first unfinished question that has a topic, because
+ * skipping past a question without theory beats stopping at a generate button.
+ * Only once none is left, the first question still waiting for theory.
+ */
+export function nextEntry(stages: RoadmapStage[], completed: Set<string>): CatalogEntry | undefined {
+  const required = stages.flatMap((s) => s.modules.flatMap((m) => m.entries)).filter((e) => !e.optional);
+  return (
+    required.find((e) => e.topicId && !completed.has(e.topicId)) ?? required.find((e) => !e.topicId)
+  );
 }
 
 /** Arranges a catalog into stages and modules; `null` for a domain without a roadmap. */
 export function groupByRoadmap(categories: CatalogCategory[], domainId: string): RoadmapStage[] | null {
-  if (domainId !== ROADMAP_DOMAIN) return null;
+  if (!hasRoadmap(domainId)) return null;
 
   const byKey = new Map<string, CatalogEntry>();
   const unplaced: CatalogEntry[] = [];

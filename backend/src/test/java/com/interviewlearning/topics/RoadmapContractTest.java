@@ -11,7 +11,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -44,6 +46,7 @@ class RoadmapContractTest {
         List<String> errs = new ArrayList<>();
         Set<String> groupIds = new HashSet<>();
         Set<String> topicIds = new HashSet<>();
+        Map<String, JsonNode> modules = new LinkedHashMap<>();
 
         JsonNode stages = roadmap.path("stages");
         assertTrue(stages.isArray() && !stages.isEmpty(), "roadmap.json: stages must be a non-empty array");
@@ -51,6 +54,7 @@ class RoadmapContractTest {
             checkGroup(stage, groupIds, errs);
             for (JsonNode module : stage.path("modules")) {
                 checkGroup(module, groupIds, errs);
+                modules.put(module.path("id").asText(), module);
                 for (JsonNode item : module.path("topics")) {
                     if (item.isObject()) {
                         checkPlanned(item, topicIds, errs);
@@ -62,7 +66,36 @@ class RoadmapContractTest {
                 }
             }
         }
+        checkMap(modules, errs);
         assertEquals(List.of(), errs);
+    }
+
+    /** The map draws modules at their cell and arrows from `requires`: both must make a drawable graph. */
+    private void checkMap(Map<String, JsonNode> modules, List<String> errs) {
+        Set<String> cells = new HashSet<>();
+        Map<String, List<String>> requires = new HashMap<>();
+        modules.forEach((id, module) -> {
+            JsonNode pos = module.path("pos");
+            if (pos.size() != 2 || !pos.get(0).isIntegralNumber() || !pos.get(1).isIntegralNumber()) {
+                errs.add(id + ": pos must be [column, row]");
+            } else if (!cells.add(pos.get(0).asInt() + ":" + pos.get(1).asInt())) {
+                errs.add(id + ": shares its cell with another module: " + pos);
+            }
+            List<String> required = new ArrayList<>();
+            for (JsonNode req : module.path("requires")) {
+                if (!modules.containsKey(req.asText())) errs.add(id + ": requires unknown module " + req.asText());
+                required.add(req.asText());
+            }
+            requires.put(id, required);
+        });
+
+        // Kahn: whatever cannot be peeled off is on a cycle.
+        Set<String> left = new HashSet<>(requires.keySet());
+        boolean peeled = true;
+        while (peeled) {
+            peeled = left.removeIf(id -> requires.get(id).stream().noneMatch(left::contains));
+        }
+        if (!left.isEmpty()) errs.add("requires has a cycle through: " + left);
     }
 
     private void checkGroup(JsonNode group, Set<String> ids, List<String> errs) {

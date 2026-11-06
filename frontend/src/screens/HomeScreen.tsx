@@ -13,13 +13,14 @@ import {
   routeForPractice,
   routeForQuestion,
   routeForReview,
+  routeForRoadmap,
   useRoute,
 } from '@app/engine/router';
 import { useStore } from '@app/engine/store';
 import { useStyle } from '@app/engine/styleStore';
 import { langsOf, tl, tlStrict, ui, useLang } from '@app/i18n';
 import { LANG_CODES, langChip, langName } from '@app/languages';
-import { entriesInTreeOrder, moduleOfEntry } from '@app/roadmap';
+import { entriesInTreeOrder, hasRoadmap, moduleIdOfEntry, moduleOfEntry } from '@app/roadmap';
 import { AddQuestionDialog } from '@app/shell/AddQuestionDialog';
 import { AddTopicDialog, addTopicKey } from '@app/shell/AddTopicDialog';
 import { AiProviderSelector } from '@app/shell/AiProviderSelector';
@@ -35,6 +36,7 @@ import { LessonPanel } from '@app/shell/lesson/LessonPanel';
 import { Markdown } from '@app/shell/Markdown';
 import { SelectionAsk } from '@app/shell/SelectionAsk';
 import { OfflineBadge } from '@app/shell/OfflineBadge';
+import { RoadmapView } from '@app/shell/roadmap/RoadmapView';
 import { SettingsButton } from '@app/shell/SettingsButton';
 import { LanguageSelect } from '@app/shell/LanguageSelect';
 import { MissingLanguage } from '@app/shell/MissingLanguage';
@@ -211,6 +213,10 @@ export function HomeScreen() {
     });
   }
 
+  const showMap = route.map && hasRoadmap(domainId);
+  // Back from a question lands on its module; without a roadmap this is just '/'.
+  const backRoute = routeForRoadmap(entry ? moduleIdOfEntry(entry) : undefined);
+
   const activeVersion = theoryVersions.find((v) => v.versionNo === activeVersionNo);
   const activeExplanation = activeVersion?.texts ?? topic?.explanation;
 
@@ -258,14 +264,22 @@ export function HomeScreen() {
 
       <BulkGenBar />
 
-      {/* `has-detail` is what the single-column (mobile) profile keys off: with a
-          question selected the tree steps aside for the theory/lesson panel. */}
+      {showMap ? (
+        <RoadmapView domainId={domainId} moduleId={route.moduleId} />
+      ) : (
+      /* `has-detail` is what the single-column (mobile) profile keys off: with a
+          question selected the tree steps aside for the theory/lesson panel. */
       <div className={`home-main${entry ? ' has-detail' : ''}`}>
         {/* Left: question catalog tree */}
         <section className="panel home-tree-panel">
           <div className="panel-title tree-panel-title">
             <span>{ui('catalogTitle', lang)}</span>
             <div className="tree-title-actions">
+              {hasRoadmap(domainId) && (
+                <button className="tree-add-btn" title={ui('mapOpen', lang)} onClick={() => navigate(backRoute)}>
+                  🗺
+                </button>
+              )}
               {selectedProvider === 'claude' && bulkMissing.theory.length > 0 && (
                 <button
                   className="tree-add-btn desktop-only"
@@ -308,7 +322,7 @@ export function HomeScreen() {
         {/* Right: theory or generate action */}
         <section className="panel home-theory-panel home-detail-panel">
           <div className="panel-title tree-panel-title">
-            <button className="mobile-only panel-back-btn" onClick={() => navigate('/')}>
+            <button className="mobile-only panel-back-btn" onClick={() => navigate(backRoute)}>
               {ui('backToCatalog', lang)}
             </button>
             <span>{theoryReady ? tl(moduleOfEntry(entry!) ?? topic!.category, lang) : ui('theory', lang)}</span>
@@ -480,6 +494,7 @@ export function HomeScreen() {
           </div>
         </section>
       </div>
+      )}
 
       {bulkKind && (
         <BulkGenDialog

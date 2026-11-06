@@ -1,18 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
-import { buildCatalog, compareEntries, stars, type CatalogEntry } from '@app/catalog';
+import { buildCatalog, compareEntries, type CatalogEntry } from '@app/catalog';
 import { useDomain } from '@app/engine/domainStore';
 import { useStore } from '@app/engine/store';
 import { tl, ui, useLang } from '@app/i18n';
 import { groupByRoadmap } from '@app/roadmap';
+import { TreeEntries } from '@app/shell/TreeEntries';
 import { TreeGroup } from '@app/shell/TreeGroup';
 
 /**
  * Left-hand tree of interview questions. The Java domain follows its roadmap
  * (stages → modules → questions in learning order, see `roadmap.ts`); other
  * domains are categories sorted by difficulty. Generated topics are merged in
- * (linked to their question or added as new entries). Entries whose topic exists
- * show a 📘 (or ✅ when the topic is fully completed); the rest only offer theory
- * generation.
+ * (linked to their question or added as new entries). Entries without a topic
+ * only offer theory generation.
  *
  * The selected entry (driven by the URL) is scrolled into view, so after a
  * refresh the tree shows the current question without the user hunting for it.
@@ -33,8 +33,6 @@ export function CategoryTree({
   const domainId = useDomain((s) => s.domainId);
   const catalog = buildCatalog(topics, manualQuestions, domainId);
   const stages = groupByRoadmap(catalog, domainId);
-  const existing = new Set(topics.map((t) => t.id));
-  const completed = new Set(topics.filter((t) => t.completed).map((t) => t.id));
   const [opened, setOpened] = useState<Record<string, boolean>>({});
 
   const selectedStage = stages?.find((s) => s.modules.some((m) => m.entries.some((e) => e.id === selectedId)));
@@ -58,41 +56,7 @@ export function CategoryTree({
   if (stages && topics.length === 0) return <div className="tree" />;
 
   const renderEntries = (entries: CatalogEntry[]) => (
-    <div className="tree-entries">
-      {entries.map((e) => {
-        const hasTheory = !!e.topicId && existing.has(e.topicId);
-        const isDone = !!e.topicId && completed.has(e.topicId);
-        const isSelected = selectedId === e.id;
-        return (
-          <button
-            key={e.id}
-            ref={isSelected ? selectedRef : undefined}
-            className={`tree-entry${isSelected ? ' selected' : ''}`}
-            onClick={() => onSelect(e)}
-            title={tl(e.question, lang)}
-          >
-            <span className="tree-stars" data-d={e.difficulty}>
-              {stars(e.difficulty)}
-            </span>
-            <span className="tree-q">
-              {e.optional && (
-                <span className="tree-optional" title={ui('treeOptional', lang)}>
-                  ◇{' '}
-                </span>
-              )}
-              {tl(e.question, lang)}
-            </span>
-            {isDone ? (
-              <span className="tree-flag">✅</span>
-            ) : hasTheory ? (
-              <span className="tree-flag" title="theory available">
-                📘
-              </span>
-            ) : null}
-          </button>
-        );
-      })}
-    </div>
+    <TreeEntries entries={entries} selectedId={selectedId} selectedRef={selectedRef} onSelect={onSelect} />
   );
 
   const toggle = (id: string, open: boolean) => setOpened((o) => ({ ...o, [id]: !open }));

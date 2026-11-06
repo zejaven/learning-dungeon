@@ -6,7 +6,9 @@ import { useEffect, useState } from 'react';
  * practice returns to that question, and (later) cross-links are just routes.
  *
  * Routes:
- *   #/                  home, nothing selected
+ *   #/                  landing: the roadmap where the domain has one, else home
+ *   #/roadmap/<module>  roadmap with that module's questions open
+ *   #/tree              home with the question tree, nothing selected
  *   #/q/<id>            home, question <id> selected (lesson when one exists, else theory)
  *   #/q/<id>/theory     home, question <id> selected, reference theory forced open
  *   #/q/<id>/practice   workspace (practice) for that question's topic
@@ -23,19 +25,33 @@ export interface Route {
   id: string | null;
   /** 'theory' forces the reference explanation over the micro-actions lesson. */
   sub: 'theory' | null;
+  /** Show the roadmap instead of the tree, if the active domain has one. */
+  map: boolean;
+  /**
+   * The roadmap module whose panel is open. Not kept in `id`: App selects a topic
+   * from `id`, and a module is not a question.
+   */
+  moduleId: string | null;
 }
 
 export function parseHash(hash: string): Route {
   const parts = hash.replace(/^#/, '').split('/').filter(Boolean); // ['q','<id>','practice']
+  const none = { id: null, sub: null, map: false, moduleId: null };
   if (parts[0] === 'review') {
-    return { view: 'review', id: null, sub: null };
+    return { ...none, view: 'review' };
+  }
+  if (parts[0] === 'tree') {
+    return { ...none, view: 'home' };
+  }
+  if (parts[0] === 'roadmap') {
+    return { ...none, view: 'home', map: true, moduleId: parts[1] ? decodeURIComponent(parts[1]) : null };
   }
   if (parts[0] === 'q' && parts[1]) {
     const id = decodeURIComponent(parts[1]);
-    if (parts[2] === 'practice') return { view: 'workspace', id, sub: null };
-    return { view: 'home', id, sub: parts[2] === 'theory' ? 'theory' : null };
+    if (parts[2] === 'practice') return { ...none, view: 'workspace', id };
+    return { ...none, view: 'home', id, sub: parts[2] === 'theory' ? 'theory' : null };
   }
-  return { view: 'home', id: null, sub: null };
+  return { ...none, view: 'home', map: true };
 }
 
 export function routeForQuestion(id: string): string {
@@ -52,6 +68,14 @@ export function routeForPractice(id: string): string {
 
 export function routeForReview(): string {
   return '/review';
+}
+
+export function routeForRoadmap(moduleId?: string): string {
+  return moduleId ? `/roadmap/${encodeURIComponent(moduleId)}` : '/';
+}
+
+export function routeForTree(): string {
+  return '/tree';
 }
 
 /** Navigates by setting the hash; a no-op if already there (avoids history spam). */

@@ -19,7 +19,7 @@ import { useStore } from '@app/engine/store';
 import { useStyle } from '@app/engine/styleStore';
 import { langsOf, tl, tlStrict, ui, useLang } from '@app/i18n';
 import { LANG_CODES, langChip, langName } from '@app/languages';
-import { entriesInTreeOrder, moduleOfTopic } from '@app/roadmap';
+import { entriesInTreeOrder, moduleOfEntry } from '@app/roadmap';
 import { AddQuestionDialog } from '@app/shell/AddQuestionDialog';
 import { AddTopicDialog, addTopicKey } from '@app/shell/AddTopicDialog';
 import { AiProviderSelector } from '@app/shell/AiProviderSelector';
@@ -311,7 +311,7 @@ export function HomeScreen() {
             <button className="mobile-only panel-back-btn" onClick={() => navigate('/')}>
               {ui('backToCatalog', lang)}
             </button>
-            <span>{theoryReady ? tl(moduleOfTopic(topic!.id) ?? topic!.category, lang) : ui('theory', lang)}</span>
+            <span>{theoryReady ? tl(moduleOfEntry(entry!) ?? topic!.category, lang) : ui('theory', lang)}</span>
             {theoryReady && (
               <button
                 className="theory-ask-btn"

@@ -9,10 +9,13 @@ import data from './roadmap.json';
  * question classification and manual questions, so {@link groupByRoadmap} only
  * rearranges what `buildCatalog` returns.
  *
- * Entries are matched by topic id because entry ids are not stable across
- * machines (`manual-N` depends on the database). What the file does not list — a
- * freshly generated topic, a manual question without a topic — lands in a
- * trailing "not placed" stage, so nothing can fall out of the tree.
+ * A list item is either a topic id or a planned question. Topics are matched by
+ * topic id because entry ids are not stable across machines (`manual-N` depends
+ * on the database). A planned question is matched by its own entry id, which it
+ * keeps after its theory is generated, so it stays where the roadmap puts it. What
+ * the file does not list — a topic from Add topic, a manual question without a
+ * topic — lands in a trailing "not placed" stage, so nothing can fall out of the
+ * tree.
  */
 
 const ROADMAP_DOMAIN = 'java';
@@ -23,23 +26,35 @@ export interface RoadmapStage {
   modules: CatalogCategory[];
 }
 
-const moduleByTopic = new Map<string, Localized>(
-  data.stages.flatMap((s) => s.modules.flatMap((m) => m.topics.map((t) => [t, m.name] as const))),
+const itemKey = (item: string | { planned: string }) => (typeof item === 'string' ? item : item.planned);
+
+const moduleByItem = new Map<string, Localized>(
+  data.stages.flatMap((s) =>
+    s.modules.flatMap((m) => (m.topics as (string | { planned: string })[]).map((t) => [itemKey(t), m.name] as const)),
+  ),
 );
 
-/** The name of the module a topic is listed in, if any. */
-export function moduleOfTopic(topicId: string): Localized | undefined {
-  return moduleByTopic.get(topicId);
+/** The key an entry is listed under in the roadmap, if it is listed at all. */
+function keyOfEntry(entry: CatalogEntry): string | undefined {
+  if (moduleByItem.has(entry.id)) return entry.id;
+  return entry.topicId && moduleByItem.has(entry.topicId) ? entry.topicId : undefined;
+}
+
+/** The name of the module an entry is listed in, if any. */
+export function moduleOfEntry(entry: CatalogEntry): Localized | undefined {
+  const key = keyOfEntry(entry);
+  return key ? moduleByItem.get(key) : undefined;
 }
 
 /** Arranges a catalog into stages and modules; `null` for a domain without a roadmap. */
 export function groupByRoadmap(categories: CatalogCategory[], domainId: string): RoadmapStage[] | null {
   if (domainId !== ROADMAP_DOMAIN) return null;
 
-  const byTopic = new Map<string, CatalogEntry>();
+  const byKey = new Map<string, CatalogEntry>();
   const unplaced: CatalogEntry[] = [];
   for (const entry of categories.flatMap((c) => c.entries)) {
-    if (entry.topicId && moduleByTopic.has(entry.topicId)) byTopic.set(entry.topicId, entry);
+    const key = keyOfEntry(entry);
+    if (key) byKey.set(key, entry);
     else unplaced.push(entry);
   }
 
@@ -49,7 +64,7 @@ export function groupByRoadmap(categories: CatalogCategory[], domainId: string):
     modules: s.modules.map((m) => ({
       id: m.id,
       name: m.name,
-      entries: m.topics.flatMap((t) => byTopic.get(t) ?? []),
+      entries: (m.topics as (string | { planned: string })[]).flatMap((t) => byKey.get(itemKey(t)) ?? []),
     })),
   }));
   if (unplaced.length > 0) {

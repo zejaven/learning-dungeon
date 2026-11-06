@@ -32,8 +32,14 @@ class RoadmapContractTest {
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
+    /** The categories that exist in the static catalog; a planned entry in any other is silently dropped. */
+    private static final Set<String> CATEGORIES = Set.of(
+            "java-core", "java-collections", "concurrency", "memory-gc", "oop-design", "exceptions", "streams",
+            "algorithms", "databases", "spring", "hibernate", "design-patterns", "microservices", "rest",
+            "networking", "security", "devops", "performance", "kotlin", "messaging");
+
     @Test
-    void roadmapListsExistingJavaTopicsOnce() throws IOException {
+    void roadmapItemsAreValidAndListedOnce() throws IOException {
         JsonNode roadmap = JSON.readTree(Files.readString(root().resolve("frontend/src/roadmap.json")));
         List<String> errs = new ArrayList<>();
         Set<String> groupIds = new HashSet<>();
@@ -45,10 +51,14 @@ class RoadmapContractTest {
             checkGroup(stage, groupIds, errs);
             for (JsonNode module : stage.path("modules")) {
                 checkGroup(module, groupIds, errs);
-                for (JsonNode topic : module.path("topics")) {
-                    String id = topic.asText();
-                    if (!topicIds.add(id)) errs.add("topic listed twice: " + id);
-                    checkTopic(id, errs);
+                for (JsonNode item : module.path("topics")) {
+                    if (item.isObject()) {
+                        checkPlanned(item, topicIds, errs);
+                    } else {
+                        String id = item.asText();
+                        if (!topicIds.add(id)) errs.add("topic listed twice: " + id);
+                        checkTopic(id, errs);
+                    }
                 }
             }
         }
@@ -62,6 +72,20 @@ class RoadmapContractTest {
         for (String lang : List.of("en", "ru")) {
             if (group.path("name").path(lang).asText().isBlank()) errs.add(id + ": name." + lang + " is blank");
         }
+    }
+
+    /** A planned question is a catalog entry waiting for theory, so it must be able to become one. */
+    private void checkPlanned(JsonNode item, Set<String> ids, List<String> errs) {
+        String id = item.path("planned").asText();
+        if (!id.matches("plan-[a-z0-9]+(-[a-z0-9]+)*")) errs.add("bad planned id: '" + id + "'");
+        if (!ids.add(id)) errs.add("planned question listed twice: " + id);
+        for (String lang : List.of("en", "ru")) {
+            if (item.path("question").path(lang).asText().isBlank()) errs.add(id + ": question." + lang + " is blank");
+        }
+        int difficulty = item.path("difficulty").asInt();
+        if (difficulty < 1 || difficulty > 3) errs.add(id + ": difficulty must be 1-3, got " + difficulty);
+        String category = item.path("categoryId").asText();
+        if (!CATEGORIES.contains(category)) errs.add(id + ": unknown categoryId '" + category + "'");
     }
 
     private void checkTopic(String id, List<String> errs) throws IOException {

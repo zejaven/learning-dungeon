@@ -74,7 +74,14 @@ export function CategoryTree({
             <span className="tree-stars" data-d={e.difficulty}>
               {stars(e.difficulty)}
             </span>
-            <span className="tree-q">{tl(e.question, lang)}</span>
+            <span className="tree-q">
+              {e.optional && (
+                <span className="tree-optional" title={ui('treeOptional', lang)}>
+                  ◇{' '}
+                </span>
+              )}
+              {tl(e.question, lang)}
+            </span>
             {isDone ? (
               <span className="tree-flag">✅</span>
             ) : hasTheory ? (

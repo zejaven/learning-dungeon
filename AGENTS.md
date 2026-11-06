@@ -442,7 +442,14 @@ When adding or changing a `visual.Visual*` model:
   classification and `manual_question`, so do not replace it with module ids.
   Entries match by topic id because `manual-N` entry ids differ per database. Reorder
   or place a topic by editing the JSON; there is no `order:`-style field for it (a
-  topic's `order:` is ignored once it attaches to a catalog question). Anything not
+  topic's `order:` is ignored once it attaches to a catalog question). An item can
+  also be a planned question: `{ "planned": "plan-x", "question": {...}, "difficulty":
+  2, "categoryId": "...", "optional": true }`. `buildCatalog` turns it into an ordinary
+  entry without a topic in that category (which must exist in `CATALOG`), so the
+  generate button and bulk generation pick it up and the new topic attaches through
+  `catalogId`. It matches by its own entry id, so generating it needs no JSON edit;
+  never replace it with the topic id, or `catalogId` would stop finding it. `optional`
+  renders a ◇ in the trees. Anything not
   listed — a new topic from Add topic, a manual question without a topic — lands in a
   trailing "Not placed yet" stage, and `RoadmapContractTest` only rejects unknown or
   repeated ids, so an unplaced topic never fails a build. Modules start collapsed;

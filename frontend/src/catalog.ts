@@ -2,6 +2,7 @@ import type { Localized } from './i18n';
 import { LANG_CODES } from './languages';
 import type { ManualQuestion, TopicSummary } from './engine/traceTypes';
 import { DOMAINS, domainOf } from './domains';
+import roadmap from './roadmap.json';
 
 /**
  * The interview-question catalog shown as a tree on the home screen.
@@ -28,6 +29,8 @@ export interface CatalogEntry {
   topicId?: string;
   /** Explicit position (e.g. lecture number) from the topic; sorts before difficulty. */
   order?: number;
+  /** A roadmap question marked as extra: rarely asked, fine to skip. */
+  optional?: boolean;
 }
 
 /** Tree sort: explicit order (lecture number) first, then difficulty stars. */
@@ -406,6 +409,19 @@ export function stars(difficulty: Difficulty): string {
   return '★'.repeat(difficulty);
 }
 
+interface PlannedQuestion {
+  planned: string;
+  question: Localized;
+  difficulty: number;
+  categoryId: string;
+  optional?: boolean;
+}
+
+function plannedQuestions(): PlannedQuestion[] {
+  const items: (string | PlannedQuestion)[] = roadmap.stages.flatMap((s) => s.modules.flatMap((m) => m.topics));
+  return items.filter((item): item is PlannedQuestion => typeof item !== 'string');
+}
+
 function normalizeDifficulty(d: number): Difficulty {
   return d === 1 || d === 3 ? d : 2;
 }
@@ -473,6 +489,18 @@ export function buildCatalog(
       byCategory.set(cat.id, cat);
     }
     cat.entries.push({ id: q.id, question: q.question, difficulty: normalizeDifficulty(q.difficulty) });
+  }
+
+  // Roadmap questions nobody has generated yet are entries like any other, and
+  // for the same reason go in before topics: the topic generated for one comes
+  // back through catalogId and keeps the question's place in the roadmap.
+  for (const q of isJava ? plannedQuestions() : []) {
+    byCategory.get(q.categoryId)?.entries.push({
+      id: q.planned,
+      question: q.question,
+      difficulty: normalizeDifficulty(q.difficulty),
+      optional: q.optional,
+    });
   }
 
   const entryById = new Map<string, CatalogEntry>();

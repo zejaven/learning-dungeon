@@ -83,7 +83,14 @@ export function ReviewTree() {
               <span className="tree-stars" data-d={e.difficulty}>
                 {stars(e.difficulty)}
               </span>
-              <span className="tree-q">{tl(e.question, lang)}</span>
+              <span className="tree-q">
+                {e.optional && (
+                  <span className="tree-optional" title={ui('treeOptional', lang)}>
+                    ◇{' '}
+                  </span>
+                )}
+                {tl(e.question, lang)}
+              </span>
             </label>
             <span className="review-tree-count" title={ui('reviewCounts', lang)}>
               <b data-due={counts.due > 0 ? '1' : undefined}>{counts.due}</b>

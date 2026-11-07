@@ -26,8 +26,8 @@
    (сид из `query.sql`, персист localStorage, миссии sticky).
 4. UI: `SchemaPanel` (слева, парсит CREATE TABLE), `SqlResultTable`, ветка `sql`
    в `WorkspaceScreen` (Monaco sql + «Выполнить запрос» + таблица), i18n.
-5. Тема `topics/sql-many-to-many/` (`databases-8`): employees/courses/enrollments,
-   миссия «курсы с >10 сотрудниками» (GROUP BY ... HAVING COUNT(*) > 10) + Boss Fight.
+5. Тема `../topics/sql-many-to-many` (`databases-8`): employees/courses/enrollments,
+   миссия «курсы с >10 сотрудниками» (GROUP BY ... HAVING COUNT (*) > 10) + Boss Fight.
 6. Проверка: `SqlServiceTest`, контракт, `npm run build`, вживую.
 
 ## Решения
@@ -37,7 +37,7 @@
 - Кнопка «Выполнить запрос» (аналог trace→Run, structural→Analyze).
 
 ## Ключевые файлы
-Бэкенд: `backend/build.gradle`, `sql/SqlDtos.java`, `sql/SqlService.java`,
+Бэкенд: `../backend/build.gradle`, `sql/SqlDtos.java`, `sql/SqlService.java`,
 `api/SqlController.java`, `topics/TopicRepository.java`, `topics/TopicContractTest.java`.
 Фронтенд: `engine/{traceTypes,api,store}.ts`, `screens/WorkspaceScreen.tsx`,
 `shell/SchemaPanel.tsx`, `shell/SqlResultTable.tsx`, `i18n.ts`. Тема: `topics/sql-many-to-many/`.

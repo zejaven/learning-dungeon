@@ -42,7 +42,7 @@
 - `nodeExists { kind: interface|class|abstractClass, name? }`
 
 ## Ключевые файлы
-Бэкенд: `backend/build.gradle`, `runner/JavaCodeRunner.java`, `structure/StructureAnalyzer.java`,
+Бэкенд: `../backend/build.gradle`, `runner/JavaCodeRunner.java`, `structure/StructureAnalyzer.java`,
 `api/AnalyzeController.java`, `topics/TopicDtos.java`, `topics/TopicRepository.java`,
 `topics/TopicContractTest.java`, `topics/TopicExamplesTest.java`.
 Фронтенд: `engine/store.ts`, `engine/traceTypes.ts`, `engine/structure.ts`, `engine/api.ts`,

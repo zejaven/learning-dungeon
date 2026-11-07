@@ -4,7 +4,7 @@
 
 `interview-preparation` сейчас — почти пустой репозиторий: лежат вопросы с собеседования
 (`src/main/resources/interview-questions/eRagaInfosystems-questions.md`), транскрипция и обсуждение
-с ChatGPT (`chatgpt-discussion.md`). Цель — превратить подготовку к Java-собеседованию в
+с ChatGPT (`../chatgpt-discussion.md`). Цель — превратить подготовку к Java-собеседованию в
 интерактивную обучающую игру: каждый вопрос становится «темой» с объяснением, редактируемым кодом,
 запуском в песочнице и **визуальным интерактивным представлением**, которое реагирует на то, что
 происходит в коде.
@@ -157,7 +157,7 @@ interview-preparation/
 - После завершения frontend перечитывает `topicRegistry` (Vite HMR подхватит новую папку) и добавляет
   тему в `TopicSwitcher`.
 
-`prompts/add-topic.md` — строгий контракт (на основе финального промпта из обсуждения): сначала выбрать
+`../prompts/add-topic.md` — строгий контракт (на основе финального промпта из обсуждения): сначала выбрать
 тип темы (DATA_STRUCTURE / CONCURRENCY / JVM_MEMORY / SPRING / TRANSACTION / SQL / HTTP / DESIGN_PATTERN
 / OTHER), затем заполнить папку темы по схеме, **не менять оболочку и runner**, переиспользовать
 примитивы, добавить тесты валидации темы.
@@ -224,7 +224,7 @@ StateMachine, RequestFlow) — заглушки с интерфейсом, ре�
 5. **Тема HashMap:** `topics/hashmap/*` целиком; примитивы ArrayGrid/LinkedNodes/EventLog;
    visualizer.tsx; примеры; миссии; step-through.
 6. **AI-помощник:** `/api/assistant/ask` + `AssistantDialog` со стримингом.
-7. **«Добавить тему» через Claude Code:** `prompts/add-topic.md` (контракт),
+7. **«Добавить тему» через Claude Code:** `../prompts/add-topic.md` (контракт),
    `ClaudeCodeService` + `/api/topics/generate` (SSE), `AddTopicDialog` со стримом и статусом.
 
 ---

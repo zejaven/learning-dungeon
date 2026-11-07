@@ -29,7 +29,7 @@
    `runningTests`/`runTests()` (редактор = `code`, персист localStorage `challenge:<id>`).
 5. UI: `TestResults.tsx`; ветка challenge в `WorkspaceScreen` (Monaco java + «Запустить тесты»
    + список кейсов); i18n.
-6. Тема `topics/algo-max-pair-product/` (`algorithms-6`): Solution-заглушка + harness (кейсы,
+6. Тема `../topics/algo-max-pair-product` (`algorithms-6`): Solution-заглушка + harness (кейсы,
    включая два отрицательных) + миссия `all-tests` + Boss Fight.
 7. Промпты (`add-topic.md`/`topic-contract.md`) + подсказка `TopicGenController` (algorithms);
    проверка `./gradlew :visual-runtime:test :backend:test`, `npm run build`.

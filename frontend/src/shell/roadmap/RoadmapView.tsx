@@ -1,4 +1,3 @@
-import { useRef } from 'react';
 import { buildCatalog, type CatalogCategory } from '@app/catalog';
 import { navigate, routeForQuestion, routeForRoadmap, routeForTree } from '@app/engine/router';
 import { useStore } from '@app/engine/store';
@@ -11,7 +10,7 @@ import {
   nextEntry,
   type ModuleLayout,
 } from '@app/roadmap';
-import { PanZoom, type PanZoomBox } from '@app/shell/PanZoom';
+import { PanZoom } from '@app/shell/PanZoom';
 
 const NODE_W = 230;
 const NODE_H = 76;
@@ -29,7 +28,6 @@ const WORLD_H = PAD_TOP + (rows - 1) * ROW_H + NODE_H + PAD_BOTTOM;
 
 const left = (m: ModuleLayout) => m.col * COL_W;
 const top = (m: ModuleLayout) => PAD_TOP + m.row * ROW_H;
-const boxOf = (m: ModuleLayout): PanZoomBox => ({ x: left(m), y: top(m), w: NODE_W, h: NODE_H });
 
 /** Is any module in this column strictly between the two rows? */
 function blocked(col: number, fromRow: number, toRow: number): boolean {
@@ -77,10 +75,6 @@ export function RoadmapView({ domainId, moduleId }: { domainId: string; moduleId
   const manualQuestions = useStore((s) => s.manualQuestions);
   const lang = useLang((s) => s.lang);
 
-  // The focus sticks to the last picked module instead of falling back to the
-  // next question whenever the selection is cleared.
-  const lastFocus = useRef<string | null>(null);
-
   // Until topics arrive nothing is linked and every module would read 0.
   if (topics.length === 0) return <div className="roadmap-view" />;
 
@@ -93,19 +87,10 @@ export function RoadmapView({ domainId, moduleId }: { domainId: string; moduleId
   const nextModuleId = next ? moduleIdOfEntry(next) : undefined;
   const openModule = moduleId ? modules.get(moduleId) : undefined;
 
-  if (openModule) lastFocus.current = openModule.id;
-  else if (!lastFocus.current) lastFocus.current = nextModuleId ?? null;
-  const focusLayout = lastFocus.current ? layoutById.get(lastFocus.current) : undefined;
-
   return (
     <div className="roadmap-view">
       <div className="roadmap-stage">
-        <PanZoom
-          width={WORLD_W}
-          height={WORLD_H}
-          focus={focusLayout ? boxOf(focusLayout) : null}
-          focusKey={lastFocus.current}
-        >
+        <PanZoom width={WORLD_W} height={WORLD_H}>
           <svg className="roadmap-edges" width={WORLD_W} height={WORLD_H} aria-hidden="true">
             <defs>
               <marker id="roadmapArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">

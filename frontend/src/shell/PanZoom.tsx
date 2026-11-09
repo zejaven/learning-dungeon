@@ -1,13 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { ui, useLang } from '@app/i18n';
 
-export interface PanZoomBox {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
-
 const MIN_SCALE = 0.25;
 const MAX_SCALE = 2;
 /** Below this the small text is not drawn: it could not be read anyway. */
@@ -19,8 +12,9 @@ const MARGIN = 24;
 /**
  * A surface of `width`×`height` that can be dragged and zoomed: the wheel zooms
  * at the cursor, dragging pans, two fingers pinch, and the buttons do it without
- * either. `focus` is the box to bring to the middle whenever `focusKey` changes;
- * with no focus the whole surface is fitted.
+ * either. It opens fitted (the whole surface in view) and stays fitted while
+ * its box changes size — a panel appearing, the window resized — until the user
+ * moves or zooms it; from then on their view is kept.
  *
  * The content moves through a single CSS transform, so a drag re-renders nothing.
  *
@@ -32,21 +26,18 @@ const MARGIN = 24;
 export function PanZoom({
   width,
   height,
-  focus,
-  focusKey,
   children,
 }: {
   width: number;
   height: number;
-  focus: PanZoomBox | null;
-  focusKey: string | null;
   children: ReactNode;
 }) {
   const lang = useLang((s) => s.lang);
   const rootRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
   const view = useRef({ x: MARGIN, y: MARGIN, k: 1 });
-  const placed = useRef(false);
+  /** The user panned or zoomed: stop re-fitting on resize. */
+  const moved = useRef(false);
 
   function apply() {
     const { x, y, k } = view.current;
@@ -64,32 +55,33 @@ export function PanZoom({
   }
 
   function zoomAtMiddle(factor: number) {
+    moved.current = true;
     const r = rootRef.current!.getBoundingClientRect();
     zoomAt(r.width / 2, r.height / 2, factor);
   }
 
   function fit() {
     const r = rootRef.current!.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) return; // hidden (e.g. the phone shows the tree): fit once shown
     const k = Math.max(MIN_SCALE, Math.min(1, (r.width - MARGIN * 2) / width, (r.height - MARGIN * 2) / height));
     view.current = { k, x: (r.width - width * k) / 2, y: Math.max(MARGIN, (r.height - height * k) / 2) };
     apply();
   }
 
-  function center(box: PanZoomBox) {
-    const r = rootRef.current!.getBoundingClientRect();
-    // The first placement picks a readable scale; later ones respect the user's.
-    const k = placed.current ? view.current.k : 1;
-    view.current = { k, x: r.width / 2 - (box.x + box.w / 2) * k, y: r.height / 2 - (box.y + box.h / 2) * k };
-    apply();
+  function fitByButton() {
+    moved.current = false; // back to following the box size
+    fit();
   }
 
   useLayoutEffect(() => {
-    if (focus) center(focus);
-    else if (!placed.current) fit();
-    placed.current = true;
-    // Only a new key moves the view: a re-render must not undo the user's drag.
+    fit();
+    const observer = new ResizeObserver(() => {
+      if (!moved.current) fit();
+    });
+    observer.observe(rootRef.current!);
+    return () => observer.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusKey]);
+  }, [width, height]);
 
   useEffect(() => {
     const root = rootRef.current!;
@@ -105,6 +97,7 @@ export function PanZoom({
 
     const onWheel = (ev: WheelEvent) => {
       ev.preventDefault();
+      moved.current = true;
       const r = root.getBoundingClientRect();
       zoomAt(ev.clientX - r.left, ev.clientY - r.top, Math.exp(-ev.deltaY * 0.0015));
     };
@@ -118,6 +111,7 @@ export function PanZoom({
         const [a, b] = [...pointers.values()];
         pinch = { distance: distance(a, b), k: view.current.k };
         dragged = true;
+        moved.current = true;
         for (const id of pointers.keys()) root.setPointerCapture(id);
       }
     };
@@ -136,6 +130,7 @@ export function PanZoom({
       if (!dragged) {
         if (Math.hypot(dx, dy) <= DRAG_PX) return;
         dragged = true;
+        moved.current = true;
         root.setPointerCapture(ev.pointerId);
         root.classList.add('panning');
       }
@@ -188,7 +183,7 @@ export function PanZoom({
         <button title={ui('mapZoomOut', lang)} onClick={() => zoomAtMiddle(0.8)}>
           −
         </button>
-        <button onClick={fit}>{ui('mapFit', lang)}</button>
+        <button onClick={fitByButton}>{ui('mapFit', lang)}</button>
       </div>
     </div>
   );

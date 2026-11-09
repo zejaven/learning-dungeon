@@ -1,6 +1,7 @@
 package com.interviewlearning.bulk;
 
 import com.interviewlearning.ai.AiTask;
+import com.interviewlearning.codetask.CodeTaskGenerator;
 import com.interviewlearning.bulk.BulkDtos.BulkItem;
 import com.interviewlearning.bulk.BulkDtos.ItemView;
 import com.interviewlearning.bulk.BulkDtos.RunView;
@@ -64,6 +65,7 @@ public class BulkGenerationService {
     private final TopicRepository topics;
     private final TopicPromptBuilder topicPrompts;
     private final AtomsPromptBuilder atomsPrompts;
+    private final CodeTaskGenerator taskGenerator;
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "bulk-gen");
@@ -77,7 +79,9 @@ public class BulkGenerationService {
                                  UsageService usage,
                                  TopicRepository topics,
                                  TopicPromptBuilder topicPrompts,
-                                 AtomsPromptBuilder atomsPrompts) {
+                                 AtomsPromptBuilder atomsPrompts,
+                                 CodeTaskGenerator taskGenerator) {
+        this.taskGenerator = taskGenerator;
         this.generation = generation;
         this.usage = usage;
         this.topics = topics;
@@ -153,8 +157,8 @@ public class BulkGenerationService {
             throw new IllegalStateException("A bulk generation run is already active.");
         }
         String kind = request.kind() == null ? "" : request.kind().trim().toLowerCase();
-        if (!"theory".equals(kind) && !"atoms".equals(kind)) {
-            throw new IllegalArgumentException("kind must be \"theory\" or \"atoms\".");
+        if (!"theory".equals(kind) && !"atoms".equals(kind) && !"tasks".equals(kind)) {
+            throw new IllegalArgumentException("kind must be \"theory\", \"atoms\" or \"tasks\".");
         }
         String provider = request.provider() == null ? "" : request.provider().trim().toLowerCase();
         if (!"claude".equals(provider)) {
@@ -295,6 +299,9 @@ public class BulkGenerationService {
             if ("atoms".equals(run.kind)) {
                 return topics.getTopic(item.spec.id()).map(TopicDetail::hasAtoms).orElse(false);
             }
+            if ("tasks".equals(run.kind)) {
+                return topics.getTopic(item.spec.id()).map(TopicDetail::tasksDecided).orElse(false);
+            }
             String catalogId = item.spec.catalogId() == null ? item.spec.id() : item.spec.catalogId();
             return topics.listTopics().stream().anyMatch(t -> catalogId.equals(t.catalogId()));
         } catch (RuntimeException e) {
@@ -372,8 +379,16 @@ public class BulkGenerationService {
             }
             TopicDetail topic = topics.getTopic(item.spec.id()).orElse(null);
             if (topic == null) {
-                log.warn("Bulk atoms item {}: topic not found.", item.spec.id());
+                log.warn("Bulk {} item {}: topic not found.", run.kind, item.spec.id());
                 return null;
+            }
+            if ("tasks".equals(run.kind)) {
+                String refusal = taskGenerator.refusal(topic);
+                if (refusal != null) {
+                    log.warn("Bulk tasks item {}: {}", topic.id(), refusal);
+                    return null;
+                }
+                return taskGenerator.start(topic, run.provider, "");
             }
             return generation.startOrGet("atoms:" + topic.id(), run.provider,
                     atomsPrompts.buildFull(topic, run.provider, 1, run.languages),

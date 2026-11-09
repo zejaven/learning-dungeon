@@ -258,7 +258,35 @@ const UI: Record<string, Localized> = {
   // --- "Learn by micro-actions" lesson mode ---
   lesson: { en: 'Lesson', ru: 'Урок' },
   reference: { en: '📖 Reference', ru: '📖 Справочник' },
-  backToLesson: { en: '← Back to lesson', ru: '← К уроку' },
+  tabLesson: { en: '🎯 Lesson', ru: '🎯 Урок' },
+  tabPractice: { en: '💻 Practice', ru: '💻 Практика' },
+  practiceIntro: {
+    en: 'Each task trains one idea of this topic. Write the code yourself: hints open only after a failed run.',
+    ru: 'Каждая задача тренирует одну идею темы. Пиши код сам: подсказки открываются только после неудачного запуска.',
+  },
+  backToTasks: { en: '← All tasks', ru: '← Все задачи' },
+  tasksEmpty: {
+    en: 'No code tasks yet. The AI picks the ideas of this topic that are worth proving by running code, and keeps only tasks whose reference passes its own tests.',
+    ru: 'Задач с кодом пока нет. ИИ выберет идеи темы, которые стоит проверить запуском кода, и оставит только задачи, чей эталон проходит собственные тесты.',
+  },
+  tasksNone: { en: 'The AI decided this topic needs no code tasks:', ru: 'ИИ решил, что задачи с кодом этой теме не нужны:' },
+  tasksCommentPlaceholder: {
+    en: 'Optional: what a task should be about',
+    ru: 'Необязательно: о чём должна быть задача',
+  },
+  generateTasks: { en: '✨ Generate tasks', ru: '✨ Сгенерировать задачи' },
+  generateMoreTasks: { en: '✨ More tasks', ru: '✨ Ещё задачи' },
+  lessonDoneTasksLeft: {
+    en: 'Lesson completed. To close the topic, solve its code tasks: {n} left in the Practice tab (on the PC).',
+    ru: 'Урок пройден. Чтобы закрыть тему, реши её задачи с кодом: осталось {n} во вкладке «Практика» (на ПК).',
+  },
+  taskHint: { en: 'Fix the code and click Run tests.', ru: 'Исправьте код и нажмите «Запустить тесты».' },
+  caseNotRun: { en: 'not run: the program stopped first', ru: 'не запущен: программа остановилась раньше' },
+  programOutput: { en: 'Program output', ru: 'Вывод программы' },
+  hint: { en: 'Hint', ru: 'Подсказка' },
+  showReference: { en: 'Show the reference solution', ru: 'Показать эталон' },
+  debrief: { en: 'Debrief', ru: 'Разбор' },
+  referenceSolution: { en: 'Reference solution', ru: 'Эталонное решение' },
   generateLesson: { en: '✨ Generate lesson', ru: '✨ Сгенерировать урок' },
   regenerateLesson: { en: '↻ Regenerate lesson', ru: '↻ Перегенерировать урок' },
   regenerateLessonWarning: {
@@ -474,6 +502,10 @@ const UI: Record<string, Localized> = {
   bulkDialogTitleAtoms: {
     en: 'Generate lessons for all topics without one',
     ru: 'Сгенерировать уроки для всех тем без них',
+  },
+  bulkDialogTitleTasks: {
+    en: 'Generate code tasks for all Java topics with a lesson',
+    ru: 'Сгенерировать задачи с кодом для всех Java-тем с уроком',
   },
   bulkDialogCount: { en: 'Items to generate:', ru: 'Будет сгенерировано:' },
   bulkEndTime: { en: 'Stop by', ru: 'Остановить к' },

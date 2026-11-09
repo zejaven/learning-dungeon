@@ -104,7 +104,8 @@ class RemoteAccessFilterTest {
 
     @Test
     void codeExecutionStaysLocalOnlyForAuthenticatedRemotes() {
-        for (String path : new String[] { "/api/run", "/api/sql", "/api/challenge", "/api/analyze" }) {
+        for (String path : new String[] { "/api/run", "/api/sql", "/api/challenge", "/api/challenge/task",
+                "/api/challenge/tasks/hashmap/generate", "/api/analyze" }) {
             assertEquals(Decision.CODE_EXECUTION_BLOCKED,
                     decide(RemoteAccessMode.PROXIED, false, path, TOKEN, null),
                     path + " must not run for a remote client");

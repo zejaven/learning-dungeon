@@ -231,6 +231,41 @@ public class AiCliService {
         return out.toString();
     }
 
+    /**
+     * Runs a provider to completion on the calling thread, forwarding its output
+     * to {@code sink} but keeping the run's own terminal status back: the caller
+     * is one step of a longer job and decides when that job is done. A terminal
+     * status is passed on as a {@code running} line so its message stays visible.
+     *
+     * @return true when the CLI exited cleanly
+     */
+    public boolean runStep(String providerId, String prompt, AiTask task, Sink sink) {
+        boolean[] ok = {false};
+        Sink step = new Sink() {
+            @Override
+            public void ai(String line) {
+                sink.ai(line);
+            }
+
+            @Override
+            public void status(String status, String message) {
+                if ("done".equals(status) || "error".equals(status)) {
+                    ok[0] = "done".equals(status);
+                    sink.status("running", message);
+                } else {
+                    sink.status(status, message);
+                }
+            }
+        };
+        try {
+            runProcess(invocation(config(providerId), task, prompt), prompt, step);
+        } catch (RuntimeException e) {
+            sink.status("running", e.getMessage());
+            return false;
+        }
+        return ok[0];
+    }
+
     private ProviderConfig config(String providerId) {
         String id = providerId == null || providerId.isBlank()
                 ? "claude"

@@ -1,0 +1,64 @@
+atomId: for-each-hidden-iterator
+order: 1
+aiProvider: claude
+aiModel: opus
+title:
+  en: |-
+    Idle sessions that linger
+  ru: |-
+    Неактивные сессии, которые не уходят
+statement:
+  en: |-
+    `SessionRegistry` keeps the active sessions of a single-threaded game server in login order. Once a minute the server calls `evictIdle(cutoff)` to drop every session not seen since minute `cutoff`, and logs how many were dropped.
+
+    Two bug reports came in. Some runs of the eviction job crash with `ConcurrentModificationException`, although nothing else touches the registry at that moment. Other runs finish without an error, yet a session that has been idle for an hour is still listed in `active()`, and the logged count is lower than the number of idle sessions:
+
+    ```java
+    registry.touch("a", 30);
+    registry.touch("b", 5);
+    registry.touch("c", 6);
+    registry.evictIdle(10);   // returns 1
+    registry.active();        // [a, c]
+    ```
+
+    Fix `evictIdle` so that it drops every idle session, keeps the remaining ones in login order, forgets the last-seen time of each dropped session, and returns the exact count.
+  ru: |-
+    `SessionRegistry` хранит активные сессии однопоточного игрового сервера в порядке входа. Раз в минуту сервер вызывает `evictIdle(cutoff)`, чтобы удалить все сессии, которых не было видно с минуты `cutoff`, и пишет в лог, сколько удалено.
+
+    Пришли два баг-репорта. Часть запусков очистки падает с `ConcurrentModificationException`, хотя в этот момент реестр больше никто не трогает. Другие запуски проходят без ошибки, но сессия, неактивная целый час, по-прежнему есть в `active()`, а число в логе меньше, чем было неактивных сессий:
+
+    ```java
+    registry.touch("a", 30);
+    registry.touch("b", 5);
+    registry.touch("c", 6);
+    registry.evictIdle(10);   // возвращает 1
+    registry.active();        // [a, c]
+    ```
+
+    Почини `evictIdle` так, чтобы метод удалял все неактивные сессии, сохранял порядок входа у оставшихся, забывал время последней активности каждой удалённой сессии и возвращал точное число удалённых.
+hints:
+  - en: |-
+      There is only one thread. Which object, besides the list itself, is walking over `active` while `active.remove(id)` runs?
+    ru: |-
+      Поток всего один. Какой объект, кроме самого списка, проходит по `active`, пока выполняется `active.remove(id)`?
+  - en: |-
+      A for-each loop is an `Iterator` loop. `active.remove(id)` changes the list behind that iterator, and the next `next()` notices and throws. When the removed element was second to last, `hasNext()` already returns `false` and the loop ends quietly without checking the last element.
+    ru: |-
+      Цикл for-each это цикл по `Iterator`. `active.remove(id)` меняет список за спиной этого итератора, и следующий `next()` это замечает и бросает исключение. Если удалённый элемент был предпоследним, `hasNext()` уже возвращает `false`, и цикл тихо заканчивается, не проверив последний элемент.
+  - en: |-
+      Remove through the iterator that is walking the list, or let the list do the walk and the removal in one call. An index loop with `active.remove(i)` does not throw, but it skips the element right after each removed one; catching the exception stops the job halfway.
+    ru: |-
+      Удаляй через тот итератор, который проходит по списку, или поручи списку обход и удаление одним вызовом. Цикл по индексу с `active.remove(i)` не бросает исключение, но пропускает элемент сразу после каждого удалённого; перехват исключения останавливает очистку на полпути.
+debrief:
+  en: |-
+    A for-each loop compiles into an `Iterator` loop, so calling `active.remove(id)` inside it modifies the list behind that iterator's back. `ArrayList` bumps its `modCount`, the iterator still holds the old value in `expectedModCount`, and the next `next()` throws `ConcurrentModificationException`. One thread is enough.
+
+    The quiet variant is worse: removing the second-to-last element shrinks the size down to the cursor position, `hasNext()` returns `false`, and the last element is never checked. Fail-fast detection is best-effort, not a guarantee.
+
+    The fix is `Iterator.remove()`, which deletes the current element and resyncs `expectedModCount`, or `active.removeIf(id -> ...)` with the map cleanup inside the predicate. Worth naming in an interview: the index loop that silently skips neighbours, and the fact that the CME can fail to appear at all.
+  ru: |-
+    Цикл for-each компилируется в цикл по `Iterator`, поэтому вызов `active.remove(id)` внутри него меняет список за спиной этого итератора. `ArrayList` увеличивает `modCount`, итератор хранит старое значение в `expectedModCount`, и следующий `next()` бросает `ConcurrentModificationException`. Хватает одного потока.
+
+    Тихий вариант хуже: удаление предпоследнего элемента уменьшает размер до позиции курсора, `hasNext()` возвращает `false`, и последний элемент так и не проверяется. Fail-fast обнаружение работает по мере возможности, а не гарантированно.
+
+    Исправление: `Iterator.remove()`, который удаляет текущий элемент и синхронизирует `expectedModCount`, или `active.removeIf(id -> ...)` с очисткой мапы внутри предиката. Что стоит назвать на собеседовании: цикл по индексу, который молча пропускает соседей, и то, что CME может вообще не появиться.

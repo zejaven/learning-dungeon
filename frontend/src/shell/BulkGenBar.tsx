@@ -3,6 +3,10 @@ import { navigate, routeForQuestion } from '@app/engine/router';
 import { useStore } from '@app/engine/store';
 import { tl, ui, useLang } from '@app/i18n';
 
+import type { BulkKind } from '@app/engine/api';
+
+const BULK_ICON: Record<BulkKind, string> = { theory: '📖', atoms: '✨', tasks: '💻' };
+
 const PHASE_KEYS: Record<string, string> = {
   generating: 'bulkPhaseGenerating',
   waitingPace: 'bulkPhaseWaitingPace',
@@ -53,7 +57,7 @@ export function BulkGenBar() {
   return (
     <div className="bulk-bar">
       <span className="bulk-bar-label">
-        {run.kind === 'theory' ? '📖' : '✨'} {phaseKey ? ui(phaseKey, lang) : run.phase}{' '}
+        {BULK_ICON[run.kind]} {phaseKey ? ui(phaseKey, lang) : run.phase}{' '}
         {doneCount}/{run.items.length}
         {run.waitUntil && ` · ${ui('bulkUntil', lang)} ${fmtTime(run.waitUntil)}`}
         {run.utilization != null && ` · ${Math.round(run.utilization)}% / ${run.maxPercent}%`}

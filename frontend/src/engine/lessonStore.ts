@@ -209,17 +209,19 @@ const EMPTY: Pick<
 };
 
 /**
- * The lesson is finished: mirror that into the topic (answering every unit
- * implies passing every boss question) and fire the completion fireworks, once,
- * unless the lesson was already complete when it was opened. Both recompute
- * callers funnel through here and every step is idempotent, so reporting the
- * same finish twice — which the boss answer and the recompute after it do —
- * changes nothing. Reports for a topic that is no longer open are dropped.
+ * The lesson is finished. The topic is too unless it still has unsolved code
+ * tasks, which the server decides (`topicCompleted`); only then is it marked
+ * and the fireworks fire, once, unless the lesson was already complete when it
+ * was opened. Otherwise the last solved task celebrates (codeTaskStore). Both
+ * recompute callers funnel through here and every step is idempotent, so
+ * reporting the same finish twice — which the boss answer and the recompute
+ * after it do — changes nothing. Reports for a topic no longer open are dropped.
  */
-function finishLesson(topicId: string) {
+function finishLesson(topicId: string, topicCompleted: boolean) {
   const lesson = useLesson.getState();
   if (lesson.topicId !== topicId || useStore.getState().topic?.id !== topicId) return;
   useLesson.setState({ lessonCompleted: true });
+  if (!topicCompleted) return;
   useStore.getState().markTopicCompleted();
   if (!lesson.completedOnLoad) useStore.getState().celebrateTopic();
 }
@@ -351,11 +353,14 @@ export const useLesson = create<LessonSlice>((set, get) => ({
     try {
       await s.pendingSave; // make sure the last answer is persisted before recompute
       const res = await recomputeLesson(s.topicId);
-      if (res.lessonCompleted) finishLesson(s.topicId);
+      if (res.lessonCompleted) finishLesson(s.topicId, res.topicCompleted);
     } catch {
       // Offline: the same rule the server applies, over the answers we hold.
       // The server recomputes from the replayed answers once it hears them.
-      if (lessonComplete(get().units, get().results, passedBossIds())) finishLesson(s.topicId);
+      // Task progress is not held offline, so a topic with tasks waits for it.
+      if (lessonComplete(get().units, get().results, passedBossIds())) {
+        finishLesson(s.topicId, !useStore.getState().topic?.hasTasks);
+      }
     }
   },
 
@@ -436,7 +441,7 @@ export const useLesson = create<LessonSlice>((set, get) => ({
     if (!s.topicId) return;
     try {
       const res = await recomputeLesson(s.topicId);
-      if (res.lessonCompleted) finishLesson(s.topicId);
+      if (res.lessonCompleted) finishLesson(s.topicId, res.topicCompleted);
     } catch {
       /* best-effort; the pass itself is already stored in boss_fight_answer */
     }

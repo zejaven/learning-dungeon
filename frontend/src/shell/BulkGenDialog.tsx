@@ -3,6 +3,12 @@ import type { BulkKind } from '@app/engine/api';
 import { useBulk } from '@app/engine/bulkStore';
 import { ui, useLang } from '@app/i18n';
 
+const BULK_TITLE: Record<BulkKind, string> = {
+  theory: 'bulkDialogTitleTheory',
+  atoms: 'bulkDialogTitleAtoms',
+  tasks: 'bulkDialogTitleTasks',
+};
+
 /** "HH:mm" a given number of hours from now (default stop time suggestion). */
 function defaultEndTime(hoursAhead: number): string {
   const t = new Date(Date.now() + hoursAhead * 3_600_000);
@@ -42,7 +48,7 @@ export function BulkGenDialog({
     <div className="dialog-backdrop" onClick={onClose}>
       <div className="dialog" onClick={(e) => e.stopPropagation()}>
         <div className="dialog-head">
-          <h2>{ui(kind === 'theory' ? 'bulkDialogTitleTheory' : 'bulkDialogTitleAtoms', lang)}</h2>
+          <h2>{ui(BULK_TITLE[kind], lang)}</h2>
           <button onClick={onClose}>✕</button>
         </div>
         <div className="dialog-body">

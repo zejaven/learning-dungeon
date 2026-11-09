@@ -11,6 +11,7 @@ import type {
   TopicSummary,
 } from './traceTypes';
 import type { AiProviderStatus } from './aiStore';
+import type { TaskListItem, TaskRunResponse } from './codeTaskTypes';
 import type { Localized } from '../i18n';
 import type {
   AnswerValue,
@@ -143,6 +144,49 @@ export async function runChallenge(topicId: string, code: string): Promise<Chall
   });
   if (!res.ok) throw new Error(`Test run failed (${res.status})`);
   return res.json();
+}
+
+/** The topic's code tasks with their progress; empty when it has none. */
+export async function fetchCodeTasks(topicId: string): Promise<TaskListItem[]> {
+  const res = await fetch(`/api/topics/${encodeURIComponent(topicId)}/code-tasks`);
+  if (!res.ok) throw new Error(`Failed to load tasks (${res.status})`);
+  return res.json();
+}
+
+/** Runs a learner's solution against a code task's hidden tests. */
+export async function runCodeTask(topicId: string, taskId: string, code: string): Promise<TaskRunResponse> {
+  const res = await fetch('/api/challenge/task', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ topicId, taskId, code }),
+  });
+  if (!res.ok) throw new Error(`Test run failed (${res.status})`);
+  return res.json();
+}
+
+/**
+ * Starts (or reuses) generating code tasks for the topic (key `tasks:<id>`).
+ * They are added to the existing ones; only tasks that pass the server's check stay.
+ */
+export async function startTasksGeneration(topicId: string, provider: string, comment = ''): Promise<GenTaskRef> {
+  const res = await fetch(`/api/challenge/tasks/${encodeURIComponent(topicId)}/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider, comment }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.error ?? `Task generation failed to start (${res.status})`);
+  }
+  return res.json();
+}
+
+/** Why the generator decided the topic needs no code tasks, or null. */
+export async function fetchTasksNoneReason(topicId: string): Promise<string | null> {
+  const res = await fetch(`/api/topics/${encodeURIComponent(topicId)}/code-tasks/none`);
+  if (res.status !== 200) return null;
+  const body = await res.json();
+  return body.reason ?? null;
 }
 
 /** Runs a SQL topic's query against its seeded schema; returns the result + mission flags. */
@@ -479,11 +523,14 @@ export async function saveExerciseAnswer(topicId: string, payload: ExerciseAnswe
 }
 
 /** Recomputes lesson completion from the persisted answers + boss passes. */
-export async function recomputeLesson(topicId: string): Promise<{ lessonCompleted: boolean }> {
+/** `topicCompleted` can lag behind the lesson: a topic with code tasks also waits for them. */
+export async function recomputeLesson(
+  topicId: string,
+): Promise<{ lessonCompleted: boolean; topicCompleted: boolean }> {
   const res = await fetch(`/api/lesson/${encodeURIComponent(topicId)}/recompute`, { method: 'POST' });
   if (!res.ok) throw new Error(`Failed to recompute lesson (${res.status})`);
   const body = await res.json();
-  return { lessonCompleted: !!body.lessonCompleted };
+  return { lessonCompleted: !!body.lessonCompleted, topicCompleted: !!body.topicCompleted };
 }
 
 /** Starts (or reuses) the atoms-generation task for the topic (key `atoms:<id>`). */
@@ -506,7 +553,7 @@ export async function startAtomsGeneration(
 
 // --- Bulk generation (backend-side loop over missing theory/lessons) --------
 
-export type BulkKind = 'theory' | 'atoms';
+export type BulkKind = 'theory' | 'atoms' | 'tasks';
 export type BulkItemStatus = 'pending' | 'running' | 'done' | 'error' | 'skipped';
 
 /** One unit of work; theory items carry the same fields startGeneration takes. */

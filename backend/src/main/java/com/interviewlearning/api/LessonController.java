@@ -9,6 +9,7 @@ import com.interviewlearning.lesson.LessonDtos.LessonState;
 import com.interviewlearning.lesson.LessonDtos.RecomputeResponse;
 import com.interviewlearning.lesson.LessonProgressRepository;
 import com.interviewlearning.lesson.ReviewEnrollment;
+import com.interviewlearning.progress.TopicCompletionService;
 import com.interviewlearning.topics.TopicDtos.BossQuestion;
 import com.interviewlearning.topics.TopicRepository;
 import org.springframework.http.ResponseEntity;
@@ -37,15 +38,18 @@ public class LessonController {
     private final LessonProgressRepository progress;
     private final TopicRepository topics;
     private final ReviewEnrollment enrollment;
+    private final TopicCompletionService completion;
 
     public LessonController(LearningAtomsRepository atomsRepository,
                             LessonProgressRepository progress,
                             TopicRepository topics,
-                            ReviewEnrollment enrollment) {
+                            ReviewEnrollment enrollment,
+                            TopicCompletionService completion) {
         this.atomsRepository = atomsRepository;
         this.progress = progress;
         this.topics = topics;
         this.enrollment = enrollment;
+        this.completion = completion;
     }
 
     /** 404 when the topic has no (valid) learning-atoms.json yet. */
@@ -95,7 +99,9 @@ public class LessonController {
                 .map(t -> t.bossFight().stream().map(BossQuestion::id).toList())
                 .orElse(List.of());
         boolean completed = progress.recomputeLessonCompletion(topicId, requiredExerciseIds(atoms), bossQids);
-        return ResponseEntity.ok(new RecomputeResponse(completed));
+        // The lesson is not the whole topic: code tasks may still be open. The
+        // client celebrates only what the server says is passed.
+        return ResponseEntity.ok(new RecomputeResponse(completed, completion.isCompleted(topicId)));
     }
 
     /** Every discovery + practice exercise id — all of these must be answered to complete. */

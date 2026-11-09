@@ -13,8 +13,11 @@
 $script:RequiredJavaMajor = 21
 
 function Get-JdkMajor([string]$home_) {
-    $release = Join-Path $home_ 'release'
-    if (-not (Test-Path (Join-Path $home_ 'bin\javac.exe')) -or -not (Test-Path $release)) {
+    # Plain concatenation, not Join-Path: it throws on a drive that does not exist,
+    # and PATH or JAVA_HOME may well name one (an unplugged disk, another machine's).
+    $base = $home_.TrimEnd('\')
+    $release = "$base\release"
+    if (-not (Test-Path "$base\bin\javac.exe") -or -not (Test-Path $release)) {
         return $null
     }
     $line = Select-String -Path $release -Pattern '^JAVA_VERSION="([0-9]+)' | Select-Object -First 1
@@ -28,7 +31,7 @@ function Find-AppJdk([string]$repoRoot) {
     $candidates = New-Object System.Collections.Generic.List[string]
     if ($env:JAVA_HOME) { $candidates.Add($env:JAVA_HOME) }
     foreach ($dir in ($env:Path -split ';')) {
-        if ($dir -and (Test-Path (Join-Path $dir 'java.exe'))) {
+        if ($dir -and (Test-Path "$($dir.TrimEnd('\'))\java.exe")) {
             $candidates.Add((Split-Path $dir -Parent))
         }
     }

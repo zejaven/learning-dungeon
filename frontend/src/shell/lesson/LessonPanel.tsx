@@ -1,10 +1,7 @@
-import { useEffect, useState } from 'react';
-import { useAi } from '@app/engine/aiStore';
-import { startAtomsGeneration } from '@app/engine/api';
-import { genLanguages } from '@app/engine/genLangStore';
+import { useEffect } from 'react';
 import { useGeneration } from '@app/engine/generationStore';
 import { previousPosition, useLesson } from '@app/engine/lessonStore';
-import { navigate, routeForTheory } from '@app/engine/router';
+import { useCodeTasks } from '@app/engine/codeTaskStore';
 import { useStore } from '@app/engine/store';
 import { tl, ui, useLang } from '@app/i18n';
 import { orderLangs } from '@app/languages';
@@ -12,25 +9,28 @@ import { GenerationView } from '@app/shell/GenerationView';
 import { MissingLanguage } from '@app/shell/MissingLanguage';
 import { BossFightUnit } from './BossFightUnit';
 import { ExerciseCard } from './ExerciseCard';
-import { RegenerateLessonDialog, type RegenerateOptions } from './RegenerateLessonDialog';
 import { UnitTrack } from './UnitTrack';
 
 /**
  * The "Learn by micro-actions" lesson: the current unit's exercise (or boss
  * question) above a horizontal unit track. Rendered in the home screen's right
  * panel as the default view of a topic that has a generated lesson; the full
- * theory stays reachable via the Reference button.
+ * theory and the regenerate action live in the topic tab bar above
+ * (TopicTabs).
  */
 export function LessonPanel() {
   const lang = useLang((s) => s.lang);
   const topic = useStore((s) => s.topic);
-  const activeVersionNo = useStore((s) => s.activeVersionNo);
+  const topicCompleted = useStore((s) => s.topicCompleted);
+  // Code tasks are the topic's other gate; TopicTabs loads them for the open topic.
+  const tasksLeft = useCodeTasks((s) =>
+    s.topicId === topic?.id ? (s.items?.filter((i) => !i.progress.solved).length ?? 0) : 0,
+  );
 
   const topicId = topic?.id ?? '';
   const lesson = useLesson();
   const genKey = `atoms:${topicId}`;
   const genTask = useGeneration((s) => (topicId ? s.tasks[genKey] : undefined));
-  const [regenOpen, setRegenOpen] = useState(false);
 
   useEffect(() => {
     if (topicId) void useLesson.getState().loadLesson(topicId);
@@ -44,23 +44,6 @@ export function LessonPanel() {
   }, [genTask?.status]);
 
   if (!topic) return null;
-
-  async function regenerate(options: RegenerateOptions) {
-    setRegenOpen(false);
-    try {
-      const ref = await startAtomsGeneration(
-        topicId,
-        useAi.getState().selectedProvider,
-        activeVersionNo,
-        options.mode,
-        options.comment,
-        genLanguages(),
-      );
-      useGeneration.getState().attach(ref.taskId, ref.key);
-    } catch {
-      /* the button stays; the learner can retry */
-    }
-  }
 
   const unit = lesson.units.find((u) => u.id === lesson.currentUnitId) ?? null;
   const isBoss = unit?.kind === 'boss';
@@ -125,19 +108,7 @@ export function LessonPanel() {
             {lesson.mistakesQueue.length} {ui('mistakesLeft', lang)}
           </span>
         )}
-        <button onClick={() => navigate(routeForTheory(topicId))}>{ui('reference', lang)}</button>
-        <button
-          onClick={() => setRegenOpen(true)}
-          disabled={generating}
-          title={ui('regenerateLesson', lang)}
-        >
-          {generating ? ui('generating', lang) : '↻'}
-        </button>
       </div>
-
-      {regenOpen && (
-        <RegenerateLessonDialog onConfirm={regenerate} onClose={() => setRegenOpen(false)} />
-      )}
 
       <div className="lesson-body">
         {generating && <GenerationView taskKey={genKey} />}
@@ -147,7 +118,11 @@ export function LessonPanel() {
             {lesson.loading && <p className="home-hint">{ui('loading', lang)}</p>}
 
             {!lesson.loading && lesson.lessonCompleted && (
-              <div className="lesson-banner done">{ui('lessonCompleted', lang)}</div>
+              <div className="lesson-banner done">
+                {tasksLeft > 0 && !topicCompleted
+                  ? ui('lessonDoneTasksLeft', lang).replace('{n}', String(tasksLeft))
+                  : ui('lessonCompleted', lang)}
+              </div>
             )}
 
             {!lesson.loading && isBoss && unit && <BossFightUnit unit={unit} />}

@@ -124,7 +124,9 @@ public final class TopicDtos {
             boolean hasAtoms,
             String domainId,
             /** Position within the catalog (e.g. lecture number); 0 = unordered. */
-            int order
+            int order,
+            /** tasks/ exists: tasks were written or generated, or the generator decided on none. */
+            boolean tasksDecided
     ) {
     }
 
@@ -199,7 +201,11 @@ public final class TopicDtos {
             boolean hasAtoms,
             String domainId,
             /** Content languages the topic declares (subset of [en, ru]); default both. */
-            List<String> languages
+            List<String> languages,
+            /** Whether the topic has at least one code task under tasks/. */
+            boolean hasTasks,
+            /** tasks/ exists, possibly holding only the generator's .none verdict. */
+            boolean tasksDecided
     ) {
     }
 }

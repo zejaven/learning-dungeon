@@ -2,6 +2,8 @@ package com.interviewlearning.generation;
 
 import com.interviewlearning.ai.AiCliService;
 import com.interviewlearning.ai.AiTask;
+import com.interviewlearning.codetask.CodeTaskDtos;
+import com.interviewlearning.codetask.CodeTaskRepository;
 import com.interviewlearning.config.RepoPaths;
 import com.interviewlearning.lang.ContentLanguages;
 import com.interviewlearning.theory.TheoryVersionRepository;
@@ -31,11 +33,14 @@ public class AtomsPromptBuilder {
     private final RepoPaths repoPaths;
     private final TheoryVersionRepository versions;
     private final AiCliService ai;
+    private final CodeTaskRepository codeTasks;
 
-    public AtomsPromptBuilder(RepoPaths repoPaths, TheoryVersionRepository versions, AiCliService ai) {
+    public AtomsPromptBuilder(RepoPaths repoPaths, TheoryVersionRepository versions, AiCliService ai,
+                              CodeTaskRepository codeTasks) {
         this.repoPaths = repoPaths;
         this.versions = versions;
         this.ai = ai;
+        this.codeTasks = codeTasks;
     }
 
     /** A full (non-augment) lesson generation from the given theory version. */
@@ -124,7 +129,10 @@ public class AtomsPromptBuilder {
                     .append("the output file. The rest of the contract above still applies to any new ")
                     .append("content.\n\nADDITION TO MAKE:\n").append(comment)
                     .append("\n\n---\n\nEXISTING LEARNING-ATOMS.JSON:\n\n").append(existingAtoms);
-        } else if (!comment.isEmpty()) {
+        } else {
+            appendTaskBoundAtoms(sb, topic.id());
+        }
+        if (!augment && !comment.isEmpty()) {
             sb.append("\n---\n\nMUST INCLUDE (an extra requirement, NOT the basis for the whole ")
                     .append("lesson): the lesson must definitely cover the following, in addition to ")
                     .append("faithfully covering the full source explanation below:\n").append(comment);
@@ -141,6 +149,23 @@ public class AtomsPromptBuilder {
         sb.append("\n---\n\nOUTPUT FILE (write the JSON exactly here):\n")
                 .append(output.toAbsolutePath());
         return sb.toString();
+    }
+
+    /**
+     * A full regeneration rewrites every atom, but code tasks are bound to atom
+     * ids. Losing one would orphan its task (and fail CodeTaskContractTest), so
+     * the ids that tasks use are handed over as fixed.
+     */
+    private void appendTaskBoundAtoms(StringBuilder sb, String topicId) {
+        List<String> bound = codeTasks.list(topicId).stream()
+                .map(CodeTaskDtos.CodeTask::atomId).distinct().toList();
+        if (bound.isEmpty()) {
+            return;
+        }
+        sb.append("\n---\n\nKEEP THESE ATOM IDS: code tasks are bound to them. The lesson must still have ")
+                .append("an atom with each of these exact ids, teaching the same rule (its title, summary and ")
+                .append("exercises may change):\n");
+        bound.forEach(id -> sb.append("- ").append(id).append("\n"));
     }
 
     /**

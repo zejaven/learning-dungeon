@@ -129,9 +129,14 @@ public class ProgressRepository {
 
     // --- Topic completion -------------------------------------------------
 
-    /** Marks the topic complete iff every boss-fight question is currently passed. */
-    public boolean recomputeCompletion(String topicId, int totalQuestions) {
-        boolean completed = totalQuestions > 0 && countPassed(topicId) >= totalQuestions;
+    /**
+     * Stores whether the topic is passed, by {@link TopicCompletion}: every
+     * boss-fight question currently passed, and the code tasks solved unless the
+     * topic was already passed before.
+     */
+    public boolean recomputeCompletion(String topicId, int totalQuestions, int tasksTotal, int tasksSolved) {
+        boolean bossDone = totalQuestions > 0 && countPassed(topicId) >= totalQuestions;
+        boolean completed = TopicCompletion.decide(bossDone, tasksTotal, tasksSolved, isCompleted(topicId));
         jdbc.update("""
                 INSERT INTO topic_progress (topic_id, completed, completed_at)
                 VALUES (?, ?, CASE WHEN ? THEN now() ELSE NULL END)

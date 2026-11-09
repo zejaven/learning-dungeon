@@ -74,6 +74,8 @@ interface AppState {
 
   // --- Challenge topics: the solution editor reuses `code`; this is its tests ---
   testResults: TestResult[] | null;
+  /** Why the last test run failed as a whole; the cases that reported stay in testResults. */
+  testError: string | null;
   runningTests: boolean;
 
   // --- Theory versions (styled regenerations) of the current topic ---
@@ -257,6 +259,7 @@ export const useStore = create<AppState>((set, get) => ({
   sqlResult: null,
   runningSql: false,
   testResults: null,
+  testError: null,
   runningTests: false,
   theoryVersions: [],
   activeVersionNo: 1,
@@ -320,6 +323,7 @@ export const useStore = create<AppState>((set, get) => ({
         sqlResult: null,
         runningSql: false,
         testResults: null,
+        testError: null,
         runningTests: false,
         theoryVersions: [],
         activeVersionNo: 1,
@@ -578,11 +582,7 @@ export const useStore = create<AppState>((set, get) => ({
           newly.push(id);
         }
       }
-      // A compile/runtime error is surfaced as a single failed "case".
-      const tests: TestResult[] = res.error
-        ? [{ name: 'compile / run', passed: false, expected: '', actual: res.error }]
-        : res.tests;
-      set({ runningTests: false, testResults: tests, completedMissions: completed });
+      set({ runningTests: false, testResults: res.tests, testError: res.error, completedMissions: completed });
       if (newly.length > 0) {
         saveMissions(topic.id, newly).catch(() => {
           /* persistence is best-effort */
@@ -592,7 +592,8 @@ export const useStore = create<AppState>((set, get) => ({
       if (get().topic?.id !== topic.id) return; // a newer topic was selected meanwhile
       set({
         runningTests: false,
-        testResults: [{ name: 'error', passed: false, expected: '', actual: (e as Error).message }],
+        testResults: null,
+        testError: (e as Error).message,
       });
     }
   },

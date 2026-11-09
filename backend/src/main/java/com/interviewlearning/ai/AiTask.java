@@ -7,7 +7,8 @@ public enum AiTask {
     CLASSIFY(true, false),
     GENERATE_TOPIC(true, true),
     REGENERATE_VERSION(true, true),
-    GENERATE_ATOMS(true, true);
+    GENERATE_ATOMS(true, true),
+    GENERATE_TASKS(true, true);
 
     private final boolean writesFiles;
     private final boolean needsStrongModel;

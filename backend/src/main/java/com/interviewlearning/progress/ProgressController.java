@@ -6,7 +6,6 @@ import com.interviewlearning.progress.ProgressDtos.BossAnswerRequest;
 import com.interviewlearning.progress.ProgressDtos.BossAnswerResponse;
 import com.interviewlearning.progress.ProgressDtos.MissionsRequest;
 import com.interviewlearning.progress.ProgressDtos.TopicProgress;
-import com.interviewlearning.topics.TopicRepository;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -23,11 +22,11 @@ import java.util.List;
 public class ProgressController {
 
     private final ProgressRepository progress;
-    private final TopicRepository topics;
+    private final TopicCompletionService completion;
 
-    public ProgressController(ProgressRepository progress, TopicRepository topics) {
+    public ProgressController(ProgressRepository progress, TopicCompletionService completion) {
         this.progress = progress;
-        this.topics = topics;
+        this.completion = completion;
     }
 
     @GetMapping("/{topicId}")
@@ -49,9 +48,7 @@ public class ProgressController {
     public BossAnswerResponse bossFight(@PathVariable String topicId,
                                         @RequestBody BossAnswerRequest req) {
         progress.saveBossAnswer(topicId, req);
-        int total = topics.getTopic(topicId).map(t -> t.bossFight().size()).orElse(0);
-        boolean completed = progress.recomputeCompletion(topicId, total);
-        return new BossAnswerResponse(completed);
+        return new BossAnswerResponse(completion.recompute(topicId));
     }
 
     @GetMapping("/{topicId}/assistant")

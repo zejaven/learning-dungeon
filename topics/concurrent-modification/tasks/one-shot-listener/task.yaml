@@ -1,0 +1,66 @@
+atomId: copy-on-write-snapshot
+order: 2
+aiProvider: claude
+aiModel: opus
+title:
+  en: |-
+    The listener that hears too little
+  ru: |-
+    Слушатель, который слышит не всё
+statement:
+  en: |-
+    `EventBus` delivers events to listeners on the publishing thread, in subscription order. Listeners are added at startup and rarely change afterwards, but some of them change the subscriptions while handling an event: a one-shot listener from `subscribeOnce` leaves the bus on its first event, a setup listener subscribes the real handler, a shutdown listener unsubscribes others.
+
+    Since one-shot listeners were introduced, some `publish` calls throw `ConcurrentModificationException`. Worse, some do not throw and a listener simply never hears the event:
+
+    ```java
+    bus.subscribe(audit);
+    bus.subscribeOnce(warmUp);
+    bus.subscribe(metrics);
+    bus.publish("started");   // audit and warmUp run, metrics does not
+    ```
+
+    The rule the callers rely on: the receivers of an event are fixed at the moment `publish` starts. A listener added during delivery gets only later events; a listener removed during delivery still gets the event in flight, and none after it. Each receiver gets the event once, in subscription order.
+
+    Fix `EventBus` so that it follows this rule.
+  ru: |-
+    `EventBus` доставляет события слушателям в публикующем потоке, в порядке подписки. Слушатели добавляются при старте и потом меняются редко, но некоторые из них меняют подписки прямо во время обработки события: одноразовый слушатель из `subscribeOnce` уходит с шины на первом событии, слушатель настройки подписывает настоящий обработчик, слушатель остановки отписывает других.
+
+    С тех пор как появились одноразовые слушатели, часть вызовов `publish` бросает `ConcurrentModificationException`. Хуже того, часть не бросает ничего, а какой-то слушатель просто не получает событие:
+
+    ```java
+    bus.subscribe(audit);
+    bus.subscribeOnce(warmUp);
+    bus.subscribe(metrics);
+    bus.publish("started");   // audit и warmUp срабатывают, metrics нет
+    ```
+
+    Правило, на которое рассчитывает вызывающий код: получатели события определяются в момент начала `publish`. Слушатель, добавленный во время доставки, получает только следующие события; слушатель, удалённый во время доставки, ещё получает текущее событие и больше ни одного. Каждый получатель получает событие один раз, в порядке подписки.
+
+    Почини `EventBus` так, чтобы он соблюдал это правило.
+hints:
+  - en: |-
+      Nothing here is multithreaded. What is `publish` walking over at the moment a listener calls `unsubscribe(this)`?
+    ru: |-
+      Многопоточности здесь нет. По чему идёт `publish` в тот момент, когда слушатель вызывает `unsubscribe(this)`?
+  - en: |-
+      The loop walks the live list, so every change a listener makes lands in the middle of the walk: the fail-fast iterator either throws or, when the removed listener was second to last, quietly stops one element early. The rule asks for the opposite: walk a version of the list that nobody can change.
+    ru: |-
+      Цикл идёт по живому списку, поэтому каждое изменение от слушателя попадает в середину обхода: fail-fast итератор либо бросает исключение, либо, если удалён предпоследний слушатель, тихо останавливается на элемент раньше. Правило требует обратного: обходить версию списка, которую никто не может изменить.
+  - en: |-
+      `publish` needs a frozen snapshot of the listeners taken when it starts, while `subscribe` and `unsubscribe` keep changing the real list. An index loop over the live list stops throwing but skips the neighbour of a removed listener and delivers to listeners added mid-way; a backward loop survives removals but breaks the subscription order.
+    ru: |-
+      `publish` нужен замороженный снимок слушателей на момент начала, а `subscribe` и `unsubscribe` продолжают менять настоящий список. Цикл по индексу по живому списку перестаёт бросать исключение, но пропускает соседа удалённого слушателя и доставляет событие добавленным по ходу; обратный цикл переживает удаления, но ломает порядок подписки.
+debrief:
+  en: |-
+    The for-each loop in `publish` holds a fail-fast `ArrayList` iterator, and a listener that subscribes or unsubscribes during delivery changes `modCount` behind it. The next `next()` throws, or, if the size drops to the cursor position, `hasNext()` returns `false` and the last listener is skipped without any error.
+
+    A `CopyOnWriteArrayList` fits this case exactly: every write copies the backing array and swaps it in, and its iterator reads the array frozen at creation time, so it never throws CME and the receivers of an event are fixed when `publish` starts. Listener lists are read-mostly, so the O(n) copy per write costs nothing that matters. Copying the list at the start of each `publish` gives the same semantics, at the price of a copy per event instead of per subscription change.
+
+    Worth naming in an interview: the snapshot iterator does not support `remove()`, a removed listener can still get the event in flight, and this structure is the wrong choice for a list written as often as it is read.
+  ru: |-
+    Цикл for-each в `publish` держит fail-fast итератор `ArrayList`, а слушатель, который подписывается или отписывается во время доставки, меняет `modCount` за его спиной. Следующий `next()` бросает исключение, а если размер упал до позиции курсора, `hasNext()` возвращает `false`, и последний слушатель пропускается без всякой ошибки.
+
+    Этому случаю точно подходит `CopyOnWriteArrayList`: каждая запись копирует внутренний массив и подменяет его, а итератор читает массив, замороженный в момент создания, поэтому никогда не бросает CME, и получатели события фиксируются в момент начала `publish`. Список слушателей в основном читают, так что O(n) копирование на каждую запись ничего существенного не стоит. Копия списка в начале каждого `publish` даёт ту же семантику, но ценой копии на каждое событие, а не на каждое изменение подписок.
+
+    Что стоит назвать на собеседовании: итератор-снимок не поддерживает `remove()`, удалённый слушатель ещё может получить текущее событие, а для списка, который пишут так же часто, как читают, эта структура не подходит.

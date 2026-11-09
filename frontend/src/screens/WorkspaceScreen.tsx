@@ -233,6 +233,8 @@ function ChallengeEditor() {
   const setCode = useStore((s) => s.setCode);
   const runTests = useStore((s) => s.runTests);
   const runningTests = useStore((s) => s.runningTests);
+  const testResults = useStore((s) => s.testResults);
+  const testError = useStore((s) => s.testError);
   const lang = useLang((s) => s.lang);
 
   return (
@@ -245,7 +247,7 @@ function ChallengeEditor() {
       </div>
       <EditorPanel code={code} onChange={setCode} />
       <div className="sql-result-area">
-        <TestResults />
+        <TestResults tests={testResults} error={testError} />
       </div>
     </section>
   );

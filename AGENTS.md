@@ -144,6 +144,73 @@ The invariants that are easy to break:
   while it is set; rows answered at a fake speed keep fake dates, so a schedule
   reset has to follow.
 
+### Code tasks
+
+A code task is a coding exercise bound to ONE learning atom: fix or write
+`Solution.java` against hidden tests, at the level of a trap asked in an
+interview. They live in `topics/<id>/tasks/<task-id>/` and work in any topic
+`mode`, shown in a "Practice" tab (`TopicTabs.hasPractice`: the topic has
+tasks, or it is a `java` topic with a lesson and can get them generated). The
+first five were hand-written as a pilot; the rest are generated. They do not
+replace the old workspace (`#/q/<id>/practice`) and do not enter the review pool.
+
+Generation (`codetask/CodeTaskGenerator`, `prompts/generate-code-tasks.md`,
+`AiTask.GENERATE_TASKS`, task key `tasks:<topicId>`) is a multi-step
+`GenerationService.startJob`, not a single CLI run: the AI writes into
+`topics/<id>/.tasks-draft/`, every draft folder goes through
+`CodeTaskValidator`, failures get ONE repair round with the problems listed,
+then what passes moves into `tasks/` and the rest is dropped (the draft is
+always deleted). Tasks are only ever added; there is no "regenerate", because
+replacing a task would orphan its progress. The AI may decide a topic needs
+none: it writes `.none` with a reason, kept as `tasks/.none`. `tasksDecided`
+(`tasks/` exists) is what bulk generation skips on; `hasTasks` means at least
+one task folder. Only `java` topics with a lesson are eligible
+(`CodeTaskGenerator.refusal`). Bulk kind `tasks` sits next to `theory` and
+`atoms`, in roadmap order.
+
+Topic completion (`progress/TopicCompletion`, pinned by `TopicCompletionTest`):
+a topic is passed when its Boss Fight is passed AND its tasks are solved —
+unless it was already passed, so tasks generated later never repaint a finished
+topic as unfinished. A failed Boss Fight re-answer still takes the mark away.
+`TopicCompletionService.recompute` runs after a boss answer and after a solved
+task; the lesson recompute only reports `topicCompleted`, and the client
+celebrates only what the server says is passed (`finishLesson`,
+`codeTaskStore.run`: whoever closes the topic last).
+
+The learner attempts first; each run that reached the tests opens the next hint
+(`attempts` in `code_task_progress`, so a compile error spends none); the
+debrief and the reference show after solving, or after the last hint so nobody
+is left stuck.
+
+The invariants that are easy to break:
+
+- `solved` means more than "all reported cases are green". `TestKit.run` opens
+  with `TEST_PLAN` and closes with `TEST_END`, and
+  `CodeTaskRunner.interpret` requires no error, `TEST_END`, and nothing left
+  unreported: a learner's `System.exit(0)` halfway is a clean exit with green
+  cases. Harnesses must therefore use `TestKit.run`, not `TestKit.expect`.
+- A failed run keeps what it learned: `TestKit.run` isolates each case on a
+  daemon thread with a 1s limit (the comparison and `show()` too, since they call
+  the learner's `equals`/`toString`), so one exception or hang fails one case.
+- `CodeTaskContractTest` proves every task both ways through the same
+  `CodeTaskRunner` as the app: the reference solves it, the starter compiles and
+  does not, and each `wrong/*` is rejected by a test rather than by a failed
+  run. A test nobody has seen pass and fail proves nothing.
+- `atomId` must exist in the topic's `learning-atoms.json`. A `full` lesson
+  regeneration rewrites atoms, so `AtomsPromptBuilder` hands the ids that tasks
+  use over as fixed; the contract test is what catches a miss.
+- `CodeTaskValidator` is the single bar for hand-written and generated tasks:
+  `CodeTaskContractTest` and the generator both call it. Tighten it there, not
+  in one of the callers.
+- Do not use the atom's `summary` as the task statement: it usually gives the
+  answer away (`avoid-subtraction` names `Integer.compare`). The statement
+  describes the symptom, and `summary` is shown in the debrief.
+- The run endpoint is `POST /api/challenge/task` and generation is
+  `POST /api/challenge/tasks/{id}/generate` on purpose: the `/api/challenge`
+  prefix is what `RemoteAccessFilter` refuses to remote clients. So tasks are
+  desktop-only, and the tab carries `.desktop-only`. A topic with tasks
+  therefore cannot be closed from the phone; the lesson banner says so.
+
 ## Prerequisites
 
 - JDK 21. The backend uses the JDK compiler API, so a JRE is not enough.
@@ -215,6 +282,7 @@ Focused topic checks:
 .\gradlew.bat :backend:test --tests "*TopicExamplesTest"
 .\gradlew.bat :backend:test --tests "*LessonAtomsContractTest"
 .\gradlew.bat :backend:test --tests "*LessonUnitsTest"
+.\gradlew.bat :backend:test --tests "*CodeTaskContractTest"
 ```
 
 Frontend build check:
@@ -304,6 +372,14 @@ If a command cannot be run, say exactly why and what remains unverified.
   `StructureAnalyzer` to produce class graphs.
 - SQL topics run against fresh in-memory H2 databases in PostgreSQL mode. Mission
   results compare user query output to `expectedSql`.
+- The `codetask` package (`backend/.../codetask/`, `api/CodeTaskController`) is
+  the Code tasks domain above: `CodeTaskRepository` reads `tasks/` per request and
+  is the only place request ids become paths, `CodeTaskRunner` decides the
+  verdict, `CodeTaskValidator` decides whether a task may exist,
+  `CodeTaskGenerator` drafts and promotes generated ones,
+  `CodeTaskProgressRepository` persists `code_task_progress`. `harness/`
+  and `wrong/` never reach the client; the reference does, held back by the UI
+  (same trust model as lesson grading).
 - Challenge topics compile learner `Solution.java` with hidden `harness/` files
   and report cases via `visual.TestKit.expect`.
 - The `lesson` package (`backend/src/main/java/com/interviewlearning/lesson/`)
@@ -521,7 +597,8 @@ When adding or changing a `visual.Visual*` model:
   exists, else theory), `#/q/<id>/theory` (forces the reference explanation),
   `#/q/<id>/practice` (trace/structural/sql/challenge workspace — the "Go to
   practice" button is hidden for `trace` topics once a lesson exists, but the
-  route still works), `#/review` (global review).
+  route still works), `#/q/<id>/tasks[/<taskId>]` (the topic's code tasks),
+  `#/review` (global review).
 - Colour tokens carry a ROLE, not just a hue, and the light theme is where
   getting that wrong shows: `--accent` paints a surface (a filled button, a
   progress bar) so it must stay light, `--accent-ink` writes or draws on one so
@@ -594,6 +671,7 @@ Before adding or significantly editing a topic, read:
 - `prompts/mermaid-guide.md` when editing explanations with diagrams
 - `prompts/generate-learning-atoms.md` when authoring or editing a topic's
   `learning-atoms.json`
+- `prompts/generate-code-tasks.md` when authoring or editing code tasks
 
 The topic `id` in `topic.yaml` must match the folder name. New topics must include
 `categoryId`, `difficulty`, and usually `assistantExample`. Topics outside the
@@ -678,6 +756,14 @@ For all topics:
 - Cross-links use `[label](topic:<id>)` or `[label](catalog:<id>)` and must point
   to real ids only.
 
+A code task is generated (see Code tasks) or authored by hand under
+`topics/<id>/tasks/<task-id>/`; `prompts/generate-code-tasks.md` is the
+contract for both: `task.yaml` (`atomId`, `order`, and `title`, `statement`, `hints` of at
+least two, `debrief` in every language the topic declares), `starter/Solution.java`,
+`reference/Solution.java`, `harness/Main.java` calling `TestKit.run`, and at least
+one `wrong/<name>/Solution.java` holding a plausible mistake that compiles. The
+folder name is the task's stable id.
+
 ## Existing Topic References
 
 Use these as templates:
@@ -689,6 +775,7 @@ Use these as templates:
 - Single-language topic (`languages: [ru]`): `topics/qa-test-estimation-task/`
 - SQL topic: `topics/sql-many-to-many/`
 - Challenge topic: `topics/algo-max-pair-product/`
+- Code task: `topics/hashmap/tasks/vanishing-route/`
 - `learning-atoms.json` (micro-actions lesson): `topics/hashmap/learning-atoms.json`
   — the canonical quality reference for lesson generation (the generator prompt
   points the model at it). Keep it exemplary: if you change how lessons should

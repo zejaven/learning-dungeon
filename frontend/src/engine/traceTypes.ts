@@ -46,6 +46,8 @@ export interface TopicSummary {
   domainId: string;
   /** Position within the catalog (e.g. lecture number); 0 = unordered. */
   order: number;
+  /** tasks/ exists: code tasks were written or generated, or the generator decided on none. */
+  tasksDecided: boolean;
 }
 
 /** Persisted progress for a topic, restored on load. */
@@ -204,6 +206,10 @@ export interface TopicDetail {
   domainId: string;
   /** Content languages the topic declares (subset of ['en', 'ru']); default both. */
   languages: string[];
+  /** True when the topic has at least one code task under tasks/. */
+  hasTasks: boolean;
+  /** tasks/ exists, possibly holding only the generator's "no tasks here" verdict. */
+  tasksDecided: boolean;
 }
 
 /** Props every topic visualizer receives. */

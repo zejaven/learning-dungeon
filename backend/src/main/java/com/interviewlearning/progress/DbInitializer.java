@@ -386,5 +386,20 @@ public class DbInitializer {
         // The review list is now per-exercise schedule state on review_pool
         // rather than a shuffled session snapshot. Drop the obsolete session table.
         jdbc.execute("DROP TABLE IF EXISTS review_session");
+
+        // --- Code tasks ------------------------------------------------------
+
+        // Keyed by the stable task id. The two timestamps are the pilot's only
+        // measure of how long a task takes.
+        jdbc.execute("""
+                CREATE TABLE IF NOT EXISTS code_task_progress (
+                    topic_id     TEXT        NOT NULL,
+                    task_id      TEXT        NOT NULL,
+                    attempts     INTEGER     NOT NULL DEFAULT 0,
+                    first_run_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    solved_at    TIMESTAMPTZ,
+                    PRIMARY KEY (topic_id, task_id)
+                )
+                """);
     }
 }

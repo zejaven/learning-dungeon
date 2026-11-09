@@ -13,7 +13,7 @@ public final class BulkDtos {
      * because the java question catalog lives there; the backend re-checks each
      * item at execution time and skips ones that are no longer missing.
      */
-    public record StartRequest(String kind,       // "theory" | "atoms"
+    public record StartRequest(String kind,       // "theory" | "atoms" | "tasks"
                                String provider,   // must be "claude"
                                String domainId,   // informational, shown in the strip
                                String endTime,    // "HH:mm" local time-of-day; blank = continuous

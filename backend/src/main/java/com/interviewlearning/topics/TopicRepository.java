@@ -40,6 +40,9 @@ public class TopicRepository {
 
     private static final Logger log = LoggerFactory.getLogger(TopicRepository.class);
 
+    /** Code tasks folder; kept here as text so this class need not know the codetask package. */
+    private static final String TASKS_DIR = "tasks";
+
     private final RepoPaths repoPaths;
 
     public TopicRepository(RepoPaths repoPaths) {
@@ -73,12 +76,25 @@ public class TopicRepository {
                                     str(meta, "aiModel", ""),
                                     Files.exists(p.resolve("learning-atoms.json")),
                                     str(meta, "domainId", "java"),
-                                    intVal(meta, "order", 0)
+                                    intVal(meta, "order", 0),
+                                    Files.isDirectory(p.resolve(TASKS_DIR))
                             ))));
         } catch (IOException e) {
             log.warn("Failed to list topics: {}", e.getMessage());
         }
         return result;
+    }
+
+    /** True when tasks/ holds at least one task folder, not just the generator's .none verdict. */
+    private static boolean hasTaskDirs(Path tasks) {
+        if (!Files.isDirectory(tasks)) {
+            return false;
+        }
+        try (Stream<Path> entries = Files.list(tasks)) {
+            return entries.anyMatch(Files::isDirectory);
+        } catch (IOException e) {
+            return false;
+        }
     }
 
     public Optional<TopicDetail> getTopic(String id) {
@@ -128,7 +144,9 @@ public class TopicRepository {
                 str(meta, "aiModel", ""),
                 Files.exists(topicDir.resolve("learning-atoms.json")),
                 str(meta, "domainId", "java"),
-                languages(meta)
+                languages(meta),
+                hasTaskDirs(topicDir.resolve(TASKS_DIR)),
+                Files.isDirectory(topicDir.resolve(TASKS_DIR))
         ));
     }
 
@@ -404,7 +422,7 @@ public class TopicRepository {
      * per language it was written in, or a plain scalar, which means the same text
      * serves every language (that is how single-language topics are authored).
      */
-    private static Localized loc(Map<String, Object> map, String key, String fallback) {
+    public static Localized loc(Map<String, Object> map, String key, String fallback) {
         Object v = map.get(key);
         if (v instanceof Map<?, ?> m) {
             Map<String, String> texts = new LinkedHashMap<>();

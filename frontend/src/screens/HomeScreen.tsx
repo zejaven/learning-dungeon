@@ -40,6 +40,8 @@ import { RoadmapView } from '@app/shell/roadmap/RoadmapView';
 import { SettingsButton } from '@app/shell/SettingsButton';
 import { LanguageSelect } from '@app/shell/LanguageSelect';
 import { MissingLanguage } from '@app/shell/MissingLanguage';
+import { PracticePanel } from '@app/shell/practice/PracticePanel';
+import { TopicTabs, hasPractice } from '@app/shell/practice/TopicTabs';
 import { StyleSelector } from '@app/shell/StyleSelector';
 import { ThemeSwitcher } from '@app/shell/ThemeSwitcher';
 import { UsageBar } from '@app/shell/UsageBar';
@@ -107,10 +109,13 @@ export function HomeScreen() {
     const ordered = entriesInTreeOrder(buildCatalog(topics, manualQuestions, domainId), domainId);
     const theory = ordered.filter(({ entry }) => !entry.topicId);
     const byId = new Map(topics.map((t) => [t.id, t]));
-    const atoms = ordered
+    const withTopic = ordered
       .map(({ entry }) => (entry.topicId ? byId.get(entry.topicId) : undefined))
-      .filter((t): t is NonNullable<typeof t> => !!t && !t.hasAtoms);
-    return { theory, atoms };
+      .filter((t): t is NonNullable<typeof t> => !!t);
+    const atoms = withTopic.filter((t) => !t.hasAtoms);
+    // A task binds to an atom, so tasks follow lessons; Java topics only.
+    const tasks = domainId === 'java' ? withTopic.filter((t) => t.hasAtoms && !t.tasksDecided) : [];
+    return { theory, atoms, tasks };
   }, [topics, manualQuestions, domainId]);
 
   async function confirmBulk(
@@ -131,7 +136,7 @@ export function HomeScreen() {
             style: useStyle.getState().instruction(),
             styleName: useStyle.getState().currentName(),
           }))
-        : bulkMissing.atoms.map((t) => ({ id: t.id, label: t.title }));
+        : bulkMissing[kind].map((t) => ({ id: t.id, label: t.title }));
     const ok = await startBulkRun({
       kind,
       provider: 'claude',
@@ -167,7 +172,8 @@ export function HomeScreen() {
   const atomsKey = topic ? `atoms:${topic.id}` : '';
   const atomsTask = useGeneration((s) => (atomsKey ? s.tasks[atomsKey] : undefined));
   const lessonReady = !!(theoryReady && topic!.hasAtoms);
-  const showLesson = lessonReady && route.sub !== 'theory';
+  const showTasks = !!(theoryReady && hasPractice(topic!) && route.sub === 'tasks');
+  const showLesson = lessonReady && route.sub !== 'theory' && !showTasks;
   const selectTopic = useStore((s) => s.selectTopic);
 
   // When a lesson generation finishes, re-fetch the topic so hasAtoms flips
@@ -300,6 +306,16 @@ export function HomeScreen() {
                   ✨
                 </button>
               )}
+              {selectedProvider === 'claude' && bulkMissing.tasks.length > 0 && (
+                <button
+                  className="tree-add-btn desktop-only"
+                  title={`${ui('bulkDialogTitleTasks', lang)} (${bulkMissing.tasks.length})`}
+                  disabled={bulkActive}
+                  onClick={() => setBulkKind('tasks')}
+                >
+                  💻
+                </button>
+              )}
               {domainId === 'java' && (
                 <button
                   className="tree-add-btn"
@@ -367,16 +383,20 @@ export function HomeScreen() {
             )}
             {entry?.topicId && !theoryReady && runError && <div className="output error">{runError}</div>}
 
+            {theoryReady && (
+              <TopicTabs
+                questionId={entry!.id}
+                active={showTasks ? 'tasks' : showLesson ? 'lesson' : 'theory'}
+              />
+            )}
+
+            {showTasks && <PracticePanel questionId={entry!.id} taskId={route.taskId} />}
+
             {theoryReady && showLesson && <LessonPanel />}
 
-            {theoryReady && !showLesson && (
+            {theoryReady && !showLesson && !showTasks && (
               <div className="home-theory">
                 <div className="home-theory-actions">
-                  {lessonReady && (
-                    <button className="primary" onClick={() => navigate(routeForQuestion(entry!.id))}>
-                      {ui('backToLesson', lang)}
-                    </button>
-                  )}
                   {/* Boss Fight moves inside the lesson once one exists. */}
                   {topic!.mode === 'theory' ? (
                     !lessonReady
@@ -499,7 +519,7 @@ export function HomeScreen() {
       {bulkKind && (
         <BulkGenDialog
           kind={bulkKind}
-          count={bulkKind === 'theory' ? bulkMissing.theory.length : bulkMissing.atoms.length}
+          count={bulkMissing[bulkKind].length}
           onConfirm={(endTime, maxPercent, maxWeeklyPercent) =>
             void confirmBulk(bulkKind, endTime, maxPercent, maxWeeklyPercent)
           }

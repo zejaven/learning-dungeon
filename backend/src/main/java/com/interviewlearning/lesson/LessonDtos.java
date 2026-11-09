@@ -194,7 +194,11 @@ public final class LessonDtos {
     ) {
     }
 
-    public record RecomputeResponse(boolean lessonCompleted) {
+    /**
+     * @param lessonCompleted every exercise answered and every boss question passed
+     * @param topicCompleted  the whole topic is passed, which may also wait for its code tasks
+     */
+    public record RecomputeResponse(boolean lessonCompleted, boolean topicCompleted) {
     }
 
     /** When one not-yet-mastered exercise falls due and when its window shuts (ISO-8601). */

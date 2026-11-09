@@ -371,6 +371,8 @@ const UI: Record<string, Localized> = {
   treeModuleEmpty: { en: 'No topics yet', ru: 'Тем пока нет' },
   treeUnplaced: { en: 'Not placed yet', ru: 'Не разложено' },
   mapOpen: { en: 'Open the roadmap', ru: 'Открыть карту' },
+  mapBackToQuestion: { en: 'Back to the last question', ru: 'Назад к последнему вопросу' },
+  mapTitle: { en: 'Roadmap', ru: 'Карта' },
   mapContinue: { en: 'Continue', ru: 'Продолжить' },
   mapDone: { en: 'Done', ru: 'Пройден' },
   mapNext: { en: 'Next up', ru: 'Следующий' },

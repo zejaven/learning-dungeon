@@ -18,13 +18,16 @@ import { TreeGroup } from '@app/shell/TreeGroup';
  * refresh the tree shows the current question without the user hunting for it.
  * Modules start collapsed, so the one holding the selection opens by itself: that
  * is derived rather than set from an effect, or the entry would not be rendered
- * yet when the scroll effect runs.
+ * yet when the scroll effect runs. A module picked on the roadmap map
+ * (`revealModuleId`) opens the same way and is scrolled to the top.
  */
 export function CategoryTree({
   selectedId,
+  revealModuleId = null,
   onSelect,
 }: {
   selectedId: string | null;
+  revealModuleId?: string | null;
   onSelect: (entry: CatalogEntry) => void;
 }) {
   const topics = useStore((s) => s.topics);
@@ -46,6 +49,20 @@ export function CategoryTree({
     }
   }, [selectedStage?.id, selectedModule?.id, selectedId]);
 
+  // A module picked on the map: open it (and its stage) and bring its head to the top.
+  const treeRef = useRef<HTMLDivElement | null>(null);
+  const revealStage = stages?.find((s) => s.modules.some((m) => m.id === revealModuleId));
+  useEffect(() => {
+    if (!revealModuleId || !revealStage) return;
+    setOpened((o) => ({ ...o, [revealStage.id]: true, [revealModuleId]: true }));
+    // After the open module has rendered, or its questions would push it back down.
+    const frame = requestAnimationFrame(() => {
+      const group = treeRef.current?.querySelector(`[data-group-id="${CSS.escape(revealModuleId)}"]`);
+      group?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [revealModuleId, revealStage?.id, topics.length]);
+
   // Bring the selected entry into view (e.g. after a reload, once topics load).
   const selectedRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
@@ -63,7 +80,7 @@ export function CategoryTree({
 
   if (stages) {
     return (
-      <div className="tree">
+      <div className="tree" ref={treeRef}>
         {stages.map((stage) => {
           const stageOpen = opened[stage.id] ?? true;
           return (
@@ -76,10 +93,11 @@ export function CategoryTree({
               onToggle={() => toggle(stage.id, stageOpen)}
             >
               {stage.modules.map((m) => {
-                const open = opened[m.id] ?? m.id === selectedModule?.id;
+                const open = opened[m.id] ?? (m.id === selectedModule?.id || m.id === revealModuleId);
                 return (
                   <TreeGroup
                     key={m.id}
+                    groupId={m.id}
                     variant="module"
                     name={tl(m.name, lang)}
                     count={m.entries.length}

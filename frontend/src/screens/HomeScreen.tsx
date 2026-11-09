@@ -44,9 +44,13 @@ import { StyleSelector } from '@app/shell/StyleSelector';
 import { ThemeSwitcher } from '@app/shell/ThemeSwitcher';
 import { UsageBar } from '@app/shell/UsageBar';
 
+/** The question last open per domain, for the map/theory switch. Lives as long as the tab. */
+const lastQuestionByDomain: Record<string, string> = {};
+
 /**
  * Home / catalog screen: a tree of interview questions on the left, theory (or a
- * "generate theory" action) on the right. The selected question lives in the URL
+ * "generate theory" action) on the right, or the roadmap map there while no
+ * question is picked. The selected question lives in the URL
  * (`#/q/<id>`), so a refresh restores it; selecting a tree entry just navigates.
  * Generation is server-tracked, so a run started here keeps going and is shown
  * again the moment you return to the question (or reopen "Add topic").
@@ -216,9 +220,21 @@ export function HomeScreen() {
     });
   }
 
-  const showMap = route.map && hasRoadmap(domainId);
+  // The roadmap fills the detail panel whenever no question is picked, so the
+  // landing page is the map instead of an empty panel.
+  const mapAvailable = hasRoadmap(domainId);
+  const showMap = !entry && mapAvailable;
   // Back from a question lands on its module; without a roadmap this is just '/'.
   const backRoute = routeForRoadmap(entry ? moduleIdOfEntry(entry) : undefined);
+  // The map/theory switch in the tree header returns to the question last open
+  // in this domain.
+  useEffect(() => {
+    if (entry) lastQuestionByDomain[domainId] = entry.id;
+  }, [entry?.id, domainId]);
+  const lastQuestionId = lastQuestionByDomain[domainId];
+  // Phones show one panel. The map is the landing screen there too, but a
+  // module picked on it (`moduleId`) or `#/tree` shows the tree instead.
+  const hasDetail = !!entry || (showMap && route.map && !route.moduleId);
 
   const activeVersion = theoryVersions.find((v) => v.versionNo === activeVersionNo);
   const activeExplanation = activeVersion?.texts ?? topic?.explanation;
@@ -267,20 +283,36 @@ export function HomeScreen() {
 
       <BulkGenBar />
 
-      {showMap ? (
-        <RoadmapView domainId={domainId} moduleId={route.moduleId} />
-      ) : (
-      /* `has-detail` is what the single-column (mobile) profile keys off: with a
-          question selected the tree steps aside for the theory/lesson panel. */
-      <div className={`home-main${entry ? ' has-detail' : ''}`}>
+      {/* `has-detail` is what the single-column (mobile) profile keys off: with a
+          question selected the tree steps aside for the theory/lesson panel. */}
+      <div className={`home-main${hasDetail ? ' has-detail' : ''}`}>
         {/* Left: question catalog tree */}
         <section className="panel home-tree-panel">
           <div className="panel-title tree-panel-title">
             <span>{ui('catalogTitle', lang)}</span>
             <div className="tree-title-actions">
-              {hasRoadmap(domainId) && (
+              {mapAvailable && entry && (
                 <button className="tree-add-btn" title={ui('mapOpen', lang)} onClick={() => navigate(backRoute)}>
                   🗺
+                </button>
+              )}
+              {/* A phone shows the tree alone after a module was picked: the way back to the map. */}
+              {showMap && !hasDetail && (
+                <button
+                  className="tree-add-btn mobile-only"
+                  title={ui('mapOpen', lang)}
+                  onClick={() => navigate(routeForRoadmap())}
+                >
+                  🗺
+                </button>
+              )}
+              {showMap && lastQuestionId && (
+                <button
+                  className="tree-add-btn"
+                  title={ui('mapBackToQuestion', lang)}
+                  onClick={() => navigate(routeForQuestion(lastQuestionId))}
+                >
+                  ↩
                 </button>
               )}
               {selectedProvider === 'claude' && bulkMissing.theory.length > 0 && (
@@ -327,6 +359,7 @@ export function HomeScreen() {
           <div className="panel-body tree-body">
             <CategoryTree
               selectedId={entry?.id ?? null}
+              revealModuleId={showMap ? route.moduleId : null}
               onSelect={(e) => navigate(routeForQuestion(e.id))}
             />
           </div>
@@ -338,7 +371,11 @@ export function HomeScreen() {
             <button className="mobile-only panel-back-btn" onClick={() => navigate(backRoute)}>
               {ui('backToCatalog', lang)}
             </button>
-            <span>{theoryReady ? tl(moduleOfEntry(entry!) ?? topic!.category, lang) : ui('theory', lang)}</span>
+            <span>
+              {theoryReady
+                ? tl(moduleOfEntry(entry!) ?? topic!.category, lang)
+                : ui(showMap ? 'mapTitle' : 'theory', lang)}
+            </span>
             {theoryReady && (
               <button
                 className="theory-ask-btn"
@@ -351,9 +388,14 @@ export function HomeScreen() {
               </button>
             )}
           </div>
-          <div className="panel-body" ref={contentRef}>
+          {showMap && (
+            <div className="panel-body roadmap-body">
+              <RoadmapView domainId={domainId} moduleId={route.moduleId} />
+            </div>
+          )}
+          <div className="panel-body" ref={contentRef} hidden={showMap}>
             {topicsError && <div className="output error">{topicsError}</div>}
-            {!entry && <p className="home-hint">{ui('selectQuestion', lang)}</p>}
+            {!entry && !showMap && <p className="home-hint">{ui('selectQuestion', lang)}</p>}
 
             {entry && !entry.topicId && (
               <div className="home-generate">
@@ -507,7 +549,6 @@ export function HomeScreen() {
           </div>
         </section>
       </div>
-      )}
 
       {bulkKind && (
         <BulkGenDialog

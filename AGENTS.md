@@ -542,11 +542,16 @@ When adding or changing a `visual.Visual*` model:
   repeated ids, so an unplaced topic never fails a build. Modules start collapsed;
   the one holding the selection opens as a DERIVED value rather than from an effect,
   or the entry would not be rendered yet when the tree scrolls to it.
-- The roadmap map (`shell/roadmap/RoadmapView.tsx`) is the Java landing page: `#/`
-  shows it, `#/roadmap/<moduleId>` opens a module's panel, and the bare tree moved
-  to `#/tree`. All three stay `view: 'home'`, with `route.map`/`route.moduleId` on
-  the side; the module is NOT in `route.id`, because App selects a topic from that.
-  `HomeScreen` swaps `.home-main` for the map, so the header and dialogs stay shared.
+- The roadmap map (`shell/roadmap/RoadmapView.tsx`) fills the home DETAIL panel
+  whenever no question is picked, so it is the Java landing page and the tree
+  stays beside it. `#/` shows it; `#/roadmap/<moduleId>` is a module picked on the
+  map, which the question tree opens and scrolls to (`CategoryTree.revealModuleId`)
+  — there is no separate module list. `#/tree` is the tree with nothing picked.
+  All three stay `view: 'home'`, with `route.map`/`route.moduleId` on the side; the
+  module is NOT in `route.id`, because App selects a topic from that. The tree
+  header's 🗺 switches a question to the map (on its module) and 📖 back to the
+  question last open in that domain. On a phone (one panel) the map is the landing
+  screen, while a picked module and `#/tree` show the tree (`hasDetail`).
   Modules carry `pos: [col, row]` (hand-placed, not auto-laid-out, so edges can be
   kept out from under the nodes: check a screenshot after moving one) and `requires`;
   `RoadmapContractTest` rejects shared cells, unknown ids and cycles. Progress skips

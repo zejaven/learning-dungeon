@@ -6,9 +6,9 @@ import { useEffect, useState } from 'react';
  * practice returns to that question, and (later) cross-links are just routes.
  *
  * Routes:
- *   #/                  landing: the roadmap where the domain has one, else home
- *   #/roadmap/<module>  roadmap with that module's questions open
- *   #/tree              home with the question tree, nothing selected
+ *   #/                  landing: home with the roadmap in the detail panel (where the domain has one)
+ *   #/roadmap/<module>  the same, with that module opened in the question tree
+ *   #/tree              home, nothing selected (on a phone: the tree instead of the map)
  *   #/q/<id>            home, question <id> selected (lesson when one exists, else theory)
  *   #/q/<id>/theory     home, question <id> selected, reference theory forced open
  *   #/q/<id>/practice   workspace (practice) for that question's topic
@@ -25,10 +25,10 @@ export interface Route {
   id: string | null;
   /** 'theory' forces the reference explanation over the micro-actions lesson. */
   sub: 'theory' | null;
-  /** Show the roadmap instead of the tree, if the active domain has one. */
+  /** A roadmap route (`#/`, `#/roadmap/...`); on a phone it shows the map rather than the tree. */
   map: boolean;
   /**
-   * The roadmap module whose panel is open. Not kept in `id`: App selects a topic
+   * The roadmap module picked on the map, opened in the tree. Not kept in `id`: App selects a topic
    * from `id`, and a module is not a question.
    */
   moduleId: string | null;

@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useRef } from 'react';
 import { buildCatalog, type CatalogCategory } from '@app/catalog';
 import { navigate, routeForQuestion, routeForRoadmap, routeForTree } from '@app/engine/router';
 import { useStore } from '@app/engine/store';
@@ -12,7 +12,6 @@ import {
   type ModuleLayout,
 } from '@app/roadmap';
 import { PanZoom, type PanZoomBox } from '@app/shell/PanZoom';
-import { ModulePanel } from './ModulePanel';
 
 const NODE_W = 230;
 const NODE_H = 76;
@@ -68,19 +67,18 @@ function edgePath(from: ModuleLayout, to: ModuleLayout): string {
 
 /**
  * The Java domain's roadmap as a map: modules as nodes showing their progress,
- * prerequisites as arrows. Pressing a module lists its questions beside the map.
- * The open module lives in the URL, so a reload or coming back from a question
- * lands on it.
+ * prerequisites as arrows. It lives in the home screen's detail panel, where
+ * the theory shows once a question is picked. Pressing a module opens it in
+ * the question tree on the left (`#/roadmap/<module>`), so a reload or coming
+ * back from a question lands on it.
  */
 export function RoadmapView({ domainId, moduleId }: { domainId: string; moduleId: string | null }) {
   const topics = useStore((s) => s.topics);
   const manualQuestions = useStore((s) => s.manualQuestions);
   const lang = useLang((s) => s.lang);
 
-  const close = useCallback(() => navigate(routeForRoadmap()), []);
-
-  // Closing the panel must leave the view where it is, so the focus sticks to the
-  // last module instead of falling back to the next question.
+  // The focus sticks to the last picked module instead of falling back to the
+  // next question whenever the selection is cleared.
   const lastFocus = useRef<string | null>(null);
 
   // Until topics arrive nothing is linked and every module would read 0.
@@ -99,10 +97,8 @@ export function RoadmapView({ domainId, moduleId }: { domainId: string; moduleId
   else if (!lastFocus.current) lastFocus.current = nextModuleId ?? null;
   const focusLayout = lastFocus.current ? layoutById.get(lastFocus.current) : undefined;
 
-  const openProgress = openModule ? moduleProgress(openModule.entries, completed) : null;
-
   return (
-    <div className={`roadmap-view${openModule ? ' has-panel' : ''}`}>
+    <div className="roadmap-view">
       <div className="roadmap-stage">
         <PanZoom
           width={WORLD_W}
@@ -163,7 +159,10 @@ export function RoadmapView({ domainId, moduleId }: { domainId: string; moduleId
               ▶ {ui('mapContinue', lang)}
             </button>
           )}
-          <button onClick={() => navigate(routeForTree())}>{ui('mapTree', lang)}</button>
+          {/* On a phone the tree is a screen of its own; on a desktop it is beside the map. */}
+          <button className="mobile-only" onClick={() => navigate(routeForTree())}>
+            {ui('mapTree', lang)}
+          </button>
         </div>
         <div className="panzoom-ui roadmap-legend">
           {stages
@@ -181,9 +180,6 @@ export function RoadmapView({ domainId, moduleId }: { domainId: string; moduleId
           <span className="roadmap-legend-next">▶ {ui('mapNext', lang)}</span>
         </div>
       </div>
-      {openModule && openProgress && (
-        <ModulePanel module={openModule} done={openProgress.done} total={openProgress.total} onClose={close} />
-      )}
     </div>
   );
 }

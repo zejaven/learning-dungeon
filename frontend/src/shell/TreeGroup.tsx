@@ -10,6 +10,7 @@ export function TreeGroup({
   open,
   onToggle,
   variant,
+  groupId,
   children,
 }: {
   name: string;
@@ -17,10 +18,12 @@ export function TreeGroup({
   open: boolean;
   onToggle: () => void;
   variant?: 'stage' | 'module';
+  /** Lets the tree scroll a group into view, e.g. a module picked on the map. */
+  groupId?: string;
   children: ReactNode;
 }) {
   return (
-    <div className={`tree-cat${variant ? ` tree-${variant}` : ''}`}>
+    <div className={`tree-cat${variant ? ` tree-${variant}` : ''}`} data-group-id={groupId}>
       <button className="tree-cat-head" onClick={onToggle}>
         <span className="tree-caret">{open ? '▾' : '▸'}</span>
         <span className="tree-cat-name">{name}</span>

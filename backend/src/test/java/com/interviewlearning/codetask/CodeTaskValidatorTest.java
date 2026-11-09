@@ -1,8 +1,10 @@
 package com.interviewlearning.codetask;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.interviewlearning.codetask.CodeTaskDtos.CodeTask;
 import com.interviewlearning.config.RepoPaths;
 import com.interviewlearning.runner.JavaCodeRunner;
+import com.interviewlearning.topics.TopicDtos.Localized;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -12,8 +14,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
-import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -25,7 +27,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CodeTaskValidatorTest {
 
     private static final List<String> LANGS = List.of("en", "ru");
-    private static final Set<String> ATOMS = Set.of("mutable-key");
 
     private final RepoPaths repoPaths = new RepoPaths("");
     private final CodeTaskValidator validator = new CodeTaskValidator(new CodeTaskRepository(repoPaths),
@@ -56,15 +57,15 @@ class CodeTaskValidatorTest {
 
     @Test
     void theOriginalPasses() {
-        List<String> errs = validator.problems(task, LANGS, ATOMS);
-        assertTrue(errs.isEmpty(), () -> String.join("\n", errs));
+        List<String> errs = validator.problems(task, LANGS);
+        assertTrue(errs.isEmpty(), () -> String.join(System.lineSeparator(), errs));
     }
 
     @Test
     void aReferenceThatFailsItsTestsIsRejected() throws IOException {
         Files.copy(task.resolve("starter/Solution.java"), task.resolve("reference/Solution.java"),
-                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-        assertReported("reference does not solve the task");
+                StandardCopyOption.REPLACE_EXISTING);
+        assertReported(task, LANGS, "reference does not solve the task");
     }
 
     @Test
@@ -72,7 +73,7 @@ class CodeTaskValidatorTest {
         Path broken = task.resolve("wrong/broken");
         Files.createDirectories(broken);
         Files.writeString(broken.resolve("Solution.java"), "class Route {", StandardCharsets.UTF_8);
-        assertReported("wrong/broken must be rejected by a test");
+        assertReported(task, LANGS, "wrong/broken must be rejected by a test");
     }
 
     @Test
@@ -80,31 +81,48 @@ class CodeTaskValidatorTest {
         Path lucky = task.resolve("wrong/lucky");
         Files.createDirectories(lucky);
         Files.copy(task.resolve("reference/Solution.java"), lucky.resolve("Solution.java"));
-        assertReported("wrong/lucky passes every test");
+        assertReported(task, LANGS, "wrong/lucky passes every test");
     }
 
     @Test
-    void anUnknownAtomIsRejected() {
-        List<String> errs = validator.problems(task, LANGS, Set.of("some-other-atom"));
-        assertTrue(errs.stream().anyMatch(e -> e.contains("atomId 'mutable-key'")), () -> String.join("\n", errs));
+    void anUnknownKindIsRejected() throws IOException {
+        Path yaml = task.resolve("task.yaml");
+        String text = Files.readString(yaml, StandardCharsets.UTF_8);
+        Files.writeString(yaml, text.replace("kind: practice", "kind: bonus"), StandardCharsets.UTF_8);
+        assertReported(task, LANGS, "kind must be 'practice' or 'final'");
     }
 
     @Test
     void aMissingLanguageIsRejected() {
-        List<String> errs = validator.problems(task, List.of("en", "ru", "de"), ATOMS);
-        assertTrue(errs.stream().anyMatch(e -> e.contains("title: no text in 'de'")), () -> String.join("\n", errs));
+        assertReported(task, List.of("en", "ru", "de"), "title: no text in 'de'");
     }
 
     @Test
     void aFolderThatIsNotAnIdIsRejected() throws IOException {
         Path renamed = Files.move(task, tmp.resolve("Vanishing Route"));
-        List<String> errs = validator.problems(renamed, LANGS, ATOMS);
-        assertTrue(errs.stream().anyMatch(e -> e.contains("not a kebab-case id")), () -> String.join("\n", errs));
+        assertReported(renamed, LANGS, "not a kebab-case id");
     }
 
-    private void assertReported(String fragment) {
-        List<String> errs = validator.problems(task, LANGS, ATOMS);
+    @Test
+    void aTopicKeepsOneFinalTask() {
+        assertTrue(CodeTaskValidator.topicProblems(List.of(finalTask("a"), practiceTask("b"))).isEmpty());
+        List<String> errs = CodeTaskValidator.topicProblems(List.of(finalTask("a"), finalTask("b")));
+        assertTrue(!errs.isEmpty() && errs.get(0).contains("at most one final"), errs::toString);
+    }
+
+    private void assertReported(Path dir, List<String> languages, String fragment) {
+        List<String> errs = validator.problems(dir, languages);
         assertTrue(errs.stream().anyMatch(e -> e.contains(fragment)),
-                () -> "expected '" + fragment + "' in:\n" + String.join("\n", errs));
+                () -> "expected '" + fragment + "' in: " + errs);
+    }
+
+    private static CodeTask finalTask(String id) {
+        return new CodeTask(id, CodeTask.FINAL, 1, Localized.empty(), Localized.empty(), List.of(),
+                Localized.empty(), "", "");
+    }
+
+    private static CodeTask practiceTask(String id) {
+        return new CodeTask(id, CodeTask.PRACTICE, 1, Localized.empty(), Localized.empty(), List.of(),
+                Localized.empty(), "", "");
     }
 }

@@ -6,6 +6,7 @@ import com.interviewlearning.lesson.LessonDtos.LearningAtoms;
 import com.interviewlearning.topics.TopicDtos.BossQuestion;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -33,6 +34,12 @@ import java.util.List;
  *       carries no exercise ids here; lesson completion ignores it.</li>
  *   <li>Boss units: one per boss-fight question, id {@code b:<questionId>}.</li>
  * </ol>
+ *
+ * <p>Code tasks join the chain as {@code task} units, id {@code t:<taskId>}, no
+ * exercise ids. Practice tasks (sorted by order, then id) are spread over the
+ * practice chunks: task k of n goes after chunk {@code ceil(k*N/(n+1))} of N,
+ * or after the discovery units when there is no practice. The final task sits
+ * right before the boss units, after the mistakes unit.
  */
 public final class LessonUnits {
 
@@ -42,11 +49,24 @@ public final class LessonUnits {
     private LessonUnits() {
     }
 
-    /** One derived unit; boss units carry no exercise ids (the question id is in the unit id). */
+    /** One derived unit; boss and task units carry no exercise ids (the id is in the unit id). */
     public record UnitRef(String unitId, String kind, List<String> exerciseIds) {
     }
 
+    /** What the chain needs of a code task. {@code kind} is "practice" or "final". */
+    public record TaskRef(String id, String kind, int order) {
+    }
+
     public static List<UnitRef> derive(LearningAtoms atoms, List<BossQuestion> bossFight) {
+        return derive(atoms, bossFight, List.of());
+    }
+
+    public static List<UnitRef> derive(LearningAtoms atoms, List<BossQuestion> bossFight, List<TaskRef> tasks) {
+        List<TaskRef> sorted = tasks.stream()
+                .sorted(Comparator.comparingInt(TaskRef::order).thenComparing(TaskRef::id))
+                .toList();
+        List<TaskRef> practiceTasks = sorted.stream().filter(t -> !"final".equals(t.kind())).toList();
+        List<TaskRef> finalTasks = sorted.stream().filter(t -> "final".equals(t.kind())).toList();
         List<UnitRef> units = new ArrayList<>();
         List<Atom> all = atoms.atoms() == null ? List.of() : atoms.atoms();
 
@@ -62,8 +82,18 @@ public final class LessonUnits {
         List<Atom> capstones = all.stream().filter(Atom::capstone).toList();
 
         List<List<String>> chunks = chunk(roundRobinPractice(regular));
-        for (int i = 0; i < chunks.size(); i++) {
+        int n = practiceTasks.size();
+        int chunkCount = chunks.size();
+        if (chunkCount == 0) {
+            practiceTasks.forEach(t -> units.add(taskUnit(t)));
+        }
+        for (int i = 0; i < chunkCount; i++) {
             units.add(new UnitRef("p" + (i + 1), "practice", List.copyOf(chunks.get(i))));
+            for (int k = 1; k <= n; k++) {
+                if (slot(k, n, chunkCount) == i + 1) {
+                    units.add(taskUnit(practiceTasks.get(k - 1)));
+                }
+            }
         }
 
         // Capstone synthesis: the capstone atoms' practice, in file order, as a
@@ -83,10 +113,23 @@ public final class LessonUnits {
         // from the learner's wrong answers, so no exercise ids here.
         units.add(new UnitRef("mistakes", "mistakes", List.of()));
 
+        // The final task covers the whole topic: the last step before the Boss Fight.
+        finalTasks.forEach(t -> units.add(taskUnit(t)));
+
         for (BossQuestion q : bossFight) {
             units.add(new UnitRef("b:" + q.id(), "boss", List.of()));
         }
         return units;
+    }
+
+    private static UnitRef taskUnit(TaskRef task) {
+        return new UnitRef("t:" + task.id(), "task", List.of());
+    }
+
+    /** The practice chunk (1-based) that task k of n follows: evenly spread over the chunks. */
+    private static int slot(int k, int n, int chunkCount) {
+        int ceil = (k * chunkCount + n) / (n + 1);
+        return Math.max(1, Math.min(chunkCount, ceil));
     }
 
     private static List<String> roundRobinPractice(List<Atom> atoms) {

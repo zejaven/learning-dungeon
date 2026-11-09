@@ -26,7 +26,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * Generates a topic's code tasks and keeps only the ones that prove themselves.
+ * Generates a topic's code tasks (practice ones and at most one final) and keeps
+ * only the ones that prove themselves.
  *
  * <p>The AI writes into {@code topics/<id>/.tasks-draft/}, never into
  * {@code tasks/} directly: a draft is invisible to the app, so a half-written or
@@ -86,9 +87,9 @@ public class CodeTaskGenerator {
     private String run(TopicDetail topic, String provider, String comment, GenerationService.Steps steps)
             throws IOException {
         List<Atom> atomList = atomsOf(topic.id());
-        Set<String> atomIds = atomList.stream().map(Atom::id).collect(Collectors.toSet());
         List<CodeTask> existing = tasks.list(topic.id());
         Set<String> takenIds = existing.stream().map(CodeTask::id).collect(Collectors.toSet());
+        boolean hasFinal = existing.stream().anyMatch(CodeTask::isFinal);
 
         Path draft = repoPaths.topicsDir().resolve(topic.id()).resolve(DRAFT_DIR);
         deleteRecursively(draft);
@@ -100,12 +101,12 @@ public class CodeTaskGenerator {
             }
 
             steps.say("Checking the generated tasks: compiling and running each one...");
-            Map<String, List<String>> problems = validate(draft, topic, atomIds, takenIds);
+            Map<String, List<String>> problems = validate(draft, topic, takenIds, hasFinal);
             if (!problems.isEmpty() && hasTaskDirs(draft)) {
                 steps.say("Failed the check: " + summary(problems) + ". Asking the AI to fix them...");
                 if (steps.ai(prompts.buildFix(prompt, problems))) {
                     steps.say("Checking again...");
-                    problems = validate(draft, topic, atomIds, takenIds);
+                    problems = validate(draft, topic, takenIds, hasFinal);
                 }
             }
             return promote(topic.id(), draft, problems);
@@ -114,16 +115,27 @@ public class CodeTaskGenerator {
         }
     }
 
-    private Map<String, List<String>> validate(Path draft, TopicDetail topic, Set<String> atomIds,
-                                               Set<String> takenIds) throws IOException {
+    /**
+     * Problems per draft task. Besides each task's own check, the topic keeps at
+     * most one final task: a final in the draft is refused when the topic
+     * already has one, and only the first final of the draft may stay.
+     */
+    private Map<String, List<String>> validate(Path draft, TopicDetail topic, Set<String> takenIds,
+                                               boolean hasFinal) throws IOException {
         Map<String, List<String>> problems = new LinkedHashMap<>();
+        boolean finalTaken = hasFinal;
         for (Path dir : taskDirs(draft)) {
             String id = dir.getFileName().toString();
             List<String> errs = new ArrayList<>();
             if (takenIds.contains(id)) {
                 errs.add("the id '" + id + "' is already used by an existing task of this topic");
             } else {
-                errs.addAll(validator.problems(dir, topic.languages(), atomIds));
+                errs.addAll(validator.problems(dir, topic.languages()));
+                boolean isFinal = tasks.read(dir).map(CodeTask::isFinal).orElse(false);
+                if (isFinal && finalTaken) {
+                    errs.add("the topic already has a final task; make this one kind: practice or delete it");
+                }
+                finalTaken |= isFinal && errs.isEmpty();
             }
             if (!errs.isEmpty()) {
                 problems.put(id, errs);

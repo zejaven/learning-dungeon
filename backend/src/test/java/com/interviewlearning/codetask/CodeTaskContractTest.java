@@ -2,9 +2,6 @@ package com.interviewlearning.codetask;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.interviewlearning.config.RepoPaths;
-import com.interviewlearning.lesson.LearningAtomsRepository;
-import com.interviewlearning.lesson.LessonDtos.Atom;
-import com.interviewlearning.lesson.LessonDtos.LearningAtoms;
 import com.interviewlearning.runner.JavaCodeRunner;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.DynamicTest;
@@ -16,10 +13,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -35,7 +30,6 @@ class CodeTaskContractTest {
 
     private final RepoPaths repoPaths = new RepoPaths("");
     private final CodeTaskRepository repository = new CodeTaskRepository(repoPaths);
-    private final LearningAtomsRepository atoms = new LearningAtomsRepository(repoPaths, new ObjectMapper());
     private final CodeTaskValidator validator = new CodeTaskValidator(repository,
             new CodeTaskRunner(new JavaCodeRunner(repoPaths, new ObjectMapper(), 15, "128m")));
 
@@ -59,11 +53,21 @@ class CodeTaskContractTest {
     private void validate(Path topic, Path dir) throws IOException {
         Assumptions.assumeTrue(repoPaths.visualRuntimeJar().isPresent(),
                 "visual-runtime jar not built — run ./gradlew :visual-runtime:jar first");
-        Set<String> atomIds = new HashSet<>();
-        atoms.load(topic.getFileName().toString()).map(LearningAtoms::atoms).orElse(List.of())
-                .stream().map(Atom::id).forEach(atomIds::add);
-        List<String> errs = validator.problems(dir, languages(topic), atomIds);
-        assertTrue(errs.isEmpty(), () -> String.join("\n", errs));
+        List<String> errs = validator.problems(dir, languages(topic));
+        assertTrue(errs.isEmpty(), () -> String.join(System.lineSeparator(), errs));
+    }
+
+    /** Rules over a topic's whole set of tasks, e.g. one final task at most. */
+    @TestFactory
+    Stream<DynamicTest> everyTopicKeepsItsTaskSetRules() throws IOException {
+        try (Stream<Path> topics = Files.list(repoPaths.topicsDir())) {
+            return topics.filter(p -> Files.isDirectory(p.resolve(CodeTaskRepository.TASKS_DIR))).sorted().toList()
+                    .stream().map(topic -> DynamicTest.dynamicTest(topic.getFileName().toString(), () -> {
+                        List<String> errs = CodeTaskValidator.topicProblems(
+                                repository.list(topic.getFileName().toString()));
+                        assertTrue(errs.isEmpty(), errs::toString);
+                    }));
+        }
     }
 
     @SuppressWarnings("unchecked")

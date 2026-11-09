@@ -1,10 +1,14 @@
 import type { Localized } from '../i18n';
 import type { TestResult } from './traceTypes';
 
-/** A code task bound to one learning atom. Harness and wrong solutions stay on the server. */
+/**
+ * A code task of a topic, placed in its lesson chain: `practice` between practice
+ * chunks, `final` (the whole topic) right before the Boss Fight. Harness and
+ * wrong solutions stay on the server.
+ */
 export interface CodeTask {
   id: string;
-  atomId: string;
+  kind: 'practice' | 'final';
   order: number;
   title: Localized;
   statement: Localized;
@@ -22,8 +26,6 @@ export interface TaskProgress {
 
 export interface TaskListItem {
   task: CodeTask;
-  atomTitle: Localized;
-  atomSummary: Localized;
   progress: TaskProgress;
 }
 

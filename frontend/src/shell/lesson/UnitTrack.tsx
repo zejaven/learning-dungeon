@@ -7,6 +7,7 @@ import {
   type ExerciseResult,
 } from '@app/engine/lessonStore';
 import type { LessonUnit } from '@app/engine/lessonTypes';
+import { useCodeTasks } from '@app/engine/codeTaskStore';
 import { useStore } from '@app/engine/store';
 import { ui, useLang, type Lang } from '@app/i18n';
 
@@ -20,7 +21,8 @@ interface Props {
 /**
  * The horizontal Duolingo-style circle row: completed units are filled and
  * clickable, the current one is highlighted, everything past the unlock
- * frontier is gray and inert. Boss units carry a sword.
+ * frontier is gray and inert. Boss units carry a sword; code task units a
+ * keyboard (the final one a flag) and are never locked, see frontierIndex.
  */
 export function UnitTrack({ units, results, currentUnitId, onSelect }: Props) {
   const lang = useLang((s) => s.lang);
@@ -28,6 +30,13 @@ export function UnitTrack({ units, results, currentUnitId, onSelect }: Props) {
   const passedBoss: Record<string, boolean> = {};
   for (const [qid, r] of Object.entries(bossResults)) {
     if (r.passed) passedBoss[qid] = true;
+  }
+  const taskItems = useCodeTasks((s) => s.items);
+  const solvedTasks: Record<string, boolean> = {};
+  const finalTasks: Record<string, boolean> = {};
+  for (const { task, progress } of taskItems ?? []) {
+    if (progress.solved) solvedTasks[task.id] = true;
+    if (task.kind === 'final') finalTasks[task.id] = true;
   }
   const cleared = mistakesCleared(units, results);
   const frontier = frontierIndex(units, results, passedBoss, cleared);
@@ -43,7 +52,8 @@ export function UnitTrack({ units, results, currentUnitId, onSelect }: Props) {
   return (
     <div className="unit-track" ref={trackRef}>
       {units.map((unit, i) => {
-        const done = isUnitDone(unit, results, passedBoss, cleared);
+        const done = isUnitDone(unit, results, passedBoss, cleared, solvedTasks);
+        const isFinal = unit.kind === 'task' && !!finalTasks[unit.id.slice(2)];
         const mistake = done && unitHasMistake(unit, results);
         const locked = i > frontier;
         const current = unit.id === currentUnitId;
@@ -52,15 +62,16 @@ export function UnitTrack({ units, results, currentUnitId, onSelect }: Props) {
         if (current) cls += ' current';
         if (locked) cls += ' locked';
         cls += ` ${unit.kind}`;
+        if (isFinal) cls += ' final';
         return (
           <button
             key={unit.id}
             className={cls}
             disabled={locked}
-            title={locked ? ui('unitLocked', lang) : unitLabel(unit, lang)}
+            title={locked ? ui('unitLocked', lang) : unitLabel(unit, lang, isFinal)}
             onClick={() => onSelect(unit.id)}
           >
-            {circleIcon(unit, done, mistake)}
+            {circleIcon(unit, done, mistake, isFinal)}
           </button>
         );
       })}
@@ -68,8 +79,9 @@ export function UnitTrack({ units, results, currentUnitId, onSelect }: Props) {
   );
 }
 
-function circleIcon(unit: LessonUnit, done: boolean, mistake: boolean): string {
+function circleIcon(unit: LessonUnit, done: boolean, mistake: boolean, isFinal: boolean): string {
   if (unit.kind === 'boss') return '⚔';
+  if (unit.kind === 'task') return done ? '✓' : isFinal ? '🏁' : '⌨';
   if (unit.kind === 'mistakes') return done ? '✓' : '🔁';
   if (mistake) return '✗';
   if (done) return '✓';
@@ -77,9 +89,11 @@ function circleIcon(unit: LessonUnit, done: boolean, mistake: boolean): string {
   return unit.kind === 'discovery' ? '◆' : '●';
 }
 
-function unitLabel(unit: LessonUnit, lang: Lang): string {
+function unitLabel(unit: LessonUnit, lang: Lang, isFinal: boolean): string {
   const phase =
-    unit.kind === 'discovery'
+    unit.kind === 'task'
+      ? ui(isFinal ? 'finalTaskPhase' : 'taskPhase', lang)
+      : unit.kind === 'discovery'
       ? ui('discoveryPhase', lang)
       : unit.kind === 'practice'
         ? ui('practicePhase', lang)

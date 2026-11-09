@@ -11,7 +11,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
@@ -43,10 +42,9 @@ public class CodeTaskValidator {
     /**
      * @param dir       the task folder; its name is the task id
      * @param languages languages the topic declares; every text needs each of them
-     * @param atomIds   atoms of the topic's lesson
      * @return what is wrong, empty when the task is good
      */
-    public List<String> problems(Path dir, List<String> languages, Collection<String> atomIds) {
+    public List<String> problems(Path dir, List<String> languages) {
         List<String> errs = new ArrayList<>();
         String taskId = dir.getFileName().toString();
         if (!CodeTaskRepository.isSafeId(taskId)) {
@@ -59,7 +57,7 @@ public class CodeTaskValidator {
             return errs;
         }
         CodeTask task = loaded.get();
-        checkContent(task, languages, atomIds, errs);
+        checkContent(task, languages, errs);
 
         List<ProjectFile> harness = repository.harnessFiles(dir);
         if (harness.stream().noneMatch(f -> f.path().equals("Main.java"))) {
@@ -72,8 +70,21 @@ public class CodeTaskValidator {
         return errs;
     }
 
-    private static void checkContent(CodeTask task, List<String> languages, Collection<String> atomIds,
-                                     List<String> errs) {
+    /**
+     * Rules over a topic's whole set of tasks: one final task at most, since it
+     * is the single block right before the Boss Fight.
+     */
+    public static List<String> topicProblems(List<CodeTask> tasks) {
+        List<String> finals = tasks.stream().filter(CodeTask::isFinal).map(CodeTask::id).toList();
+        return finals.size() > 1
+                ? List.of("a topic has at most one final task, found " + finals)
+                : List.of();
+    }
+
+    private static void checkContent(CodeTask task, List<String> languages, List<String> errs) {
+        if (!CodeTask.PRACTICE.equals(task.kind()) && !task.isFinal()) {
+            errs.add("kind must be 'practice' or 'final', found '" + task.kind() + "'");
+        }
         checkText("title", task.title(), languages, errs);
         checkText("statement", task.statement(), languages, errs);
         checkText("debrief", task.debrief(), languages, errs);
@@ -82,9 +93,6 @@ public class CodeTaskValidator {
         }
         for (int i = 0; i < task.hints().size(); i++) {
             checkText("hints[" + i + "]", task.hints().get(i), languages, errs);
-        }
-        if (!atomIds.contains(task.atomId())) {
-            errs.add("atomId '" + task.atomId() + "' is not an atom of this topic's learning-atoms.json");
         }
     }
 

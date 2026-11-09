@@ -1,0 +1,74 @@
+kind: final
+order: 2
+title:
+  en: |-
+    The ledger that loses stock
+  ru: |-
+    Учёт, который теряет остатки
+statement:
+  en: |-
+    `StockLedger` keeps the units in stock per `Sku` in a `HashMap`. Vendor names are case-insensitive: suppliers type them however they like, and `Sku.equals()` already accounts for that.
+
+    The warehouse reports four problems:
+
+    1. Deliveries for `"ACME"` and `"acme"` sometimes show up as two separate SKUs, and asking for `"Acme"` then finds nothing.
+    2. After `rebrand("Acme", "NovaCo")` the stock is gone: neither the new name nor the old one finds it, yet `distinctSkus()` has not changed.
+    3. When a vendor is rebranded into one that already stocks the same code, the two stocks must add up, not replace each other.
+    4. The nightly `report()` must list lines sorted by code, but its order jumps around from run to run of the data.
+
+    ```java
+    ledger.receive(new Sku("Acme", "A1"), 5);
+    ledger.rebrand("acme", "NovaCo");
+    ledger.unitsOf(new Sku("NovaCo", "A1"));  // expected 5, got 0
+    ```
+
+    Fix `Sku` and `StockLedger` so that all four hold. Keep the public methods of `StockLedger` and the constructor and getters of `Sku`.
+  ru: |-
+    `StockLedger` хранит остатки по каждому `Sku` в `HashMap`. Названия поставщиков нечувствительны к регистру: их вводят как придётся, и `Sku.equals()` это уже учитывает.
+
+    Со склада пришли четыре жалобы:
+
+    1. Поставки для `"ACME"` и `"acme"` иногда оказываются двумя разными SKU, а запрос по `"Acme"` после этого ничего не находит.
+    2. После `rebrand("Acme", "NovaCo")` остатки пропадают: их не находит ни новое название, ни старое, а `distinctSkus()` не изменился.
+    3. Когда поставщика переименовывают в того, у кого уже есть тот же код, остатки должны сложиться, а не заменить друг друга.
+    4. Ночной `report()` должен выводить строки по порядку кодов, но порядок скачет в зависимости от данных.
+
+    ```java
+    ledger.receive(new Sku("Acme", "A1"), 5);
+    ledger.rebrand("acme", "NovaCo");
+    ledger.unitsOf(new Sku("NovaCo", "A1"));  // ожидалось 5, получили 0
+    ```
+
+    Почини `Sku` и `StockLedger` так, чтобы выполнялись все четыре пункта. Публичные методы `StockLedger`, конструктор и геттеры `Sku` сохрани.
+hints:
+  - en: |-
+      Each complaint is a different rule of `HashMap`. For the first one: `equals()` ignores case. Does everything else the map uses for a key ignore it too?
+    ru: |-
+      Каждая жалоба нарушает своё правило `HashMap`. Для первой: `equals()` игнорирует регистр. А всё остальное, что карта использует для ключа, тоже его игнорирует?
+  - en: |-
+      `rebrand` changes a key that is already in the map. The entry stays in the bucket chosen by the old hash. Rehashing by copying the map brings the entry back, but two keys that have just become equal collide, and one of them wins.
+    ru: |-
+      `rebrand` меняет ключ, который уже лежит в карте. Запись остаётся в бакете, выбранном по старому хэшу. Перехэширование копированием карты возвращает запись, но два ключа, которые только что стали равными, сталкиваются, и один из них побеждает.
+  - en: |-
+      Make `Sku` immutable and hash the vendor the way `equals()` compares it (lower case). In `rebrand`, take the matching entries out and `merge` them back under new keys. A `HashMap` has no order, and a `LinkedHashMap` only remembers insertion order: sort the lines by code.
+    ru: |-
+      Сделай `Sku` неизменяемым и хэшируй поставщика так же, как его сравнивает `equals()` (в нижнем регистре). В `rebrand` вынь подходящие записи и верни их через `merge` под новыми ключами. У `HashMap` нет порядка, а `LinkedHashMap` помнит только порядок вставки: сортируй строки по коду.
+debrief:
+  en: |-
+    Four rules of `HashMap`, one per complaint:
+
+    - **The contract.** Equal keys must have equal hashes. `equals()` ignored the case of the vendor but `hashCode()` did not, so `"ACME"` and `"acme"` landed in different buckets and `get()` looked in the wrong one. Hash exactly what `equals()` compares.
+    - **Stable keys.** A key's hash must not change while it is in the map. Renaming a vendor in place left each entry in the bucket of its old hash, unreachable by any lookup and still counted by `size()`. Immutable keys make this impossible; a change of key is a remove and a put.
+    - **Equal keys merge.** When two keys become equal, the map keeps one entry. `put` and the `HashMap` copy constructor overwrite, so one stock disappears; `merge` decides what happens to both values.
+    - **No order.** Iteration follows buckets, which depend on hashes and capacity. Sort when order matters, or use a `TreeMap`.
+
+    In an interview, the mutable key and the case-insensitive `equals()` with a case-sensitive `hashCode()` are the classic pair. Name the symptom ("the entry is still there, `size()` counts it, nothing finds it") before the fix.
+  ru: |-
+    Четыре правила `HashMap`, по одному на жалобу:
+
+    - **Контракт.** У равных ключей должны быть равные хэши. `equals()` игнорировал регистр поставщика, а `hashCode()` нет, поэтому `"ACME"` и `"acme"` попадали в разные бакеты, и `get()` искал не в том. Хэшируй ровно то, что сравнивает `equals()`.
+    - **Стабильные ключи.** Хэш ключа не должен меняться, пока ключ лежит в карте. Переименование поставщика на месте оставляло каждую запись в бакете старого хэша: её не находит ни один поиск, но `size()` её считает. Неизменяемые ключи делают это невозможным; смена ключа — это удаление и вставка.
+    - **Равные ключи сливаются.** Когда два ключа становятся равными, карта хранит одну запись. `put` и конструктор копирования `HashMap` перезаписывают значение, и одни остатки пропадают; `merge` решает, что делать с обоими значениями.
+    - **Нет порядка.** Обход идёт по бакетам, а они зависят от хэшей и ёмкости. Если порядок важен, сортируй или бери `TreeMap`.
+
+    На собеседовании классическая пара — изменяемый ключ и `equals()` без учёта регистра при `hashCode()` с учётом. Сначала назови симптом («запись в карте есть, `size()` её считает, но ничего её не находит»), потом исправление.

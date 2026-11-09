@@ -12,7 +12,6 @@ import { useEffect, useState } from 'react';
  *   #/q/<id>            home, question <id> selected (lesson when one exists, else theory)
  *   #/q/<id>/theory     home, question <id> selected, reference theory forced open
  *   #/q/<id>/practice   workspace (practice) for that question's topic
- *   #/q/<id>/tasks[/<task>]  home, the topic's code tasks or the open one
  *   #/review            global review over answered practice exercises
  *
  * <id> is a catalog entry id (e.g. `java-collections-7`) or a topic id
@@ -25,9 +24,7 @@ export interface Route {
   view: View;
   id: string | null;
   /** 'theory' forces the reference explanation over the micro-actions lesson. */
-  sub: 'theory' | 'tasks' | null;
-  /** The code task open under `sub: 'tasks'`. */
-  taskId: string | null;
+  sub: 'theory' | null;
   /** Show the roadmap instead of the tree, if the active domain has one. */
   map: boolean;
   /**
@@ -39,7 +36,7 @@ export interface Route {
 
 export function parseHash(hash: string): Route {
   const parts = hash.replace(/^#/, '').split('/').filter(Boolean); // ['q','<id>','practice']
-  const none = { id: null, sub: null, taskId: null, map: false, moduleId: null };
+  const none = { id: null, sub: null, map: false, moduleId: null };
   if (parts[0] === 'review') {
     return { ...none, view: 'review' };
   }
@@ -52,10 +49,6 @@ export function parseHash(hash: string): Route {
   if (parts[0] === 'q' && parts[1]) {
     const id = decodeURIComponent(parts[1]);
     if (parts[2] === 'practice') return { ...none, view: 'workspace', id };
-    if (parts[2] === 'tasks') {
-      const taskId = parts[3] ? decodeURIComponent(parts[3]) : null;
-      return { ...none, view: 'home', id, sub: 'tasks', taskId };
-    }
     return { ...none, view: 'home', id, sub: parts[2] === 'theory' ? 'theory' : null };
   }
   return { ...none, view: 'home', map: true };
@@ -71,11 +64,6 @@ export function routeForTheory(id: string): string {
 
 export function routeForPractice(id: string): string {
   return `/q/${encodeURIComponent(id)}/practice`;
-}
-
-export function routeForTasks(id: string, taskId?: string): string {
-  const tasks = `/q/${encodeURIComponent(id)}/tasks`;
-  return taskId ? `${tasks}/${encodeURIComponent(taskId)}` : tasks;
 }
 
 export function routeForReview(): string {

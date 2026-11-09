@@ -13,7 +13,7 @@ import { TestResults } from '@app/shell/TestResults';
  * a learner who is stuck would have no way out.
  */
 export function CodeTaskView({ topicId, item }: { topicId: string; item: TaskListItem }) {
-  const { task, atomSummary, progress } = item;
+  const { task, progress } = item;
   const lang = useLang((s) => s.lang);
   const running = useCodeTasks((s) => s.running);
   const run = useCodeTasks((s) => s.run);
@@ -85,7 +85,6 @@ export function CodeTaskView({ topicId, item }: { topicId: string; item: TaskLis
       {showAnswer && (
         <div className="code-task-answer">
           <h4>{ui('debrief', lang)}</h4>
-          <Markdown className="markdown">{tl(atomSummary, lang)}</Markdown>
           <Markdown className="markdown">{tl(task.debrief, lang)}</Markdown>
           <h4>{ui('referenceSolution', lang)}</h4>
           <Markdown className="markdown">{`\`\`\`java\n${task.reference}\n\`\`\``}</Markdown>

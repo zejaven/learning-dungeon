@@ -39,8 +39,31 @@ function roundRobinPractice(atoms: LearningAtom[]): string[] {
   return flat;
 }
 
-export function deriveUnits(atoms: LearningAtoms, bossFight: BossQuestion[]): LessonUnit[] {
+/** What the chain needs of a code task. */
+export interface TaskRef {
+  id: string;
+  kind: string; // 'practice' | 'final'
+  order: number;
+}
+
+/** The practice chunk (1-based) that task k of n follows: evenly spread over the chunks. */
+function slot(k: number, n: number, chunkCount: number): number {
+  const ceil = Math.floor((k * chunkCount + n) / (n + 1));
+  return Math.max(1, Math.min(chunkCount, ceil));
+}
+
+const taskUnit = (t: TaskRef): LessonUnit => ({ id: `t:${t.id}`, kind: 'task', exerciseIds: [] });
+
+/**
+ * Code tasks join as `task` units: practice tasks spread over the practice
+ * chunks (task k of n after chunk ceil(k*N/(n+1)), or after discovery when
+ * there is no practice), the final task right before the boss units.
+ */
+export function deriveUnits(atoms: LearningAtoms, bossFight: BossQuestion[], tasks: TaskRef[] = []): LessonUnit[] {
   const units: LessonUnit[] = [];
+  const sorted = [...tasks].sort((a, b) => a.order - b.order || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const practiceTasks = sorted.filter((t) => t.kind !== 'final');
+  const finalTasks = sorted.filter((t) => t.kind === 'final');
 
   for (const atom of atoms.atoms) {
     if (atom.discovery && atom.discovery.length > 0) {
@@ -55,8 +78,14 @@ export function deriveUnits(atoms: LearningAtoms, bossFight: BossQuestion[]): Le
   const regular = atoms.atoms.filter((a) => !a.capstone);
   const capstones = atoms.atoms.filter((a) => a.capstone);
 
-  chunk(roundRobinPractice(regular)).forEach((ids, i) => {
+  const chunks = chunk(roundRobinPractice(regular));
+  const n = practiceTasks.length;
+  if (chunks.length === 0) practiceTasks.forEach((t) => units.push(taskUnit(t)));
+  chunks.forEach((ids, i) => {
     units.push({ id: `p${i + 1}`, kind: 'practice', exerciseIds: ids });
+    for (let k = 1; k <= n; k++) {
+      if (slot(k, n, chunks.length) === i + 1) units.push(taskUnit(practiceTasks[k - 1]));
+    }
   });
 
   // Capstone synthesis: the capstone atoms' practice, in file order, as a
@@ -72,6 +101,9 @@ export function deriveUnits(atoms: LearningAtoms, bossFight: BossQuestion[]): Le
   // Single "fix your mistakes" unit; its contents are derived from the
   // learner's wrong answers at render time (see lessonStore).
   units.push({ id: 'mistakes', kind: 'mistakes', exerciseIds: [] });
+
+  // The final task covers the whole topic: the last step before the Boss Fight.
+  finalTasks.forEach((t) => units.push(taskUnit(t)));
 
   for (const q of bossFight) {
     units.push({ id: `b:${q.id}`, kind: 'boss', exerciseIds: [] });

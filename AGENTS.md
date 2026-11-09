@@ -146,13 +146,23 @@ The invariants that are easy to break:
 
 ### Code tasks
 
-A code task is a coding exercise bound to ONE learning atom: fix or write
-`Solution.java` against hidden tests, at the level of a trap asked in an
-interview. They live in `topics/<id>/tasks/<task-id>/` and work in any topic
-`mode`, shown in a "Practice" tab (`TopicTabs.hasPractice`: the topic has
-tasks, or it is a `java` topic with a lesson and can get them generated). The
-first five were hand-written as a pilot; the rest are generated. They do not
-replace the old workspace (`#/q/<id>/practice`) and do not enter the review pool.
+A code task is a coding exercise of a TOPIC (not of one atom — that version
+kept every task down to one small trap): fix or write `Solution.java` against
+hidden tests, at the level of a trap asked in an interview. They live in
+`topics/<id>/tasks/<task-id>/` with `kind: practice` (5-15 min, combines a few
+ideas) or `kind: final` (15-30 min, the whole topic; at most one per topic,
+`CodeTaskValidator.topicProblems`). They are units of the lesson chain, not a
+separate tab: `LessonUnits` places practice tasks between practice chunks and
+the final task right before the Boss Fight (see the lesson package notes). The
+pilot tasks were hand-written, `hashmap/ledger-loses-stock` is the hand-written
+final reference; the rest are generated. They do not replace the old workspace
+(`#/q/<id>/practice`) and do not enter the review pool.
+
+Task units never hold the unlock frontier (`frontierIndex` skips them): running
+code is refused on the phone, so a task must not jam the lesson there. On the
+phone the unit says it is solved on the PC and lets the learner continue. The
+lesson header carries "⌨ ✨" (generate / more tasks, `.desktop-only`, `java`
+topics) next to Reference and ↻.
 
 Generation (`codetask/CodeTaskGenerator`, `prompts/generate-code-tasks.md`,
 `AiTask.GENERATE_TASKS`, task key `tasks:<topicId>`) is a multi-step
@@ -196,20 +206,19 @@ The invariants that are easy to break:
   `CodeTaskRunner` as the app: the reference solves it, the starter compiles and
   does not, and each `wrong/*` is rejected by a test rather than by a failed
   run. A test nobody has seen pass and fail proves nothing.
-- `atomId` must exist in the topic's `learning-atoms.json`. A `full` lesson
-  regeneration rewrites atoms, so `AtomsPromptBuilder` hands the ids that tasks
-  use over as fixed; the contract test is what catches a miss.
+- Tasks hold no atom ids on purpose: a `full` lesson regeneration rewrites the
+  atoms, and the chain places tasks by `kind` and `order` alone.
 - `CodeTaskValidator` is the single bar for hand-written and generated tasks:
   `CodeTaskContractTest` and the generator both call it. Tighten it there, not
   in one of the callers.
-- Do not use the atom's `summary` as the task statement: it usually gives the
+- Do not build the statement from the atoms' `summary`: it usually gives the
   answer away (`avoid-subtraction` names `Integer.compare`). The statement
-  describes the symptom, and `summary` is shown in the debrief.
+  describes symptoms; the rules behind them go in the debrief.
 - The run endpoint is `POST /api/challenge/task` and generation is
   `POST /api/challenge/tasks/{id}/generate` on purpose: the `/api/challenge`
   prefix is what `RemoteAccessFilter` refuses to remote clients. So tasks are
-  desktop-only, and the tab carries `.desktop-only`. A topic with tasks
-  therefore cannot be closed from the phone; the lesson banner says so.
+  desktop-only (the editor in a task unit is `.desktop-only`). A topic with
+  tasks therefore cannot be closed from the phone; the lesson banner says so.
 
 ## Prerequisites
 
@@ -390,10 +399,12 @@ If a command cannot be run, say exactly why and what remains unverified.
     alike — `ReviewController.resolvedRows` must therefore never treat empty as
     "this topic has no exercises" and prune, or a request landing mid
     regeneration would delete the topic's whole repetition schedule.
-  - `LessonUnits.derive(...)` turns atoms + boss-fight questions into the
-    ordered unit sequence (discovery per atom, practice chunked round-robin
-    across atoms in groups of `PRACTICE_CHUNK` = 5, one boss unit per
-    question). This algorithm is mirrored in
+  - `LessonUnits.derive(...)` turns atoms + boss-fight questions + code tasks
+    into the ordered unit sequence (discovery per atom, practice chunked
+    round-robin across atoms in groups of `PRACTICE_CHUNK` = 5, capstone,
+    mistakes, one boss unit per question; `task` units `t:<id>`: practice task
+    k of n after chunk `ceil(k*N/(n+1))`, the final task right before the
+    boss units). This algorithm is mirrored in
     `frontend/src/engine/lessonUnits.ts` — a change to one requires the same
     change to the other, and `LessonUnitsTest` pins the exact output.
   - `ReviewSchedule` is the spaced-repetition policy: a `final` class of pure
@@ -597,7 +608,7 @@ When adding or changing a `visual.Visual*` model:
   exists, else theory), `#/q/<id>/theory` (forces the reference explanation),
   `#/q/<id>/practice` (trace/structural/sql/challenge workspace — the "Go to
   practice" button is hidden for `trace` topics once a lesson exists, but the
-  route still works), `#/q/<id>/tasks[/<taskId>]` (the topic's code tasks),
+  route still works),
   `#/review` (global review).
 - Colour tokens carry a ROLE, not just a hue, and the light theme is where
   getting that wrong shows: `--accent` paints a surface (a filled button, a
@@ -758,7 +769,7 @@ For all topics:
 
 A code task is generated (see Code tasks) or authored by hand under
 `topics/<id>/tasks/<task-id>/`; `prompts/generate-code-tasks.md` is the
-contract for both: `task.yaml` (`atomId`, `order`, and `title`, `statement`, `hints` of at
+contract for both: `task.yaml` (`kind`, `order`, and `title`, `statement`, `hints` of at
 least two, `debrief` in every language the topic declares), `starter/Solution.java`,
 `reference/Solution.java`, `harness/Main.java` calling `TestKit.run`, and at least
 one `wrong/<name>/Solution.java` holding a plausible mistake that compiles. The
@@ -775,7 +786,8 @@ Use these as templates:
 - Single-language topic (`languages: [ru]`): `topics/qa-test-estimation-task/`
 - SQL topic: `topics/sql-many-to-many/`
 - Challenge topic: `topics/algo-max-pair-product/`
-- Code task: `topics/hashmap/tasks/vanishing-route/`
+- Code task: `topics/hashmap/tasks/vanishing-route/` (practice) and
+  `topics/hashmap/tasks/ledger-loses-stock/` (final)
 - `learning-atoms.json` (micro-actions lesson): `topics/hashmap/learning-atoms.json`
   — the canonical quality reference for lesson generation (the generator prompt
   points the model at it). Keep it exemplary: if you change how lessons should

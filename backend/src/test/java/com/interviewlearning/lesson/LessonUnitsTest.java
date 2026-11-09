@@ -3,6 +3,7 @@ package com.interviewlearning.lesson;
 import com.interviewlearning.lesson.LessonDtos.Atom;
 import com.interviewlearning.lesson.LessonDtos.Exercise;
 import com.interviewlearning.lesson.LessonDtos.LearningAtoms;
+import com.interviewlearning.lesson.LessonUnits.TaskRef;
 import com.interviewlearning.lesson.LessonUnits.UnitRef;
 import com.interviewlearning.topics.TopicDtos.BossQuestion;
 import com.interviewlearning.topics.TopicDtos.Localized;
@@ -89,6 +90,61 @@ class LessonUnitsTest {
                 new UnitRef("mistakes", "mistakes", List.of()),
                 new UnitRef("b:q", "boss", List.of())
         ), units);
+    }
+
+    @Test
+    void practiceTasksSpreadOverPracticeChunksAndTheFinalTaskPrecedesTheBoss() {
+        // 15 practice exercises → p1, p2, p3. Two practice tasks of n=2 over N=3
+        // chunks go after chunks ceil(1*3/3)=1 and ceil(2*3/3)=2, sorted by order.
+        LearningAtoms atoms = new LearningAtoms(1, "demo", 1, "claude", "", List.of(
+                atom("a", List.of(ex("d1")), exercises(15))));
+        List<BossQuestion> boss = List.of(new BossQuestion("q", Localized.of("?")));
+        List<TaskRef> tasks = List.of(
+                new TaskRef("second", "practice", 2),
+                new TaskRef("big", "final", 3),
+                new TaskRef("first", "practice", 1));
+
+        List<UnitRef> units = LessonUnits.derive(atoms, boss, tasks);
+
+        assertEquals(List.of(
+                new UnitRef("d:a", "discovery", List.of("d1")),
+                new UnitRef("p1", "practice", List.of("e1", "e2", "e3", "e4", "e5")),
+                new UnitRef("t:first", "task", List.of()),
+                new UnitRef("p2", "practice", List.of("e6", "e7", "e8", "e9", "e10")),
+                new UnitRef("t:second", "task", List.of()),
+                new UnitRef("p3", "practice", List.of("e11", "e12", "e13", "e14", "e15")),
+                new UnitRef("mistakes", "mistakes", List.of()),
+                new UnitRef("t:big", "task", List.of()),
+                new UnitRef("b:q", "boss", List.of())
+        ), units);
+    }
+
+    @Test
+    void aSinglePracticeTaskLandsMidPractice() {
+        // n=1 over N=3 chunks: after chunk ceil(3/2)=2.
+        LearningAtoms atoms = new LearningAtoms(1, "demo", 1, "claude", "", List.of(
+                atom("a", List.of(), exercises(15))));
+
+        List<UnitRef> units = LessonUnits.derive(atoms, List.of(), List.of(new TaskRef("only", "practice", 1)));
+
+        assertEquals(List.of("p1", "p2", "t:only", "p3", "mistakes"),
+                units.stream().map(UnitRef::unitId).toList());
+    }
+
+    @Test
+    void withoutPracticeTheTasksFollowDiscovery() {
+        LearningAtoms atoms = new LearningAtoms(1, "demo", 1, "claude", "", List.of(
+                atom("a", List.of(ex("d1")), List.of())));
+
+        List<UnitRef> units = LessonUnits.derive(atoms, List.of(),
+                List.of(new TaskRef("fin", "final", 2), new TaskRef("x", "practice", 1)));
+
+        assertEquals(List.of("d:a", "t:x", "mistakes", "t:fin"),
+                units.stream().map(UnitRef::unitId).toList());
+    }
+
+    private static List<Exercise> exercises(int count) {
+        return java.util.stream.IntStream.rangeClosed(1, count).mapToObj(i -> ex("e" + i)).toList();
     }
 
     private static Atom atom(String id, List<Exercise> discovery, List<Exercise> practice) {

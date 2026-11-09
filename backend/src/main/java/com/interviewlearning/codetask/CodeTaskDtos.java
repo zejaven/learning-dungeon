@@ -5,7 +5,7 @@ import com.interviewlearning.topics.TopicDtos.Localized;
 
 import java.util.List;
 
-/** Data transfer objects for code tasks: one hand-checked coding task per learning atom. */
+/** Data transfer objects for code tasks: coding tasks of a topic, placed in its lesson chain. */
 public final class CodeTaskDtos {
 
     private CodeTaskDtos() {
@@ -18,7 +18,8 @@ public final class CodeTaskDtos {
      */
     public record CodeTask(
             String id,
-            String atomId,
+            /** {@link #PRACTICE} (between practice chunks) or {@link #FINAL} (the whole topic, before Boss Fight). */
+            String kind,
             int order,
             Localized title,
             Localized statement,
@@ -27,6 +28,12 @@ public final class CodeTaskDtos {
             String starter,
             String reference
     ) {
+        public static final String PRACTICE = "practice";
+        public static final String FINAL = "final";
+
+        public boolean isFinal() {
+            return FINAL.equals(kind);
+        }
     }
 
     /**
@@ -37,8 +44,8 @@ public final class CodeTaskDtos {
         public static final TaskProgress NONE = new TaskProgress(0, false);
     }
 
-    /** A task plus what the practice tab shows around it. */
-    public record TaskListItem(CodeTask task, Localized atomTitle, Localized atomSummary, TaskProgress progress) {
+    /** A task plus the learner's progress on it. */
+    public record TaskListItem(CodeTask task, TaskProgress progress) {
     }
 
     /**

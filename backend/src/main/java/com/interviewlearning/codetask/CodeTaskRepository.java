@@ -128,7 +128,7 @@ public class CodeTaskRepository {
             }
             return Optional.of(new CodeTask(
                     dir.getFileName().toString(),
-                    String.valueOf(meta.getOrDefault("atomId", "")),
+                    String.valueOf(meta.getOrDefault("kind", "")),
                     meta.get("order") instanceof Number n ? n.intValue() : Integer.MAX_VALUE,
                     TopicRepository.loc(meta, "title", dir.getFileName().toString()),
                     TopicRepository.loc(meta, "statement", ""),

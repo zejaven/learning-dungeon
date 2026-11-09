@@ -9,7 +9,8 @@ import {
 import { grade, shuffled } from './grading';
 import { pendingAnswers } from './offline/outbox';
 import type { AnswerValue, Exercise, LearningAtoms, LessonUnit } from './lessonTypes';
-import { deriveUnits } from './lessonUnits';
+import { useCodeTasks } from './codeTaskStore';
+import { deriveUnits, type TaskRef } from './lessonUnits';
 import { useStore } from './store';
 
 export type LessonPhase = 'answering' | 'feedback';
@@ -72,16 +73,19 @@ interface LessonSlice {
 /**
  * A discovery/practice unit is done when all its exercises are answered; a boss
  * unit when its question was passed; the mistakes unit when the wrong pool is
- * empty. All derived from stable data — no server-stored unit rows.
+ * empty; a code task unit when the task is solved. All derived from stable
+ * data — no server-stored unit rows.
  */
 export function isUnitDone(
   unit: LessonUnit,
   results: Record<string, ExerciseResult>,
   passedBossIds: Record<string, boolean>,
   mistakesDone: boolean,
+  solvedTaskIds: Record<string, boolean> = {},
 ): boolean {
   if (unit.kind === 'mistakes') return mistakesDone;
   if (unit.kind === 'boss') return !!passedBossIds[unit.id.slice(2)];
+  if (unit.kind === 'task') return !!solvedTaskIds[unit.id.slice(2)];
   return unit.exerciseIds.length > 0 && unit.exerciseIds.every((id) => results[id] != null);
 }
 
@@ -139,7 +143,7 @@ function allExercisesAnswered(
 
 /** True when any exercise of a (non-boss) unit was answered incorrectly. */
 export function unitHasMistake(unit: LessonUnit, results: Record<string, ExerciseResult>): boolean {
-  if (unit.kind === 'boss' || unit.kind === 'mistakes') return false;
+  if (unit.kind === 'boss' || unit.kind === 'mistakes' || unit.kind === 'task') return false;
   return unit.exerciseIds.some((id) => results[id]?.correct === false);
 }
 
@@ -164,7 +168,12 @@ export function previousPosition(
   return { unitId: prev.id, exerciseIndex: prev.exerciseIds.length - 1 };
 }
 
-/** Index of the first not-yet-done unit (the unlock frontier); units.length when all done. */
+/**
+ * Index of the first not-yet-done unit (the unlock frontier); units.length when
+ * all done. Code task units never hold the frontier: running code is refused on
+ * the phone, and the lesson must not jam there. Unsolved tasks still keep the
+ * TOPIC open (TopicCompletion on the server).
+ */
 export function frontierIndex(
   units: LessonUnit[],
   results: Record<string, ExerciseResult>,
@@ -172,6 +181,7 @@ export function frontierIndex(
   mistakesDone: boolean,
 ): number {
   for (let i = 0; i < units.length; i++) {
+    if (units[i].kind === 'task') continue;
     if (!isUnitDone(units[i], results, passedBossIds, mistakesDone)) return i;
   }
   return units.length;
@@ -240,8 +250,17 @@ export const useLesson = create<LessonSlice>((set, get) => ({
         set({ loading: false });
         return;
       }
-      const bossFight = useStore.getState().topic?.bossFight ?? [];
-      const units = deriveUnits(atoms, bossFight);
+      const topic = useStore.getState().topic;
+      const bossFight = topic?.bossFight ?? [];
+      // Code tasks join the chain. Without a connection there are none, and
+      // so no task units: the rest of the lesson still works offline.
+      let tasks: TaskRef[] = [];
+      if (topic?.id === topicId && topic.hasTasks) {
+        await useCodeTasks.getState().load(topicId);
+        tasks = (useCodeTasks.getState().items ?? []).map(({ task }) => task);
+      }
+      if (get().topicId !== topicId) return;
+      const units = deriveUnits(atoms, bossFight, tasks);
 
       const results: Record<string, ExerciseResult> = {};
       for (const a of state?.answers ?? []) {

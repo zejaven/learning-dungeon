@@ -258,16 +258,17 @@ const UI: Record<string, Localized> = {
   // --- "Learn by micro-actions" lesson mode ---
   lesson: { en: 'Lesson', ru: 'Урок' },
   reference: { en: '📖 Reference', ru: '📖 Справочник' },
-  tabLesson: { en: '🎯 Lesson', ru: '🎯 Урок' },
-  tabPractice: { en: '💻 Practice', ru: '💻 Практика' },
-  practiceIntro: {
-    en: 'Each task trains one idea of this topic. Write the code yourself: hints open only after a failed run.',
-    ru: 'Каждая задача тренирует одну идею темы. Пиши код сам: подсказки открываются только после неудачного запуска.',
+  backToLesson: { en: '← Back to lesson', ru: '← К уроку' },
+  taskPhase: { en: 'Code task', ru: 'Задача' },
+  finalTaskPhase: { en: 'Final task', ru: 'Итоговая задача' },
+  taskOnPc: {
+    en: 'This code task is solved on the PC: running code is off on the phone. Continue the lesson; the topic closes once the task is solved.',
+    ru: 'Эта задача решается на ПК: запуск кода на телефоне выключен. Продолжай урок; тема закроется, когда задача будет решена.',
   },
-  backToTasks: { en: '← All tasks', ru: '← Все задачи' },
-  tasksEmpty: {
-    en: 'No code tasks yet. The AI picks the ideas of this topic that are worth proving by running code, and keeps only tasks whose reference passes its own tests.',
-    ru: 'Задач с кодом пока нет. ИИ выберет идеи темы, которые стоит проверить запуском кода, и оставит только задачи, чей эталон проходит собственные тесты.',
+  taskSolved: { en: '✓ This code task is solved.', ru: '✓ Эта задача решена.' },
+  tasksGenerateHint: {
+    en: 'The AI writes practice tasks that combine ideas of this topic and, if the topic has none yet, one final task on the whole topic. Only tasks whose reference passes its own tests are kept; existing tasks stay.',
+    ru: 'ИИ напишет задачи, которые сочетают идеи темы, и, если её ещё нет, одну итоговую задачу на всю тему. Останутся только задачи, чей эталон проходит собственные тесты; существующие задачи не меняются.',
   },
   tasksNone: { en: 'The AI decided this topic needs no code tasks:', ru: 'ИИ решил, что задачи с кодом этой теме не нужны:' },
   tasksCommentPlaceholder: {
@@ -277,8 +278,8 @@ const UI: Record<string, Localized> = {
   generateTasks: { en: '✨ Generate tasks', ru: '✨ Сгенерировать задачи' },
   generateMoreTasks: { en: '✨ More tasks', ru: '✨ Ещё задачи' },
   lessonDoneTasksLeft: {
-    en: 'Lesson completed. To close the topic, solve its code tasks: {n} left in the Practice tab (on the PC).',
-    ru: 'Урок пройден. Чтобы закрыть тему, реши её задачи с кодом: осталось {n} во вкладке «Практика» (на ПК).',
+    en: 'Lesson completed. To close the topic, solve its code tasks: {n} left in the chain (⌨, on the PC).',
+    ru: 'Урок пройден. Чтобы закрыть тему, реши её задачи с кодом: осталось {n} в цепочке (⌨, на ПК).',
   },
   taskHint: { en: 'Fix the code and click Run tests.', ru: 'Исправьте код и нажмите «Запустить тесты».' },
   caseNotRun: { en: 'not run: the program stopped first', ru: 'не запущен: программа остановилась раньше' },

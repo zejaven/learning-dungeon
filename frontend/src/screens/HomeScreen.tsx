@@ -40,8 +40,6 @@ import { RoadmapView } from '@app/shell/roadmap/RoadmapView';
 import { SettingsButton } from '@app/shell/SettingsButton';
 import { LanguageSelect } from '@app/shell/LanguageSelect';
 import { MissingLanguage } from '@app/shell/MissingLanguage';
-import { PracticePanel } from '@app/shell/practice/PracticePanel';
-import { TopicTabs, hasPractice } from '@app/shell/practice/TopicTabs';
 import { StyleSelector } from '@app/shell/StyleSelector';
 import { ThemeSwitcher } from '@app/shell/ThemeSwitcher';
 import { UsageBar } from '@app/shell/UsageBar';
@@ -113,7 +111,7 @@ export function HomeScreen() {
       .map(({ entry }) => (entry.topicId ? byId.get(entry.topicId) : undefined))
       .filter((t): t is NonNullable<typeof t> => !!t);
     const atoms = withTopic.filter((t) => !t.hasAtoms);
-    // A task binds to an atom, so tasks follow lessons; Java topics only.
+    // Tasks sit in a lesson chain, so they follow lessons; Java topics only.
     const tasks = domainId === 'java' ? withTopic.filter((t) => t.hasAtoms && !t.tasksDecided) : [];
     return { theory, atoms, tasks };
   }, [topics, manualQuestions, domainId]);
@@ -172,8 +170,7 @@ export function HomeScreen() {
   const atomsKey = topic ? `atoms:${topic.id}` : '';
   const atomsTask = useGeneration((s) => (atomsKey ? s.tasks[atomsKey] : undefined));
   const lessonReady = !!(theoryReady && topic!.hasAtoms);
-  const showTasks = !!(theoryReady && hasPractice(topic!) && route.sub === 'tasks');
-  const showLesson = lessonReady && route.sub !== 'theory' && !showTasks;
+  const showLesson = lessonReady && route.sub !== 'theory';
   const selectTopic = useStore((s) => s.selectTopic);
 
   // When a lesson generation finishes, re-fetch the topic so hasAtoms flips
@@ -383,20 +380,16 @@ export function HomeScreen() {
             )}
             {entry?.topicId && !theoryReady && runError && <div className="output error">{runError}</div>}
 
-            {theoryReady && (
-              <TopicTabs
-                questionId={entry!.id}
-                active={showTasks ? 'tasks' : showLesson ? 'lesson' : 'theory'}
-              />
-            )}
-
-            {showTasks && <PracticePanel questionId={entry!.id} taskId={route.taskId} />}
-
             {theoryReady && showLesson && <LessonPanel />}
 
-            {theoryReady && !showLesson && !showTasks && (
+            {theoryReady && !showLesson && (
               <div className="home-theory">
                 <div className="home-theory-actions">
+                  {lessonReady && (
+                    <button className="primary" onClick={() => navigate(routeForQuestion(entry!.id))}>
+                      {ui('backToLesson', lang)}
+                    </button>
+                  )}
                   {/* Boss Fight moves inside the lesson once one exists. */}
                   {topic!.mode === 'theory' ? (
                     !lessonReady

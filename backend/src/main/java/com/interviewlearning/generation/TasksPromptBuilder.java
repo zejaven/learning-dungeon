@@ -59,12 +59,13 @@ public class TasksPromptBuilder {
                 .append("- aiProvider: ").append(provider).append("\n")
                 .append("- aiModel: ").append(model == null ? "" : model.trim()).append("\n");
 
-        sb.append("\n---\n\nATOMS OF THE LESSON (atomId — title — summary):\n");
+        sb.append("\n---\n\nIDEAS OF THE TOPIC (the lesson's atoms: title — summary). A map of what ")
+                .append("the topic teaches, not a list to cover one by one:\n");
         for (Atom atom : atoms) {
             if (atom.capstone()) {
-                continue; // the synthesis atom restates the others; a task binds to one rule
+                continue; // the synthesis atom restates the others
             }
-            sb.append("- ").append(atom.id()).append(" — ").append(atom.title().label(first))
+            sb.append("- ").append(atom.title().label(first))
                     .append(" — ").append(atom.summary().label(first)).append("\n");
         }
 
@@ -73,11 +74,14 @@ public class TasksPromptBuilder {
         } else {
             int maxOrder = existing.stream().mapToInt(CodeTask::order)
                     .filter(o -> o != Integer.MAX_VALUE).max().orElse(0);
-            sb.append("\nEXISTING TASKS (do not repeat their mistake; do not reuse their ids). ")
+            sb.append("\nEXISTING TASKS (do not repeat their mistakes; do not reuse their ids). ")
                     .append("Continue `order` from ").append(maxOrder + 1).append(":\n");
             for (CodeTask task : existing) {
-                sb.append("- ").append(task.id()).append(" (atom ").append(task.atomId()).append("): ")
+                sb.append("- ").append(task.id()).append(" (").append(task.kind()).append("): ")
                         .append(task.title().label(first)).append("\n");
+            }
+            if (existing.stream().anyMatch(CodeTask::isFinal)) {
+                sb.append("The topic already has its final task: write practice tasks only.\n");
             }
         }
 

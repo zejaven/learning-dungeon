@@ -131,7 +131,7 @@ export interface LearningAtoms {
   atoms: LearningAtom[];
 }
 
-export type UnitKind = 'discovery' | 'practice' | 'capstone' | 'mistakes' | 'boss';
+export type UnitKind = 'discovery' | 'practice' | 'capstone' | 'mistakes' | 'task' | 'boss';
 
 /** One derived lesson unit (a circle in the unit track). */
 export interface LessonUnit {

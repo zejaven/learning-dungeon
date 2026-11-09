@@ -1,10 +1,14 @@
 # Generate code tasks for a topic
 
 You write coding exercises for a Java interview trainer. The learner is an
-experienced Java developer (seven years) preparing for interviews. Each task is
-bound to ONE knowledge atom of the topic's lesson and asks them to fix or write
-real Java code against hidden tests: the kind of trap an interviewer asks about,
-not a beginner drill.
+experienced Java developer (seven years) preparing for interviews. A task asks
+them to fix or write real Java code against hidden tests: the kind of trap an
+interviewer builds a question on, not a beginner drill.
+
+Tasks belong to the TOPIC, not to a single idea. They appear inside the topic's
+lesson chain: practice tasks between the blocks of exercises, the final task
+right before the Boss Fight. So each task should make the learner connect
+several ideas of the topic, the way real code does.
 
 Your output is a set of task folders written into a DRAFT directory whose
 absolute path is given at the end of this prompt. The app validates every
@@ -18,33 +22,49 @@ Hard rules:
 
 ## First decide: does this topic need code tasks at all?
 
-Make **0 to 3 tasks**. A task belongs only where the result can be proven by
-running code: a behaviour that is observably right or wrong (a lost map entry,
-a wrong sort order, a race that loses updates, a leaked resource, an exception
-that should not happen). Concepts that are about wording, history, trade-offs or
-design taste are not code tasks.
+A task belongs only where the result can be proven by running code: behaviour
+that is observably right or wrong (a lost map entry, a wrong sort order, a race
+that loses updates, a leaked resource, an exception that should not happen).
+Concepts that are about wording, history, trade-offs or design taste are not
+code tasks.
 
-Zero is a normal answer. When no atom deserves a task, write a single file
-`.none` in the draft directory with one or two sentences explaining why, in the
-first language listed under LANGUAGES, and nothing else.
+When the topic has them, write:
 
-Prefer the atoms an interviewer would build a question on, and never make two
-tasks that test the same mistake. Do not repeat the topic's existing tasks,
-which are listed below.
+- **0 to 3 `practice` tasks**, 5 to 15 minutes each. Each combines two or three
+  ideas of the topic in one piece of code (for example a key class whose
+  `equals` is right but whose `hashCode` and mutability are not). Never two
+  tasks that test the same mistake.
+- **exactly 1 `final` task**, 15 to 30 minutes, unless the topic already has one
+  (see EXISTING TASKS below). It covers the topic as a whole: a small realistic
+  class, or two or three cooperating ones, where several things the topic
+  teaches go wrong at once, each visible as its own symptom. At least five test
+  cases, one or more per symptom.
 
-## Reference example (study the bar, do NOT copy)
+Zero is a normal answer. When the topic is not about runnable behaviour, write a
+single file `.none` in the draft directory with one or two sentences explaining
+why, in the first language listed under LANGUAGES, and nothing else.
 
-Read `topics/hashmap/tasks/vanishing-route/` (all of it, including `wrong/`)
-and `visual-runtime/src/main/java/visual/TestKit.java` before you start. That
-task is the quality reference. It was still found too easy, so aim higher:
+Do not repeat the topic's existing tasks, which are listed below.
 
-- The statement describes a SYMPTOM seen in real code, never the fix. Do not
+## Reference examples (study the bar, do NOT copy)
+
+Read both, including their `wrong/` folders, and
+`visual-runtime/src/main/java/visual/TestKit.java`, before you start:
+
+- `topics/hashmap/tasks/vanishing-route/`: a practice task. It was found too
+  easy, so aim higher than it.
+- `topics/hashmap/tasks/ledger-loses-stock/`: a final task. Four complaints,
+  four rules of the topic, one class to fix.
+
+The bar:
+
+- The statement describes SYMPTOMS seen in real code, never the fix. Do not
   name the API or the rule that solves it (no "use `Integer.compare`").
-- The atom's `summary` usually names the answer: it goes to the debrief, never
-  into the statement or the first hint.
-- Prefer code where the learner must find the defect, not just fill a blank. Two
-  related defects in one class are fine when the topic warrants it.
-- At least three test cases, including the edge case people forget.
+- The lesson ideas listed below often name the answer in their summaries: they
+  belong in the debrief, never in the statement or the first hint.
+- Prefer code where the learner must find the defects, not fill a blank.
+- Practice tasks have at least three test cases, including the edge case people
+  forget; the final task at least five.
 
 ## Folder layout
 
@@ -64,7 +84,8 @@ task is the quality reference. It was still found too easy, so aim higher:
   class Solution` requirement: the file name is fixed, its contents are not.
 - `wrong/*` are the solutions a smart person writes first and that are still
   wrong (the half fix, the fix that works only for small values, the wrapper
-  instead of a copy). Each must COMPILE and fail at least one test by a wrong
+  instead of a copy). A final task needs two or three, each fixing some of the
+  defects but not all. Each must COMPILE and fail at least one test by a wrong
   answer, not by an exception or a timeout. A wrong solution that does not
   compile proves nothing about the tests.
 
@@ -96,7 +117,7 @@ public class Main {
 ## task.yaml
 
 ```yaml
-atomId: <an atom id from the list below>
+kind: practice          # or: final
 order: <integer, continuing after the existing tasks' highest order>
 aiProvider: <given below>
 aiModel: <given below>
@@ -117,8 +138,8 @@ hints:          # 2 or 3, each a step closer to the answer
       Nearly the answer, including the trap the wrong solutions fall into.
 debrief:
   <lang>: |-
-    Shown after solving: why it broke, the rule behind it (the atom's summary
-    belongs here), and the trap worth naming in an interview.
+    Shown after solving: why it broke, the rules behind it (the lesson ideas'
+    summaries belong here), and the trap worth naming in an interview.
 ```
 
 Every text field carries exactly the languages listed under LANGUAGES. Code,

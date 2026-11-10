@@ -75,8 +75,8 @@ public class AiCliService {
             @Value("${app.ai.claude.generate-permission-mode:${app.claude.generate-permission-mode:bypassPermissions}}")
             String claudePermissionMode,
             @Value("${app.ai.codex.command:codex}") String codexCommand,
-            @Value("${app.ai.codex.assistant-model:gpt-5.4-mini}") String codexAssistantModel,
-            @Value("${app.ai.codex.generate-model:gpt-5.5}") String codexGenerateModel,
+            @Value("${app.ai.codex.assistant-model:gpt-6-luna}") String codexAssistantModel,
+            @Value("${app.ai.codex.generate-model:gpt-6-astra}") String codexGenerateModel,
             @Value("${app.ai.codex.assistant-effort:medium}") String codexAssistantEffort,
             @Value("${app.ai.codex.generate-effort:xhigh}") String codexGenerateEffort,
             @Value("${app.ai.kimi.command:kimi}") String kimiCommand,

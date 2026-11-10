@@ -11,8 +11,8 @@ const LABELS = {
   tree: { en: 'red-black tree', ru: 'красно-чёрное дерево' },
   count: { en: 'count', ru: 'кол-во' },
   capacity: { en: 'capacity', ru: 'ёмкость' },
-  treeifyAt: { en: 'treeify at', ru: 'treeify при' },
-  untreeifyAt: { en: 'untreeify at', ru: 'untreeify при' },
+  treeifyAt: { en: 'treeify past', ru: 'treeify больше' },
+  untreeifyAt: { en: 'resize split: list at <=', ru: 'деление при resize: список при <=' },
   hash: { en: 'hash', ru: 'хэш' },
   bucket: { en: 'bucket', ru: 'бакет' },
   runHint: {

@@ -13,12 +13,19 @@ import java.util.Map;
  * bucket?</em>
  *
  * <p>By default a bucket is a singly-linked list of {@code Node} objects
- * (separate chaining). Since Java 8, once a single bucket grows to
- * {@link #TREEIFY_THRESHOLD} entries <em>and</em> the table capacity is at least
- * {@link #MIN_TREEIFY_CAPACITY}, that bucket is converted ("treeified") into a
- * red-black tree of {@code TreeNode} objects, turning the bucket's lookups from
- * O(n) into O(log n). It reverts to a list ("untreeifies") when the count drops
- * to {@link #UNTREEIFY_THRESHOLD}.
+ * (separate chaining). Since Java 8, once a single bucket grows past
+ * {@link #TREEIFY_THRESHOLD} entries (the 9th is added) <em>and</em> the table
+ * capacity is at least {@link #MIN_TREEIFY_CAPACITY}, that bucket is converted
+ * ("treeified") into a red-black tree of {@code TreeNode} objects, turning the
+ * bucket's lookups from O(n) into O(log n).
+ *
+ * <p>Going back is not a count. On {@code remove()} the JDK converts a tree back
+ * to a list ("untreeifies") when it is too small <em>by shape</em>: its root has
+ * no left or right child, or the left child has no left child. This model applies
+ * that same rule to the balanced tree it displays, which happens at 6 entries; a
+ * real tree of colliding keys can reach it anywhere from about 6 down to 2.
+ * {@link #UNTREEIFY_THRESHOLD} is the count used when a resize splits a tree
+ * bucket, which this single-bucket model does not simulate.
  *
  * <p>This is NOT the JDK implementation: every key handed to this model is
  * assumed to land in the same bucket (that is the whole point — a bucket only
@@ -27,9 +34,9 @@ import java.util.Map;
  */
 public class VisualBucket {
 
-    /** A chain this long or longer is converted to a tree (JDK value). */
+    /** A chain that grows past this is converted to a tree (JDK value). */
     static final int TREEIFY_THRESHOLD = 8;
-    /** A tree this small or smaller is converted back to a list (JDK value). */
+    /** On a resize split, a tree half this small or smaller becomes a list (JDK value; shown, not simulated). */
     static final int UNTREEIFY_THRESHOLD = 6;
     /** Below this table capacity the map resizes instead of treeifying (JDK value). */
     static final int MIN_TREEIFY_CAPACITY = 64;
@@ -88,15 +95,15 @@ public class VisualBucket {
     }
 
     private void maybeTreeify() {
-        if (tree || nodes.size() < TREEIFY_THRESHOLD) {
-            return;
+        if (tree || nodes.size() <= TREEIFY_THRESHOLD) {
+            return; // the JDK checks after appending, so a chain of exactly 8 stays a chain
         }
         if (capacity < MIN_TREEIFY_CAPACITY) {
             Trace.event("TREEIFY_SKIPPED",
-                    "Chain reached " + nodes.size() + " but capacity " + capacity
+                    "Chain grew to " + nodes.size() + " but capacity " + capacity
                             + " < " + MIN_TREEIFY_CAPACITY
                             + " — the map resizes instead of treeifying.",
-                    "Цепочка достигла " + nodes.size() + ", но ёмкость " + capacity
+                    "Цепочка выросла до " + nodes.size() + ", но ёмкость " + capacity
                             + " < " + MIN_TREEIFY_CAPACITY
                             + " — мапа делает resize вместо treeify.",
                     List.of("bucket:" + index), state());
@@ -104,9 +111,9 @@ public class VisualBucket {
         }
         tree = true;
         Trace.event("TREEIFY",
-                "Chain reached " + TREEIFY_THRESHOLD + " entries and capacity >= "
+                "Chain grew past " + TREEIFY_THRESHOLD + " entries (now " + nodes.size() + ") and capacity >= "
                         + MIN_TREEIFY_CAPACITY + " — bucket converted to a red-black tree.",
-                "Цепочка достигла " + TREEIFY_THRESHOLD + " записей и ёмкость >= "
+                "Цепочка выросла больше " + TREEIFY_THRESHOLD + " записей (теперь " + nodes.size() + ") и ёмкость >= "
                         + MIN_TREEIFY_CAPACITY + " — бакет превращён в красно-чёрное дерево.",
                 List.of("bucket:" + index), state());
     }
@@ -163,7 +170,7 @@ public class VisualBucket {
         return null;
     }
 
-    /** Removes a key; a small enough tree reverts to a linked list. */
+    /** Removes a key; a tree that becomes too small by shape reverts to a linked list. */
     public void remove(String key) {
         boolean removed = false;
         for (Iterator<Node> it = nodes.iterator(); it.hasNext(); ) {
@@ -176,13 +183,13 @@ public class VisualBucket {
         if (!removed) {
             return;
         }
-        if (tree && nodes.size() <= UNTREEIFY_THRESHOLD) {
+        if (tree && tooSmallByShape(nodes.size())) {
             tree = false;
             Trace.event("UNTREEIFY",
-                    "Tree shrank to " + nodes.size() + " (<= " + UNTREEIFY_THRESHOLD
-                            + ") — converted back to a linked list.",
-                    "Дерево уменьшилось до " + nodes.size() + " (<= " + UNTREEIFY_THRESHOLD
-                            + ") — снова превращено в связный список.",
+                    "Tree of " + nodes.size() + " is too small by shape (the root's left child has no left child)"
+                            + " — converted back to a linked list. The JDK checks the shape, not a count.",
+                    "Дерево из " + nodes.size() + " слишком маленькое по форме (у левого потомка корня нет левого"
+                            + " потомка) — снова превращено в связный список. JDK проверяет форму, а не счётчик.",
                     List.of("bucket:" + index), state());
         } else {
             Trace.event(tree ? "TREE_ADD" : "LIST_ADD",
@@ -194,6 +201,18 @@ public class VisualBucket {
 
     public int size() {
         return nodes.size();
+    }
+
+    /**
+     * The JDK's removeTreeNode test, applied to the balanced tree this model
+     * displays (see buildTree): the root lacks a child, or its left child lacks
+     * a left child.
+     */
+    static boolean tooSmallByShape(int n) {
+        int left = (n - 1) >>> 1;          // nodes left of the root, as buildTree splits them
+        int right = n - 1 - left;
+        int leftLeft = (left - 1) >>> 1;   // nodes left of the left child
+        return n == 0 || left == 0 || right == 0 || leftLeft == 0;
     }
 
     private List<Node> sortedByHash() {

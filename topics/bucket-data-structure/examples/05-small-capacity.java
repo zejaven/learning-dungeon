@@ -7,8 +7,8 @@ public class Playground {
         // entries over more buckets is cheaper than building a tree in a tiny table.
         VisualBucket bucket = new VisualBucket(0, 16);
 
-        for (int i = 0; i < 8; i++) {
-            bucket.add("k" + i, "v" + i); // reaches 8 but stays a list
+        for (int i = 0; i < 9; i++) {
+            bucket.add("k" + i, "v" + i); // grows past 8 but stays a list
         }
 
         System.out.println("still a list, size -> " + bucket.size());

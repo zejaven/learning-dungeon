@@ -117,6 +117,16 @@ class RemoteAccessFilterTest {
     }
 
     @Test
+    void voiceInputWorksFromThePhoneButStillNeedsTheToken() {
+        // A deliberate exception to "shells out -> CODE_EXECUTION_PATHS": the voice
+        // worker is a fixed program fed audio and a text hint, never the caller's code.
+        for (String path : new String[] { "/api/voice/status", "/api/voice/warmup", "/api/voice/transcribe" }) {
+            assertEquals(Decision.ALLOW, decide(RemoteAccessMode.PROXIED, false, path, TOKEN, null), path);
+            assertEquals(Decision.UNAUTHORIZED, decide(RemoteAccessMode.PROXIED, false, path, null, null), path);
+        }
+    }
+
+    @Test
     void codeExecutionCanBeAllowedExplicitly() {
         assertEquals(Decision.ALLOW, RemoteAccessFilter.decide(
                 RemoteAccessMode.DIRECT, TOKEN, true, false, "/api/run", TOKEN, null));

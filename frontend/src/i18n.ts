@@ -494,6 +494,20 @@ const UI: Record<string, Localized> = {
     en: 'Offline storage needs the installed app (an https:// or localhost address).',
     ru: 'Офлайн-хранилище работает только в установленном приложении (адрес https:// или localhost).',
   },
+  voiceStart: { en: 'Speak', ru: 'Голосом' },
+  voiceStop: { en: 'Stop', ru: 'Стоп' },
+  voiceTranscribing: { en: 'Transcribing…', ru: 'Распознаю…' },
+  voiceHint: {
+    en: 'Record your answer; pauses are fine. Press Stop when you are done, and the text goes into the answer box.',
+    ru: 'Запиши ответ голосом, паузы не мешают. Нажми «Стоп», когда закончишь, и текст попадёт в поле ответа.',
+  },
+  voiceNeedsHttps: {
+    en: 'The microphone works only over https (Tailscale) or on localhost.',
+    ru: 'Микрофон работает только по https (Tailscale) или на localhost.',
+  },
+  voiceMicDenied: { en: 'No access to the microphone.', ru: 'Нет доступа к микрофону.' },
+  voiceNothingHeard: { en: 'No speech was recognised.', ru: 'Речь не распознана.' },
+  voiceFailed: { en: 'Voice input failed', ru: 'Голосовой ввод не сработал' },
   offlineBossUnavailable: {
     en: 'Boss Fight grading needs a connection — the answer is checked by AI on the PC.',
     ru: 'Проверка Битвы с боссом требует связи — ответ оценивает ИИ на компьютере.',

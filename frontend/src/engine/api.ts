@@ -733,3 +733,39 @@ function newAnswerId(): string {
   }
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
+
+// --- Voice input (Boss Fight answers) ---------------------------------------
+// Online-only like AI grading: the UI needs the text back, so nothing queues.
+
+export interface VoiceStatus {
+  available: boolean;
+  reason: string;
+}
+
+export async function fetchVoiceStatus(): Promise<VoiceStatus> {
+  const res = await fetch('/api/voice/status');
+  if (!res.ok) throw new Error(`Voice status failed (${res.status})`);
+  return res.json();
+}
+
+/** Starts loading the model for `lang` while the user is still speaking. Best-effort. */
+export function warmupVoice(lang: string): void {
+  void fetch('/api/voice/warmup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ lang }),
+  }).catch(() => {});
+}
+
+/** The text spoken in `audio`; `question` helps spell its terms. */
+export async function transcribeVoice(audio: Blob, lang: string, question: string): Promise<string> {
+  const form = new FormData();
+  const ext = audio.type.includes('mp4') ? 'mp4' : audio.type.includes('ogg') ? 'ogg' : 'webm';
+  form.append('audio', audio, `answer.${ext}`);
+  form.append('lang', lang);
+  form.append('question', question);
+  const res = await fetch('/api/voice/transcribe', { method: 'POST', body: form });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(body?.error ?? `Transcription failed (${res.status})`);
+  return body?.text ?? '';
+}

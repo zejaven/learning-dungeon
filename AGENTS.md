@@ -465,6 +465,31 @@ If a command cannot be run, say exactly why and what remains unverified.
     ES_SYSTEM_REQUIRED)` and releases it ~90s after the last run ends. Display
     sleep stays allowed; non-Windows is a no-op. Every AI code path must keep
     funneling through `runProcess` for this to hold.
+- The `voice` package (`voice/VoiceService`, `api/VoiceController`) is voice
+  input for Boss Fight answers. The browser records with `MediaRecorder` until
+  Stop (pauses never end it) and posts the whole recording; the PC transcribes
+  it in one go with faster-whisper through the python worker
+  `tools/voice/transcribe_worker.py`. That is what makes long pauses harmless:
+  VAD cuts the silence out and Whisper punctuates the joined speech by meaning,
+  which streaming recognisers and the Web Speech API cannot do (they end
+  utterances on silence).
+  - The worker is long-lived and talks JSON lines over stdin/stdout (no port).
+    It holds ONE model, picked by the UI language (`ru` →
+    `bzikst/faster-whisper-large-v3-russian`, anything else →
+    `large-v3-turbo`), and exits after `app.voice.idle-minutes` idle to give
+    the VRAM back: the zeveon-transcriber bot shares the 6 GB GPU. The next
+    request restarts it; `/api/voice/warmup`, sent when recording starts,
+    hides the model load behind the user's speech.
+  - It runs in the zeveon-transcriber venv (found next to this repo, or
+    `app.voice.python`) and needs ffmpeg on PATH; without them
+    `/api/voice/status` says why and the button stays hidden.
+  - `VoiceService.promptFor` builds Whisper's `initial_prompt`: a lead that
+    spells sample terms in Latin plus the question. Whisper copies the prompt's
+    style, and without the Latin examples Russian speech came out as
+    "Хешмэп ... джет ... нол" even for "HashMap ... get ... null".
+  - Online-only (`engine/api.ts transcribeVoice`, never the outbox), and the
+    microphone needs a secure context like the service worker: https via
+    Tailscale or localhost; over http on the LAN the button says so.
 - The `remote` package (`backend/src/main/java/com/interviewlearning/remote/`)
   is the only thing standing between this app and a remote shell, because
   `/api/run`, `/api/sql`, `/api/challenge` and `/api/analyze` execute what the
@@ -487,7 +512,10 @@ If a command cannot be run, say exactly why and what remains unverified.
   - Even an authenticated remote client cannot reach the code-execution paths
     unless `app.remote.allow-code-execution` is on. Adding a new endpoint that
     compiles, executes or shells out means adding it to
-    `CODE_EXECUTION_PATHS`.
+    `CODE_EXECUTION_PATHS`. The one deliberate exception is `/api/voice/*`
+    (the `voice` package): it drives a fixed program fed audio and a text
+    hint, never the caller's code, and the phone is where dictation is most
+    useful. `RemoteAccessFilterTest` pins that exception.
   - Settings live in `config/secret.yml` (`remote.*`, `app.bind-address`),
     written by `launcher/remote.ps1` into a managed block. The policy is a pure
     function (`RemoteAccessFilter.decide`) pinned by `RemoteAccessFilterTest` —

@@ -8,6 +8,7 @@ import type { BossQuestion } from '@app/engine/traceTypes';
 import { langsOf, tlStrict, ui, useLang, type Lang } from '@app/i18n';
 import { MissingLanguage } from '@app/shell/MissingLanguage';
 import { Markdown } from './Markdown';
+import { VoiceInputButton } from './VoiceInputButton';
 
 export const PASS_SCORE = 6;
 
@@ -222,6 +223,13 @@ export function BossQuestionForm({ topicId, question, onPassed, onBusyChange }: 
         <button className="primary" onClick={evaluate} disabled={busy || !draft.trim() || !online}>
           {busy ? ui('evaluating', lang) : stored ? ui('reEvaluate', lang) : ui('submitAnswer', lang)}
         </button>
+        {online && (
+          <VoiceInputButton
+            question={questionText}
+            disabled={busy}
+            onText={(text) => setDraft((d) => (d.trim() ? `${d.trimEnd()} ${text}` : text))}
+          />
+        )}
       </div>
     </div>
   );

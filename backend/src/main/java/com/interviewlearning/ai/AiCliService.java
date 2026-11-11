@@ -703,7 +703,13 @@ public class AiCliService {
         }
         switch (cfg.kind()) {
             case CLAUDE -> out.add("claude");
-            case CODEX -> out.add("codex");
+            // npm installs codex on Windows as codex.cmd, and ProcessBuilder only
+            // appends .exe to a bare name, so "codex" alone is not found there.
+            case CODEX -> {
+                out.add("codex");
+                out.add("codex.cmd");
+                out.add("codex.exe");
+            }
             case KIMI -> {
                 out.add("kimi");
                 out.add("kimi.cmd");

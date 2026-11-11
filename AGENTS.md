@@ -832,6 +832,18 @@ The backend uses the Claude Code CLI for generation and assistant flows. Relevan
 settings are under `app.ai.*` (legacy `app.claude.*` still works as a fallback)
 and `app.usage` in `backend/src/main/resources/application.yml`.
 
+The header usage bars (`usage/UsageService`, `app.usage`) exist for Claude and
+Codex. Claude's come from Anthropic's OAuth usage endpoint; Codex's from
+`codex app-server` (JSON-RPC on stdio, request `account/rateLimits/read`, no
+model run) through `usage/CodexRateLimits`, which tells the 5-hour and weekly
+windows apart by `windowDurationMins`. app-server is experimental: an answer of
+another shape is "no reading", never an error, and after a codex-cli update
+`CodexRateLimitsLiveCheck` (`-Dverify.codexLimits=codex.cmd`) checks the real
+CLI. `UsageService.fetch` picks the source by provider because the bulk loop
+reads limits for whatever provider it runs on. On Windows npm installs codex as
+`codex.cmd`, which `ProcessBuilder` does not find by the bare name `codex`, so
+`AiCliService.candidates` tries both.
+
 Claude models are configured as tier aliases (`sonnet`, `opus`), not pinned ids,
 so a new model release needs no config change. `AiCliService` passes the
 configured value to `--model` verbatim and separately caches the concrete id the

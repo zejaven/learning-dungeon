@@ -155,6 +155,16 @@ public class AiCliService {
         return status(providerId).available();
     }
 
+    /**
+     * The command that started the provider's CLI (e.g. {@code codex.cmd}), or
+     * empty when it cannot start. For callers that drive the CLI in a mode other
+     * than a generation run, such as reading Codex rate limits.
+     */
+    public Optional<String> command(String providerId) {
+        ResolvedCommand resolved = resolve(config(providerId));
+        return resolved.available() ? Optional.of(resolved.command()) : Optional.empty();
+    }
+
     public String label(String providerId) {
         return config(providerId).label();
     }

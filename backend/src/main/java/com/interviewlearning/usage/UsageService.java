@@ -25,8 +25,9 @@ import java.util.Map;
 /**
  * Reports selected AI provider usage/status for the app header.
  *
- * Claude has a real session/weekly usage endpoint. Codex and Kimi are checked
- * for local CLI availability, but comparable quota windows are not exposed here.
+ * Claude has a real session/weekly usage endpoint; Codex reports the same two
+ * windows through {@code codex app-server} ({@link CodexRateLimits}). Kimi is
+ * only checked for local CLI availability.
  */
 @Service
 public class UsageService {
@@ -37,6 +38,7 @@ public class UsageService {
 
     private final ObjectMapper mapper;
     private final AiCliService ai;
+    private final CodexRateLimits codexLimits;
     private final boolean enabled;
     private final long refreshMillis;
     private final String userAgent;
@@ -58,12 +60,14 @@ public class UsageService {
 
     public UsageService(ObjectMapper mapper,
                         AiCliService ai,
+                        CodexRateLimits codexLimits,
                         @Value("${app.usage.enabled:true}") boolean enabled,
                         @Value("${app.usage.refresh-seconds:180}") long refreshSeconds,
                         @Value("${app.usage.user-agent:claude-code/2.1.177}") String userAgent,
                         @Value("${app.usage.credentials-file:}") String credentialsFile) {
         this.mapper = mapper;
         this.ai = ai;
+        this.codexLimits = codexLimits;
         this.enabled = enabled;
         this.refreshMillis = Math.max(MIN_REFRESH_SECONDS, refreshSeconds) * 1000L;
         this.userAgent = userAgent;
@@ -73,8 +77,8 @@ public class UsageService {
     }
 
     /**
-     * Returns the latest reading for the selected provider. For Claude this may
-     * refresh from Anthropic; for other providers this returns CLI status.
+     * Returns the latest reading for the selected provider. Claude and Codex may
+     * refresh their limits here; other providers return CLI status.
      */
     public synchronized UsageSnapshot current(String providerId) {
         String provider = providerId == null || providerId.isBlank() ? "claude" : providerId.trim().toLowerCase();
@@ -83,13 +87,9 @@ public class UsageService {
             return UsageSnapshot.unavailable(status.id(), status.label(), false, status.downloadUrl(),
                     status.label() + " CLI is not installed or cannot start.");
         }
-        if (!"claude".equals(status.id())) {
-            String message = "codex".equals(status.id())
-                    ? "Codex CLI is available. Open Codex and run /status to see rate limits; "
-                    + "this app cannot read them automatically yet."
-                    : status.label() + " CLI is available. Usage limits are not exposed through this app yet.";
+        if (!hasLimits(status.id())) {
             return UsageSnapshot.unavailable(status.id(), status.label(), true, status.downloadUrl(),
-                    message);
+                    status.label() + " CLI is available. Usage limits are not exposed through this app yet.");
         }
         if (!enabled) {
             return unavailable(status, "Usage display disabled.");
@@ -106,7 +106,7 @@ public class UsageService {
             return current;
         }
         lastFetchAt.put(status.id(), now);
-        UsageSnapshot fetched = fetchClaude(status);
+        UsageSnapshot fetched = fetch(status);
         cached.put(status.id(), fetched);
         return fetched;
     }
@@ -152,7 +152,7 @@ public class UsageService {
             return new BulkRefresh(current, false, nextAllowed);
         }
         lastFetchAt.put(id, now);
-        UsageSnapshot fetched = fetchClaude(status);
+        UsageSnapshot fetched = fetch(status);
         cached.put(id, fetched);
         // fetchClaude sets cooldownUntil on a 429; report that as not-fresh.
         boolean rateLimited = cooldownUntil.getOrDefault(id, 0L) > now;
@@ -161,6 +161,45 @@ public class UsageService {
 
     private static String normalize(String providerId) {
         return providerId == null || providerId.isBlank() ? "claude" : providerId.trim().toLowerCase();
+    }
+
+    private static boolean hasLimits(String providerId) {
+        return "claude".equals(providerId) || "codex".equals(providerId);
+    }
+
+    /**
+     * One upstream reading for the provider. The bulk loop gets here for any
+     * provider, so this must not read Claude's limits for a Codex run.
+     */
+    private UsageSnapshot fetch(AiProviderStatus status) {
+        if (!status.available()) {
+            return unavailable(status, status.label() + " CLI is not installed or cannot start.");
+        }
+        return switch (status.id()) {
+            case "claude" -> fetchClaude(status);
+            case "codex" -> fetchCodex(status);
+            default -> unavailable(status, status.label() + " usage limits are not exposed through this app yet.");
+        };
+    }
+
+    private UsageSnapshot fetchCodex(AiProviderStatus status) {
+        String command = ai.command(status.id()).orElse(null);
+        if (command == null) {
+            return unavailable(status, "Codex CLI cannot start.");
+        }
+        try {
+            CodexRateLimits.Reading reading = codexLimits.read(command);
+            if (reading == null) {
+                return unavailable(status, "Codex reported no rate-limit windows.");
+            }
+            return new UsageSnapshot(status.id(), status.label(), true, status.downloadUrl(),
+                    true, reading.session(), reading.weekly(), null);
+        } catch (IOException e) {
+            log.debug("Codex rate limits unavailable: {}", e.getMessage());
+            UsageSnapshot current = cached.get(status.id());
+            return current != null && current.available()
+                    ? current : unavailable(status, "Codex rate limits unavailable: " + e.getMessage());
+        }
     }
 
     private UsageSnapshot fetchClaude(AiProviderStatus status) {

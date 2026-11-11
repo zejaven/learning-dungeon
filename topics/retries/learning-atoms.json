@@ -1,0 +1,1501 @@
+{
+  "schemaVersion": 1,
+  "topicId": "retries",
+  "sourceVersion": 1,
+  "aiProvider": "claude",
+  "aiModel": "claude-opus-5-5",
+  "atoms": [
+    {
+      "id": "transient-failures",
+      "title": { "en": "What a retry is for", "ru": "Зачем нужен retry" },
+      "summary": {
+        "en": "A retry turns a short transient failure into an unnoticed success, but a careless retry can kill a struggling service, double-charge a card or multiply load.",
+        "ru": "Retry превращает короткий временный сбой в незаметный успех, но небрежный retry может добить перегруженный сервис, дважды списать деньги или умножить нагрузку."
+      },
+      "discovery": [
+        {
+          "id": "transient-d1-pod-restart",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A pod restarts and drops a client's connection for about 200 ms. The client tries the same call once more a moment later. What does the user most likely see?",
+            "ru": "Под перезапускается и примерно на 200 ms обрывает соединение клиента. Клиент через мгновение повторяет тот же вызов ещё раз. Что, скорее всего, увидит пользователь?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "A normal successful response", "ru": "Обычный успешный ответ" }, "correct": true },
+            { "id": "b", "text": { "en": "An error page, because the first call failed", "ru": "Страницу ошибки, ведь первый вызов упал" }, "correct": false,
+              "feedback": { "en": "The second call reached a healthy pod; the first failure stays invisible.", "ru": "Второй вызов попал на здоровый под; первый сбой остаётся невидимым." } },
+            { "id": "c", "text": { "en": "Two results, one per call", "ru": "Два результата — по одному на вызов" }, "correct": false,
+              "feedback": { "en": "The first call produced no response at all; the user gets one answer.", "ru": "Первый вызов вообще не дал ответа; пользователь получит один ответ." } }
+          ],
+          "reveal": {
+            "en": "A **transient failure** is a short, temporary one: a dropped connection, a restarting pod, a briefly overloaded service. A **retry** — sending the same call again after it failed — turns such a failure into a success the user never notices.\n\nThe same tool used carelessly does damage: it can turn a struggling service into a dead one, charge a card twice, or turn one user request into dozens of calls to a database that is already down. A safe retry policy answers four questions:\n\n```mermaid\nflowchart LR\n  Q[\"retry policy\"] --> W1[\"When: backoff + jitter\"]\n  Q --> W2[\"What: transient errors only\"]\n  Q --> W3[\"How much: attempts, deadline, budget\"]\n  Q --> W4[\"Where: one layer of the stack\"]\n```\n\nThe rest of this lesson answers each of them.",
+            "ru": "**Временный (transient) сбой** — короткий и преходящий: оборванное соединение, перезапуск пода, кратковременная перегрузка сервиса. **Retry** — повторная отправка того же вызова после неудачи — превращает такой сбой в успех, которого пользователь даже не заметит.\n\nНо тот же инструмент без аккуратности вредит: превращает с трудом работающий сервис в мёртвый, списывает деньги с карты дважды или делает из одного запроса пользователя десятки вызовов к базе, которая и так лежит. Безопасная политика повторов отвечает на четыре вопроса:\n\n```mermaid\nflowchart LR\n  Q[\"политика повторов\"] --> W1[\"Когда: backoff + jitter\"]\n  Q --> W2[\"Что: только временные ошибки\"]\n  Q --> W3[\"Сколько: попытки, deadline, budget\"]\n  Q --> W4[\"Где: один уровень стека\"]\n```\n\nОстальной урок отвечает на каждый из них."
+          },
+          "feedback": {
+            "correct": { "en": "Right — the retry hides the blip.", "ru": "Верно — повтор скрывает кратковременный сбой." },
+            "incorrect": { "en": "Not quite — see below.", "ru": "Не совсем — смотри ниже." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "transient-p1-which-is-transient",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which of these failures of a remote call is transient, so a retry can help?",
+            "ru": "Какой из этих сбоев удалённого вызова временный, то есть retry может помочь?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "The service is briefly overloaded", "ru": "Сервис кратковременно перегружен" }, "correct": true },
+            { "id": "b", "text": { "en": "The request body is invalid JSON", "ru": "Тело запроса — невалидный JSON" }, "correct": false,
+              "feedback": { "en": "The same body fails the same way every time.", "ru": "То же тело каждый раз падает одинаково." } },
+            { "id": "c", "text": { "en": "The requested order does not exist", "ru": "Запрошенного заказа не существует" }, "correct": false,
+              "feedback": { "en": "The order will not appear because you asked again.", "ru": "Заказ не появится от того, что вы спросили ещё раз." } },
+            { "id": "d", "text": { "en": "The access token is wrong", "ru": "Токен доступа неверный" }, "correct": false,
+              "feedback": { "en": "A wrong token stays wrong on every attempt.", "ru": "Неверный токен остаётся неверным при любой попытке." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — overload passes, so a later call can succeed.", "ru": "Верно — перегрузка проходит, и позже вызов может пройти." },
+            "incorrect": { "en": "No — only a temporary condition can be fixed by waiting.", "ru": "Нет — ожидание лечит только временное состояние." }
+          }
+        },
+        {
+          "id": "transient-p2-retry-everything",
+          "type": "true_false",
+          "prompt": {
+            "en": "A retry policy is safe as long as it retries every failed call.",
+            "ru": "Политика повторов безопасна, если она повторяет каждый неудачный вызов."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": { "en": "Right — careless retries add load, duplicate operations and amplify outages.", "ru": "Верно — небрежные повторы добавляют нагрузку, дублируют операции и раздувают сбои." },
+            "incorrect": { "en": "No — retrying everything can kill a service or charge a card twice.", "ru": "Нет — повтор всего подряд может добить сервис или дважды списать деньги." }
+          }
+        },
+        {
+          "id": "transient-p3-four-questions",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each question of a safe retry policy with its answer.",
+            "ru": "Сопоставьте каждый вопрос безопасной политики повторов с ответом."
+          },
+          "pairs": [
+            { "id": "when", "left": { "en": "When to try again", "ru": "Когда пробовать снова" }, "right": { "en": "backoff with jitter", "ru": "backoff с jitter" } },
+            { "id": "what", "left": { "en": "What to retry", "ru": "Что повторять" }, "right": { "en": "transient errors; ambiguous ones only if idempotent", "ru": "временные ошибки; неоднозначные — только если идемпотентно" } },
+            { "id": "how-much", "left": { "en": "How much", "ru": "Сколько" }, "right": { "en": "attempt cap, request deadline, retry budget", "ru": "лимит попыток, deadline запроса, retry budget" } },
+            { "id": "where", "left": { "en": "Where", "ru": "Где" }, "right": { "en": "at one layer of the stack", "ru": "на одном уровне стека" } }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — when, what, how much, where.", "ru": "Верно — когда, что, сколько, где." },
+            "incorrect": { "en": "Not quite — check the pairs again.", "ru": "Не совсем — проверьте пары ещё раз." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "exponential-backoff",
+      "title": { "en": "Capped exponential backoff", "ru": "Exponential backoff с потолком" },
+      "summary": {
+        "en": "Each retry waits longer than the previous one, delay(k) = min(maxDelay, baseDelay * multiplier^k), and the cap keeps late waits bounded.",
+        "ru": "Каждый повтор ждёт дольше предыдущего, delay(k) = min(maxDelay, baseDelay * multiplier^k), а потолок ограничивает поздние паузы."
+      },
+      "discovery": [
+        {
+          "id": "backoff-d1-schedule",
+          "type": "predict_output",
+          "prompt": {
+            "en": "This loop computes the wait before each of five retries. What does it print?",
+            "ru": "Этот цикл считает паузу перед каждым из пяти повторов. Что он напечатает?"
+          },
+          "code": "long baseDelay = 100;   // ms\nlong maxDelay = 1000;   // ms\nfor (int k = 0; k < 5; k++) {   // k = 0 is the first retry\n    long delay = Math.min(maxDelay, baseDelay * (1L << k));   // multiplier 2\n    System.out.print(delay + \" \");\n}",
+          "codeLang": "java",
+          "options": [
+            { "id": "a", "text": { "en": "100 200 400 800 1000", "ru": "100 200 400 800 1000" }, "correct": true },
+            { "id": "b", "text": { "en": "100 200 400 800 1600", "ru": "100 200 400 800 1600" }, "correct": false,
+              "feedback": { "en": "That ignores Math.min: 1600 is cut to maxDelay = 1000.", "ru": "Здесь забыт Math.min: 1600 обрезается до maxDelay = 1000." } },
+            { "id": "c", "text": { "en": "100 100 100 100 100", "ru": "100 100 100 100 100" }, "correct": false,
+              "feedback": { "en": "That would be a fixed delay; here it doubles each time.", "ru": "Так выглядела бы фиксированная пауза; здесь она удваивается." } },
+            { "id": "d", "text": { "en": "200 400 800 1000 1000", "ru": "200 400 800 1000 1000" }, "correct": false,
+              "feedback": { "en": "k starts at 0, so the first wait is baseDelay itself.", "ru": "k начинается с 0, поэтому первая пауза равна самому baseDelay." } }
+          ],
+          "reveal": {
+            "en": "**Retrying immediately is the worst option.** If a service failed because it is overloaded, an instant retry adds load exactly when it has the least capacity.\n\nWith **exponential backoff** each retry waits longer than the previous one:\n\n```\ndelay(k) = min(maxDelay, baseDelay * multiplier^k)   // k = 0 for the first retry\n\nbaseDelay = 100 ms, multiplier = 2, maxDelay = 1000 ms\nk=0: min(1000,  100) =  100\nk=1: min(1000,  200) =  200\nk=2: min(1000,  400) =  400\nk=3: min(1000,  800) =  800\nk=4: min(1000, 1600) = 1000   <- the cap kicks in\n```\n\nThe **cap** (`maxDelay`) matters: without it the fifth or sixth retry would wait for minutes — longer than anyone is still waiting for the answer.",
+            "ru": "**Повторять сразу — худший вариант.** Если сервис упал из-за перегрузки, мгновенный повтор добавляет нагрузку именно тогда, когда ресурсов меньше всего.\n\nПри **exponential backoff** каждая следующая пауза длиннее предыдущей:\n\n```\ndelay(k) = min(maxDelay, baseDelay * multiplier^k)   // k = 0 для первого повтора\n\nbaseDelay = 100 ms, multiplier = 2, maxDelay = 1000 ms\nk=0: min(1000,  100) =  100\nk=1: min(1000,  200) =  200\nk=2: min(1000,  400) =  400\nk=3: min(1000,  800) =  800\nk=4: min(1000, 1600) = 1000   <- срабатывает потолок\n```\n\n**Потолок** (`maxDelay`) важен: без него пятый-шестой повтор ждал бы минуты — дольше, чем кто-либо ещё ждёт ответа."
+          },
+          "feedback": {
+            "correct": { "en": "Right — doubling, then capped at 1000.", "ru": "Верно — удвоение, затем потолок 1000." },
+            "incorrect": { "en": "Not quite — see below.", "ru": "Не совсем — смотри ниже." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "backoff-p1-why-cap",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why does exponential backoff need a cap (maxDelay)?",
+            "ru": "Зачем exponential backoff нужен потолок (maxDelay)?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Without it, late retries wait minutes — longer than anyone still waits for the answer", "ru": "Без него поздние повторы ждут минуты — дольше, чем кто-то ещё ждёт ответа" }, "correct": true },
+            { "id": "b", "text": { "en": "Without it, the first retry happens immediately", "ru": "Без него первый повтор происходит сразу" }, "correct": false,
+              "feedback": { "en": "The first wait is baseDelay; the cap only limits late waits.", "ru": "Первая пауза — это baseDelay; потолок ограничивает только поздние паузы." } },
+            { "id": "c", "text": { "en": "It makes clients retry at different moments", "ru": "Он заставляет клиентов повторять в разные моменты" }, "correct": false,
+              "feedback": { "en": "Spreading clients apart is the job of jitter, not of the cap.", "ru": "Разносить клиентов во времени — задача jitter, а не потолка." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — the cap bounds the longest wait.", "ru": "Верно — потолок ограничивает самую длинную паузу." },
+            "incorrect": { "en": "No — the cap stops waits from growing without limit.", "ru": "Нет — потолок не даёт паузам расти без предела." }
+          }
+        },
+        {
+          "id": "backoff-p2-triple-schedule",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Capped exponential backoff with baseDelay 50 ms, multiplier 3 and maxDelay 1000 ms. What does this print?",
+            "ru": "Exponential backoff с потолком: baseDelay 50 ms, multiplier 3, maxDelay 1000 ms. Что напечатает код?"
+          },
+          "code": "long baseDelay = 50;\nlong maxDelay = 1000;\nint multiplier = 3;\nlong factor = 1;   // multiplier^k\nfor (int k = 0; k < 4; k++) {\n    System.out.print(Math.min(maxDelay, baseDelay * factor) + \" \");\n    factor *= multiplier;\n}",
+          "codeLang": "java",
+          "options": [
+            { "id": "a", "text": { "en": "50 150 450 1000", "ru": "50 150 450 1000" }, "correct": true },
+            { "id": "b", "text": { "en": "50 150 450 1350", "ru": "50 150 450 1350" }, "correct": false,
+              "feedback": { "en": "1350 is above maxDelay, so Math.min returns 1000.", "ru": "1350 больше maxDelay, поэтому Math.min вернёт 1000." } },
+            { "id": "c", "text": { "en": "50 100 150 200", "ru": "50 100 150 200" }, "correct": false,
+              "feedback": { "en": "That is linear growth; the factor is multiplied, not added.", "ru": "Это линейный рост; множитель умножается, а не прибавляется." } },
+            { "id": "d", "text": { "en": "150 450 1000 1000", "ru": "150 450 1000 1000" }, "correct": false,
+              "feedback": { "en": "The first wait uses multiplier^0 = 1, so it is 50.", "ru": "Первая пауза использует multiplier^0 = 1, то есть 50." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — 50, 150, 450, then capped.", "ru": "Верно — 50, 150, 450, затем потолок." },
+            "incorrect": { "en": "No — multiply by 3 each step and cap at 1000.", "ru": "Нет — на каждом шаге умножайте на 3 и обрезайте до 1000." }
+          }
+        },
+        {
+          "id": "backoff-p3-formula",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the capped exponential backoff formula.",
+            "ru": "Соберите формулу exponential backoff с потолком."
+          },
+          "tokens": {
+            "en": ["delay(k)", "=", "min(", "maxDelay,", "baseDelay", "*", "multiplier^k", ")"],
+            "ru": ["delay(k)", "=", "min(", "maxDelay,", "baseDelay", "*", "multiplier^k", ")"]
+          },
+          "distractors": {
+            "en": ["max(", "+"],
+            "ru": ["max(", "+"]
+          },
+          "feedback": {
+            "correct": { "en": "Right — min() applies the cap.", "ru": "Верно — min() применяет потолок." },
+            "incorrect": { "en": "It is delay(k) = min(maxDelay, baseDelay * multiplier^k).", "ru": "Это delay(k) = min(maxDelay, baseDelay * multiplier^k)." }
+          }
+        },
+        {
+          "id": "backoff-p4-fill-schedule",
+          "type": "fill_blank",
+          "prompt": {
+            "en": "Capped exponential backoff: baseDelay = 100 ms, multiplier = 2, maxDelay = 1000 ms. Type the missing waits.",
+            "ru": "Exponential backoff с потолком: baseDelay = 100 ms, multiplier = 2, maxDelay = 1000 ms. Впишите пропущенные паузы."
+          },
+          "text": {
+            "en": "The five retries wait 100, 200, ___, 800 and ___ ms.",
+            "ru": "Пять повторов ждут 100, 200, ___, 800 и ___ ms."
+          },
+          "blanks": [
+            { "en": ["400"], "ru": ["400"] },
+            { "en": ["1000"], "ru": ["1000"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — 1600 is capped to 1000.", "ru": "Верно — 1600 обрезается до 1000." },
+            "incorrect": { "en": "It is 400, then 1000 (1600 capped).", "ru": "Это 400, затем 1000 (1600 после потолка)." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "thundering-herd",
+      "title": { "en": "The thundering herd", "ru": "Thundering herd" },
+      "summary": {
+        "en": "Clients that fail together and share one backoff schedule also retry together, hitting the recovering service in synchronized waves.",
+        "ru": "Клиенты, упавшие вместе и с одинаковым расписанием backoff, и повторяют вместе — накрывая восстанавливающийся сервис синхронными волнами."
+      },
+      "discovery": [
+        {
+          "id": "herd-d1-distinct-delays",
+          "type": "predict_output",
+          "prompt": {
+            "en": "1000 clients all failed at t=0 and all compute their first backoff wait. How many DIFFERENT wait values are there?",
+            "ru": "1000 клиентов упали в t=0, и каждый считает свою первую паузу backoff. Сколько РАЗНЫХ значений паузы получится?"
+          },
+          "code": "int clients = 1000;\nlong baseDelay = 100;\njava.util.Set<Long> distinctWaits = new java.util.HashSet<>();\nfor (int c = 0; c < clients; c++) {\n    int k = 0;   // first retry\n    distinctWaits.add(baseDelay * (1L << k));\n}\nSystem.out.println(distinctWaits.size());",
+          "codeLang": "java",
+          "options": [
+            { "id": "a", "text": { "en": "1", "ru": "1" }, "correct": true },
+            { "id": "b", "text": { "en": "1000", "ru": "1000" }, "correct": false,
+              "feedback": { "en": "Every client computes the same formula with the same inputs.", "ru": "Каждый клиент считает одну и ту же формулу с одинаковыми входами." } },
+            { "id": "c", "text": { "en": "100", "ru": "100" }, "correct": false,
+              "feedback": { "en": "100 is the wait itself, not the number of distinct waits.", "ru": "100 — это сама пауза, а не число разных пауз." } }
+          ],
+          "reveal": {
+            "en": "Backoff alone has a subtle problem. When a service blips, **every** client fails at the same moment. With the same schedule they all retry at the same moment too:\n\n```\nt=0      1000 calls fail\nt=100ms  1000 retries arrive at once\nt=300ms  1000 more arrive at once\n```\n\nThis is the **thundering herd**: the service recovers, gets flattened again by a synchronized wave, and never gets out of it.\n\n```mermaid\nflowchart LR\n  B[\"service blips\"] --> F[\"all clients fail together\"]\n  F --> S[\"same backoff wait\"]\n  S --> W[\"synchronized retry wave\"]\n  W --> B\n```\n\nThe fix is **jitter**: a random component added to each wait so the clients spread out in time. Backoff decides *how long on average*; jitter makes sure the waits are *not identical*.",
+            "ru": "У одного backoff есть тонкая проблема. Когда сервис моргнул, падают **все** клиенты в один момент. С одинаковым расписанием они и повторяют все в один момент:\n\n```\nt=0      падают 1000 вызовов\nt=100ms  разом приходят 1000 повторов\nt=300ms  разом приходят ещё 1000\n```\n\nЭто **thundering herd** (стадо): сервис восстанавливается, его снова накрывает синхронной волной, и он никак не может выбраться.\n\n```mermaid\nflowchart LR\n  B[\"сервис моргнул\"] --> F[\"все клиенты падают вместе\"]\n  F --> S[\"одинаковая пауза backoff\"]\n  S --> W[\"синхронная волна повторов\"]\n  W --> B\n```\n\nЛечится это **jitter**: случайной составляющей каждой паузы, чтобы клиенты расходились во времени. Backoff решает, *сколько ждать в среднем*; jitter гарантирует, что паузы *не одинаковые*."
+          },
+          "feedback": {
+            "correct": { "en": "Right — one value, so one synchronized wave.", "ru": "Верно — одно значение, значит, одна синхронная волна." },
+            "incorrect": { "en": "Not quite — see below.", "ru": "Не совсем — смотри ниже." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "herd-p1-backoff-alone",
+          "type": "true_false",
+          "prompt": {
+            "en": "Exponential backoff alone stops 1000 clients that failed together from retrying together.",
+            "ru": "Один exponential backoff не даёт 1000 клиентов, упавших вместе, повторять вместе."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": { "en": "Right — the same schedule means the same retry moments.", "ru": "Верно — одинаковое расписание значит одинаковые моменты повторов." },
+            "incorrect": { "en": "No — without jitter they retry in lockstep.", "ru": "Нет — без jitter они повторяют в ногу." }
+          }
+        },
+        {
+          "id": "herd-p2-fix",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Clients that failed together keep retrying in synchronized waves. What fixes it?",
+            "ru": "Клиенты, упавшие вместе, продолжают повторять синхронными волнами. Что это исправит?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Add jitter to each wait", "ru": "Добавить jitter к каждой паузе" }, "correct": true },
+            { "id": "b", "text": { "en": "Allow more attempts", "ru": "Разрешить больше попыток" }, "correct": false,
+              "feedback": { "en": "More attempts means more synchronized waves, not fewer.", "ru": "Больше попыток — больше синхронных волн, а не меньше." } },
+            { "id": "c", "text": { "en": "Raise maxDelay", "ru": "Поднять maxDelay" }, "correct": false,
+              "feedback": { "en": "A bigger cap still gives every client the same wait.", "ru": "Больший потолок всё равно даёт всем одинаковую паузу." } },
+            { "id": "d", "text": { "en": "Shorten baseDelay", "ru": "Уменьшить baseDelay" }, "correct": false,
+              "feedback": { "en": "The waves just arrive sooner, still in lockstep.", "ru": "Волны просто придут раньше, всё так же в ногу." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — randomness desynchronizes the clients.", "ru": "Верно — случайность рассинхронизирует клиентов." },
+            "incorrect": { "en": "No — only randomizing the waits breaks the lockstep.", "ru": "Нет — шаг в ногу ломает только случайность пауз." }
+          }
+        },
+        {
+          "id": "herd-p3-cycle",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the steps of a thundering herd caused by backoff without jitter.",
+            "ru": "Расставьте по порядку шаги thundering herd при backoff без jitter."
+          },
+          "steps": [
+            { "id": "blip", "text": { "en": "The service blips", "ru": "Сервис моргает" } },
+            { "id": "fail", "text": { "en": "All clients fail at the same moment", "ru": "Все клиенты падают в один момент" } },
+            { "id": "wait", "text": { "en": "All clients wait the same backoff delay", "ru": "Все клиенты ждут одинаковую паузу backoff" } },
+            { "id": "wave", "text": { "en": "Retries land as one synchronized wave", "ru": "Повторы приходят одной синхронной волной" } },
+            { "id": "flattened", "text": { "en": "The recovering service is flattened again", "ru": "Восстанавливающийся сервис снова лежит" } }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — and the cycle repeats.", "ru": "Верно — и цикл повторяется." },
+            "incorrect": { "en": "No — blip, shared failure, same wait, wave, flattened.", "ru": "Нет — сбой, общее падение, одинаковая пауза, волна, снова лежит." }
+          }
+        },
+        {
+          "id": "herd-p4-name",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the missing word.", "ru": "Впишите пропущенное слово." },
+          "text": {
+            "en": "Synchronized retry waves from clients that failed together are called the thundering ___.",
+            "ru": "Синхронные волны повторов от клиентов, упавших вместе, называют thundering ___."
+          },
+          "blanks": [
+            { "en": ["herd"], "ru": ["herd"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — thundering herd.", "ru": "Верно — thundering herd." },
+            "incorrect": { "en": "It is the thundering herd.", "ru": "Это thundering herd." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "jitter-variants",
+      "title": { "en": "Full, equal or no jitter", "ru": "Full, equal или без jitter" },
+      "summary": {
+        "en": "Full jitter waits random(0, d) and gives the widest spread; equal jitter waits d/2 + random(0, d/2) and guarantees a minimum wait; no jitter waits d and synchronizes.",
+        "ru": "Full jitter ждёт random(0, d) и даёт наибольший разброс; equal jitter ждёт d/2 + random(0, d/2) и гарантирует минимальную паузу; без jitter все ждут d синхронно."
+      },
+      "discovery": [
+        {
+          "id": "jitter-d1-widest-spread",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "1000 clients failed together; backoff says d = 400 ms. Which wait spreads their retries the most?",
+            "ru": "1000 клиентов упали вместе; backoff даёт d = 400 ms. Какая пауза сильнее всего разнесёт их повторы?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "random(0, d)", "ru": "random(0, d)" }, "correct": true },
+            { "id": "b", "text": { "en": "d/2 + random(0, d/2)", "ru": "d/2 + random(0, d/2)" }, "correct": false,
+              "feedback": { "en": "That spreads clients over only half the window.", "ru": "Это разносит клиентов только по половине окна." } },
+            { "id": "c", "text": { "en": "d", "ru": "d" }, "correct": false,
+              "feedback": { "en": "Everyone waits exactly d: one synchronized wave.", "ru": "Все ждут ровно d: одна синхронная волна." } }
+          ],
+          "reveal": {
+            "en": "There are three common variants for a backoff delay `d`:\n\n| Variant | Wait | Notes |\n|---|---|---|\n| no jitter | `d` | synchronized waves |\n| **full jitter** | `random(0, d)` | best spread, the usual default |\n| **equal jitter** | `d/2 + random(0, d/2)` | guarantees some minimum wait |\n\nWith d = 400 ms, full jitter scatters retries across the whole 0-400 ms window; equal jitter only across 200-400 ms, so twice as many clients share each slice of time. For a synchronized fleet the widest window wins, which is why full jitter is the usual default. Equal jitter is the choice when you need every client to wait at least `d/2`.\n\nThe `jitter-herd` example shows 20 clients: without jitter all 20 retries hit the same 100 ms window; with full jitter the peak drops to a few. Backoff and jitter are not alternatives — you need both.",
+            "ru": "Для паузы backoff `d` есть три распространённых варианта:\n\n| Вариант | Пауза | Заметки |\n|---|---|---|\n| без jitter | `d` | синхронные волны |\n| **full jitter** | `random(0, d)` | лучший разброс, обычный выбор по умолчанию |\n| **equal jitter** | `d/2 + random(0, d/2)` | гарантирует минимальную паузу |\n\nПри d = 400 ms full jitter рассыпает повторы по всему окну 0-400 ms, а equal jitter — только по 200-400 ms, поэтому на каждый отрезок времени приходится вдвое больше клиентов. Для синхронно упавшего множества клиентов выигрывает самое широкое окно — поэтому full jitter и стоит по умолчанию. Equal jitter выбирают, когда каждый клиент должен подождать хотя бы `d/2`.\n\nПример `jitter-herd` показывает 20 клиентов: без jitter все 20 повторов попадают в одно окно 100 ms, с full jitter пик падает до нескольких. Backoff и jitter — не альтернативы, нужны оба."
+          },
+          "feedback": {
+            "correct": { "en": "Right — full jitter uses the whole window.", "ru": "Верно — full jitter использует всё окно." },
+            "incorrect": { "en": "Not quite — see below.", "ru": "Не совсем — смотри ниже." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "jitter-p1-equal-guarantee",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does equal jitter, d/2 + random(0, d/2), guarantee that full jitter does not?",
+            "ru": "Что гарантирует equal jitter, d/2 + random(0, d/2), в отличие от full jitter?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "A minimum wait of d/2", "ru": "Минимальную паузу d/2" }, "correct": true },
+            { "id": "b", "text": { "en": "A wider spread of retries", "ru": "Более широкий разброс повторов" }, "correct": false,
+              "feedback": { "en": "Its window is half as wide, so the spread is narrower.", "ru": "Его окно вдвое уже, так что разброс меньше." } },
+            { "id": "c", "text": { "en": "That no two clients ever retry at once", "ru": "Что два клиента никогда не повторят одновременно" }, "correct": false,
+              "feedback": { "en": "Random waits reduce collisions; no variant rules them out.", "ru": "Случайные паузы уменьшают совпадения, но ни один вариант их не исключает." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — the d/2 part is fixed.", "ru": "Верно — часть d/2 фиксирована." },
+            "incorrect": { "en": "No — its fixed d/2 part is a minimum wait.", "ru": "Нет — его фиксированная часть d/2 — это минимальная пауза." }
+          }
+        },
+        {
+          "id": "jitter-p2-variants",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each jitter variant with its wait for a backoff delay d.",
+            "ru": "Сопоставьте каждый вариант jitter с его паузой для задержки backoff d."
+          },
+          "pairs": [
+            { "id": "none", "left": { "en": "No jitter", "ru": "Без jitter" }, "right": { "en": "d", "ru": "d" } },
+            { "id": "full", "left": { "en": "Full jitter", "ru": "Full jitter" }, "right": { "en": "random(0, d)", "ru": "random(0, d)" } },
+            { "id": "equal", "left": { "en": "Equal jitter", "ru": "Equal jitter" }, "right": { "en": "d/2 + random(0, d/2)", "ru": "d/2 + random(0, d/2)" } }
+          ],
+          "feedback": {
+            "correct": { "en": "Right.", "ru": "Верно." },
+            "incorrect": { "en": "Not quite: none = d, full = random(0, d), equal = d/2 + random(0, d/2).", "ru": "Не совсем: без = d, full = random(0, d), equal = d/2 + random(0, d/2)." }
+          }
+        },
+        {
+          "id": "jitter-p3-replaces-backoff",
+          "type": "true_false",
+          "prompt": {
+            "en": "With jitter in place, retries no longer need exponential backoff.",
+            "ru": "Если есть jitter, повторам больше не нужен exponential backoff."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": { "en": "Right — backoff sets the average, jitter spreads around it.", "ru": "Верно — backoff задаёт среднее, jitter разбрасывает вокруг него." },
+            "incorrect": { "en": "No — you need both: how long on average, and not identical.", "ru": "Нет — нужны оба: сколько в среднем и чтобы не одинаково." }
+          }
+        },
+        {
+          "id": "jitter-p4-full-range",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the lower bound of the full-jitter wait.", "ru": "Впишите нижнюю границу паузы full jitter." },
+          "text": {
+            "en": "Full jitter waits random(___, d).",
+            "ru": "Full jitter ждёт random(___, d)."
+          },
+          "blanks": [
+            { "en": ["0"], "ru": ["0"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — anywhere from 0 to d.", "ru": "Верно — от 0 до d." },
+            "incorrect": { "en": "It is random(0, d).", "ru": "Это random(0, d)." }
+          }
+        },
+        {
+          "id": "jitter-p5-equal-range",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the bounds of the equal-jitter wait in milliseconds.", "ru": "Впишите границы паузы equal jitter в миллисекундах." },
+          "text": {
+            "en": "With d = 400 ms, equal jitter waits between ___ and ___ ms.",
+            "ru": "При d = 400 ms equal jitter ждёт от ___ до ___ ms."
+          },
+          "blanks": [
+            { "en": ["200"], "ru": ["200"] },
+            { "en": ["400"], "ru": ["400"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — d/2 plus up to d/2.", "ru": "Верно — d/2 плюс до d/2." },
+            "incorrect": { "en": "It is 200 to 400: d/2 + random(0, d/2).", "ru": "Это от 200 до 400: d/2 + random(0, d/2)." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "permanent-vs-transient",
+      "title": { "en": "Permanent vs transient errors", "ru": "Постоянные и временные ошибки" },
+      "summary": {
+        "en": "Retry only failures that can succeed later: 503, 429, connection refused — never permanent ones like 400, 401, 403, 404, 409, 422.",
+        "ru": "Повторяйте только сбои, которые могут пройти позже: 503, 429, connection refused — и никогда постоянные вроде 400, 401, 403, 404, 409, 422."
+      },
+      "discovery": [
+        {
+          "id": "errors-d1-retry-400",
+          "type": "predict_output",
+          "prompt": {
+            "en": "This client retries on ANY error status, up to 3 attempts. The server answers 400 Bad Request every time. What does it print?",
+            "ru": "Этот клиент повторяет на ЛЮБОЙ статус ошибки, до 3 попыток. Сервер каждый раз отвечает 400 Bad Request. Что напечатает код?"
+          },
+          "code": "int status = 400;   // Bad Request, on every attempt\nint maxAttempts = 3;\nint sent = 0;\nfor (int attempt = 1; attempt <= maxAttempts; attempt++) {\n    sent++;\n    boolean retryable = status >= 400;   // retry on any error\n    if (!retryable) break;\n}\nSystem.out.println(sent + \" requests, all answered \" + status);",
+          "codeLang": "java",
+          "options": [
+            { "id": "a", "text": { "en": "3 requests, all answered 400", "ru": "3 requests, all answered 400" }, "correct": true },
+            { "id": "b", "text": { "en": "1 requests, all answered 400", "ru": "1 requests, all answered 400" }, "correct": false,
+              "feedback": { "en": "status >= 400 is true, so the loop never breaks early.", "ru": "status >= 400 истинно, поэтому цикл не прерывается раньше." } },
+            { "id": "c", "text": { "en": "2 requests, all answered 400", "ru": "2 requests, all answered 400" }, "correct": false,
+              "feedback": { "en": "maxAttempts = 3 counts the first call too, and all 3 are sent.", "ru": "maxAttempts = 3 включает первый вызов, и отправлены все 3." } }
+          ],
+          "reveal": {
+            "en": "Ask one question about every failure: **will the same request succeed if sent again later, and is it safe to send it again?**\n\n| Group | Examples | Retry? |\n|---|---|---|\n| Transient, not processed | `503 Service Unavailable`, `429 Too Many Requests`, connection refused, DNS failure | yes |\n| Ambiguous, maybe processed | read timeout, `500`, `502`, `504`, connection reset mid-response | only if idempotent (next steps) |\n| **Permanent** | `400`, `401`, `403`, `404`, `409`, `422`, validation or business errors | never |\n\n**Permanent errors** fail the same way every time: the body stays invalid, the order stays missing, the token stays wrong. Retrying a `400` just produces three `400`s and three times the log noise — exactly what the code above did.\n\n**Connection refused** means the request never reached the server, so it is safe to retry even for a call that must not run twice. The rule \"retry on any error\" is the bug here: pick the retryable cases explicitly.",
+            "ru": "Про каждый сбой задайте один вопрос: **пройдёт ли тот же запрос, если отправить его позже, и безопасно ли отправлять его ещё раз?**\n\n| Группа | Примеры | Повторять? |\n|---|---|---|\n| Временные, не обработаны | `503 Service Unavailable`, `429 Too Many Requests`, connection refused, сбой DNS | да |\n| Неоднозначные, возможно обработаны | read timeout, `500`, `502`, `504`, обрыв соединения посреди ответа | только если идемпотентно (дальше) |\n| **Постоянные** | `400`, `401`, `403`, `404`, `409`, `422`, ошибки валидации и бизнес-правил | никогда |\n\n**Постоянные ошибки** каждый раз падают одинаково: тело остаётся невалидным, заказ — несуществующим, токен — неверным. Повтор `400` даёт просто три `400` и втрое больше шума в логах — ровно это и сделал код выше.\n\n**Connection refused** значит, что запрос не дошёл до сервера, поэтому его можно повторять даже для вызова, который нельзя выполнять дважды. Ошибка здесь — правило «повторять на любую ошибку»: повторяемые случаи нужно выбирать явно."
+          },
+          "feedback": {
+            "correct": { "en": "Right — three identical failures.", "ru": "Верно — три одинаковых провала." },
+            "incorrect": { "en": "Not quite — see below.", "ru": "Не совсем — смотри ниже." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "errors-p1-worth-retrying",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Which HTTP status from another service is worth retrying?",
+            "ru": "Какой HTTP-статус от другого сервиса стоит повторить?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "503 Service Unavailable", "ru": "503 Service Unavailable" }, "correct": true },
+            { "id": "b", "text": { "en": "404 Not Found", "ru": "404 Not Found" }, "correct": false,
+              "feedback": { "en": "The resource will not appear on a retry: permanent.", "ru": "Ресурс не появится при повторе: постоянная ошибка." } },
+            { "id": "c", "text": { "en": "401 Unauthorized", "ru": "401 Unauthorized" }, "correct": false,
+              "feedback": { "en": "The same credentials fail the same way: permanent.", "ru": "Те же учётные данные упадут так же: постоянная ошибка." } },
+            { "id": "d", "text": { "en": "409 Conflict", "ru": "409 Conflict" }, "correct": false,
+              "feedback": { "en": "A conflict is a business outcome, not a blip: permanent.", "ru": "Конфликт — бизнес-результат, а не сбой: постоянная ошибка." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — 503 means \"not now\".", "ru": "Верно — 503 значит «не сейчас»." },
+            "incorrect": { "en": "No — only 503 can succeed later.", "ru": "Нет — позже может пройти только 503." }
+          }
+        },
+        {
+          "id": "errors-p2-connection-refused",
+          "type": "true_false",
+          "prompt": {
+            "en": "When a POST fails with connection refused, it is safe to retry it even though POST is not idempotent.",
+            "ru": "Если POST упал с connection refused, его можно безопасно повторить, хотя POST не идемпотентен."
+          },
+          "answer": true,
+          "feedback": {
+            "correct": { "en": "Right — the request never reached the server.", "ru": "Верно — запрос вообще не дошёл до сервера." },
+            "incorrect": { "en": "It is safe: connection refused means nothing was processed.", "ru": "Это безопасно: connection refused значит, что ничего не обработано." }
+          }
+        },
+        {
+          "id": "errors-p3-sort-statuses",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Sort each failure of a remote call into \"retry\" or \"never retry\".",
+            "ru": "Разложите каждый сбой удалённого вызова на «повторять» и «никогда не повторять»."
+          },
+          "pairs": [
+            { "id": "s400", "left": { "en": "400 Bad Request", "ru": "400 Bad Request" }, "right": { "en": "never retry", "ru": "никогда не повторять" } },
+            { "id": "s404", "left": { "en": "404 Not Found", "ru": "404 Not Found" }, "right": { "en": "never retry", "ru": "никогда не повторять" } },
+            { "id": "s429", "left": { "en": "429 Too Many Requests", "ru": "429 Too Many Requests" }, "right": { "en": "retry", "ru": "повторять" } },
+            { "id": "s503", "left": { "en": "503 Service Unavailable", "ru": "503 Service Unavailable" }, "right": { "en": "retry", "ru": "повторять" } },
+            { "id": "refused", "left": { "en": "connection refused", "ru": "connection refused" }, "right": { "en": "retry", "ru": "повторять" } }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — 4xx client errors are permanent.", "ru": "Верно — клиентские 4xx-ошибки постоянные." },
+            "incorrect": { "en": "Not quite: 429, 503 and connection refused are retryable; 400 and 404 are not.", "ru": "Не совсем: 429, 503 и connection refused повторяемы; 400 и 404 — нет." }
+          }
+        },
+        {
+          "id": "errors-p4-count-400",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the numbers.", "ru": "Впишите числа." },
+          "text": {
+            "en": "A client that retries any error, with maxAttempts = 3, sends ___ requests for a Bad Request and gets status ___ every time.",
+            "ru": "Клиент, повторяющий на любую ошибку, с maxAttempts = 3 отправит ___ запроса на Bad Request и каждый раз получит статус ___."
+          },
+          "blanks": [
+            { "en": ["3", "three"], "ru": ["3", "три"] },
+            { "en": ["400"], "ru": ["400"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — three 400s and three times the log noise.", "ru": "Верно — три 400 и втрое больше шума в логах." },
+            "incorrect": { "en": "It is 3 requests, each answered 400.", "ru": "Это 3 запроса, каждый с ответом 400." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "ambiguous-failures",
+      "title": { "en": "Ambiguous failures", "ru": "Неоднозначные сбои" },
+      "summary": {
+        "en": "A timeout, 500, 502, 504 or a reset mid-response may come after the server did the work, so such failures are retried only for idempotent operations.",
+        "ru": "Timeout, 500, 502, 504 или обрыв посреди ответа могут случиться уже после того, как сервер сделал работу, поэтому такие сбои повторяют только для идемпотентных операций."
+      },
+      "discovery": [
+        {
+          "id": "ambiguous-d1-timeout-meaning",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A client sends a request, then gets a read timeout while waiting for the response. What does the client know about the server?",
+            "ru": "Клиент отправил запрос и получил read timeout, пока ждал ответа. Что клиент знает о сервере?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Nothing certain: the work may be done and only the response lost", "ru": "Ничего определённого: работа могла быть сделана, а потерялся только ответ" }, "correct": true },
+            { "id": "b", "text": { "en": "The server did nothing, so resending is always safe", "ru": "Сервер ничего не сделал, так что повтор всегда безопасен" }, "correct": false,
+              "feedback": { "en": "A timeout means YOU stopped waiting, not that the server stopped working.", "ru": "Timeout значит, что ВЫ перестали ждать, а не что сервер перестал работать." } },
+            { "id": "c", "text": { "en": "The server definitely processed it", "ru": "Сервер точно его обработал" }, "correct": false,
+              "feedback": { "en": "It may also have failed before doing anything; you cannot tell.", "ru": "Он мог и упасть, ничего не сделав; узнать нельзя." } }
+          ],
+          "reveal": {
+            "en": "A **timeout** is the dangerous failure: you do not know whether the server did the work. The request may have been processed and only the response lost. The same holds for `500`, `502`, `504` and a connection reset mid-response — these are **ambiguous** failures.\n\nAn operation is **idempotent** when repeating it leaves the system in the same state. `GET`, `PUT` and `DELETE` are idempotent by definition; `POST` and `PATCH` are not. So an ambiguous failure may be retried **only if the operation is idempotent** — otherwise the retry may do the work twice.\n\nIn Java code the same groups map to exceptions:\n\n```\nConnectException                         -> safe (never reached the server)\nSocketTimeoutException, HttpTimeoutException -> ambiguous\nIllegalArgumentException, validation error   -> permanent\n```\n\nSo never retry on a blanket `Exception`.",
+            "ru": "Опаснее всего **timeout**: вы не знаете, сделал ли сервер работу. Запрос мог быть обработан, а потерялся только ответ. То же относится к `500`, `502`, `504` и обрыву соединения посреди ответа — это **неоднозначные** сбои.\n\nОперация **идемпотентна**, если её повтор оставляет систему в том же состоянии. `GET`, `PUT` и `DELETE` идемпотентны по определению; `POST` и `PATCH` — нет. Поэтому неоднозначный сбой можно повторять **только если операция идемпотентна** — иначе повтор может выполнить работу дважды.\n\nВ Java-коде те же группы соответствуют исключениям:\n\n```\nConnectException                         -> безопасно (не дошёл до сервера)\nSocketTimeoutException, HttpTimeoutException -> неоднозначно\nIllegalArgumentException, ошибка валидации   -> постоянная ошибка\n```\n\nПоэтому никогда не повторяйте на любое `Exception` подряд."
+          },
+          "feedback": {
+            "correct": { "en": "Right — a timeout is ambiguous.", "ru": "Верно — timeout неоднозначен." },
+            "incorrect": { "en": "Not quite — see below.", "ru": "Не совсем — смотри ниже." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "ambiguous-p1-timeout-did-nothing",
+          "type": "true_false",
+          "prompt": {
+            "en": "A timeout on a remote call means the server did nothing.",
+            "ru": "Timeout удалённого вызова значит, что сервер ничего не сделал."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": { "en": "Right — the work may be complete; only the answer was lost.", "ru": "Верно — работа могла быть выполнена; потерялся только ответ." },
+            "incorrect": { "en": "No — it means you stopped waiting.", "ru": "Нет — он значит, что вы перестали ждать." }
+          }
+        },
+        {
+          "id": "ambiguous-p2-which-method",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A call to another service times out. Which HTTP method can be retried without any extra measures?",
+            "ru": "Вызов другого сервиса упал по timeout. Какой HTTP-метод можно повторить без дополнительных мер?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "PUT", "ru": "PUT" }, "correct": true },
+            { "id": "b", "text": { "en": "POST", "ru": "POST" }, "correct": false,
+              "feedback": { "en": "POST is not idempotent: a retry may create a second resource.", "ru": "POST не идемпотентен: повтор может создать второй ресурс." } },
+            { "id": "c", "text": { "en": "PATCH", "ru": "PATCH" }, "correct": false,
+              "feedback": { "en": "PATCH is not idempotent by definition.", "ru": "PATCH не идемпотентен по определению." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — PUT is idempotent.", "ru": "Верно — PUT идемпотентен." },
+            "incorrect": { "en": "No — of these only PUT is idempotent.", "ru": "Нет — из них идемпотентен только PUT." }
+          }
+        },
+        {
+          "id": "ambiguous-p3-java-exceptions",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Classify each Java exception from a remote call for retrying.",
+            "ru": "Классифицируйте каждое Java-исключение удалённого вызова с точки зрения повтора."
+          },
+          "pairs": [
+            { "id": "connect", "left": { "en": "ConnectException", "ru": "ConnectException" }, "right": { "en": "safe to retry", "ru": "безопасно повторять" } },
+            { "id": "socket-timeout", "left": { "en": "SocketTimeoutException", "ru": "SocketTimeoutException" }, "right": { "en": "ambiguous: only if idempotent", "ru": "неоднозначно: только если идемпотентно" } },
+            { "id": "http-timeout", "left": { "en": "HttpTimeoutException", "ru": "HttpTimeoutException" }, "right": { "en": "ambiguous: only if idempotent", "ru": "неоднозначно: только если идемпотентно" } },
+            { "id": "iae", "left": { "en": "IllegalArgumentException", "ru": "IllegalArgumentException" }, "right": { "en": "permanent: never retry", "ru": "постоянная: никогда не повторять" } }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — refused is safe, timeouts are ambiguous, bad arguments are permanent.", "ru": "Верно — отказ в соединении безопасен, timeout неоднозначен, плохие аргументы постоянны." },
+            "incorrect": { "en": "Not quite — timeouts are ambiguous, ConnectException is safe.", "ru": "Не совсем — timeout неоднозначен, ConnectException безопасно." }
+          }
+        },
+        {
+          "id": "ambiguous-p4-idempotent-word",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the missing term.", "ru": "Впишите пропущенный термин." },
+          "text": {
+            "en": "GET, PUT and DELETE are ___: repeating them leaves the system in the same state.",
+            "ru": "GET, PUT и DELETE ___: их повтор оставляет систему в том же состоянии."
+          },
+          "blanks": [
+            { "en": ["idempotent"], "ru": ["идемпотентны", "идемпотентные", "idempotent"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — idempotent.", "ru": "Верно — идемпотентны." },
+            "incorrect": { "en": "The term is idempotent.", "ru": "Термин — идемпотентны (idempotent)." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "idempotency-key",
+      "title": { "en": "The idempotency key", "ru": "Idempotency key" },
+      "summary": {
+        "en": "A client-generated key per logical operation, sent with every attempt, lets the server return the stored result instead of doing the work twice.",
+        "ru": "Ключ, который клиент генерирует на одну логическую операцию и шлёт с каждой попыткой, позволяет серверу вернуть сохранённый результат, а не делать работу дважды."
+      },
+      "discovery": [
+        {
+          "id": "idem-d1-double-charge",
+          "type": "predict_output",
+          "prompt": {
+            "en": "POST /payments charges the card, but the response is lost and the client times out. The client retries the same POST with no idempotency key. What is printed?",
+            "ru": "POST /payments списывает деньги, но ответ теряется, и клиент получает timeout. Клиент повторяет тот же POST без idempotency key. Что напечатается?"
+          },
+          "code": "int charges = 0;\n// attempt 1: the server charges the card, then the response is lost\ncharges++;\nboolean clientSawTimeout = true;\n// the client cannot tell, so it retries the same POST\nif (clientSawTimeout) {\n    charges++;   // the server sees a brand-new payment\n}\nSystem.out.println(\"charges = \" + charges);",
+          "codeLang": "java",
+          "options": [
+            { "id": "a", "text": { "en": "charges = 2", "ru": "charges = 2" }, "correct": true },
+            { "id": "b", "text": { "en": "charges = 1", "ru": "charges = 1" }, "correct": false,
+              "feedback": { "en": "Without a key the server cannot recognize the retry as a repeat.", "ru": "Без ключа сервер не может узнать в повторе уже виденный запрос." } },
+            { "id": "c", "text": { "en": "charges = 0", "ru": "charges = 0" }, "correct": false,
+              "feedback": { "en": "The first attempt did charge; only its response was lost.", "ru": "Первая попытка списала деньги; потерялся только ответ." } }
+          ],
+          "reveal": {
+            "en": "After a timeout on `POST /payments` a retry may **charge the card twice**: the first attempt did the work, only its response was lost.\n\nThe fix is an **idempotency key**: the client generates a unique key per *logical operation* (`order-42-payment`) and sends it with *every attempt*. The server stores the key with the result and, on a repeat, returns the stored result instead of doing the work again. That turns any operation into one that is safe to retry.\n\n```mermaid\nsequenceDiagram\n  participant C as Client\n  participant S as Payments\n  participant DB as Key store\n  C->>S: POST /payments (Idempotency-Key: k42)\n  S->>DB: save k42 = charged\n  S--xC: response lost (timeout)\n  C->>S: retry POST /payments (Idempotency-Key: k42)\n  S->>DB: k42 seen\n  S-->>C: 201, stored result (no second charge)\n```\n\nThe key must stay the same across attempts — a fresh key per attempt looks like a new payment.",
+            "ru": "После timeout на `POST /payments` повтор может **списать деньги дважды**: первая попытка сделала работу, потерялся только её ответ.\n\nРешение — **idempotency key**: клиент генерирует уникальный ключ на одну *логическую операцию* (`order-42-payment`) и отправляет его с *каждой попыткой*. Сервер сохраняет ключ вместе с результатом и на повтор возвращает сохранённый результат, а не выполняет работу заново. Так любую операцию можно безопасно повторять.\n\n```mermaid\nsequenceDiagram\n  participant C as Клиент\n  participant S as Payments\n  participant DB as Хранилище ключей\n  C->>S: POST /payments (Idempotency-Key: k42)\n  S->>DB: сохранить k42 = списано\n  S--xC: ответ потерян (timeout)\n  C->>S: повтор POST /payments (Idempotency-Key: k42)\n  S->>DB: k42 уже был\n  S-->>C: 201, сохранённый результат (без второго списания)\n```\n\nКлюч должен оставаться одним и тем же во всех попытках — новый ключ на каждую попытку выглядит как новый платёж."
+          },
+          "feedback": {
+            "correct": { "en": "Right — the card is charged twice.", "ru": "Верно — деньги списаны дважды." },
+            "incorrect": { "en": "Not quite — see below.", "ru": "Не совсем — смотри ниже." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "idem-p1-with-key",
+          "type": "predict_output",
+          "prompt": {
+            "en": "A payments server stores results by idempotency key. The client sends the same key twice because the first response was lost. What is the last line printed?",
+            "ru": "Сервер платежей хранит результаты по idempotency key. Клиент отправляет тот же ключ дважды, потому что первый ответ потерялся. Какая строка напечатается последней?"
+          },
+          "code": "java.util.Map<String, String> processed = new java.util.HashMap<>();\nint charges = 0;\nString key = \"order-42-payment\";\nfor (int attempt = 1; attempt <= 2; attempt++) {\n    if (processed.containsKey(key)) {\n        System.out.println(\"attempt \" + attempt + \": stored result \" + processed.get(key));\n        continue;\n    }\n    charges++;\n    processed.put(key, \"charged\");\n    System.out.println(\"attempt \" + attempt + \": charged, response lost\");\n}\nSystem.out.println(\"charges = \" + charges);",
+          "codeLang": "java",
+          "options": [
+            { "id": "a", "text": { "en": "charges = 1", "ru": "charges = 1" }, "correct": true },
+            { "id": "b", "text": { "en": "charges = 2", "ru": "charges = 2" }, "correct": false,
+              "feedback": { "en": "The second attempt finds the key and returns the stored result.", "ru": "Вторая попытка находит ключ и возвращает сохранённый результат." } },
+            { "id": "c", "text": { "en": "attempt 2: charged, response lost", "ru": "attempt 2: charged, response lost" }, "correct": false,
+              "feedback": { "en": "Attempt 2 takes the containsKey branch; and the last line is the total.", "ru": "Попытка 2 идёт в ветку containsKey; а последняя строка — итог." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — one charge, one stored result.", "ru": "Верно — одно списание, один сохранённый результат." },
+            "incorrect": { "en": "No — the repeat is answered from the key store.", "ru": "Нет — на повтор отвечает хранилище ключей." }
+          }
+        },
+        {
+          "id": "idem-p2-new-key-bug",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This client retries a payment POST with an idempotency key on timeouts. What is the defect?",
+            "ru": "Этот клиент повторяет POST платежа с idempotency key при timeout. В чём дефект?"
+          },
+          "code": "for (int attempt = 1; attempt <= 3; attempt++) {\n    String key = UUID.randomUUID().toString();\n    try {\n        return payments.charge(order, key);   // sends Idempotency-Key: key\n    } catch (HttpTimeoutException e) {\n        Thread.sleep(backoff(attempt));\n    }\n}",
+          "codeLang": "java",
+          "options": [
+            { "id": "a", "text": { "en": "A new key per attempt makes every retry look like a new payment", "ru": "Новый ключ на каждую попытку делает каждый повтор похожим на новый платёж" }, "correct": true },
+            { "id": "b", "text": { "en": "Timeouts must never be retried, even with a key", "ru": "Timeout нельзя повторять никогда, даже с ключом" }, "correct": false,
+              "feedback": { "en": "With a stable key a timed-out POST is safe to retry.", "ru": "Со стабильным ключом POST после timeout безопасно повторять." } },
+            { "id": "c", "text": { "en": "UUID keys are too long for a header", "ru": "UUID-ключи слишком длинные для заголовка" }, "correct": false,
+              "feedback": { "en": "Length is not the problem; changing the key is.", "ru": "Проблема не в длине, а в смене ключа." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — generate the key once per logical operation.", "ru": "Верно — ключ генерируют один раз на логическую операцию." },
+            "incorrect": { "en": "No — the key changes between attempts.", "ru": "Нет — ключ меняется между попытками." }
+          }
+        },
+        {
+          "id": "idem-p3-flow",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the steps of a payment retried safely with an idempotency key.",
+            "ru": "Расставьте по порядку шаги платежа, безопасно повторённого с idempotency key."
+          },
+          "steps": [
+            { "id": "gen", "text": { "en": "Client generates one key for the operation", "ru": "Клиент генерирует один ключ на операцию" } },
+            { "id": "send", "text": { "en": "Client sends POST /payments with the key", "ru": "Клиент отправляет POST /payments с ключом" } },
+            { "id": "store", "text": { "en": "Server charges and stores the key with the result", "ru": "Сервер списывает деньги и сохраняет ключ с результатом" } },
+            { "id": "lost", "text": { "en": "The response is lost; the client times out", "ru": "Ответ теряется; у клиента timeout" } },
+            { "id": "retry", "text": { "en": "Client retries with the same key", "ru": "Клиент повторяет с тем же ключом" } },
+            { "id": "stored", "text": { "en": "Server finds the key and returns the stored result", "ru": "Сервер находит ключ и возвращает сохранённый результат" } }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — one charge despite two requests.", "ru": "Верно — одно списание при двух запросах." },
+            "incorrect": { "en": "Not quite — the key is created once, before the first attempt.", "ru": "Не совсем — ключ создаётся один раз, до первой попытки." }
+          }
+        },
+        {
+          "id": "idem-p4-key-word",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the missing word.", "ru": "Впишите пропущенное слово." },
+          "text": {
+            "en": "To make POST /payments safe to retry after a timeout, the client sends the same idempotency ___ with every attempt.",
+            "ru": "Чтобы POST /payments можно было безопасно повторить после timeout, клиент отправляет один и тот же idempotency ___ с каждой попыткой."
+          },
+          "blanks": [
+            { "en": ["key"], "ru": ["key", "ключ"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — the idempotency key.", "ru": "Верно — idempotency key." },
+            "incorrect": { "en": "It is the idempotency key.", "ru": "Это idempotency key." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "retry-after",
+      "title": { "en": "Honoring Retry-After", "ru": "Уважать Retry-After" },
+      "summary": {
+        "en": "On 429 or 503 with a Retry-After header, wait at least that long: the server knows its recovery time better than your backoff formula.",
+        "ru": "При 429 или 503 с заголовком Retry-After ждите не меньше указанного: сервер знает время своего восстановления лучше вашей формулы backoff."
+      },
+      "discovery": [
+        {
+          "id": "retry-after-d1-wait",
+          "type": "predict_output",
+          "prompt": {
+            "en": "A call got 429 Too Many Requests with a Retry-After header. How long does this client wait before the retry?",
+            "ru": "Вызов получил 429 Too Many Requests с заголовком Retry-After. Сколько этот клиент ждёт перед повтором?"
+          },
+          "code": "long backoffMs = 200;      // from the backoff formula\nlong retryAfterMs = 2000;  // from the Retry-After header\nlong waitMs = Math.max(backoffMs, retryAfterMs);\nSystem.out.println(waitMs);",
+          "codeLang": "java",
+          "options": [
+            { "id": "a", "text": { "en": "2000", "ru": "2000" }, "correct": true },
+            { "id": "b", "text": { "en": "200", "ru": "200" }, "correct": false,
+              "feedback": { "en": "Math.max picks the longer wait, the server's.", "ru": "Math.max выбирает более длинную паузу — серверную." } },
+            { "id": "c", "text": { "en": "2200", "ru": "2200" }, "correct": false,
+              "feedback": { "en": "The waits are not added; the longer one wins.", "ru": "Паузы не складываются; побеждает более длинная." } }
+          ],
+          "reveal": {
+            "en": "`429 Too Many Requests` and `503 Service Unavailable` usually mean **\"not now\"**. If the response carries a **`Retry-After`** header, wait **at least** that long: the server knows its own recovery time better than your backoff formula does.\n\n```\nwait = max(backoff, Retry-After)\nbackoff = 200 ms, Retry-After = 2000 ms  ->  wait 2000 ms\n```\n\nRetrying sooner than the server asked just lands in the same overload, or the same rate limit, again. Backoff (and jitter) still apply when no header is present, or when they ask for a longer wait.",
+            "ru": "`429 Too Many Requests` и `503 Service Unavailable` обычно значат **«не сейчас»**. Если в ответе есть заголовок **`Retry-After`**, ждите **не меньше** указанного: сервер знает время своего восстановления лучше, чем ваша формула backoff.\n\n```\nwait = max(backoff, Retry-After)\nbackoff = 200 ms, Retry-After = 2000 ms  ->  ждать 2000 ms\n```\n\nПовтор раньше, чем просил сервер, просто снова попадёт в ту же перегрузку или тот же rate limit. Backoff (и jitter) по-прежнему работают, когда заголовка нет или когда они просят паузу длиннее."
+          },
+          "feedback": {
+            "correct": { "en": "Right — the server's hint wins.", "ru": "Верно — побеждает подсказка сервера." },
+            "incorrect": { "en": "Not quite — see below.", "ru": "Не совсем — смотри ниже." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "retry-after-p1-503",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A 503 response carries Retry-After asking for 5 seconds; your backoff says 400 ms. How long should the client wait?",
+            "ru": "Ответ 503 содержит Retry-After на 5 секунд; ваш backoff говорит 400 ms. Сколько должен ждать клиент?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "At least 5 seconds", "ru": "Не меньше 5 секунд" }, "correct": true },
+            { "id": "b", "text": { "en": "400 ms — the backoff formula decides", "ru": "400 ms — решает формула backoff" }, "correct": false,
+              "feedback": { "en": "The server knows its recovery time better than the formula.", "ru": "Сервер знает время восстановления лучше формулы." } },
+            { "id": "c", "text": { "en": "Do not retry: 503 is permanent", "ru": "Не повторять: 503 — постоянная ошибка" }, "correct": false,
+              "feedback": { "en": "503 is transient; it means \"not now\".", "ru": "503 временная; она значит «не сейчас»." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — at least Retry-After.", "ru": "Верно — не меньше Retry-After." },
+            "incorrect": { "en": "No — wait at least what Retry-After asks.", "ru": "Нет — ждите не меньше, чем просит Retry-After." }
+          }
+        },
+        {
+          "id": "retry-after-p2-hint",
+          "type": "true_false",
+          "prompt": {
+            "en": "When a 429 carries Retry-After, a client should still retry on its own shorter backoff schedule.",
+            "ru": "Если 429 содержит Retry-After, клиенту всё равно стоит повторять по своему более короткому расписанию backoff."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": { "en": "Right — Retry-After overrides a shorter backoff.", "ru": "Верно — Retry-After важнее более короткого backoff." },
+            "incorrect": { "en": "No — wait at least Retry-After.", "ru": "Нет — ждите не меньше Retry-After." }
+          }
+        },
+        {
+          "id": "retry-after-p3-formula",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the missing header name.", "ru": "Впишите имя пропущенного заголовка." },
+          "text": {
+            "en": "On 429 or 503 the wait before the retry is max(backoff, ___).",
+            "ru": "При 429 или 503 пауза перед повтором — max(backoff, ___)."
+          },
+          "blanks": [
+            { "en": ["Retry-After", "retry-after"], "ru": ["Retry-After", "retry-after"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — the longer of the two.", "ru": "Верно — большее из двух." },
+            "incorrect": { "en": "It is Retry-After.", "ru": "Это Retry-After." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "attempts-and-deadline",
+      "title": { "en": "Max attempts and the request deadline", "ru": "Лимит попыток и deadline запроса" },
+      "summary": {
+        "en": "Make about 3 attempts in total, stop when the next wait would cross the caller's deadline, and give each attempt its own timeout.",
+        "ru": "Делайте около 3 попыток всего, останавливайтесь, когда следующая пауза пересечёт deadline вызывающего, и давайте каждой попытке свой timeout."
+      },
+      "discovery": [
+        {
+          "id": "deadline-d1-give-up",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The caller waits at most 500 ms. Every attempt times out after 100 ms. What does this retry loop print?",
+            "ru": "Вызывающий ждёт не больше 500 ms. Каждая попытка падает по timeout через 100 ms. Что напечатает этот цикл повторов?"
+          },
+          "code": "long deadline = 500;        // ms the caller will wait\nlong attemptTimeout = 100;  // each attempt gives up after this\nlong[] waits = {100, 200, 400};\nlong elapsed = 0;\nint attempts = 0;\nfor (int i = 0; ; i++) {\n    attempts++;\n    elapsed += attemptTimeout;   // every attempt times out\n    if (i == waits.length) break;   // no retries left\n    if (elapsed + waits[i] + attemptTimeout > deadline) break;   // the next try would miss the deadline\n    elapsed += waits[i];\n}\nSystem.out.println(attempts + \" attempts, gave up at \" + elapsed + \" ms\");",
+          "codeLang": "java",
+          "options": [
+            { "id": "a", "text": { "en": "2 attempts, gave up at 300 ms", "ru": "2 attempts, gave up at 300 ms" }, "correct": true },
+            { "id": "b", "text": { "en": "4 attempts, gave up at 1100 ms", "ru": "4 attempts, gave up at 1100 ms" }, "correct": false,
+              "feedback": { "en": "That ignores the deadline check.", "ru": "Здесь проигнорирована проверка deadline." } },
+            { "id": "c", "text": { "en": "3 attempts, gave up at 500 ms", "ru": "3 attempts, gave up at 500 ms" }, "correct": false,
+              "feedback": { "en": "After attempt 2, 300 + 200 + 100 = 600 > 500, so it stops there.", "ru": "После попытки 2: 300 + 200 + 100 = 600 > 500, значит, остановка." } },
+            { "id": "d", "text": { "en": "1 attempts, gave up at 100 ms", "ru": "1 attempts, gave up at 100 ms" }, "correct": false,
+              "feedback": { "en": "100 + 100 + 100 = 300 still fits in 500, so a retry happens.", "ru": "100 + 100 + 100 = 300 ещё укладывается в 500, так что повтор будет." } }
+          ],
+          "reveal": {
+            "en": "Retries are bounded in more than one way:\n\n- **Max attempts.** Typically **3 total** — one call and two retries. More rarely helps: if three spaced attempts failed, the problem is not transient.\n- **Request deadline.** The caller has a time budget (\"the page must answer in 500 ms\"). Stop when the next wait would cross it, rather than returning a success nobody is waiting for.\n- **Per-attempt timeout.** Each attempt needs its own timeout, or one hanging attempt eats the whole deadline.\n\n```\nattempt 1: 0-100 ms, times out          elapsed 100\nwait 100 -> 100+100+100 = 300 <= 500     elapsed 200\nattempt 2: 200-300 ms, times out        elapsed 300\nwait 200 -> 300+200+100 = 600 > 500     stop\n```",
+            "ru": "Повторы ограничены сразу несколькими способами:\n\n- **Максимум попыток.** Обычно **3 всего** — один вызов и два повтора. Больше редко помогает: если три разнесённые во времени попытки упали, проблема не временная.\n- **Deadline запроса.** У вызывающего есть бюджет времени («страница должна ответить за 500 ms»). Останавливайтесь, когда следующая пауза его пересечёт, а не возвращайте успех, которого уже никто не ждёт.\n- **Timeout на попытку.** У каждой попытки нужен свой timeout, иначе одна зависшая попытка съест весь deadline.\n\n```\nпопытка 1: 0-100 ms, timeout            elapsed 100\nпауза 100 -> 100+100+100 = 300 <= 500    elapsed 200\nпопытка 2: 200-300 ms, timeout          elapsed 300\nпауза 200 -> 300+200+100 = 600 > 500    стоп\n```"
+          },
+          "feedback": {
+            "correct": { "en": "Right — the deadline stopped the third attempt.", "ru": "Верно — deadline остановил третью попытку." },
+            "incorrect": { "en": "Not quite — see below.", "ru": "Не совсем — смотри ниже." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "deadline-p1-max-attempts",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In a typical retry policy, maxAttempts = 3 means:",
+            "ru": "В типичной политике повторов maxAttempts = 3 означает:"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "One call and two retries", "ru": "Один вызов и два повтора" }, "correct": true },
+            { "id": "b", "text": { "en": "One call and three retries", "ru": "Один вызов и три повтора" }, "correct": false,
+              "feedback": { "en": "Attempts count the first call too.", "ru": "Попытки включают и первый вызов." } },
+            { "id": "c", "text": { "en": "Three retries per minute", "ru": "Три повтора в минуту" }, "correct": false,
+              "feedback": { "en": "That would be a rate, not a cap per call.", "ru": "Это была бы частота, а не лимит на вызов." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — 3 attempts in total.", "ru": "Верно — 3 попытки всего." },
+            "incorrect": { "en": "No — 3 attempts total: one call, two retries.", "ru": "Нет — 3 попытки всего: вызов и два повтора." }
+          }
+        },
+        {
+          "id": "deadline-p2-three-failed",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Three retries spaced with backoff have all failed. What does that most likely mean?",
+            "ru": "Три попытки, разнесённые через backoff, все упали. Что это, скорее всего, значит?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "The problem is not transient; more attempts mostly add load", "ru": "Проблема не временная; новые попытки в основном добавят нагрузку" }, "correct": true },
+            { "id": "b", "text": { "en": "maxAttempts should be raised to 10", "ru": "Надо поднять maxAttempts до 10" }, "correct": false,
+              "feedback": { "en": "More retries rarely help and hit a failing service harder.", "ru": "Больше повторов редко помогает и сильнее бьёт по падающему сервису." } },
+            { "id": "c", "text": { "en": "The backoff should be removed to retry faster", "ru": "Надо убрать backoff, чтобы повторять быстрее" }, "correct": false,
+              "feedback": { "en": "Instant retries add load when capacity is lowest.", "ru": "Мгновенные повторы добавляют нагрузку, когда ресурсов меньше всего." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — more retries is not more reliability.", "ru": "Верно — больше повторов не значит выше надёжность." },
+            "incorrect": { "en": "No — after a few spaced failures, stop.", "ru": "Нет — после нескольких разнесённых неудач остановитесь." }
+          }
+        },
+        {
+          "id": "deadline-p3-per-attempt-timeout",
+          "type": "true_false",
+          "prompt": {
+            "en": "When a request already has an overall deadline, its individual retry attempts do not need their own timeouts.",
+            "ru": "Если у запроса уже есть общий deadline, отдельным попыткам повтора не нужны свои timeout."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": { "en": "Right — one hanging attempt would eat the whole deadline.", "ru": "Верно — одна зависшая попытка съела бы весь deadline." },
+            "incorrect": { "en": "No — each attempt needs its own timeout.", "ru": "Нет — каждой попытке нужен свой timeout." }
+          }
+        },
+        {
+          "id": "deadline-p4-fill-attempts",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the numbers.", "ru": "Впишите числа." },
+          "text": {
+            "en": "A typical retry policy makes ___ attempts in total: one call and ___ retries.",
+            "ru": "Типичная политика повторов делает ___ попытки всего: один вызов и ___ повтора."
+          },
+          "blanks": [
+            { "en": ["3", "three"], "ru": ["3", "три"] },
+            { "en": ["2", "two"], "ru": ["2", "два"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — 3 = 1 + 2.", "ru": "Верно — 3 = 1 + 2." },
+            "incorrect": { "en": "It is 3 attempts: 1 call and 2 retries.", "ru": "Это 3 попытки: 1 вызов и 2 повтора." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "retry-budget-breaker",
+      "title": { "en": "Retry budget and circuit breaker", "ru": "Retry budget и circuit breaker" },
+      "summary": {
+        "en": "A retry budget caps retries at a share of a client's requests so a real outage is not multiplied; a circuit breaker stops even first attempts while the dependency is down.",
+        "ru": "Retry budget ограничивает повторы долей запросов клиента, чтобы настоящий отказ не умножался; circuit breaker не делает даже первые попытки, пока зависимость лежит."
+      },
+      "discovery": [
+        {
+          "id": "budget-d1-calls-sent",
+          "type": "predict_output",
+          "prompt": {
+            "en": "The dependency is down, so all 100 calls fail. Each call may retry twice, but retries are limited to 10% of requests. What is printed?",
+            "ru": "Зависимость лежит, поэтому все 100 вызовов падают. Каждый вызов может повторить дважды, но повторы ограничены 10% запросов. Что напечатается?"
+          },
+          "code": "int requests = 100;           // the dependency is down: every call fails\nint maxRetriesPerCall = 2;\nint budget = requests / 10;   // retries may be at most 10% of requests\nint retries = 0;\nfor (int r = 0; r < requests; r++) {\n    for (int k = 0; k < maxRetriesPerCall && retries < budget; k++) {\n        retries++;\n    }\n}\nSystem.out.println(\"calls sent: \" + (requests + retries));",
+          "codeLang": "java",
+          "options": [
+            { "id": "a", "text": { "en": "calls sent: 110", "ru": "calls sent: 110" }, "correct": true },
+            { "id": "b", "text": { "en": "calls sent: 300", "ru": "calls sent: 300" }, "correct": false,
+              "feedback": { "en": "That is what happens without the budget: load tripled.", "ru": "Так было бы без budget: нагрузка утроилась." } },
+            { "id": "c", "text": { "en": "calls sent: 100", "ru": "calls sent: 100" }, "correct": false,
+              "feedback": { "en": "The budget allows 10 retries, not zero.", "ru": "Budget разрешает 10 повторов, а не ноль." } },
+            { "id": "d", "text": { "en": "calls sent: 120", "ru": "calls sent: 120" }, "correct": false,
+              "feedback": { "en": "The budget counts retries in total, not per call.", "ru": "Budget считает повторы в сумме, а не на вызов." } }
+          ],
+          "reveal": {
+            "en": "When a dependency is really down, every call fails and every call wants to retry. With 3 attempts per call that **triples** the load on something already broken (300 calls instead of 100).\n\nA **retry budget** is a per-client limit on retries, e.g. \"retries may be at most 10% of requests\", typically implemented as a **token bucket**: requests add tokens, retries spend them. Once the budget is spent the client **fails fast** instead of piling on: here 100 + 10 = 110 calls.\n\nA **circuit breaker** goes further: while it is *open* it stops even the first attempt, because the dependency is known to be down.\n\n```mermaid\nflowchart LR\n  C[\"call\"] --> CB{\"breaker open?\"}\n  CB -- \"yes\" --> FF[\"fail fast, no call\"]\n  CB -- \"no\" --> A[\"attempt\"]\n  A -- \"failed\" --> B{\"retry budget left?\"}\n  B -- \"no\" --> FF\n  B -- \"yes\" --> R[\"retry\"]\n```\n\nRetries handle blips; a breaker handles outages by not calling at all.",
+            "ru": "Когда зависимость действительно лежит, падает каждый вызов и каждый хочет повтора. При 3 попытках на вызов это **утраивает** нагрузку на то, что и так сломано (300 вызовов вместо 100).\n\n**Retry budget** — лимит повторов на клиента, например «повторы — не больше 10% запросов», обычно реализуемый как **token bucket**: запросы добавляют токены, повторы их тратят. Когда budget исчерпан, клиент **быстро отказывает**, а не наваливается: здесь 100 + 10 = 110 вызовов.\n\n**Circuit breaker** идёт дальше: пока он *разомкнут* (open), он не делает даже первую попытку, потому что известно, что зависимость лежит.\n\n```mermaid\nflowchart LR\n  C[\"вызов\"] --> CB{\"breaker разомкнут?\"}\n  CB -- \"да\" --> FF[\"быстрый отказ, без вызова\"]\n  CB -- \"нет\" --> A[\"попытка\"]\n  A -- \"упала\" --> B{\"остался retry budget?\"}\n  B -- \"нет\" --> FF\n  B -- \"да\" --> R[\"повтор\"]\n```\n\nПовторы лечат кратковременные сбои; breaker справляется с настоящим отказом, вообще не делая вызов."
+          },
+          "feedback": {
+            "correct": { "en": "Right — 100 calls plus 10 budgeted retries.", "ru": "Верно — 100 вызовов плюс 10 повторов из budget." },
+            "incorrect": { "en": "Not quite — see below.", "ru": "Не совсем — смотри ниже." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "budget-p1-breaker-adds",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "What does a circuit breaker add on top of a retry budget?",
+            "ru": "Что circuit breaker добавляет поверх retry budget?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "While open, it stops even the first attempt", "ru": "Пока он разомкнут, не делается даже первая попытка" }, "correct": true },
+            { "id": "b", "text": { "en": "It retries more aggressively during outages", "ru": "Он агрессивнее повторяет во время отказа" }, "correct": false,
+              "feedback": { "en": "The breaker reduces calls; it never adds retries.", "ru": "Breaker уменьшает число вызовов, а не добавляет повторы." } },
+            { "id": "c", "text": { "en": "It adds jitter to the waits", "ru": "Он добавляет jitter к паузам" }, "correct": false,
+              "feedback": { "en": "Jitter belongs to the backoff, not to the breaker.", "ru": "Jitter — часть backoff, а не breaker." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — no calls at all during an outage.", "ru": "Верно — во время отказа вызовов нет вообще." },
+            "incorrect": { "en": "No — an open breaker skips the call entirely.", "ru": "Нет — разомкнутый breaker вообще не делает вызов." }
+          }
+        },
+        {
+          "id": "budget-p2-replace-breaker",
+          "type": "true_false",
+          "prompt": {
+            "en": "Well-tuned retries can replace a circuit breaker.",
+            "ru": "Хорошо настроенные повторы могут заменить circuit breaker."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": { "en": "Right — retries handle blips, a breaker handles outages.", "ru": "Верно — повторы для кратких сбоев, breaker — для отказов." },
+            "incorrect": { "en": "No — retries still call a dead dependency; a breaker does not.", "ru": "Нет — повторы всё равно вызывают мёртвую зависимость, а breaker — нет." }
+          }
+        },
+        {
+          "id": "budget-p3-limits",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each limit on retries with what it bounds.",
+            "ru": "Сопоставьте каждое ограничение повторов с тем, что оно ограничивает."
+          },
+          "pairs": [
+            { "id": "max-attempts", "left": { "en": "Max attempts", "ru": "Максимум попыток" }, "right": { "en": "tries for one call", "ru": "число попыток одного вызова" } },
+            { "id": "deadline", "left": { "en": "Request deadline", "ru": "Deadline запроса" }, "right": { "en": "total time the caller waits", "ru": "общее время ожидания вызывающего" } },
+            { "id": "budget", "left": { "en": "Retry budget", "ru": "Retry budget" }, "right": { "en": "retries across all of a client's requests", "ru": "повторы по всем запросам клиента" } },
+            { "id": "breaker", "left": { "en": "Circuit breaker", "ru": "Circuit breaker" }, "right": { "en": "whether to call at all during an outage", "ru": "делать ли вызов вообще во время отказа" } }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — four layers of limits.", "ru": "Верно — четыре уровня ограничений." },
+            "incorrect": { "en": "Not quite — check which limit is per call, per time, per client.", "ru": "Не совсем — проверьте, что ограничено на вызов, по времени, на клиента." }
+          }
+        },
+        {
+          "id": "budget-p4-fill-budget",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the number.", "ru": "Впишите число." },
+          "text": {
+            "en": "A retry budget of 10% of requests allows a client that sent 200 requests at most ___ retries.",
+            "ru": "Retry budget в 10% запросов разрешает клиенту, отправившему 200 запросов, не больше ___ повторов."
+          },
+          "blanks": [
+            { "en": ["20", "twenty"], "ru": ["20"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — 10% of 200.", "ru": "Верно — 10% от 200." },
+            "incorrect": { "en": "It is 20: 10% of 200.", "ru": "Это 20: 10% от 200." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "retry-amplification",
+      "title": { "en": "Retry amplification across layers", "ru": "Retry amplification по уровням" },
+      "summary": {
+        "en": "Retries at every layer multiply: n layers with 3 attempts each send 3^n calls to the failing dependency, so retry at exactly one layer.",
+        "ru": "Повторы на каждом уровне перемножаются: n уровней по 3 попытки шлют 3^n вызовов к падающей зависимости, поэтому повторять нужно ровно на одном уровне."
+      },
+      "discovery": [
+        {
+          "id": "amplification-d1-five-layers",
+          "type": "predict_output",
+          "prompt": {
+            "en": "A request passes through 5 layers to a database that keeps failing. Each layer makes up to 3 attempts of its call to the next one. How many requests reach the database?",
+            "ru": "Запрос проходит через 5 уровней к базе данных, которая продолжает падать. Каждый уровень делает до 3 попыток вызова следующего. Сколько запросов дойдёт до базы?"
+          },
+          "code": "int layers = 5;\nint attemptsPerLayer = 3;\nint dbCalls = 1;   // one user request\nfor (int i = 0; i < layers; i++) {\n    dbCalls *= attemptsPerLayer;   // each attempt of this layer triggers all attempts below\n}\nSystem.out.println(dbCalls);",
+          "codeLang": "java",
+          "options": [
+            { "id": "a", "text": { "en": "243", "ru": "243" }, "correct": true },
+            { "id": "b", "text": { "en": "15", "ru": "15" }, "correct": false,
+              "feedback": { "en": "Retries multiply across layers, they do not add up.", "ru": "Повторы по уровням перемножаются, а не складываются." } },
+            { "id": "c", "text": { "en": "3", "ru": "3" }, "correct": false,
+              "feedback": { "en": "That would be true only if just one layer retried.", "ru": "Так было бы, только если бы повторял один уровень." } },
+            { "id": "d", "text": { "en": "125", "ru": "125" }, "correct": false,
+              "feedback": { "en": "That is 5^3; it is 3 attempts raised to 5 layers: 3^5.", "ru": "Это 5^3; правильно — 3 попытки в степени 5 уровней: 3^5." } }
+          ],
+          "reveal": {
+            "en": "Retries **multiply** across layers. Each attempt of an outer layer triggers the full set of attempts of the layer below it. With 3 attempts at each of 5 layers one user request becomes `3^5 = 243` calls to a database that is already failing. Even three layers give `3 × 3 × 3 = 27`:\n\n```mermaid\nflowchart LR\n  U[\"user: 1 request\"] --> G[\"gateway: 3 attempts\"]\n  G --> O[\"orders: 3 attempts each\"]\n  O --> I[\"inventory: 3 attempts each\"]\n  I --> D[\"db: 27 calls\"]\n```\n\nThis is **retry amplification**, and it is how a small outage becomes a big one.\n\nThe rule: **retry at one layer**, usually the one **closest to the failing dependency**, because it knows best which errors are transient there. Layers above propagate the failure fast instead of retrying again. With only one layer retrying, the database sees at most 3 calls.",
+            "ru": "Повторы по уровням **перемножаются**. Каждая попытка внешнего уровня запускает полный набор попыток уровня под ним. При 3 попытках на каждом из 5 уровней один запрос пользователя превращается в `3^5 = 243` вызова к базе, которая и так падает. Даже три уровня дают `3 × 3 × 3 = 27`:\n\n```mermaid\nflowchart LR\n  U[\"пользователь: 1 запрос\"] --> G[\"gateway: 3 попытки\"]\n  G --> O[\"orders: по 3 попытки\"]\n  O --> I[\"inventory: по 3 попытки\"]\n  I --> D[\"db: 27 вызовов\"]\n```\n\nЭто **retry amplification** — именно так небольшой сбой становится большим.\n\nПравило: **повторяйте на одном уровне**, обычно **ближайшем к упавшей зависимости**: он лучше всех знает, какие ошибки там временные. Уровни выше быстро передают ошибку дальше, а не повторяют ещё раз. Если повторяет только один уровень, база получит не больше 3 вызовов."
+          },
+          "feedback": {
+            "correct": { "en": "Right — 3^5 = 243.", "ru": "Верно — 3^5 = 243." },
+            "incorrect": { "en": "Not quite — see below.", "ru": "Не совсем — смотри ниже." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "amplification-p1-which-layer",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A call chain is gateway → orders → inventory → database, and the database blips now and then. Which layer should retry?",
+            "ru": "Цепочка вызовов: gateway → orders → inventory → база данных, и база иногда кратковременно сбоит. Какой уровень должен повторять?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Only inventory, the layer closest to the database", "ru": "Только inventory — ближайший к базе уровень" }, "correct": true },
+            { "id": "b", "text": { "en": "Only the gateway, the entry point", "ru": "Только gateway — точка входа" }, "correct": false,
+              "feedback": { "en": "The gateway knows least about which database errors are transient.", "ru": "Gateway хуже всех знает, какие ошибки базы временные." } },
+            { "id": "c", "text": { "en": "All three, to be safe", "ru": "Все три, на всякий случай" }, "correct": false,
+              "feedback": { "en": "Three retrying layers turn 1 request into 27 database calls.", "ru": "Три повторяющих уровня превращают 1 запрос в 27 вызовов базы." } },
+            { "id": "d", "text": { "en": "None — retries are always harmful", "ru": "Ни один — повторы всегда вредны" }, "correct": false,
+              "feedback": { "en": "One layer retrying blips is useful and bounded.", "ru": "Повторы кратких сбоев на одном уровне полезны и ограничены." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — nearest to the dependency.", "ru": "Верно — ближайший к зависимости." },
+            "incorrect": { "en": "No — one layer, nearest to the failing dependency.", "ru": "Нет — один уровень, ближайший к падающей зависимости." }
+          }
+        },
+        {
+          "id": "amplification-p2-why-one",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "Why should only one layer of a service call chain retry?",
+            "ru": "Почему в цепочке вызовов сервисов повторять должен только один уровень?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Retries at each layer multiply the calls reaching the failing dependency", "ru": "Повторы на каждом уровне перемножают число вызовов, доходящих до падающей зависимости" }, "correct": true },
+            { "id": "b", "text": { "en": "Retry libraries cannot run in more than one service", "ru": "Библиотеки повторов не могут работать больше чем в одном сервисе" }, "correct": false,
+              "feedback": { "en": "They can; the problem is the multiplied load.", "ru": "Могут; проблема в перемноженной нагрузке." } },
+            { "id": "c", "text": { "en": "Each layer's retries add a fixed delay, nothing more", "ru": "Повторы каждого уровня лишь добавляют фиксированную задержку" }, "correct": false,
+              "feedback": { "en": "They add calls too, multiplicatively.", "ru": "Они ещё и умножают число вызовов." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — amplification, 3^n.", "ru": "Верно — amplification, 3^n." },
+            "incorrect": { "en": "No — retries multiply across layers.", "ru": "Нет — повторы перемножаются по уровням." }
+          }
+        },
+        {
+          "id": "amplification-p3-every-service",
+          "type": "true_false",
+          "prompt": {
+            "en": "Every microservice should protect itself with its own retries on its downstream calls.",
+            "ru": "Каждый микросервис должен защищаться собственными повторами своих нижестоящих вызовов."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": { "en": "Right — retries at every layer amplify an outage.", "ru": "Верно — повторы на каждом уровне раздувают сбой." },
+            "incorrect": { "en": "No — that multiplies into an outage amplifier.", "ru": "Нет — это перемножается и раздувает сбой." }
+          }
+        },
+        {
+          "id": "amplification-p4-fill-counts",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the numbers of database calls for one user request.", "ru": "Впишите число вызовов базы на один запрос пользователя." },
+          "text": {
+            "en": "Gateway, orders and inventory each make up to 3 attempts: the database gets ___ calls. If only inventory retries: ___ calls.",
+            "ru": "Gateway, orders и inventory делают до 3 попыток каждый: база получит ___ вызовов. Если повторяет только inventory: ___ вызова."
+          },
+          "blanks": [
+            { "en": ["27"], "ru": ["27"] },
+            { "en": ["3", "three"], "ru": ["3", "три"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — 3 × 3 × 3 = 27 versus 3.", "ru": "Верно — 3 × 3 × 3 = 27 против 3." },
+            "incorrect": { "en": "It is 27 (3 × 3 × 3), and 3 with one retrying layer.", "ru": "Это 27 (3 × 3 × 3) и 3 при одном повторяющем уровне." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "retry-placement",
+      "title": { "en": "Where retries do not belong", "ru": "Где повторам не место" },
+      "summary": {
+        "en": "If an outer layer retries, inner ones do not; never retry inside a lock-holding transaction; message consumers use redelivery with a dead-letter queue and inbox deduplication.",
+        "ru": "Если повторяет внешний уровень, внутренние не повторяют; не повторяйте внутри транзакции с блокировками; потребители сообщений используют redelivery с dead-letter queue и inbox-дедупликацией."
+      },
+      "discovery": [
+        {
+          "id": "placement-d1-transaction",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "A method inside a database transaction that holds row locks catches a failure and retries the statement in a loop with backoff. What is the better design?",
+            "ru": "Метод внутри транзакции базы данных, держащей блокировки строк, ловит сбой и повторяет запрос в цикле с backoff. Какой дизайн лучше?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Retry the whole unit of work from outside the transaction", "ru": "Повторять всю единицу работы снаружи транзакции" }, "correct": true },
+            { "id": "b", "text": { "en": "Keep the loop but raise maxAttempts", "ru": "Оставить цикл, но поднять maxAttempts" }, "correct": false,
+              "feedback": { "en": "Longer waits mean the locks are held even longer.", "ru": "Более долгие паузы — ещё дольше удерживаемые блокировки." } },
+            { "id": "c", "text": { "en": "Keep the loop but drop the backoff", "ru": "Оставить цикл, но убрать backoff" }, "correct": false,
+              "feedback": { "en": "Instant retries still run under the same held locks.", "ru": "Мгновенные повторы всё так же идут под удерживаемыми блокировками." } }
+          ],
+          "reveal": {
+            "en": "Besides \"retry at one layer\", a few placement rules:\n\n- **Do not retry inside a database transaction that holds locks.** Every wait holds the locks longer and blocks others. Retry the whole unit of work from outside instead.\n- **If an outer layer must retry** — for example a mobile client over a flaky network — the inner services should not, or should signal **\"already retried, do not retry\"**. gRPC and Envoy support this through retry headers and policies.\n- **A message consumer is a different tool.** A failed message is **redelivered**; one that keeps failing goes to a **dead-letter queue** (a side queue for messages that could not be processed), and **inbox-style deduplication** makes a redelivered message harmless.\n\n```mermaid\nflowchart LR\n  M[\"message\"] --> C[\"consumer\"]\n  C -- \"fails\" --> RD[\"redelivery\"]\n  RD --> C\n  C -- \"keeps failing\" --> DLQ[\"dead-letter queue\"]\n```",
+            "ru": "Кроме «повторять на одном уровне», есть ещё несколько правил размещения:\n\n- **Не повторяйте внутри транзакции базы данных, держащей блокировки.** Каждая пауза дольше держит блокировки и мешает другим. Повторяйте всю единицу работы снаружи.\n- **Если повторять должен внешний уровень** — например, мобильный клиент в плохой сети, — внутренние сервисы не повторяют или сигнализируют **«уже повторено, не повторяй»**. gRPC и Envoy поддерживают это через retry-заголовки и политики.\n- **Потребитель сообщений — другой инструмент.** Упавшее сообщение **доставляется повторно** (redelivery); то, что падает раз за разом, уходит в **dead-letter queue** (отдельную очередь для необработанных сообщений), а **дедупликация в стиле inbox** делает повторную доставку безвредной.\n\n```mermaid\nflowchart LR\n  M[\"сообщение\"] --> C[\"потребитель\"]\n  C -- \"падает\" --> RD[\"redelivery\"]\n  RD --> C\n  C -- \"падает снова и снова\" --> DLQ[\"dead-letter queue\"]\n```"
+          },
+          "feedback": {
+            "correct": { "en": "Right — retry from outside, not under locks.", "ru": "Верно — повторять снаружи, а не под блокировками." },
+            "incorrect": { "en": "Not quite — see below.", "ru": "Не совсем — смотри ниже." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "placement-p1-mobile-client",
+          "type": "true_false",
+          "prompt": {
+            "en": "If a mobile client already retries over a flaky network, the backend services it calls should retry their own downstream calls too.",
+            "ru": "Если мобильный клиент уже повторяет запросы в плохой сети, бэкенд-сервисы, которые он вызывает, тоже должны повторять свои нижестоящие вызовы."
+          },
+          "answer": false,
+          "feedback": {
+            "correct": { "en": "Right — inner layers should not, or should signal \"already retried\".", "ru": "Верно — внутренние уровни не повторяют или сигнализируют «уже повторено»." },
+            "incorrect": { "en": "No — that would stack retries and multiply calls.", "ru": "Нет — это сложит повторы и умножит вызовы." }
+          }
+        },
+        {
+          "id": "placement-p2-situations",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each situation with the right way to retry.",
+            "ru": "Сопоставьте каждую ситуацию с правильным способом повтора."
+          },
+          "pairs": [
+            { "id": "tx", "left": { "en": "Failure inside a lock-holding DB transaction", "ru": "Сбой внутри транзакции БД с блокировками" }, "right": { "en": "retry the whole unit of work from outside", "ru": "повторить всю единицу работы снаружи" } },
+            { "id": "consumer", "left": { "en": "A message consumer fails", "ru": "Падает потребитель сообщений" }, "right": { "en": "redelivery, dead-letter queue, inbox dedup", "ru": "redelivery, dead-letter queue, inbox-дедупликация" } },
+            { "id": "outer", "left": { "en": "The outer client already retries", "ru": "Внешний клиент уже повторяет" }, "right": { "en": "inner services signal \"do not retry\"", "ru": "внутренние сервисы сигнализируют «не повторяй»" } }
+          ],
+          "feedback": {
+            "correct": { "en": "Right.", "ru": "Верно." },
+            "incorrect": { "en": "Not quite — check each pair again.", "ru": "Не совсем — проверьте каждую пару ещё раз." }
+          }
+        },
+        {
+          "id": "placement-p3-dlq",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the missing term.", "ru": "Впишите пропущенный термин." },
+          "text": {
+            "en": "A message that keeps failing after redelivery is moved to a ___ queue.",
+            "ru": "Сообщение, которое продолжает падать после redelivery, переносится в ___ queue."
+          },
+          "blanks": [
+            { "en": ["dead-letter", "dead letter", "DLQ"], "ru": ["dead-letter", "dead letter", "DLQ"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — the dead-letter queue.", "ru": "Верно — dead-letter queue." },
+            "incorrect": { "en": "It is the dead-letter queue.", "ru": "Это dead-letter queue." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "retry-in-java",
+      "title": { "en": "Retries in Java libraries", "ru": "Повторы в Java-библиотеках" },
+      "summary": {
+        "en": "Resilience4j Retry and Spring Retry @Retryable configure attempts, jittered backoff and error classes declaratively; order decorators as Retry(CircuitBreaker(TimeLimiter(call))) and beware proxy self-invocation.",
+        "ru": "Resilience4j Retry и Spring Retry @Retryable декларативно задают попытки, backoff с jitter и классы ошибок; порядок декораторов — Retry(CircuitBreaker(TimeLimiter(call))), и помните про self-invocation через proxy."
+      },
+      "discovery": [
+        {
+          "id": "java-d1-self-invocation",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In a Spring bean, method placeOrder() calls this.charge(), which is annotated @Retryable(maxAttempts = 3). charge() throws a ConnectException every time. How many times does charge() run?",
+            "ru": "В Spring-бине метод placeOrder() вызывает this.charge(), помеченный @Retryable(maxAttempts = 3). charge() каждый раз бросает ConnectException. Сколько раз выполнится charge()?"
+          },
+          "code": "@Service\nclass OrderService {\n    void placeOrder() {\n        this.charge();   // self-invocation\n    }\n\n    @Retryable(maxAttempts = 3)\n    void charge() { /* throws ConnectException */ }\n}",
+          "codeLang": "java",
+          "options": [
+            { "id": "a", "text": { "en": "Once — the call bypasses the Spring proxy", "ru": "Один раз — вызов идёт мимо Spring proxy" }, "correct": true },
+            { "id": "b", "text": { "en": "3 times", "ru": "3 раза" }, "correct": false,
+              "feedback": { "en": "Only calls through the proxy are retried; this.charge() is not.", "ru": "Повторяются только вызовы через proxy; this.charge() — нет." } },
+            { "id": "c", "text": { "en": "4 times: one call plus 3 retries", "ru": "4 раза: вызов плюс 3 повтора" }, "correct": false,
+              "feedback": { "en": "maxAttempts counts the first call, and here no retry happens at all.", "ru": "maxAttempts включает первый вызов, а здесь повторов нет вообще." } }
+          ],
+          "reveal": {
+            "en": "Libraries such as **Resilience4j `Retry`** and **Spring Retry `@Retryable`** implement the whole policy declaratively:\n\n- `maxAttempts` — the attempt cap;\n- an exponential `IntervalFunction` with randomization — backoff with jitter;\n- `retryExceptions` / `ignoreExceptions` (or `retryOnResult`) — which error classes are retried.\n\nThe typical decorator order is `Retry(CircuitBreaker(TimeLimiter(call)))`: each attempt gets its own timeout, and the breaker sees every attempt.\n\n```mermaid\nflowchart LR\n  R[\"Retry\"] --> CB[\"CircuitBreaker\"]\n  CB --> TL[\"TimeLimiter\"]\n  TL --> CALL[\"call\"]\n```\n\n`@Retryable` works through a Spring **proxy**: the retry logic wraps calls that arrive *through the proxy*. A method calling another method of the same bean (`this.charge()`) goes straight to the object, so it is **not retried**.",
+            "ru": "Библиотеки вроде **Resilience4j `Retry`** и **Spring Retry `@Retryable`** реализуют всю политику декларативно:\n\n- `maxAttempts` — лимит попыток;\n- экспоненциальная `IntervalFunction` с рандомизацией — backoff с jitter;\n- `retryExceptions` / `ignoreExceptions` (или `retryOnResult`) — какие классы ошибок повторять.\n\nТипичный порядок декораторов — `Retry(CircuitBreaker(TimeLimiter(call)))`: у каждой попытки свой timeout, и breaker видит каждую попытку.\n\n```mermaid\nflowchart LR\n  R[\"Retry\"] --> CB[\"CircuitBreaker\"]\n  CB --> TL[\"TimeLimiter\"]\n  TL --> CALL[\"вызов\"]\n```\n\n`@Retryable` работает через Spring **proxy**: логика повторов оборачивает вызовы, пришедшие *через proxy*. Метод, вызывающий другой метод того же бина (`this.charge()`), обращается к объекту напрямую, поэтому такой вызов **не повторяется**."
+          },
+          "feedback": {
+            "correct": { "en": "Right — self-invocation is not retried.", "ru": "Верно — self-invocation не повторяется." },
+            "incorrect": { "en": "Not quite — see below.", "ru": "Не совсем — смотри ниже." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "java-p1-why-order",
+          "type": "multiple_choice",
+          "prompt": {
+            "en": "In Resilience4j the typical order is Retry(CircuitBreaker(TimeLimiter(call))). What does this order give?",
+            "ru": "В Resilience4j типичный порядок — Retry(CircuitBreaker(TimeLimiter(call))). Что даёт такой порядок?"
+          },
+          "options": [
+            { "id": "a", "text": { "en": "Each attempt has its own timeout, and the breaker sees each attempt", "ru": "У каждой попытки свой timeout, и breaker видит каждую попытку" }, "correct": true },
+            { "id": "b", "text": { "en": "One timeout covers all attempts together", "ru": "Один timeout покрывает все попытки вместе" }, "correct": false,
+              "feedback": { "en": "TimeLimiter is innermost, so it wraps each single attempt.", "ru": "TimeLimiter самый внутренний, значит, оборачивает каждую попытку." } },
+            { "id": "c", "text": { "en": "The breaker sees only the final result after all retries", "ru": "Breaker видит только итог после всех повторов" }, "correct": false,
+              "feedback": { "en": "Retry is outermost, so every attempt passes through the breaker.", "ru": "Retry самый внешний, поэтому каждая попытка проходит через breaker." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — per-attempt timeout, per-attempt breaker accounting.", "ru": "Верно — timeout на попытку, учёт breaker на попытку." },
+            "incorrect": { "en": "No — innermost TimeLimiter times each attempt.", "ru": "Нет — внутренний TimeLimiter ограничивает каждую попытку." }
+          }
+        },
+        {
+          "id": "java-p2-settings",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each retry library setting with the part of the policy it controls.",
+            "ru": "Сопоставьте каждую настройку библиотеки повторов с частью политики, которой она управляет."
+          },
+          "pairs": [
+            { "id": "max", "left": { "en": "maxAttempts", "ru": "maxAttempts" }, "right": { "en": "cap on attempts", "ru": "лимит попыток" } },
+            { "id": "interval", "left": { "en": "exponential IntervalFunction with randomization", "ru": "экспоненциальная IntervalFunction с рандомизацией" }, "right": { "en": "backoff with jitter", "ru": "backoff с jitter" } },
+            { "id": "retry-ex", "left": { "en": "retryExceptions", "ru": "retryExceptions" }, "right": { "en": "errors that are retried", "ru": "ошибки, которые повторяются" } },
+            { "id": "ignore-ex", "left": { "en": "ignoreExceptions", "ru": "ignoreExceptions" }, "right": { "en": "errors that are never retried", "ru": "ошибки, которые не повторяются" } }
+          ],
+          "feedback": {
+            "correct": { "en": "Right.", "ru": "Верно." },
+            "incorrect": { "en": "Not quite — check each setting again.", "ru": "Не совсем — проверьте каждую настройку ещё раз." }
+          }
+        },
+        {
+          "id": "java-p3-decorator-order",
+          "type": "word_bank",
+          "prompt": {
+            "en": "Assemble the typical Resilience4j decorator order around a call.",
+            "ru": "Соберите типичный порядок декораторов Resilience4j вокруг вызова."
+          },
+          "tokens": {
+            "en": ["Retry(", "CircuitBreaker(", "TimeLimiter(", "call", ")))"],
+            "ru": ["Retry(", "CircuitBreaker(", "TimeLimiter(", "call", ")))"]
+          },
+          "distractors": {
+            "en": ["Bulkhead("],
+            "ru": ["Bulkhead("]
+          },
+          "feedback": {
+            "correct": { "en": "Right — Retry outermost, TimeLimiter innermost.", "ru": "Верно — Retry снаружи, TimeLimiter внутри." },
+            "incorrect": { "en": "It is Retry(CircuitBreaker(TimeLimiter(call))).", "ru": "Это Retry(CircuitBreaker(TimeLimiter(call)))." }
+          }
+        },
+        {
+          "id": "java-p4-annotation",
+          "type": "fill_blank",
+          "prompt": { "en": "Type the missing annotation name.", "ru": "Впишите имя пропущенной аннотации." },
+          "text": {
+            "en": "Spring Retry marks a method for declarative retries with @___.",
+            "ru": "Spring Retry помечает метод для декларативных повторов аннотацией @___."
+          },
+          "blanks": [
+            { "en": ["Retryable"], "ru": ["Retryable"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — @Retryable.", "ru": "Верно — @Retryable." },
+            "incorrect": { "en": "It is @Retryable.", "ru": "Это @Retryable." }
+          }
+        }
+      ]
+    },
+    {
+      "id": "retry-policy-capstone",
+      "title": { "en": "A complete retry policy", "ru": "Полная политика повторов" },
+      "summary": {
+        "en": "Classify the error, check idempotency for ambiguous ones, check attempts, deadline and budget, wait backoff with jitter but at least Retry-After, and retry at one layer.",
+        "ru": "Классифицировать ошибку, для неоднозначных проверить идемпотентность, проверить попытки, deadline и budget, подождать backoff с jitter, но не меньше Retry-After, и повторять на одном уровне."
+      },
+      "capstone": true,
+      "discovery": [
+        {
+          "id": "capstone-d1-503-then-ok",
+          "type": "predict_output",
+          "prompt": {
+            "en": "A client calls a service that answers 503, 503, then 200. Each 503 carries Retry-After of 300 ms. What does this retry loop print?",
+            "ru": "Клиент вызывает сервис, который отвечает 503, 503, затем 200. Каждый 503 содержит Retry-After 300 ms. Что напечатает этот цикл повторов?"
+          },
+          "code": "int[] responses = {503, 503, 200};   // the server's answer on attempts 1, 2, 3\nlong[] backoff = {100, 200};         // capped exponential backoff (jitter left out for clarity)\nlong retryAfterMs = 300;             // Retry-After sent with each 503\nlong waited = 0;\nint attempt = 0;\nwhile (true) {\n    int status = responses[attempt];\n    attempt++;\n    if (status == 200) {\n        System.out.println(\"ok after \" + attempt + \" attempts, waited \" + waited + \" ms\");\n        break;\n    }\n    boolean retryable = status == 503 || status == 429;\n    if (!retryable || attempt == responses.length) {\n        System.out.println(\"fail \" + status);\n        break;\n    }\n    waited += Math.max(backoff[attempt - 1], retryAfterMs);\n}",
+          "codeLang": "java",
+          "options": [
+            { "id": "a", "text": { "en": "ok after 3 attempts, waited 600 ms", "ru": "ok after 3 attempts, waited 600 ms" }, "correct": true },
+            { "id": "b", "text": { "en": "ok after 3 attempts, waited 300 ms", "ru": "ok after 3 attempts, waited 300 ms" }, "correct": false,
+              "feedback": { "en": "That is 100 + 200, ignoring Retry-After; each wait is max(backoff, 300).", "ru": "Это 100 + 200 без учёта Retry-After; каждая пауза — max(backoff, 300)." } },
+            { "id": "c", "text": { "en": "fail 503", "ru": "fail 503" }, "correct": false,
+              "feedback": { "en": "503 is retryable and the third attempt succeeds.", "ru": "503 повторяема, и третья попытка успешна." } },
+            { "id": "d", "text": { "en": "ok after 2 attempts, waited 300 ms", "ru": "ok after 2 attempts, waited 300 ms" }, "correct": false,
+              "feedback": { "en": "The second answer is also 503; 200 comes on attempt 3.", "ru": "Второй ответ тоже 503; 200 приходит на третьей попытке." } }
+          ],
+          "reveal": {
+            "en": "The whole policy as one decision flow — every earlier piece has its place:\n\n```mermaid\nflowchart TD\n  F[\"call failed\"] --> P{\"permanent? 400/401/403/404/409/422\"}\n  P -- \"yes\" --> X[\"fail, no retry\"]\n  P -- \"no\" --> A{\"ambiguous? timeout, 500, 502, 504\"}\n  A -- \"yes\" --> I{\"idempotent or idempotency key?\"}\n  I -- \"no\" --> X\n  I -- \"yes\" --> L\n  A -- \"no: 503, 429, connect refused\" --> L{\"attempts, deadline and budget left?\"}\n  L -- \"no\" --> X\n  L -- \"yes\" --> W[\"wait: backoff + jitter, at least Retry-After\"]\n  W --> R[\"retry\"]\n```\n\nIn the code: 503 is transient (retry), the waits are `max(100, 300) + max(200, 300) = 600 ms`, and attempt 3 succeeds within 3 attempts. On top of this flow: a circuit breaker in front for real outages, and the retry lives at exactly one layer.",
+            "ru": "Вся политика как один поток решений — у каждой прошлой части своё место:\n\n```mermaid\nflowchart TD\n  F[\"вызов упал\"] --> P{\"постоянная? 400/401/403/404/409/422\"}\n  P -- \"да\" --> X[\"ошибка, без повтора\"]\n  P -- \"нет\" --> A{\"неоднозначно? timeout, 500, 502, 504\"}\n  A -- \"да\" --> I{\"идемпотентно или есть idempotency key?\"}\n  I -- \"нет\" --> X\n  I -- \"да\" --> L\n  A -- \"нет: 503, 429, connect refused\" --> L{\"остались попытки, время и budget?\"}\n  L -- \"нет\" --> X\n  L -- \"да\" --> W[\"пауза: backoff + jitter, не меньше Retry-After\"]\n  W --> R[\"повтор\"]\n```\n\nВ коде: 503 временная (повторяем), паузы — `max(100, 300) + max(200, 300) = 600 ms`, и третья попытка успешна в пределах 3 попыток. Поверх этого потока — circuit breaker на случай настоящего отказа, а повторы живут ровно на одном уровне."
+          },
+          "feedback": {
+            "correct": { "en": "Right — Retry-After stretched both waits to 300 ms.", "ru": "Верно — Retry-After растянул обе паузы до 300 ms." },
+            "incorrect": { "en": "Not quite — see below.", "ru": "Не совсем — смотри ниже." }
+          }
+        }
+      ],
+      "practice": [
+        {
+          "id": "capstone-p1-404-layers",
+          "type": "predict_output",
+          "prompt": {
+            "en": "Three layers each allow 3 attempts, but they retry only 429 and 503. The database answers 404 (the order does not exist). How many database calls does one user request cause?",
+            "ru": "Три уровня разрешают по 3 попытки, но повторяют только 429 и 503. База отвечает 404 (заказа не существует). Сколько вызовов базы вызовет один запрос пользователя?"
+          },
+          "code": "int layers = 3;\nint attemptsPerLayer = 3;\nint status = 404;   // the order does not exist\nboolean retryable = status == 429 || status == 503;\nint dbCalls = 1;\nfor (int i = 0; i < layers; i++) {\n    dbCalls *= retryable ? attemptsPerLayer : 1;\n}\nSystem.out.println(dbCalls);",
+          "codeLang": "java",
+          "options": [
+            { "id": "a", "text": { "en": "1", "ru": "1" }, "correct": true },
+            { "id": "b", "text": { "en": "27", "ru": "27" }, "correct": false,
+              "feedback": { "en": "404 is permanent, so no layer retries it.", "ru": "404 постоянная, поэтому ни один уровень её не повторяет." } },
+            { "id": "c", "text": { "en": "3", "ru": "3" }, "correct": false,
+              "feedback": { "en": "Not even the innermost layer retries a 404.", "ru": "Даже самый внутренний уровень не повторяет 404." } },
+            { "id": "d", "text": { "en": "9", "ru": "9" }, "correct": false,
+              "feedback": { "en": "With retryable false every factor is 1.", "ru": "При retryable = false каждый множитель равен 1." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — classifying errors also stops amplification.", "ru": "Верно — классификация ошибок тоже останавливает amplification." },
+            "incorrect": { "en": "No — a permanent error is never retried at any layer.", "ru": "Нет — постоянная ошибка не повторяется ни на одном уровне." }
+          }
+        },
+        {
+          "id": "capstone-p2-payment-loop",
+          "type": "spot_bug",
+          "prompt": {
+            "en": "This client retries a payment call. Which defect can charge a customer's card twice?",
+            "ru": "Этот клиент повторяет вызов платежа. Какой дефект может дважды списать деньги с карты клиента?"
+          },
+          "code": "for (int attempt = 0; attempt < 3; attempt++) {\n    try {\n        return http.post(\"/payments\", body);   // no Idempotency-Key header\n    } catch (Exception e) {\n        Thread.sleep(Math.min(1000, 100L << attempt));   // capped backoff\n    }\n}",
+          "codeLang": "java",
+          "options": [
+            { "id": "a", "text": { "en": "It retries timeouts of a non-idempotent POST without an idempotency key", "ru": "Он повторяет timeout неидемпотентного POST без idempotency key" }, "correct": true },
+            { "id": "b", "text": { "en": "The backoff is capped at 1000 ms", "ru": "Backoff ограничен 1000 ms" }, "correct": false,
+              "feedback": { "en": "A cap is correct; it does not cause duplicates.", "ru": "Потолок — это правильно; он не порождает дублей." } },
+            { "id": "c", "text": { "en": "3 attempts is too few", "ru": "3 попытки — слишком мало" }, "correct": false,
+              "feedback": { "en": "3 is the typical cap; more attempts would make duplicates likelier.", "ru": "3 — типичный лимит; больше попыток сделали бы дубли вероятнее." } }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — catch (Exception) includes ambiguous timeouts.", "ru": "Верно — catch (Exception) ловит и неоднозначные timeout." },
+            "incorrect": { "en": "No — the blanket catch retries a timed-out POST with no key.", "ru": "Нет — общий catch повторяет POST после timeout без ключа." }
+          }
+        },
+        {
+          "id": "capstone-p3-decision-order",
+          "type": "sort_steps",
+          "prompt": {
+            "en": "Order the checks a safe retry policy makes after a remote call fails.",
+            "ru": "Расставьте по порядку проверки безопасной политики повторов после падения удалённого вызова."
+          },
+          "steps": [
+            { "id": "permanent", "text": { "en": "Permanent error (400/404/409)? Fail without retry", "ru": "Постоянная ошибка (400/404/409)? Ошибка без повтора" } },
+            { "id": "ambiguous", "text": { "en": "Ambiguous (timeout, 502, 504)? Retry only if idempotent or keyed", "ru": "Неоднозначно (timeout, 502, 504)? Повтор только если идемпотентно или с ключом" } },
+            { "id": "limits", "text": { "en": "Attempts, deadline and retry budget left?", "ru": "Остались попытки, время до deadline и retry budget?" } },
+            { "id": "wait", "text": { "en": "Wait backoff with jitter, at least Retry-After", "ru": "Подождать backoff с jitter, не меньше Retry-After" } },
+            { "id": "retry", "text": { "en": "Retry the call", "ru": "Повторить вызов" } }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — classify, guard, wait, retry.", "ru": "Верно — классифицировать, проверить лимиты, подождать, повторить." },
+            "incorrect": { "en": "Not quite — classify the error first, wait last.", "ru": "Не совсем — сначала классификация, пауза в конце." }
+          }
+        },
+        {
+          "id": "capstone-p4-roles",
+          "type": "match_pairs",
+          "prompt": {
+            "en": "Match each mechanism of a retry policy with the problem it solves.",
+            "ru": "Сопоставьте каждый механизм политики повторов с проблемой, которую он решает."
+          },
+          "pairs": [
+            { "id": "backoff", "left": { "en": "Exponential backoff", "ru": "Exponential backoff" }, "right": { "en": "instant retries add load to an overloaded service", "ru": "мгновенные повторы нагружают перегруженный сервис" } },
+            { "id": "jitter", "left": { "en": "Jitter", "ru": "Jitter" }, "right": { "en": "clients that failed together retry together", "ru": "упавшие вместе клиенты повторяют вместе" } },
+            { "id": "key", "left": { "en": "Idempotency key", "ru": "Idempotency key" }, "right": { "en": "a timed-out POST would run twice", "ru": "POST после timeout выполнился бы дважды" } },
+            { "id": "budget", "left": { "en": "Retry budget", "ru": "Retry budget" }, "right": { "en": "a real outage triples the load", "ru": "настоящий отказ утраивает нагрузку" } },
+            { "id": "one-layer", "left": { "en": "Retrying at one layer", "ru": "Повторы на одном уровне" }, "right": { "en": "retries multiply across the call chain", "ru": "повторы перемножаются по цепочке вызовов" } }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — each mechanism closes one failure mode.", "ru": "Верно — каждый механизм закрывает свой сценарий отказа." },
+            "incorrect": { "en": "Not quite — check each pair again.", "ru": "Не совсем — проверьте каждую пару ещё раз." }
+          }
+        },
+        {
+          "id": "capstone-p5-policy-summary",
+          "type": "fill_blank",
+          "prompt": { "en": "Fill in the safe retry policy.", "ru": "Заполните безопасную политику повторов." },
+          "text": {
+            "en": "Retry 503, 429 and connection refused; retry a timeout only if the operation is ___; never retry ___ Bad Request; wait exponential backoff plus ___; retry at exactly ___ layer.",
+            "ru": "Повторять 503, 429 и connection refused; timeout — только если операция ___; никогда не повторять ___ Bad Request; ждать exponential backoff плюс ___; повторять ровно на ___ уровне."
+          },
+          "blanks": [
+            { "en": ["idempotent"], "ru": ["идемпотентна", "идемпотентная", "idempotent"] },
+            { "en": ["400"], "ru": ["400"] },
+            { "en": ["jitter"], "ru": ["jitter", "джиттер"] },
+            { "en": ["one", "1"], "ru": ["одном", "1", "one"] }
+          ],
+          "feedback": {
+            "correct": { "en": "Right — that is the whole policy.", "ru": "Верно — это вся политика." },
+            "incorrect": { "en": "It is: idempotent, 400, jitter, one.", "ru": "Это: идемпотентна, 400, jitter, одном." }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useGeneration } from '@app/engine/generationStore';
 import { previousPosition, useLesson } from '@app/engine/lessonStore';
 import { useCodeTasks } from '@app/engine/codeTaskStore';
@@ -36,6 +36,9 @@ export function LessonPanel() {
   const genTask = useGeneration((s) => (topicId ? s.tasks[genKey] : undefined));
   const tasksKey = `tasks:${topicId}`;
   const tasksGen = useGeneration((s) => (topicId ? s.tasks[tasksKey] : undefined));
+  // The generation's last word: what running the new code exercises confirmed,
+  // fixed or could not settle. Shown until dismissed (per generation task).
+  const [dismissedGen, setDismissedGen] = useState('');
 
   useEffect(() => {
     if (topicId) void useLesson.getState().loadLesson(topicId);
@@ -67,6 +70,14 @@ export function LessonPanel() {
   const taskItem = isTask ? taskItems?.find((i) => i.task.id === unit!.id.slice(2)) : undefined;
   const generating = genTask?.status === 'running';
   const generatingTasks = tasksGen?.status === 'running' || tasksGen?.status === 'error';
+  const genResult =
+    genTask && (genTask.status === 'done' || genTask.status === 'error') && genTask.message &&
+    dismissedGen !== genTask.taskId
+      ? genTask
+      : null;
+  const genResultWarns =
+    !!genResult &&
+    (genResult.status === 'error' || /STILL CONTRADICTED|rolled back/.test(genResult.message));
 
   // The exercise on screen: for a normal unit it is the indexed one; for the
   // mistakes loop it is the head of the requeue queue.
@@ -142,6 +153,16 @@ export function LessonPanel() {
 
         {!generating && (
           <>
+            {genResult && (
+              <div className={`lesson-banner gen-result ${genResultWarns ? 'warn' : 'done'}`}>
+                <span>
+                  {ui('lessonGenResult', lang)} {genResult.message}
+                </span>
+                <button onClick={() => setDismissedGen(genResult.taskId)} title={ui('close', lang)}>
+                  ✕
+                </button>
+              </div>
+            )}
             {lesson.loading && <p className="home-hint">{ui('loading', lang)}</p>}
 
             {!lesson.loading && lesson.lessonCompleted && (

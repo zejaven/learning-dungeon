@@ -277,6 +277,7 @@ const UI: Record<string, Localized> = {
   },
   generateTasks: { en: '✨ Generate tasks', ru: '✨ Сгенерировать задачи' },
   generateMoreTasks: { en: '✨ More tasks', ru: '✨ Ещё задачи' },
+  lessonGenResult: { en: 'Lesson generation:', ru: 'Генерация урока:' },
   lessonDoneTasksLeft: {
     en: 'Lesson completed. To close the topic, solve its code tasks: {n} left in the chain (⌨, on the PC).',
     ru: 'Урок пройден. Чтобы закрыть тему, реши её задачи с кодом: осталось {n} в цепочке (⌨, на ПК).',

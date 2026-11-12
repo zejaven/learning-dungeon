@@ -1,9 +1,8 @@
 package com.interviewlearning.api;
 
-import com.interviewlearning.ai.AiTask;
 import com.interviewlearning.generation.AtomsPromptBuilder;
-import com.interviewlearning.generation.GenerationService;
 import com.interviewlearning.generation.GenerationTask;
+import com.interviewlearning.lesson.LessonGenerator;
 import com.interviewlearning.topics.TopicDtos.Localized;
 import com.interviewlearning.topics.TopicDtos.TopicDetail;
 import com.interviewlearning.topics.TopicRepository;
@@ -23,20 +22,21 @@ import java.util.Map;
  * {@code atoms:<topicId>} and the client attaches to the same
  * {@code /api/topics/generate/{taskId}/events} stream. The AI writes the JSON
  * file directly (same rationale as version regeneration: files avoid Windows
- * Cyrillic stdout mangling); a broken write is caught by the lenient runtime
- * loader, leaving the Generate button available for a retry.
+ * Cyrillic stdout mangling). {@link LessonGenerator} then runs the code of the
+ * new prediction exercises and gives the AI one round to fix a key the run
+ * contradicts.
  */
 @RestController
 public class LessonGenController {
 
-    private final GenerationService generation;
+    private final LessonGenerator lessons;
     private final TopicRepository topics;
     private final AtomsPromptBuilder prompts;
 
-    public LessonGenController(GenerationService generation,
+    public LessonGenController(LessonGenerator lessons,
                                TopicRepository topics,
                                AtomsPromptBuilder prompts) {
-        this.generation = generation;
+        this.lessons = lessons;
         this.topics = topics;
         this.prompts = prompts;
     }
@@ -74,10 +74,9 @@ public class LessonGenController {
             augment = false;
         }
 
-        GenerationTask task = generation.startOrGet("atoms:" + id, provider,
+        GenerationTask task = lessons.start(id, provider,
                 prompts.build(topic, provider, versionNo, explanation, augment, comment, existingAtoms,
-                        request.languages()),
-                AiTask.GENERATE_ATOMS);
+                        request.languages()));
         return ResponseEntity.ok(Map.of("taskId", task.id(), "key", task.key(), "status", task.status()));
     }
 }

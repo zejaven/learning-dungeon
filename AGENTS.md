@@ -424,9 +424,24 @@ If a command cannot be run, say exactly why and what remains unverified.
     the backfill. `lesson_unit_progress` and `review_session` are dropped.
   - `api/LessonController` serves atoms/state/answer/recompute;
     `api/ReviewController` serves the review list/topics/answer/reset; `api/LessonGenController`
-    starts atoms generation via the existing detached-SSE `GenerationService`
-    (task key `atoms:<topicId>`, `AiTask.GENERATE_ATOMS`), reusing
+    starts atoms generation through `lesson/LessonGenerator` (a
+    `GenerationService.startJob`, task key `atoms:<topicId>`,
+    `AiTask.GENERATE_ATOMS`; bulk generation uses it too), reusing
     `GET /api/topics/generate/{taskId}/events` for streaming.
+  - After the AI writes the lesson, `LessonGenerator` RUNS the code of every NEW
+    or CHANGED `predict_output` exercise with Java code through
+    `lesson/verify/SnippetCheck` (wrapped into a `Main` with common imports, run
+    twice). A real output that literally matches another option than the marked
+    one gets ONE repair round (`SnippetFixPrompt`, short and standalone); a
+    repair that breaks the JSON or changes any atom/exercise/option id is rolled
+    back. The lesson is kept either way and the task's final message says what
+    was confirmed, fixed, or "STILL CONTRADICTED"; `LessonPanel` shows it as a
+    dismissible banner. Only new or changed exercises are checked, so an augment
+    run never re-raises an old exercise the check cannot settle (one deliberate
+    false alarm exists in collections-streams). What it cannot catch: prose
+    options, fragments that do not compile as written, and errors of reasoning —
+    `ExerciseRunCheck` plus `tools/verify/check_exercises_codex.py` remain the
+    module-wide audit for those (see `plans/exercise-verification-collections-streams.md`).
   - Grading of discovery/practice exercises is deterministic and happens on the
     frontend; these endpoints only persist results (same trust model as trace
     mission completion). Boss Fight units reuse the existing AI-graded
@@ -867,7 +882,7 @@ the topic shape.
 Lesson (`learning-atoms.json`) generation is likewise constrained by
 `prompts/generate-learning-atoms.md` and follows the same detached-task pattern
 as topic generation and theory-version regeneration
-(`generation/GenerationService`, `api/LessonGenController`): the AI writes the
+(`lesson/LessonGenerator`, `api/LessonGenController`): the AI writes the
 JSON file directly rather than streaming it to stdout, to avoid the Windows
 Cyrillic stdout-mangling issue that theory-version regeneration also works
 around.

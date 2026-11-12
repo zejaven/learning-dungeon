@@ -97,6 +97,16 @@ classes with the same simple name, a class loader asked for `java.lang.String`.
 If you compile a snippet to check its output, add the imports in your scratch
 copy, not in the snippet.
 
+After you finish, the app RUNS the code of every new `predict_output` exercise
+(wrapped into a `Main` with those imports; declared classes go beside it,
+declared methods become static) and compares the output with your options. So
+write a `predict_output` snippet as complete, deterministic code that prints its
+result with `System.out` — no `...` placeholders, no undeclared variables, no
+reliance on `HashMap`/`HashSet` iteration order, timing or threads unless the
+exercise's answer is exactly that the output is unspecified. When the answer is
+literal output, make the correct option the exact printed text (one line per
+`println`, or joined with ", ").
+
 ## Atom rules
 
 - 8-15 atoms, the LAST of which is the capstone (`"capstone": true`, see below).

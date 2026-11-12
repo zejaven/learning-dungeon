@@ -17,6 +17,7 @@ import com.interviewlearning.generation.GenerationService;
 import com.interviewlearning.generation.GenerationTask;
 import com.interviewlearning.generation.TopicPromptBuilder;
 import com.interviewlearning.generation.TopicPromptBuilder.TopicGenSpec;
+import com.interviewlearning.lesson.LessonGenerator;
 import com.interviewlearning.topics.TopicDtos.TopicDetail;
 import com.interviewlearning.topics.TopicRepository;
 import com.interviewlearning.usage.UsageDtos.UsageSnapshot;
@@ -66,6 +67,7 @@ public class BulkGenerationService {
     private final TopicPromptBuilder topicPrompts;
     private final AtomsPromptBuilder atomsPrompts;
     private final CodeTaskGenerator taskGenerator;
+    private final LessonGenerator lessonGenerator;
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "bulk-gen");
@@ -80,8 +82,10 @@ public class BulkGenerationService {
                                  TopicRepository topics,
                                  TopicPromptBuilder topicPrompts,
                                  AtomsPromptBuilder atomsPrompts,
-                                 CodeTaskGenerator taskGenerator) {
+                                 CodeTaskGenerator taskGenerator,
+                                 LessonGenerator lessonGenerator) {
         this.taskGenerator = taskGenerator;
+        this.lessonGenerator = lessonGenerator;
         this.generation = generation;
         this.usage = usage;
         this.topics = topics;
@@ -390,9 +394,8 @@ public class BulkGenerationService {
                 }
                 return taskGenerator.start(topic, run.provider, "");
             }
-            return generation.startOrGet("atoms:" + topic.id(), run.provider,
-                    atomsPrompts.buildFull(topic, run.provider, 1, run.languages),
-                    AiTask.GENERATE_ATOMS);
+            return lessonGenerator.start(topic.id(), run.provider,
+                    atomsPrompts.buildFull(topic, run.provider, 1, run.languages));
         } catch (RuntimeException e) {
             log.warn("Bulk item {} could not start: {}", item.spec.id(), e.getMessage());
             return null;

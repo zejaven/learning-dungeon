@@ -217,6 +217,10 @@ public class AiCliService {
         void ai(String line);
 
         void status(String status, String message);
+
+        /** The CLI process has started; a generation task keeps it to be able to stop it. */
+        default void started(Process process) {
+        }
     }
 
     public void runDetached(String providerId, String prompt, AiTask task, Sink sink) {
@@ -255,6 +259,11 @@ public class AiCliService {
             @Override
             public void ai(String line) {
                 sink.ai(line);
+            }
+
+            @Override
+            public void started(Process process) {
+                sink.started(process);
             }
 
             @Override
@@ -402,6 +411,7 @@ public class AiCliService {
                     + " (command: " + invocation.command().get(0) + ")");
             return;
         }
+        sink.started(process);
 
         if (invocation.promptFile() == null) {
             try (OutputStream stdin = process.getOutputStream()) {

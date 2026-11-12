@@ -35,6 +35,9 @@ public class GenerationTask {
     private volatile String status = "running"; // running | done | error
     private final List<Event> history = new ArrayList<>();
     private final Set<SseEmitter> subscribers = new LinkedHashSet<>();
+    /** The CLI run of the moment, so {@link #cancel} can stop it; null between runs. */
+    private Process process;
+    private volatile boolean cancelled;
 
     public GenerationTask(String id, String key) {
         this.id = id;
@@ -57,6 +60,45 @@ public class GenerationTask {
         return !"running".equals(status);
     }
 
+    /** The message a stopped task ends with, whatever its run or job reported. */
+    public static final String STOPPED = "Stopped by the user.";
+
+    public boolean isCancelled() {
+        return cancelled;
+    }
+
+    /** Remembers the CLI process now running for this task; one started after a stop is killed at once. */
+    public synchronized void attachProcess(Process process) {
+        this.process = process;
+        if (cancelled) {
+            kill(process);
+        }
+    }
+
+    /**
+     * Stops the task: kills its CLI run (with the processes it spawned) and makes
+     * every later AI step refuse to start. The task still ends through the normal
+     * terminal status of its run or job, which then reads {@link #STOPPED}.
+     *
+     * @return false when the task had already finished
+     */
+    public synchronized boolean cancel() {
+        if (isTerminal()) {
+            return false;
+        }
+        cancelled = true;
+        if (process != null) {
+            kill(process);
+        }
+        return true;
+    }
+
+    private static void kill(Process process) {
+        // The CLI spawns its own tools (shells, node); they would keep writing files.
+        process.descendants().forEach(ProcessHandle::destroyForcibly);
+        process.destroyForcibly();
+    }
+
     /** Buffers and broadcasts a normalized AI stream line. */
     public synchronized void addAi(String line) {
         add(new Event("ai", line));
@@ -64,7 +106,14 @@ public class GenerationTask {
 
     /** Buffers and broadcasts a status change; completes subscribers when terminal. */
     public synchronized void addStatus(String newStatus, String message) {
+        if (isTerminal()) {
+            return; // a run killed by a stop still reports its exit afterwards
+        }
         if ("done".equals(newStatus) || "error".equals(newStatus)) {
+            if (cancelled) {
+                newStatus = "error";
+                message = STOPPED;
+            }
             this.status = newStatus;
         }
         String json;

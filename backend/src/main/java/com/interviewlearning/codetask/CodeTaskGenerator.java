@@ -109,6 +109,9 @@ public class CodeTaskGenerator {
                     problems = validate(draft, topic, takenIds, hasFinal);
                 }
             }
+            if (steps.cancelled()) {
+                throw new IllegalStateException("Stopped; nothing was added.");
+            }
             return promote(topic.id(), draft, problems);
         } finally {
             deleteRecursively(draft);

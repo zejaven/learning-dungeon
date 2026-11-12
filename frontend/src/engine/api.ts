@@ -454,6 +454,13 @@ export async function startGeneration(body: GenerateBody): Promise<GenTaskRef> {
   return res.json();
 }
 
+/** Stops a running generation (topic, lesson or code tasks); false when it had already ended. */
+export async function cancelGeneration(taskId: string): Promise<boolean> {
+  const res = await fetch(`/api/topics/generate/${encodeURIComponent(taskId)}/cancel`, { method: 'POST' });
+  if (!res.ok) throw new Error(`Failed to stop generation (${res.status})`);
+  return (await res.json()).cancelled === true;
+}
+
 /** Lists generation tasks still running, so the UI can reattach after a reload. */
 export async function fetchActiveGenerations(): Promise<GenTaskRef[]> {
   const res = await fetch('/api/topics/generate/active');

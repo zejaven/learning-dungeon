@@ -70,8 +70,27 @@ public class LessonGenerator {
 
     String run(String topicId, String prompt, GenerationService.Steps steps) throws IOException {
         Path file = repoPaths.topicsDir().resolve(topicId).resolve("learning-atoms.json");
+        byte[] original = Files.isRegularFile(file) ? Files.readAllBytes(file) : null;
+        String message = generateAndCheck(file, topicId, prompt, steps);
+        if (steps.cancelled()) {
+            // Stopped by the user: whatever the run got to, the topic keeps the lesson it had.
+            if (original != null) {
+                Files.write(file, original);
+            } else {
+                Files.deleteIfExists(file);
+            }
+            throw new IllegalStateException("Stopped; the previous lesson is kept.");
+        }
+        return message;
+    }
+
+    private String generateAndCheck(Path file, String topicId, String prompt, GenerationService.Steps steps)
+            throws IOException {
         Map<String, String> before = fingerprints(readTree(file));
         if (!steps.ai(prompt)) {
+            if (steps.cancelled()) {
+                return "";
+            }
             throw new IllegalStateException("The AI run failed.");
         }
         JsonNode written = readTree(file);

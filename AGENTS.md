@@ -879,6 +879,17 @@ Topic generation is intentionally constrained by `prompts/add-topic.md`. Do not
 loosen the contract unless you also update tests and the app logic that relies on
 the topic shape.
 
+A running generation can be stopped (■ in `shell/GenerationView`,
+`POST /api/topics/generate/{taskId}/cancel`). `GenerationTask.cancel` kills the
+CLI with its descendants (the CLI's own shells would keep writing files), later
+`Steps.ai` calls of a job fail at once, and the task ends as `error` with
+`GenerationTask.STOPPED` whatever its run reports afterwards. Each kind undoes
+its half-written output: a topic run deletes the `topics/` folders that appeared
+since it started (`NewTopicDirs`, skipped while another topic generation runs,
+since the folder could be that run's), `LessonGenerator` puts the previous
+`learning-atoms.json` back, and `CodeTaskGenerator` promotes nothing. A new
+multi-step job must check `Steps.cancelled()` before it commits anything.
+
 Lesson (`learning-atoms.json`) generation is likewise constrained by
 `prompts/generate-learning-atoms.md` and follows the same detached-task pattern
 as topic generation and theory-version regeneration

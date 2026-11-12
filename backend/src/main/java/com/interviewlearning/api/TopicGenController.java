@@ -1,8 +1,10 @@
 package com.interviewlearning.api;
 
 import com.interviewlearning.ai.AiTask;
+import com.interviewlearning.config.RepoPaths;
 import com.interviewlearning.generation.GenerationService;
 import com.interviewlearning.generation.GenerationTask;
+import com.interviewlearning.generation.NewTopicDirs;
 import com.interviewlearning.generation.TopicPromptBuilder;
 import com.interviewlearning.generation.TopicPromptBuilder.TopicGenSpec;
 import org.springframework.http.MediaType;
@@ -30,10 +32,12 @@ public class TopicGenController {
 
     private final GenerationService generation;
     private final TopicPromptBuilder prompts;
+    private final RepoPaths repoPaths;
 
-    public TopicGenController(GenerationService generation, TopicPromptBuilder prompts) {
+    public TopicGenController(GenerationService generation, TopicPromptBuilder prompts, RepoPaths repoPaths) {
         this.generation = generation;
         this.prompts = prompts;
+        this.repoPaths = repoPaths;
     }
 
     /**
@@ -66,7 +70,8 @@ public class TopicGenController {
         String prompt = prompts.build(new TopicGenSpec(request.question(), request.catalogId(),
                 request.categoryId(), request.difficulty(), request.style(), request.styleName(),
                 request.provider(), request.languages(), domainId));
-        GenerationTask task = generation.startOrGet(key, request.provider(), prompt, AiTask.GENERATE_TOPIC);
+        GenerationTask task = generation.startOrGet(key, request.provider(), prompt, AiTask.GENERATE_TOPIC,
+                NewTopicDirs.snapshot(repoPaths.topicsDir(), key, generation::runningKeys));
         return Map.of("taskId", task.id(), "key", task.key(), "status", task.status());
     }
 
@@ -88,6 +93,15 @@ public class TopicGenController {
             return emitter;
         }
         return task.attach(30 * 60 * 1000L);
+    }
+
+    /**
+     * Stops a running generation of any kind (topic, lesson, code tasks): its
+     * CLI run is killed and what it had half-written is undone.
+     */
+    @PostMapping("/generate/{taskId}/cancel")
+    public Map<String, Boolean> cancel(@PathVariable String taskId) {
+        return Map.of("cancelled", generation.cancel(taskId));
     }
 
     /** Tasks still running, so the frontend can reattach after a reload. */

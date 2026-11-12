@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import {
+  cancelGeneration,
   fetchActiveGenerations,
   startGeneration,
   streamGenerationEvents,
@@ -30,6 +31,8 @@ interface GenerationState {
 
   start: (key: string, body: GenerateBody) => Promise<void>;
   attach: (taskId: string, key: string) => void;
+  /** Asks the backend to stop the task; its stream then ends with the stopped status. */
+  cancel: (key: string) => Promise<void>;
   refreshActive: () => Promise<void>;
 }
 
@@ -107,6 +110,20 @@ export const useGeneration = create<GenerationState>((set, get) => ({
       },
       onDone: () => set((s) => ({ subscribed: { ...s.subscribed, [taskId]: false } })),
     }).catch(() => set((s) => ({ subscribed: { ...s.subscribed, [taskId]: false } })));
+  },
+
+  async cancel(key) {
+    const t = get().tasks[key];
+    if (!t?.taskId || t.status !== 'running') return;
+    try {
+      await cancelGeneration(t.taskId);
+    } catch (e) {
+      const message = (e as Error).message;
+      set((s) => {
+        const cur = s.tasks[key];
+        return cur ? { tasks: { ...s.tasks, [key]: { ...cur, log: [...cur.log, `[error] ${message}`] } } } : {};
+      });
+    }
   },
 
   async refreshActive() {

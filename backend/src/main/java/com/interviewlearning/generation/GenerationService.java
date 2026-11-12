@@ -2,6 +2,8 @@ package com.interviewlearning.generation;
 
 import com.interviewlearning.ai.AiCliService;
 import com.interviewlearning.ai.AiTask;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -20,6 +22,8 @@ import java.util.concurrent.Executors;
 @Service
 public class GenerationService {
 
+    private static final Logger log = LoggerFactory.getLogger(GenerationService.class);
+
     private static final long ATTACH_TIMEOUT_MILLIS = 30 * 60 * 1000L;
 
     private final AiCliService ai;
@@ -37,6 +41,15 @@ public class GenerationService {
 
     /** Starts a task for the key, or returns the one already running for it. */
     public GenerationTask startOrGet(String key, String provider, String prompt, AiTask aiTask) {
+        return startOrGet(key, provider, prompt, aiTask, null);
+    }
+
+    /**
+     * Same, with {@code onStopped} run once the CLI has exited after a stop and
+     * before the task ends, to undo what the killed run had already written.
+     */
+    public GenerationTask startOrGet(String key, String provider, String prompt, AiTask aiTask,
+                                     Runnable onStopped) {
         GenerationTask existing = byKey.get(key);
         if (existing != null && !existing.isTerminal()) {
             return existing;
@@ -51,11 +64,34 @@ public class GenerationService {
             }
 
             @Override
+            public void started(Process process) {
+                task.attachProcess(process);
+            }
+
+            @Override
             public void status(String status, String message) {
+                if (task.isCancelled() && onStopped != null && ("done".equals(status) || "error".equals(status))) {
+                    try {
+                        onStopped.run();
+                    } catch (RuntimeException e) {
+                        log.warn("Cleanup after stopping {} failed: {}", key, e.getMessage());
+                    }
+                }
                 task.addStatus(status, message);
             }
         });
         return task;
+    }
+
+    /**
+     * Stops a running task: kills its CLI run, and a job's later AI steps fail
+     * at once. The task ends with {@link GenerationTask#STOPPED}.
+     *
+     * @return false for an unknown or already finished task
+     */
+    public boolean cancel(String taskId) {
+        GenerationTask task = byId.get(taskId);
+        return task != null && task.cancel();
     }
 
     /**
@@ -74,6 +110,11 @@ public class GenerationService {
 
         /** A progress line shown in the task log. */
         void say(String message);
+
+        /** True once the user stopped the task: the job should undo its partial work and end. */
+        default boolean cancelled() {
+            return false;
+        }
     }
 
     /**
@@ -97,6 +138,11 @@ public class GenerationService {
             }
 
             @Override
+            public void started(Process process) {
+                task.attachProcess(process);
+            }
+
+            @Override
             public void status(String status, String message) {
                 task.addStatus(status, message);
             }
@@ -104,12 +150,19 @@ public class GenerationService {
         Steps steps = new Steps() {
             @Override
             public boolean ai(String prompt) {
-                return GenerationService.this.ai.runStep(provider, prompt, aiTask, sink);
+                return !task.isCancelled()
+                        && GenerationService.this.ai.runStep(provider, prompt, aiTask, sink)
+                        && !task.isCancelled();
             }
 
             @Override
             public void say(String message) {
                 task.addStatus("running", message);
+            }
+
+            @Override
+            public boolean cancelled() {
+                return task.isCancelled();
             }
         };
         jobs.submit(() -> {
@@ -124,6 +177,11 @@ public class GenerationService {
 
     public GenerationTask byId(String taskId) {
         return byId.get(taskId);
+    }
+
+    /** Keys of the tasks still running. */
+    public List<String> runningKeys() {
+        return byKey.values().stream().filter(t -> !t.isTerminal()).map(GenerationTask::key).toList();
     }
 
     /** Tasks still running, for the frontend to reattach to after a reload. */

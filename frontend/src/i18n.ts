@@ -154,6 +154,12 @@ const UI: Record<string, Localized> = {
   generating: { en: 'Generating…', ru: 'Генерация…' },
   reloadNew: { en: 'Reload to open new topic', ru: 'Перезагрузить, чтобы открыть тему' },
   genFinished: { en: '— topic generation finished —', ru: '— генерация темы завершена —' },
+  genStop: { en: 'Stop', ru: 'Остановить' },
+  genStopping: { en: 'Stopping…', ru: 'Останавливаю…' },
+  genStopHint: {
+    en: 'Stop the AI run. What it has half-written is undone: a new topic is deleted, a lesson goes back to the previous one, code tasks are not added.',
+    ru: 'Остановить работу ИИ. Недописанное откатывается: новая тема удаляется, урок возвращается к прежнему, задачи с кодом не добавляются.',
+  },
   bossFight: { en: '⚔️ Boss Fight', ru: '⚔️ Битва с боссом' },
   bossFightTitle: { en: 'Boss Fight — ', ru: 'Битва с боссом — ' },
   bossFightAnswerPlaceholder: {

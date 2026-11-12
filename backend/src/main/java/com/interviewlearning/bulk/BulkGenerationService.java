@@ -12,9 +12,11 @@ import com.interviewlearning.bulk.BulkPlanner.Proceed;
 import com.interviewlearning.bulk.BulkPlanner.Stop;
 import com.interviewlearning.bulk.BulkPlanner.WaitUntil;
 import com.interviewlearning.bulk.BulkPlanner.Window;
+import com.interviewlearning.config.RepoPaths;
 import com.interviewlearning.generation.AtomsPromptBuilder;
 import com.interviewlearning.generation.GenerationService;
 import com.interviewlearning.generation.GenerationTask;
+import com.interviewlearning.generation.NewTopicDirs;
 import com.interviewlearning.generation.TopicPromptBuilder;
 import com.interviewlearning.generation.TopicPromptBuilder.TopicGenSpec;
 import com.interviewlearning.lesson.LessonGenerator;
@@ -77,13 +79,17 @@ public class BulkGenerationService {
 
     private volatile BulkRun current;
 
+    private final RepoPaths repoPaths;
+
     public BulkGenerationService(GenerationService generation,
                                  UsageService usage,
                                  TopicRepository topics,
                                  TopicPromptBuilder topicPrompts,
                                  AtomsPromptBuilder atomsPrompts,
                                  CodeTaskGenerator taskGenerator,
-                                 LessonGenerator lessonGenerator) {
+                                 LessonGenerator lessonGenerator,
+                                 RepoPaths repoPaths) {
+        this.repoPaths = repoPaths;
         this.taskGenerator = taskGenerator;
         this.lessonGenerator = lessonGenerator;
         this.generation = generation;
@@ -378,8 +384,9 @@ public class BulkGenerationService {
                 String prompt = topicPrompts.build(new TopicGenSpec(item.spec.question(), catalogId,
                         item.spec.categoryId(), item.spec.difficulty(), item.spec.style(),
                         item.spec.styleName(), run.provider, run.languages, run.domainId));
-                return generation.startOrGet("catalog:" + catalogId, run.provider, prompt,
-                        AiTask.GENERATE_TOPIC);
+                String key = "catalog:" + catalogId;
+                return generation.startOrGet(key, run.provider, prompt, AiTask.GENERATE_TOPIC,
+                        NewTopicDirs.snapshot(repoPaths.topicsDir(), key, generation::runningKeys));
             }
             TopicDetail topic = topics.getTopic(item.spec.id()).orElse(null);
             if (topic == null) {

@@ -72,6 +72,8 @@ class LessonGeneratorTest {
     private final class FakeSteps implements GenerationService.Steps {
         final Deque<String> writes = new ArrayDeque<>();
         final List<String> prompts = new ArrayList<>();
+        /** "STOP" as a content: the run writes nothing more and the user has stopped the task. */
+        boolean stopped;
 
         FakeSteps(String... contents) {
             writes.addAll(List.of(contents));
@@ -81,19 +83,36 @@ class LessonGeneratorTest {
         public boolean ai(String prompt) {
             prompts.add(prompt);
             String next = writes.poll();
+            if (next != null && next.startsWith("STOP")) {
+                stopped = true;
+                next = next.substring(4);
+                if (!next.isEmpty()) {
+                    write(next); // what the killed run had already written
+                }
+                return false;
+            }
             if (next == null || next.equals("FAIL")) {
                 return false;
             }
+            write(next);
+            return true;
+        }
+
+        private void write(String content) {
             try {
-                Files.writeString(file, next, StandardCharsets.UTF_8);
+                Files.writeString(file, content, StandardCharsets.UTF_8);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
-            return true;
         }
 
         @Override
         public void say(String message) {
+        }
+
+        @Override
+        public boolean cancelled() {
+            return stopped;
         }
     }
 
@@ -168,6 +187,31 @@ class LessonGeneratorTest {
         FakeSteps steps = new FakeSteps(lesson(tf));
         assertEquals("Lesson written. No new code exercises to check by running.",
                 generator.run(TOPIC, "generate", steps));
+    }
+
+    @Test
+    void aStopKeepsThePreviousLesson() throws IOException {
+        String old = lesson(prediction("old", "b"));
+        Files.writeString(file, old, StandardCharsets.UTF_8);
+        FakeSteps steps = new FakeSteps("STOP{ \"atoms\": [ half");
+        assertThrows(IllegalStateException.class, () -> generator.run(TOPIC, "generate", steps));
+        assertEquals(old, Files.readString(file, StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void aStopDuringTheRepairKeepsThePreviousLessonToo() throws IOException {
+        String old = lesson(prediction("old", "b"));
+        Files.writeString(file, old, StandardCharsets.UTF_8);
+        FakeSteps steps = new FakeSteps(lesson(prediction("x", "a")), "STOP");
+        assertThrows(IllegalStateException.class, () -> generator.run(TOPIC, "generate", steps));
+        assertEquals(old, Files.readString(file, StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void aStoppedFirstGenerationLeavesNoLesson() {
+        FakeSteps steps = new FakeSteps("STOP{ \"atoms\": [ half");
+        assertThrows(IllegalStateException.class, () -> generator.run(TOPIC, "generate", steps));
+        assertFalse(Files.exists(file));
     }
 
     @Test

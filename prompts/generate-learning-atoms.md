@@ -86,6 +86,17 @@ Exercise types and their extra fields:
 | `predict_output` | same as `multiple_choice` plus a REQUIRED `code` snippet the learner predicts the behaviour/output of |
 | `spot_bug` | same as `multiple_choice` plus a REQUIRED `code` snippet containing a subtle defect |
 
+A Java `code` snippet is a fragment read by a person, written the way it would
+look in a real file: assume the usual imports (`java.util.*`, `java.util.function.*`,
+`java.util.stream.*`, `java.util.concurrent.*`, `java.time.*` and the like) and write
+the simple class names: `Map<String, String> m = new HashMap<>();`, never
+`java.util.Map<String, String> m = new java.util.HashMap<>();`. Do not add
+`import` lines either, unless the import itself is what the exercise is about. A
+fully qualified name belongs only where it is the point: a stack-trace line, two
+classes with the same simple name, a class loader asked for `java.lang.String`.
+If you compile a snippet to check its output, add the imports in your scratch
+copy, not in the snippet.
+
 ## Atom rules
 
 - 8-15 atoms, the LAST of which is the capstone (`"capstone": true`, see below).

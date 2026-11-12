@@ -526,6 +526,9 @@ const UI: Record<string, Localized> = {
     ru: 'Сгенерировать задачи с кодом для всех Java-тем с уроком',
   },
   bulkDialogCount: { en: 'Items to generate:', ru: 'Будет сгенерировано:' },
+  bulkModules: { en: 'Modules', ru: 'Модули' },
+  bulkCategories: { en: 'Categories', ru: 'Категории' },
+  bulkAllGroups: { en: 'All', ru: 'Все' },
   bulkEndTime: { en: 'Stop by', ru: 'Остановить к' },
   bulkEndTimeHint: {
     en: 'A time already past today means tomorrow (e.g. 10:00 tonight = tomorrow morning).',

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { BulkKind } from '@app/engine/api';
 import { useBulk } from '@app/engine/bulkStore';
 import { ui, useLang } from '@app/i18n';
@@ -10,6 +10,14 @@ const BULK_TITLE: Record<BulkKind, string> = {
   tasks: 'bulkDialogTitleTasks',
 };
 
+/** A module (or, without a roadmap, a category) that has items to generate. */
+export interface BulkGroup {
+  id: string;
+  /** Already localized. */
+  name: string;
+  count: number;
+}
+
 /** "HH:mm" a given number of hours from now (default stop time suggestion). */
 function defaultEndTime(hoursAhead: number): string {
   const t = new Date(Date.now() + hoursAhead * 3_600_000);
@@ -17,22 +25,44 @@ function defaultEndTime(hoursAhead: number): string {
 }
 
 /**
- * Start-confirmation dialog for a bulk-generation run: how many items will be
- * generated, the stop time (time-of-day; already past today = tomorrow) and the
+ * Start-confirmation dialog for a bulk-generation run: which modules to cover
+ * (all by default) and so how many items will be generated, the stop time (time-of-day; already past today = tomorrow) and the
  * usage cap that must hold once the 5-hour limit window outlives the stop time.
  */
 export function BulkGenDialog({
   kind,
-  count,
+  groups,
+  groupsAreModules,
   onConfirm,
   onClose,
 }: {
   kind: BulkKind;
-  count: number;
-  onConfirm: (endTime: string, maxPercent: number, maxWeeklyPercent: number) => void;
+  groups: BulkGroup[];
+  /** True where the tree is a roadmap of modules; otherwise the groups are categories. */
+  groupsAreModules: boolean;
+  onConfirm: (groupIds: Set<string>, endTime: string, maxPercent: number, maxWeeklyPercent: number) => void;
   onClose: () => void;
 }) {
   const lang = useLang((s) => s.lang);
+  const [picked, setPicked] = useState<Set<string>>(() => new Set(groups.map((g) => g.id)));
+  const allRef = useRef<HTMLInputElement>(null);
+  const allPicked = groups.every((g) => picked.has(g.id));
+  const nonePicked = groups.every((g) => !picked.has(g.id));
+  const count = groups.reduce((n, g) => n + (picked.has(g.id) ? g.count : 0), 0);
+  // "All" shows a dash when only some are picked; that state exists only as a DOM property.
+  useEffect(() => {
+    if (allRef.current) allRef.current.indeterminate = !allPicked && !nonePicked;
+  }, [allPicked, nonePicked]);
+
+  function toggle(id: string) {
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   const starting = useBulk((s) => s.starting);
   const error = useBulk((s) => s.error);
   const [endTime, setEndTime] = useState(() => defaultEndTime(6));
@@ -43,7 +73,7 @@ export function BulkGenDialog({
   // Continuous mode: no deadline, the caps simply hold in every window.
   const [noDeadline, setNoDeadline] = useState(false);
 
-  const canConfirm = !starting && (noDeadline || /^\d{2}:\d{2}$/.test(endTime));
+  const canConfirm = !starting && count > 0 && (noDeadline || /^\d{2}:\d{2}$/.test(endTime));
 
   const backdrop = useBackdropClose(onClose);
   return (
@@ -54,6 +84,27 @@ export function BulkGenDialog({
           <button onClick={onClose}>✕</button>
         </div>
         <div className="dialog-body">
+          <div className="bulk-groups-head">
+            <span>{ui(groupsAreModules ? 'bulkModules' : 'bulkCategories', lang)}</span>
+            <label>
+              <input
+                ref={allRef}
+                type="checkbox"
+                checked={allPicked}
+                onChange={() => setPicked(allPicked ? new Set() : new Set(groups.map((g) => g.id)))}
+              />
+              {ui('bulkAllGroups', lang)}
+            </label>
+          </div>
+          <div className="bulk-groups">
+            {groups.map((g) => (
+              <label key={g.id}>
+                <input type="checkbox" checked={picked.has(g.id)} onChange={() => toggle(g.id)} />
+                <span className="bulk-group-name">{g.name}</span>
+                <span className="bulk-group-count">{g.count}</span>
+              </label>
+            ))}
+          </div>
           <p>
             {ui('bulkDialogCount', lang)} <strong>{count}</strong>
           </p>
@@ -130,7 +181,7 @@ export function BulkGenDialog({
           <button
             className="primary"
             disabled={!canConfirm}
-            onClick={() => onConfirm(noDeadline ? '' : endTime, maxPercent, maxWeeklyPercent)}
+            onClick={() => onConfirm(picked, noDeadline ? '' : endTime, maxPercent, maxWeeklyPercent)}
           >
             {ui('bulkStart', lang)}
           </button>

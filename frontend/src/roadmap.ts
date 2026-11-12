@@ -126,17 +126,36 @@ export function pruneEmpty(stages: RoadmapStage[]): RoadmapStage[] {
     .filter((s) => s.modules.length > 0);
 }
 
-/** Every entry in the order the tree renders it, with the category it belongs to. */
+/** A tree group an entry sits in: a roadmap module, or the category where there is no roadmap. */
+export interface TreeGroup {
+  id: string;
+  name: Localized;
+}
+
+/**
+ * Every entry in the order the tree renders it, with the category it belongs to
+ * and the group the tree shows it under (what bulk generation lets you pick).
+ */
 export function entriesInTreeOrder(
   catalog: CatalogCategory[],
   domainId: string,
-): { categoryId: string; entry: CatalogEntry }[] {
+): { categoryId: string; entry: CatalogEntry; group: TreeGroup }[] {
   const stages = groupByRoadmap(catalog, domainId);
   if (!stages) {
-    return catalog.flatMap((c) => [...c.entries].sort(compareEntries).map((entry) => ({ categoryId: c.id, entry })));
+    return catalog.flatMap((c) =>
+      [...c.entries]
+        .sort(compareEntries)
+        .map((entry) => ({ categoryId: c.id, entry, group: { id: c.id, name: c.name } })),
+    );
   }
   const categoryOf = new Map(catalog.flatMap((c) => c.entries.map((e) => [e.id, c.id] as const)));
   return stages
     .flatMap((s) => s.modules)
-    .flatMap((m) => m.entries.map((entry) => ({ categoryId: categoryOf.get(entry.id) ?? m.id, entry })));
+    .flatMap((m) =>
+      m.entries.map((entry) => ({
+        categoryId: categoryOf.get(entry.id) ?? m.id,
+        entry,
+        group: { id: m.id, name: m.name },
+      })),
+    );
 }

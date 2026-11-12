@@ -27,7 +27,7 @@ import { AiProviderSelector } from '@app/shell/AiProviderSelector';
 import { AssistantDialog } from '@app/shell/AssistantDialog';
 import { BossFightDialog } from '@app/shell/BossFightDialog';
 import { BulkGenBar } from '@app/shell/BulkGenBar';
-import { BulkGenDialog } from '@app/shell/BulkGenDialog';
+import { BulkGenDialog, type BulkGroup } from '@app/shell/BulkGenDialog';
 import { CategoryTree } from '@app/shell/CategoryTree';
 import { Celebration } from '@app/shell/Celebration';
 import { GenerationView } from '@app/shell/GenerationView';
@@ -111,24 +111,42 @@ export function HomeScreen() {
     const ordered = entriesInTreeOrder(buildCatalog(topics, manualQuestions, domainId), domainId);
     const theory = ordered.filter(({ entry }) => !entry.topicId);
     const byId = new Map(topics.map((t) => [t.id, t]));
-    const withTopic = ordered
-      .map(({ entry }) => (entry.topicId ? byId.get(entry.topicId) : undefined))
-      .filter((t): t is NonNullable<typeof t> => !!t);
-    const atoms = withTopic.filter((t) => !t.hasAtoms);
+    const withTopic = ordered.flatMap(({ entry, group }) => {
+      const topic = entry.topicId ? byId.get(entry.topicId) : undefined;
+      return topic ? [{ topic, group }] : [];
+    });
+    const atoms = withTopic.filter(({ topic }) => !topic.hasAtoms);
     // Tasks sit in a lesson chain, so they follow lessons; Java topics only.
-    const tasks = domainId === 'java' ? withTopic.filter((t) => t.hasAtoms && !t.tasksDecided) : [];
+    const tasks =
+      domainId === 'java' ? withTopic.filter(({ topic }) => topic.hasAtoms && !topic.tasksDecided) : [];
     return { theory, atoms, tasks };
   }, [topics, manualQuestions, domainId]);
 
+  // The modules (or categories) holding something to generate, in tree order,
+  // so the bulk dialog can limit a run to some of them.
+  const bulkGroups = useMemo(() => {
+    if (!bulkKind) return [];
+    const counts = new Map<string, BulkGroup>();
+    for (const { group } of bulkMissing[bulkKind]) {
+      const known = counts.get(group.id);
+      if (known) known.count++;
+      else counts.set(group.id, { id: group.id, name: tl(group.name, lang), count: 1 });
+    }
+    return [...counts.values()];
+  }, [bulkKind, bulkMissing, lang]);
+
   async function confirmBulk(
     kind: BulkKind,
+    groupIds: Set<string>,
     endTime: string,
     maxPercent: number,
     maxWeeklyPercent: number,
   ) {
+    const picked = <T extends { group: { id: string } }>(list: T[]) =>
+      list.filter(({ group }) => groupIds.has(group.id));
     const items =
       kind === 'theory'
-        ? bulkMissing.theory.map(({ categoryId: catId, entry: e }) => ({
+        ? picked(bulkMissing.theory).map(({ categoryId: catId, entry: e }) => ({
             id: e.id,
             label: e.question,
             question: tl(e.question, lang),
@@ -138,7 +156,7 @@ export function HomeScreen() {
             style: useStyle.getState().instruction(),
             styleName: useStyle.getState().currentName(),
           }))
-        : bulkMissing[kind].map((t) => ({ id: t.id, label: t.title }));
+        : picked(bulkMissing[kind]).map(({ topic: t }) => ({ id: t.id, label: t.title }));
     const ok = await startBulkRun({
       kind,
       provider: 'claude',
@@ -553,9 +571,10 @@ export function HomeScreen() {
       {bulkKind && (
         <BulkGenDialog
           kind={bulkKind}
-          count={bulkMissing[bulkKind].length}
-          onConfirm={(endTime, maxPercent, maxWeeklyPercent) =>
-            void confirmBulk(bulkKind, endTime, maxPercent, maxWeeklyPercent)
+          groups={bulkGroups}
+          groupsAreModules={hasRoadmap(domainId)}
+          onConfirm={(groupIds, endTime, maxPercent, maxWeeklyPercent) =>
+            void confirmBulk(bulkKind, groupIds, endTime, maxPercent, maxWeeklyPercent)
           }
           onClose={() => setBulkKind(null)}
         />

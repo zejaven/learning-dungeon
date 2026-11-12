@@ -466,7 +466,9 @@ If a command cannot be run, say exactly why and what remains unverified.
     sleep stays allowed; non-Windows is a no-op. Every AI code path must keep
     funneling through `runProcess` for this to hold.
 - The `voice` package (`voice/VoiceService`, `api/VoiceController`) is voice
-  input for Boss Fight answers. The browser records with `MediaRecorder` until
+  input for Boss Fight answers and Ask AI questions (one `shell/VoiceInputButton`;
+  Ask AI has no question yet, so it passes the topic title as Whisper's hint).
+  The browser records with `MediaRecorder` until
   Stop (pauses never end it) and posts the whole recording; the PC transcribes
   it in one go with faster-whisper through the python worker
   `tools/voice/transcribe_worker.py`. That is what makes long pauses harmless:

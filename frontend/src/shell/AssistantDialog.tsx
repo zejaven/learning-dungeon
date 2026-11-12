@@ -7,10 +7,12 @@ import {
   type AssistantQa,
 } from '@app/engine/api';
 import { useAi } from '@app/engine/aiStore';
+import { useOffline } from '@app/engine/offlineStore';
 import { parseTextDelta } from '@app/engine/aiStream';
 import { useStore } from '@app/engine/store';
 import { questionLabel, statusLabel, tl, ui, useLang } from '@app/i18n';
 import { Markdown } from './Markdown';
+import { VoiceInputButton } from './VoiceInputButton';
 
 /** Formats selected screen text as a Markdown blockquote for the composer. */
 function asQuote(text: string): string {
@@ -35,6 +37,7 @@ export function AssistantDialog({
   const code = useStore((s) => (s.topic?.mode === 'theory' ? '' : s.code));
   const provider = useAi((s) => s.selectedProvider);
   const lang = useLang((s) => s.lang);
+  const online = useOffline((s) => s.online);
 
   const [history, setHistory] = useState<AssistantQa[]>([]);
   // null = compose mode (a fresh, empty question). A number = the id of the
@@ -213,17 +216,29 @@ export function AssistantDialog({
           {viewing ? (
             <div className="boss-question">{viewing.question}</div>
           ) : (
-            <textarea
-              ref={textareaRef}
-              rows={3}
-              placeholder={tl(topic?.assistantExample, lang) || ui('assistantPlaceholder', lang)}
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) ask();
-              }}
-              disabled={busy}
-            />
+            <>
+              <textarea
+                ref={textareaRef}
+                rows={3}
+                placeholder={tl(topic?.assistantExample, lang) || ui('assistantPlaceholder', lang)}
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) ask();
+                }}
+                disabled={busy}
+              />
+              {online && (
+                <div className="boss-form-actions assistant-voice">
+                  {/* No question exists yet, so the topic is Whisper's vocabulary hint. */}
+                  <VoiceInputButton
+                    question={tl(topic.title, lang)}
+                    disabled={busy}
+                    onText={(text) => setQuestion((q) => (q.trim() ? `${q.trimEnd()} ${text}` : text))}
+                  />
+                </div>
+              )}
+            </>
           )}
 
           {shownAnswer && <Markdown>{shownAnswer}</Markdown>}

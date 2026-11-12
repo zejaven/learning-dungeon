@@ -468,6 +468,8 @@ If a command cannot be run, say exactly why and what remains unverified.
 - The `voice` package (`voice/VoiceService`, `api/VoiceController`) is voice
   input for Boss Fight answers and Ask AI questions (one `shell/VoiceInputButton`;
   Ask AI has no question yet, so it passes the topic title as Whisper's hint).
+  Dictated text goes in at the textarea's caret (`shell/dictation.ts`), not
+  appended with trimmed whitespace, which glued it onto a quoted selection.
   The browser records with `MediaRecorder` until
   Stop (pauses never end it) and posts the whole recording; the PC transcribes
   it in one go with faster-whisper through the python worker

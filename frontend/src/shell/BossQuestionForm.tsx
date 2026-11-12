@@ -9,6 +9,7 @@ import { langsOf, tlStrict, ui, useLang, type Lang } from '@app/i18n';
 import { MissingLanguage } from '@app/shell/MissingLanguage';
 import { Markdown } from './Markdown';
 import { VoiceInputButton } from './VoiceInputButton';
+import { useDictationInsert } from './dictation';
 
 export const PASS_SCORE = 6;
 
@@ -69,6 +70,8 @@ export function BossQuestionForm({ topicId, question, onPassed, onBusyChange }: 
   const stored = results[qid];
 
   const [draft, setDraft] = useState('');
+  const answerRef = useRef<HTMLTextAreaElement>(null);
+  const dictate = useDictationInsert(answerRef, setDraft);
   const [stream, setStream] = useState('');
   const [liveScore, setLiveScore] = useState<number | null>(null);
   const [busy, setBusyState] = useState(false);
@@ -191,6 +194,7 @@ export function BossQuestionForm({ topicId, question, onPassed, onBusyChange }: 
       </div>
 
       <textarea
+        ref={answerRef}
         rows={4}
         placeholder={ui('bossFightAnswerPlaceholder', lang)}
         value={draft}
@@ -227,7 +231,7 @@ export function BossQuestionForm({ topicId, question, onPassed, onBusyChange }: 
           <VoiceInputButton
             question={questionText}
             disabled={busy}
-            onText={(text) => setDraft((d) => (d.trim() ? `${d.trimEnd()} ${text}` : text))}
+            onText={dictate}
           />
         )}
       </div>

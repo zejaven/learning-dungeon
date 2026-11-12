@@ -13,6 +13,7 @@ import { useStore } from '@app/engine/store';
 import { questionLabel, statusLabel, tl, ui, useLang } from '@app/i18n';
 import { Markdown } from './Markdown';
 import { VoiceInputButton } from './VoiceInputButton';
+import { useDictationInsert } from './dictation';
 import { useBackdropClose } from './backdropClose';
 
 /** Formats selected screen text as a Markdown blockquote for the composer. */
@@ -50,6 +51,7 @@ export function AssistantDialog({
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const dictate = useDictationInsert(textareaRef, setQuestion);
   const abortRef = useRef<AbortController | null>(null);
 
   // Abort an in-flight stream when the dialog unmounts (e.g. hash navigation).
@@ -237,7 +239,7 @@ export function AssistantDialog({
                   <VoiceInputButton
                     question={tl(topic.title, lang)}
                     disabled={busy}
-                    onText={(text) => setQuestion((q) => (q.trim() ? `${q.trimEnd()} ${text}` : text))}
+                    onText={dictate}
                   />
                 </div>
               )}

@@ -6,6 +6,7 @@ import { cacheAvailable } from '@app/engine/offline/cache';
 import { useReview } from '@app/engine/reviewStore';
 import { useSystem } from '@app/engine/systemStore';
 import { tl, ui, useLang } from '@app/i18n';
+import { useBackdropClose } from './backdropClose';
 
 /**
  * Settings modal: rebuild+restart the app. "Update" also pulls from GitHub first
@@ -40,8 +41,9 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
     await triggerUpdate(pull);
   }
 
+  const backdrop = useBackdropClose(onClose);
   return (
-    <div className="dialog-backdrop" onClick={onClose}>
+    <div className="dialog-backdrop" {...backdrop}>
       <div className="dialog settings-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="dialog-head">
           <h2>{ui('settingsTitle', lang)}</h2>

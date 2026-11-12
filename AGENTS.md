@@ -669,6 +669,10 @@ When adding or changing a `visual.Visual*` model:
     fires on touch, which is why `SortSteps` also has arrow buttons. Inputs
     stay >= 16px on phones or iOS zooms the page on focus, and full-viewport
     boxes use `dvh` plus `env(safe-area-inset-*)`.
+  - A `.dialog-backdrop` closes through `useBackdropClose` (`shell/backdropClose.ts`),
+    never a bare `onClick={onClose}`: a touch browser delivers the click of the
+    tap that OPENED a dialog to the new backdrop under the finger, so the
+    dialog vanished at once (seen in a VR headset with the selection 💬).
 - PWA / offline (`frontend/src/engine/offline/`, `offlineStore.ts`, and the
   `VitePWA` block in `vite.config.ts`). The app installs to a phone home screen
   and keeps working with the PC switched off. Rules that are easy to break:

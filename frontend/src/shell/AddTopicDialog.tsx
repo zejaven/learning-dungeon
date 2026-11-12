@@ -7,6 +7,7 @@ import { tl, ui, useLang } from '@app/i18n';
 import { GenerationView } from './GenerationView';
 import { LanguageSelect } from './LanguageSelect';
 import { StyleSelector } from './StyleSelector';
+import { useBackdropClose } from './backdropClose';
 
 /** Task key of the free-form run, per domain (the backend keys it the same way). */
 export function addTopicKey(domainId: string): string {
@@ -41,8 +42,9 @@ export function AddTopicDialog({ onClose }: { onClose: () => void }) {
     });
   }
 
+  const backdrop = useBackdropClose(onClose);
   return (
-    <div className="dialog-backdrop" onClick={onClose}>
+    <div className="dialog-backdrop" {...backdrop}>
       <div className="dialog" onClick={(e) => e.stopPropagation()}>
         <div className="dialog-head">
           <h2>

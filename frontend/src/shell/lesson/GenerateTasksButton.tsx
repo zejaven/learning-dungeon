@@ -5,6 +5,7 @@ import { useCodeTasks } from '@app/engine/codeTaskStore';
 import { useGeneration } from '@app/engine/generationStore';
 import { useStore } from '@app/engine/store';
 import { ui, useLang } from '@app/i18n';
+import { useBackdropClose } from '../backdropClose';
 
 /**
  * Generates code tasks for the topic, from the lesson header. Tasks are only
@@ -63,8 +64,9 @@ function GenerateTasksDialog({
     }
   }
 
+  const backdrop = useBackdropClose(onClose);
   return (
-    <div className="dialog-backdrop" onClick={onClose}>
+    <div className="dialog-backdrop" {...backdrop}>
       <div className="dialog" onClick={(e) => e.stopPropagation()}>
         <div className="dialog-head">
           <h2>{ui(hasTasks ? 'generateMoreTasks' : 'generateTasks', lang)}</h2>

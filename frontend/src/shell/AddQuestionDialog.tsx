@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { navigate, routeForQuestion } from '@app/engine/router';
 import { useStore } from '@app/engine/store';
 import { ui, useLang } from '@app/i18n';
+import { useBackdropClose } from './backdropClose';
 
 /**
  * Adds a question to the catalog by hand. On confirm, the AI classifies it
@@ -29,8 +30,9 @@ export function AddQuestionDialog({ onClose }: { onClose: () => void }) {
     }
   }
 
+  const backdrop = useBackdropClose(onClose);
   return (
-    <div className="dialog-backdrop" onClick={onClose}>
+    <div className="dialog-backdrop" {...backdrop}>
       <div className="dialog" onClick={(e) => e.stopPropagation()}>
         <div className="dialog-head">
           <h2>{ui('addQuestionTitle', lang)}</h2>

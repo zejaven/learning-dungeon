@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ui, useLang } from '@app/i18n';
+import { useBackdropClose } from '../backdropClose';
 
 export interface RegenerateOptions {
   mode: 'full' | 'augment';
@@ -32,8 +33,9 @@ export function RegenerateLessonDialog({
     onConfirm({ mode: full ? 'full' : 'augment', comment: comment.trim() });
   }
 
+  const backdrop = useBackdropClose(onClose);
   return (
-    <div className="dialog-backdrop" onClick={onClose}>
+    <div className="dialog-backdrop" {...backdrop}>
       <div className="dialog" onClick={(e) => e.stopPropagation()}>
         <div className="dialog-head">
           <h2>{ui('regenerateTitle', lang)}</h2>

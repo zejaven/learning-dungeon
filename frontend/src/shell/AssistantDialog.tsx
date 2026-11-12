@@ -13,6 +13,7 @@ import { useStore } from '@app/engine/store';
 import { questionLabel, statusLabel, tl, ui, useLang } from '@app/i18n';
 import { Markdown } from './Markdown';
 import { VoiceInputButton } from './VoiceInputButton';
+import { useBackdropClose } from './backdropClose';
 
 /** Formats selected screen text as a Markdown blockquote for the composer. */
 function asQuote(text: string): string {
@@ -179,13 +180,15 @@ export function AssistantDialog({
     });
   }
 
+  const backdrop = useBackdropClose(busy ? undefined : onClose);
+
   if (!topic) return null;
 
   const shownAnswer = viewing ? viewing.answer : answer;
   const counter = viewing ? questionLabel(lang, selectedIndex + 1, total) : ui('newQuestion', lang);
 
   return (
-    <div className="dialog-backdrop" onClick={busy ? undefined : onClose}>
+    <div className="dialog-backdrop" {...backdrop}>
       <div className="dialog" onClick={(e) => e.stopPropagation()}>
         <div className="dialog-head">
           <h2>

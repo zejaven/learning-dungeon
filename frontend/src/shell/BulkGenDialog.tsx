@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { BulkKind } from '@app/engine/api';
 import { useBulk } from '@app/engine/bulkStore';
 import { ui, useLang } from '@app/i18n';
+import { useBackdropClose } from './backdropClose';
 
 const BULK_TITLE: Record<BulkKind, string> = {
   theory: 'bulkDialogTitleTheory',
@@ -44,8 +45,9 @@ export function BulkGenDialog({
 
   const canConfirm = !starting && (noDeadline || /^\d{2}:\d{2}$/.test(endTime));
 
+  const backdrop = useBackdropClose(onClose);
   return (
-    <div className="dialog-backdrop" onClick={onClose}>
+    <div className="dialog-backdrop" {...backdrop}>
       <div className="dialog" onClick={(e) => e.stopPropagation()}>
         <div className="dialog-head">
           <h2>{ui(BULK_TITLE[kind], lang)}</h2>

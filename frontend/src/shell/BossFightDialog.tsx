@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useStore } from '@app/engine/store';
 import { questionLabel, tl, ui, useLang } from '@app/i18n';
 import { BossQuestionForm } from './BossQuestionForm';
+import { useBackdropClose } from './backdropClose';
 
 /**
  * Boss Fight modal: one AI-graded question at a time with locked progression
@@ -20,6 +21,8 @@ export function BossFightDialog({ onClose }: { onClose: () => void }) {
   const [index, setIndex] = useState(0);
   const [busy, setBusy] = useState(false);
 
+  const backdrop = useBackdropClose(busy ? undefined : onClose);
+
   if (!topic || total === 0) return null;
 
   const currentQuestion = questions[index];
@@ -28,7 +31,7 @@ export function BossFightDialog({ onClose }: { onClose: () => void }) {
   const canPrev = index > 0;
 
   return (
-    <div className="dialog-backdrop" onClick={busy ? undefined : onClose}>
+    <div className="dialog-backdrop" {...backdrop}>
       <div className="dialog" onClick={(e) => e.stopPropagation()}>
         <div className="dialog-head">
           <h2>

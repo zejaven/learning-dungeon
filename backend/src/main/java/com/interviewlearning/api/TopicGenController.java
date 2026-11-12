@@ -48,10 +48,11 @@ public class TopicGenController {
      * @param difficulty 1-3 to use; when null/0, the selected AI decides
      * @param languages  content languages to generate; null/empty = every registered one
      * @param domainId   subject area the topic belongs to; null/blank = java
+     * @param note       optional note for the AI: a focus, things to skip
      */
     public record GenerateRequest(String question, String catalogId, String categoryId,
                                   Integer difficulty, String style, String styleName, String provider,
-                                  List<String> languages, String domainId) {
+                                  List<String> languages, String domainId, String note) {
     }
 
     /**
@@ -69,7 +70,7 @@ public class TopicGenController {
                 : "add-topic:" + domainId;
         String prompt = prompts.build(new TopicGenSpec(request.question(), request.catalogId(),
                 request.categoryId(), request.difficulty(), request.style(), request.styleName(),
-                request.provider(), request.languages(), domainId));
+                request.provider(), request.languages(), domainId, request.note()));
         GenerationTask task = generation.startOrGet(key, request.provider(), prompt, AiTask.GENERATE_TOPIC,
                 NewTopicDirs.snapshot(repoPaths.topicsDir(), key, generation::runningKeys));
         return Map.of("taskId", task.id(), "key", task.key(), "status", task.status());

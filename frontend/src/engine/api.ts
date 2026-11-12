@@ -364,6 +364,8 @@ export interface GenerateBody {
   styleName?: string;
   /** Content languages to generate ('en'/'ru'); omitted = both. */
   languages?: string[];
+  /** Optional note for the AI, appended to the prompt. */
+  note?: string;
   /** Subject area the new topic belongs to; omitted = java. */
   domainId?: string;
 }
@@ -382,11 +384,12 @@ export async function regenerateVersion(
   styleName: string,
   provider: string,
   languages?: string[],
+  note?: string,
 ): Promise<TheoryVersion> {
   const res = await fetch(`/api/topics/${encodeURIComponent(topicId)}/versions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ style, styleName, provider, languages }),
+    body: JSON.stringify({ style, styleName, provider, languages, note }),
   });
   if (!res.ok) throw new Error(await res.text().catch(() => `Regenerate failed (${res.status})`));
   return res.json();

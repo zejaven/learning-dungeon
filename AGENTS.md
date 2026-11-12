@@ -879,6 +879,14 @@ Topic generation is intentionally constrained by `prompts/add-topic.md`. Do not
 loosen the contract unless you also update tests and the app logic that relies on
 the topic shape.
 
+Every generation row has an optional "note for the AI" (`shell/AiNoteInput`):
+the tree question and Add topic send it as `note` (`TopicGenSpec`), a new theory
+version as `note` of `RegenerateRequest`, a lesson as the existing `comment`.
+`generation/LearnerNote` appends it LAST, after the contract, under "THE LEARNER
+ASKS FOR", so it reads as a request within the rules; for a theory version it
+explicitly overrides "keep the same content" where it asks to add or cut.
+Bulk generation sends none.
+
 A running generation can be stopped (■ in `shell/GenerationView`,
 `POST /api/topics/generate/{taskId}/cancel`). `GenerationTask.cancel` kills the
 CLI with its descendants (the CLI's own shells would keep writing files), later

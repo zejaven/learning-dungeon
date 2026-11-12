@@ -38,7 +38,7 @@ public class TopicPromptBuilder {
     /** Everything the prompt needs about one topic-to-be. */
     public record TopicGenSpec(String question, String catalogId, String categoryId,
                                Integer difficulty, String style, String styleName, String provider,
-                               List<String> languages, String domainId) {
+                               List<String> languages, String domainId, String note) {
     }
 
     public String build(TopicGenSpec spec) {
@@ -127,6 +127,7 @@ public class TopicPromptBuilder {
         appendLanguages(sb, ContentLanguages.normalize(spec.languages()));
         appendStyle(sb, spec.style());
         appendCrossLinkContext(sb, domainId);
+        LearnerNote.append(sb, spec.note(), "follow it where it fits the contract above");
         return sb.toString();
     }
 

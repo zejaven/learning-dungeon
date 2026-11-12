@@ -23,6 +23,7 @@ import { LANG_CODES, langChip, langName } from '@app/languages';
 import { entriesInTreeOrder, hasRoadmap, moduleIdOfEntry, moduleOfEntry } from '@app/roadmap';
 import { AddQuestionDialog } from '@app/shell/AddQuestionDialog';
 import { AddTopicDialog, addTopicKey } from '@app/shell/AddTopicDialog';
+import { AiNoteInput } from '@app/shell/AiNoteInput';
 import { AiProviderSelector } from '@app/shell/AiProviderSelector';
 import { AssistantDialog } from '@app/shell/AssistantDialog';
 import { BossFightDialog } from '@app/shell/BossFightDialog';
@@ -77,6 +78,10 @@ export function HomeScreen() {
   const [showAddQuestion, setShowAddQuestion] = useState(false);
   const [bulkKind, setBulkKind] = useState<BulkKind | null>(null);
   const [showBossFight, setShowBossFight] = useState(false);
+  // Notes for the AI of the three generation rows; a new question starts them empty.
+  const [topicNote, setTopicNote] = useState('');
+  const [versionNote, setVersionNote] = useState('');
+  const [lessonNote, setLessonNote] = useState('');
   const [showAssistant, setShowAssistant] = useState(false);
   // Text selected in the reference/lesson to pre-quote in the assistant.
   const [assistantQuote, setAssistantQuote] = useState<string | null>(null);
@@ -217,7 +222,7 @@ export function HomeScreen() {
         useAi.getState().selectedProvider,
         useStore.getState().activeVersionNo,
         'full',
-        '',
+        lessonNote.trim(),
         genLanguages(),
       );
       useGeneration.getState().attach(ref.taskId, ref.key);
@@ -235,8 +240,15 @@ export function HomeScreen() {
       difficulty: entry.difficulty,
       style: useStyle.getState().instruction(),
       styleName: useStyle.getState().currentName(),
+      note: topicNote.trim(),
     });
   }
+
+  useEffect(() => {
+    setTopicNote('');
+    setVersionNote('');
+    setLessonNote('');
+  }, [entry?.id]);
 
   // The roadmap fills the detail panel whenever no question is picked, so the
   // landing page is the map instead of an empty panel.
@@ -427,6 +439,7 @@ export function HomeScreen() {
                       <StyleSelector />
                       <LanguageSelect />
                     </div>
+                    <AiNoteInput value={topicNote} onChange={setTopicNote} />
                     <button className="primary" onClick={generateForSelected}>
                       {ui('generateTheory', lang)}
                     </button>
@@ -516,9 +529,14 @@ export function HomeScreen() {
                     )}
                     <StyleSelector />
                     <LanguageSelect />
+                    <AiNoteInput value={versionNote} onChange={setVersionNote} />
                     <button
                       onClick={() =>
-                        regenerateTheory(useStyle.getState().instruction(), useStyle.getState().currentName())
+                        regenerateTheory(
+                          useStyle.getState().instruction(),
+                          useStyle.getState().currentName(),
+                          versionNote.trim(),
+                        )
                       }
                       disabled={generatingVersion}
                     >
@@ -537,6 +555,7 @@ export function HomeScreen() {
                     ) : (
                       <>
                         <LanguageSelect />
+                        <AiNoteInput value={lessonNote} onChange={setLessonNote} />
                         <button
                           className="accent"
                           title={ui('lessonGenHint', lang)}

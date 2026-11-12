@@ -114,7 +114,7 @@ interface AppState {
 
   loadVersions: (topicId: string) => Promise<void>;
   setActiveVersion: (versionNo: number) => void;
-  regenerateTheory: (style: string, styleName: string) => Promise<void>;
+  regenerateTheory: (style: string, styleName: string, note?: string) => Promise<void>;
   /** Translates a version into one more language, in place. */
   addVersionLanguage: (versionNo: number, lang: string) => Promise<void>;
   /** Language currently being translated, or null. */
@@ -616,13 +616,13 @@ export const useStore = create<AppState>((set, get) => ({
     persistActiveVersion(get().topic?.id, versionNo);
   },
 
-  async regenerateTheory(style, styleName) {
+  async regenerateTheory(style, styleName, note) {
     const topic = get().topic;
     if (!topic) return;
     set({ generatingVersion: true });
     try {
       const v = await regenerateVersion(
-        topic.id, style, styleName, useAi.getState().selectedProvider, genLanguages());
+        topic.id, style, styleName, useAi.getState().selectedProvider, genLanguages(), note);
       if (get().topic?.id !== topic.id) return; // switched away meanwhile
       const versions = [...get().theoryVersions, v];
       set({ theoryVersions: versions, activeVersionNo: v.versionNo, generatingVersion: false });

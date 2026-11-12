@@ -3,6 +3,7 @@ package com.interviewlearning.api;
 import com.interviewlearning.ai.AiCliService;
 import com.interviewlearning.ai.AiTask;
 import com.interviewlearning.config.RepoPaths;
+import com.interviewlearning.generation.LearnerNote;
 import com.interviewlearning.lang.ContentLanguages;
 import com.interviewlearning.theory.TheoryVersionRepository;
 import com.interviewlearning.theory.TheoryVersionRepository.TheoryVersion;
@@ -67,7 +68,7 @@ public class VersionController {
 
     /** {@code languages}: content languages to write; null/empty = every registered one. */
     public record RegenerateRequest(String style, String styleName, String provider,
-                                    List<String> languages) {
+                                    List<String> languages, String note) {
     }
 
     /** Adds one missing language to an existing version. */
@@ -114,7 +115,7 @@ public class VersionController {
         }
         try {
             ai.runForResult(request.provider(),
-                    buildPrompt(topic, request.style(), outputs, languages),
+                    buildPrompt(topic, request.style(), outputs, languages, request.note()),
                     AiTask.REGENERATE_VERSION);
             Map<String, String> texts = new LinkedHashMap<>();
             for (String lang : languages) {
@@ -262,7 +263,7 @@ public class VersionController {
     }
 
     private String buildPrompt(TopicDetail topic, String style, Map<String, Path> outputs,
-                               List<String> languages) {
+                               List<String> languages, String note) {
         boolean both = languages.size() > 1;
         StringBuilder sb = new StringBuilder();
         sb.append("Rewrite ONLY the explanation prose of an existing Java interview learning topic. "

@@ -6,6 +6,7 @@ import { domainById } from '@app/domains';
 import { tl, ui, useLang } from '@app/i18n';
 import { GenerationView } from './GenerationView';
 import { LanguageSelect } from './LanguageSelect';
+import { AiNoteInput } from './AiNoteInput';
 import { StyleSelector } from './StyleSelector';
 import { useBackdropClose } from './backdropClose';
 
@@ -27,6 +28,7 @@ export function AddTopicDialog({ onClose }: { onClose: () => void }) {
   const task = useGeneration((s) => s.tasks[key]);
   const start = useGeneration((s) => s.start);
   const [question, setQuestion] = useState('');
+  const [note, setNote] = useState('');
 
   const running = task?.status === 'running';
   const showForm = !task; // once a task exists, show its stream instead of the form
@@ -39,6 +41,7 @@ export function AddTopicDialog({ onClose }: { onClose: () => void }) {
       style: useStyle.getState().instruction(),
       styleName: useStyle.getState().currentName(),
       domainId,
+      note: note.trim(),
     });
   }
 
@@ -67,6 +70,7 @@ export function AddTopicDialog({ onClose }: { onClose: () => void }) {
               />
               <StyleSelector />
               <LanguageSelect inline />
+              <AiNoteInput value={note} onChange={setNote} />
             </>
           ) : (
             <GenerationView taskKey={key} />

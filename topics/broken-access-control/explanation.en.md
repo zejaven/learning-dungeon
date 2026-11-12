@@ -99,6 +99,22 @@ Key details interviewers look for:
   `/orders/7` but then saves an entity whose `id` came from the JSON body, the
   write lands on order 8. The path id is the only id; the body must not carry
   one into the entity.
+- **Ids of related records need the same check.** `POST /payments` with
+  `{"orderId": 8, "cardId": 3}` has no id in the path, yet both fields point at
+  records: the handler checks that the caller may create payments and then pays
+  bob's order with someone else's saved card. Every reference in a body or query
+  — `orderId`, `addressId`, `attachmentId`, `parentCommentId`, `invoiceIds[]` — is
+  loaded through the same owner-scoped lookup as a path id:
+
+  ```java
+  Order order = orders.findByIdAndOwnerId(req.orderId(), me.id())
+          .orElseThrow(NotFoundException::new);
+  Card card = cards.findByIdAndOwnerId(req.cardId(), me.id())
+          .orElseThrow(NotFoundException::new);
+  ```
+
+  The same goes for a child reached through its parent: `/orders/7/items/55`
+  must check that item 55 belongs to order 7, not only that order 7 is yours.
 - **Answer 404 for someone else's record.** A 403 confirms the record exists,
   so a caller can map valid ids. Querying by id *and* owner gives "not found" for
   both cases naturally. (403 is still right when existence is not secret, e.g. a

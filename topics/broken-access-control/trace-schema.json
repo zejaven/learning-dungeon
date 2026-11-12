@@ -1,0 +1,142 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Broken access control trace event state",
+  "description": "Shape of the `state` field for broken-access-control trace events.",
+  "type": "object",
+  "required": ["defenses", "callers", "records", "gates", "stats"],
+  "properties": {
+    "defenses": {
+      "type": "object",
+      "description": "Which server-side defenses are switched on.",
+      "required": ["ownerOnRead", "ownerOnWrite", "scopedLists", "roleCheck", "fieldAllowlist", "notFoundForForeign"],
+      "properties": {
+        "ownerOnRead": { "type": "boolean", "description": "Reads load the record by id AND owner." },
+        "ownerOnWrite": { "type": "boolean", "description": "Updates and deletes check ownership." },
+        "scopedLists": { "type": "boolean", "description": "Lists take the owner from the session." },
+        "roleCheck": { "type": "boolean", "description": "/admin checks the role on the server." },
+        "fieldAllowlist": { "type": "boolean", "description": "Bodies bind into a DTO of client-editable fields." },
+        "notFoundForForeign": { "type": "boolean", "description": "Someone else's record answers 404 instead of 403." }
+      }
+    },
+    "callers": {
+      "type": "array",
+      "description": "Logged-in users, with their current role (mass assignment may change it).",
+      "items": {
+        "type": "object",
+        "required": ["subject", "role", "displayName"],
+        "properties": {
+          "subject": { "type": "string" },
+          "role": { "type": "string", "description": "USER or ADMIN." },
+          "displayName": { "type": "string" }
+        }
+      }
+    },
+    "records": {
+      "type": "array",
+      "description": "Orders in the store.",
+      "items": {
+        "type": "object",
+        "required": ["id", "owner", "price", "status", "note", "exposed", "tampered", "deleted", "inResponse"],
+        "properties": {
+          "id": { "type": "string" },
+          "owner": { "type": "string" },
+          "price": { "type": "integer" },
+          "status": { "type": "string" },
+          "note": { "type": "string" },
+          "exposed": { "type": "boolean", "description": "Was ever returned to somebody other than its owner without entitlement." },
+          "tampered": { "type": "boolean", "description": "Was changed by a non-owner or through a server-owned field." },
+          "deleted": { "type": "boolean" },
+          "inResponse": { "type": "boolean", "description": "Is part of the current response." }
+        }
+      }
+    },
+    "request": {
+      "type": "object",
+      "description": "The request being processed (absent before the first one and after the audit).",
+      "required": ["caller", "method", "path", "body"],
+      "properties": {
+        "caller": { "type": "string" },
+        "method": { "type": "string" },
+        "path": { "type": "string" },
+        "body": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["field", "value", "clientEditable"],
+            "properties": {
+              "field": { "type": "string" },
+              "value": { "type": "string" },
+              "clientEditable": { "type": "boolean", "description": "Whether a client may legitimately set this field." }
+            }
+          }
+        }
+      }
+    },
+    "gates": {
+      "type": "array",
+      "description": "The checks in order, with the verdict of each for the current request.",
+      "items": {
+        "type": "object",
+        "required": ["id", "status", "detail"],
+        "properties": {
+          "id": { "enum": ["authentication", "functionLevel", "objectLevel", "propertyLevel", "handler"] },
+          "status": {
+            "enum": ["pending", "passed", "denied", "skipped", "breach"],
+            "description": "breach = it let through what it should have stopped."
+          },
+          "detail": { "type": "string", "description": "Bare token behind the verdict: a subject, role, owner or field names." }
+        }
+      }
+    },
+    "outcome": {
+      "type": "object",
+      "description": "How the current request ended (absent before the first one and after the audit).",
+      "required": ["status", "decision", "reason", "detail", "kinds"],
+      "properties": {
+        "status": { "type": ["integer", "null"] },
+        "decision": { "enum": ["pending", "allowed", "denied", "breach"] },
+        "reason": { "type": ["string", "null"], "enum": ["not-found", "not-owner", "role", null] },
+        "detail": { "type": "string" },
+        "kinds": {
+          "type": "array",
+          "description": "Breach kinds of a served request.",
+          "items": { "enum": ["horizontal", "vertical", "massAssignment"] }
+        }
+      }
+    },
+    "stats": {
+      "type": "object",
+      "required": ["requests", "allowed", "denied", "breaches", "horizontal", "vertical", "massAssignment", "leakedRows"],
+      "properties": {
+        "requests": { "type": "integer" },
+        "allowed": { "type": "integer", "description": "Requests whose handler ran." },
+        "denied": { "type": "integer" },
+        "breaches": { "type": "integer", "description": "Served requests that should have been refused." },
+        "horizontal": { "type": "integer" },
+        "vertical": { "type": "integer" },
+        "massAssignment": { "type": "integer" },
+        "leakedRows": { "type": "integer", "description": "Foreign rows returned to a caller not entitled to them." }
+      }
+    }
+  },
+  "events": [
+    "API_SETUP",
+    "DEFENSE_ENABLED",
+    "USER_ADDED",
+    "RECORD_ADDED",
+    "REQUEST_RECEIVED",
+    "RECORD_NOT_FOUND",
+    "OWNERSHIP_DENIED",
+    "OWNERSHIP_CHECK_MISSING",
+    "LIST_SCOPED",
+    "LIST_LEAKED",
+    "ROLE_DENIED",
+    "ROLE_CHECK_MISSING",
+    "BODY_ID_OVERRIDE",
+    "MASS_ASSIGNMENT",
+    "PRIVILEGE_ESCALATED",
+    "FIELD_IGNORED",
+    "HANDLER_RAN",
+    "ACCESS_AUDIT"
+  ]
+}

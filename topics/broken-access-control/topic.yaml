@@ -1,0 +1,193 @@
+id: broken-access-control
+languages: [en, ru]
+title:
+  en: 'Broken Access Control and IDOR'
+  ru: 'Нарушенный контроль доступа и IDOR'
+category:
+  en: Security & Authentication
+  ru: Безопасность и аутентификация
+type: HTTP
+mode: trace
+aiProvider: claude
+aiModel: opus
+categoryId: security
+difficulty: 2
+catalogId: plan-broken-access-control
+summary:
+  en: >
+    Broken access control is the number one OWASP risk because logging in only
+    answers who is calling, while every request also has to answer three more
+    questions on the server: may this caller use this endpoint at all (function
+    level — missing it is vertical escalation), may they touch this particular
+    record or see these rows (object level — missing it is IDOR, horizontal
+    escalation), and may they set these fields (property level — missing it is
+    mass assignment). The fixes are unglamorous and must be everywhere: load
+    records by id AND owner on reads, writes and deletes alike; take the owner
+    of a list from the session, never from a query parameter; check roles on the
+    server instead of hiding buttons; bind request bodies into DTOs that only
+    have client-editable fields, with the path id as the only id; and answer 404
+    for someone else's record so refusals do not confirm what exists. Random
+    UUIDs make guessing harder but are not a check — a leaked id still works
+    without one.
+  ru: >
+    Нарушенный контроль доступа — риск номер один в OWASP, потому что вход в
+    систему отвечает только на вопрос, кто звонит, а каждый запрос должен ещё
+    ответить на сервере на три: может ли этот вызывающий вообще пользоваться этим
+    эндпоинтом (уровень функции — без этой проверки возникает вертикальное
+    повышение привилегий), может ли он трогать именно эту запись или видеть эти
+    строки (уровень объекта — без неё возникает IDOR, горизонтальное повышение),
+    и может ли он выставлять эти поля (уровень свойств — без неё возникает mass
+    assignment). Исправления скучные и должны быть везде: загружать записи по id
+    И владельцу — при чтении, записи и удалении одинаково; брать владельца списка
+    из сессии, а не из параметра запроса; проверять роли на сервере, а не прятать
+    кнопки; привязывать тело запроса к DTO, в котором есть только поля, доступные
+    клиенту, а единственным id считать id из пути; и отвечать 404 на чужую
+    запись, чтобы отказ не подтверждал её существование. Случайные UUID
+    затрудняют угадывание, но проверкой не являются — утёкший id без проверки
+    всё равно работает.
+
+# Visual primitives this topic's visualizer composes (frontend).
+primitives:
+  - BoxGroup
+
+defaultExample: idor-by-id
+
+examples:
+  - id: idor-by-id
+    title:
+      en: 'Change the number in the URL'
+      ru: 'Поменяй число в URL'
+    file: 01-idor-by-id.java
+    explanation:
+      en: >
+        The classic IDOR. Alice is logged in, so authentication passes, and the
+        handler loads order 8 by id alone — it never asks whose order it is.
+        Then one condition is added to the query, findByIdAndOwner instead of
+        findById, and the same request is refused.
+      ru: >
+        Классический IDOR. Алиса вошла в систему, аутентификация пройдена, а
+        обработчик загружает заказ 8 только по id — и не спрашивает, чей он.
+        Затем в запрос добавляется одно условие, findByIdAndOwner вместо
+        findById, и тот же запрос получает отказ.
+  - id: uuid-is-not-a-check
+    title:
+      en: 'A random id is not a check'
+      ru: 'Случайный id — не проверка'
+    file: 02-uuid-is-not-a-check.java
+    explanation:
+      en: >
+        Switching sequential ids to UUIDs stops enumeration, not IDOR. Ids leak
+        through shared links, logs, Referer headers and screenshots, and a leaked
+        UUID opens the record exactly as a guessed number would. Only the
+        ownership check makes knowing the id harmless.
+      ru: >
+        Замена последовательных id на UUID останавливает перебор, но не IDOR. Id
+        утекают через общие ссылки, логи, заголовок Referer и скриншоты, и
+        утёкший UUID открывает запись так же, как угаданное число. Только
+        проверка владельца делает знание id безвредным.
+  - id: not-found-not-forbidden
+    title:
+      en: '403 confirms the record exists'
+      ru: '403 подтверждает, что запись есть'
+    file: 03-404-not-403.java
+    explanation:
+      en: >
+        A 403 for someone else's order and a 404 for a missing one are two
+        different answers, so a caller can map which ids exist. Querying by id
+        AND owner makes both cases "nothing found", and the API answers 404 to
+        both.
+      ru: >
+        403 на чужой заказ и 404 на несуществующий — два разных ответа, и по ним
+        вызывающий может составить карту существующих id. Запрос по id И
+        владельцу превращает оба случая в «ничего не найдено», и API отвечает 404
+        на оба.
+  - id: writes-need-their-own-check
+    title:
+      en: 'Guarded read, open write'
+      ru: 'Чтение закрыто, запись открыта'
+    file: 04-writes-need-their-own-check.java
+    explanation:
+      en: >
+        The GET handler checks ownership; PATCH and DELETE, written separately,
+        load the order by id alone. The read is refused while the update and the
+        delete go through — the more damaging half. Every handler that touches a
+        record by id needs the check, which is why it belongs in one shared
+        place.
+      ru: >
+        GET проверяет владельца, а PATCH и DELETE, написанные отдельно, грузят
+        заказ только по id. Чтение отклонено, а изменение и удаление проходят —
+        и это более опасная половина. Проверка нужна каждому обработчику,
+        который трогает запись по id, поэтому ей место в одном общем месте.
+  - id: lists-leak-too
+    title:
+      en: 'Lists are IDOR without an id'
+      ru: 'Списки — IDOR без id'
+    file: 05-lists-leak-too.java
+    explanation:
+      en: >
+        The list endpoint filters by an ownerId the frontend sends. The server
+        cannot tell that the parameter is honest, and with no parameter it
+        returns every row. A scoped list takes the owner from the session and
+        ignores the parameter.
+      ru: >
+        Эндпоинт списка фильтрует по ownerId, который присылает фронтенд. Сервер
+        не может знать, честен ли параметр, а без параметра вообще отдаёт все
+        строки. Список с ограничением берёт владельца из сессии и игнорирует
+        параметр.
+  - id: hidden-button-is-not-a-check
+    title:
+      en: 'A hidden button is not a role check'
+      ru: 'Скрытая кнопка — не проверка роли'
+    file: 06-hidden-button-is-not-a-check.java
+    explanation:
+      en: >
+        Vertical escalation: the admin export is hidden in the UI, but the URL is
+        in the JavaScript bundle and nothing on the server checks the role. With
+        a server-side role check, alice gets a 403 and the real admin is still
+        served.
+      ru: >
+        Вертикальное повышение привилегий: выгрузка для администратора скрыта в
+        UI, но URL лежит в JavaScript-бандле, а на сервере роль никто не
+        проверяет. С серверной проверкой роли Алиса получает 403, а настоящий
+        администратор по-прежнему обслуживается.
+  - id: mass-assigned-role
+    title:
+      en: 'Mass assignment: role in the body'
+      ru: 'Mass assignment: роль в теле запроса'
+    file: 07-mass-assigned-role.java
+    explanation:
+      en: >
+        The role check on /admin works — until PATCH /users/me binds the whole
+        JSON body onto the User entity and alice sends "role":"ADMIN". The
+        property-level hole turns into vertical escalation, and the admin endpoint
+        now lets her in legitimately. A DTO with only displayName closes it.
+      ru: >
+        Проверка роли на /admin работает — пока PATCH /users/me привязывает всё
+        JSON-тело к сущности User, а Алиса присылает "role":"ADMIN". Дыра на
+        уровне свойств превращается в вертикальное повышение, и админский
+        эндпоинт теперь пускает её на законных основаниях. DTO только с
+        displayName эту дыру закрывает.
+  - id: mass-assigned-order
+    title:
+      en: 'Mass assignment: price and id'
+      ru: 'Mass assignment: цена и id'
+    file: 08-mass-assigned-order.java
+    explanation:
+      en: >
+        Ownership on writes is checked, but for the id in the path. The body sets
+        price and status, which only the server may decide, and then an id field
+        that redirects the save to bob's order — the check ran on one record and
+        the write landed on another. An allowlist DTO ignores all three.
+      ru: >
+        Владелец при записи проверяется — но для id из пути. Тело запроса
+        выставляет price и status, которые решает только сервер, а затем поле id,
+        перенаправляющее сохранение в заказ Боба: проверка прошла для одной
+        записи, а запись ушла в другую. DTO со списком разрешённых полей
+        игнорирует все три.
+
+# Example question pre-filled as the Ask AI placeholder.
+assistantExample:
+  en: 'e.g. Why is switching order ids to UUIDs not a fix for IDOR?'
+  ru: 'например: Почему переход на UUID для id заказов не исправляет IDOR?'
+
+missionsFile: quiz.yaml

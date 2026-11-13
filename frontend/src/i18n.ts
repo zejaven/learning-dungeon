@@ -381,6 +381,8 @@ const UI: Record<string, Localized> = {
   reviewTopicsTitle: { en: 'Topics in review', ru: 'Топики для повторения' },
   reviewOther: { en: 'Other', ru: 'Другое' },
   treeModuleEmpty: { en: 'No topics yet', ru: 'Тем пока нет' },
+  treeSearchPlaceholder: { en: 'Search questions', ru: 'Поиск по вопросам' },
+  treeSearchNothing: { en: 'Nothing found', ru: 'Ничего не найдено' },
   treeUnplaced: { en: 'Not placed yet', ru: 'Не разложено' },
   mapOpen: { en: 'Open the roadmap', ru: 'Открыть карту' },
   mapBackToQuestion: { en: 'Back to the last question', ru: 'Назад к последнему вопросу' },

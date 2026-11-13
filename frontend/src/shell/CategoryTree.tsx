@@ -6,6 +6,7 @@ import { tl, ui, useLang } from '@app/i18n';
 import { groupByRoadmap } from '@app/roadmap';
 import { TreeEntries } from '@app/shell/TreeEntries';
 import { TreeGroup } from '@app/shell/TreeGroup';
+import { entryMatcher } from '@app/shell/treeSearch';
 
 /**
  * Left-hand tree of interview questions. The Java domain follows its roadmap
@@ -20,6 +21,10 @@ import { TreeGroup } from '@app/shell/TreeGroup';
  * is derived rather than set from an effect, or the entry would not be rendered
  * yet when the scroll effect runs. A module picked on the roadmap map
  * (`revealModuleId`) opens the same way and is scrolled to the top.
+ *
+ * The search box above the tree keeps only the matching questions (see
+ * `treeSearch.ts`), drops the groups left empty and shows the rest open, without
+ * touching what the user had folded: clearing the query brings that back.
  */
 export function CategoryTree({
   selectedId,
@@ -37,6 +42,8 @@ export function CategoryTree({
   const catalog = buildCatalog(topics, manualQuestions, domainId);
   const stages = groupByRoadmap(catalog, domainId);
   const [opened, setOpened] = useState<Record<string, boolean>>({});
+  const [query, setQuery] = useState('');
+  const matches = entryMatcher(query, topics);
 
   const selectedStage = stages?.find((s) => s.modules.some((m) => m.entries.some((e) => e.id === selectedId)));
   const selectedModule = selectedStage?.modules.find((m) => m.entries.some((e) => e.id === selectedId));
@@ -72,6 +79,22 @@ export function CategoryTree({
   // Until topics arrive every roadmap entry would look unplaced.
   if (stages && topics.length === 0) return <div className="tree" />;
 
+  const searchBox = (
+    <div className="tree-search">
+      <input
+        type="search"
+        value={query}
+        placeholder={ui('treeSearchPlaceholder', lang)}
+        aria-label={ui('treeSearchPlaceholder', lang)}
+        onChange={(ev) => setQuery(ev.target.value)}
+        onKeyDown={(ev) => {
+          if (ev.key === 'Escape') setQuery('');
+        }}
+      />
+    </div>
+  );
+  const nothingFound = <div className="tree-empty">{ui('treeSearchNothing', lang)}</div>;
+
   const renderEntries = (entries: CatalogEntry[]) => (
     <TreeEntries entries={entries} selectedId={selectedId} selectedRef={selectedRef} onSelect={onSelect} />
   );
@@ -79,10 +102,22 @@ export function CategoryTree({
   const toggle = (id: string, open: boolean) => setOpened((o) => ({ ...o, [id]: !open }));
 
   if (stages) {
+    const shown = matches
+      ? stages
+          .map((stage) => ({
+            ...stage,
+            modules: stage.modules
+              .map((m) => ({ ...m, entries: m.entries.filter(matches) }))
+              .filter((m) => m.entries.length > 0),
+          }))
+          .filter((stage) => stage.modules.length > 0)
+      : stages;
     return (
       <div className="tree" ref={treeRef}>
-        {stages.map((stage) => {
-          const stageOpen = opened[stage.id] ?? true;
+        {searchBox}
+        {shown.length === 0 && nothingFound}
+        {shown.map((stage) => {
+          const stageOpen = matches ? true : (opened[stage.id] ?? true);
           return (
             <TreeGroup
               key={stage.id}
@@ -90,10 +125,12 @@ export function CategoryTree({
               name={tl(stage.name, lang)}
               count={stage.modules.reduce((sum, m) => sum + m.entries.length, 0)}
               open={stageOpen}
-              onToggle={() => toggle(stage.id, stageOpen)}
+              onToggle={() => !matches && toggle(stage.id, stageOpen)}
             >
               {stage.modules.map((m) => {
-                const open = opened[m.id] ?? (m.id === selectedModule?.id || m.id === revealModuleId);
+                const open = matches
+                  ? true
+                  : (opened[m.id] ?? (m.id === selectedModule?.id || m.id === revealModuleId));
                 return (
                   <TreeGroup
                     key={m.id}
@@ -102,7 +139,7 @@ export function CategoryTree({
                     name={tl(m.name, lang)}
                     count={m.entries.length}
                     open={open}
-                    onToggle={() => toggle(m.id, open)}
+                    onToggle={() => !matches && toggle(m.id, open)}
                   >
                     {m.entries.length > 0 ? (
                       renderEntries(m.entries)
@@ -119,18 +156,23 @@ export function CategoryTree({
     );
   }
 
+  const shownCategories = catalog
+    .map((cat) => ({ ...cat, entries: [...cat.entries].filter((e) => !matches || matches(e)).sort(compareEntries) }))
+    .filter((cat) => !matches || cat.entries.length > 0);
   return (
     <div className="tree">
-      {catalog.map((cat) => {
-        const open = opened[cat.id] ?? true;
-        const entries = [...cat.entries].sort(compareEntries);
+      {searchBox}
+      {shownCategories.length === 0 && matches && nothingFound}
+      {shownCategories.map((cat) => {
+        const open = matches ? true : (opened[cat.id] ?? true);
+        const entries = cat.entries;
         return (
           <TreeGroup
             key={cat.id}
             name={tl(cat.name, lang)}
             count={entries.length}
             open={open}
-            onToggle={() => toggle(cat.id, open)}
+            onToggle={() => !matches && toggle(cat.id, open)}
           >
             {renderEntries(entries)}
           </TreeGroup>

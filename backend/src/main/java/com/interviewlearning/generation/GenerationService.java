@@ -12,6 +12,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.Supplier;
 
 /**
  * Tracks topic-generation tasks so they survive a client closing the dialog or
@@ -41,15 +42,17 @@ public class GenerationService {
 
     /** Starts a task for the key, or returns the one already running for it. */
     public GenerationTask startOrGet(String key, String provider, String prompt, AiTask aiTask) {
-        return startOrGet(key, provider, prompt, aiTask, null);
+        return startOrGet(key, provider, prompt, aiTask, null, null);
     }
 
     /**
      * Same, with {@code onStopped} run once the CLI has exited after a stop and
-     * before the task ends, to undo what the killed run had already written.
+     * before the task ends, to undo what the killed run had already written, and
+     * {@code onDone} run after a clean exit (the auto-commit); the line it returns,
+     * if any, goes into the task log.
      */
     public GenerationTask startOrGet(String key, String provider, String prompt, AiTask aiTask,
-                                     Runnable onStopped) {
+                                     Runnable onStopped, Supplier<String> onDone) {
         GenerationTask existing = byKey.get(key);
         if (existing != null && !existing.isTerminal()) {
             return existing;
@@ -76,6 +79,9 @@ public class GenerationService {
                     } catch (RuntimeException e) {
                         log.warn("Cleanup after stopping {} failed: {}", key, e.getMessage());
                     }
+                }
+                if ("done".equals(status) && !task.isCancelled()) {
+                    afterSuccess(task, onDone);
                 }
                 task.addStatus(status, message);
             }
@@ -124,6 +130,11 @@ public class GenerationService {
      * first CLI run exits.
      */
     public GenerationTask startJob(String key, String provider, AiTask aiTask, Job job) {
+        return startJob(key, provider, aiTask, job, null);
+    }
+
+    /** Same, with {@code onDone} run when the job returns and was not stopped (the auto-commit). */
+    public GenerationTask startJob(String key, String provider, AiTask aiTask, Job job, Supplier<String> onDone) {
         GenerationTask existing = byKey.get(key);
         if (existing != null && !existing.isTerminal()) {
             return existing;
@@ -167,12 +178,31 @@ public class GenerationService {
         };
         jobs.submit(() -> {
             try {
-                task.addStatus("done", job.run(steps));
+                String message = job.run(steps);
+                if (!task.isCancelled()) {
+                    afterSuccess(task, onDone);
+                }
+                task.addStatus("done", message);
             } catch (Exception e) {
                 task.addStatus("error", e.getMessage() == null ? e.toString() : e.getMessage());
             }
         });
         return task;
+    }
+
+    private void afterSuccess(GenerationTask task, Supplier<String> onDone) {
+        if (onDone == null) {
+            return;
+        }
+        try {
+            String line = onDone.get();
+            if (line != null) {
+                task.addStatus("running", line);
+            }
+        } catch (RuntimeException e) {
+            log.warn("After {} finished: {}", task.key(), e.getMessage());
+            task.addStatus("running", "Not committed: " + e.getMessage());
+        }
     }
 
     public GenerationTask byId(String taskId) {

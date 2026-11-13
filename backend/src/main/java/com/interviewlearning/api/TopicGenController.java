@@ -4,6 +4,7 @@ import com.interviewlearning.ai.AiTask;
 import com.interviewlearning.config.RepoPaths;
 import com.interviewlearning.generation.GenerationService;
 import com.interviewlearning.generation.GenerationTask;
+import com.interviewlearning.generation.GitAutoCommit;
 import com.interviewlearning.generation.NewTopicDirs;
 import com.interviewlearning.generation.TopicPromptBuilder;
 import com.interviewlearning.generation.TopicPromptBuilder.TopicGenSpec;
@@ -33,11 +34,14 @@ public class TopicGenController {
     private final GenerationService generation;
     private final TopicPromptBuilder prompts;
     private final RepoPaths repoPaths;
+    private final GitAutoCommit autoCommit;
 
-    public TopicGenController(GenerationService generation, TopicPromptBuilder prompts, RepoPaths repoPaths) {
+    public TopicGenController(GenerationService generation, TopicPromptBuilder prompts, RepoPaths repoPaths,
+                              GitAutoCommit autoCommit) {
         this.generation = generation;
         this.prompts = prompts;
         this.repoPaths = repoPaths;
+        this.autoCommit = autoCommit;
     }
 
     /**
@@ -71,8 +75,9 @@ public class TopicGenController {
         String prompt = prompts.build(new TopicGenSpec(request.question(), request.catalogId(),
                 request.categoryId(), request.difficulty(), request.style(), request.styleName(),
                 request.provider(), request.languages(), domainId, request.note()));
+        NewTopicDirs dirs = NewTopicDirs.snapshot(repoPaths.topicsDir(), key, generation::runningKeys);
         GenerationTask task = generation.startOrGet(key, request.provider(), prompt, AiTask.GENERATE_TOPIC,
-                NewTopicDirs.snapshot(repoPaths.topicsDir(), key, generation::runningKeys));
+                dirs::deleteAdded, autoCommit.afterTopicRun(dirs));
         return Map.of("taskId", task.id(), "key", task.key(), "status", task.status());
     }
 

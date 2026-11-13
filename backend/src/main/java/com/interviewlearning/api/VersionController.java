@@ -3,6 +3,7 @@ package com.interviewlearning.api;
 import com.interviewlearning.ai.AiCliService;
 import com.interviewlearning.ai.AiTask;
 import com.interviewlearning.config.RepoPaths;
+import com.interviewlearning.generation.GitAutoCommit;
 import com.interviewlearning.generation.LearnerNote;
 import com.interviewlearning.lang.ContentLanguages;
 import com.interviewlearning.theory.TheoryVersionRepository;
@@ -48,12 +49,15 @@ public class VersionController {
     private final AiCliService ai;
     private final RepoPaths repoPaths;
     private final TopicYamlEditor yamlEditor;
+    private final GitAutoCommit autoCommit;
 
     public VersionController(TopicRepository topics,
                              TheoryVersionRepository versions,
                              AiCliService ai,
                              RepoPaths repoPaths,
-                             TopicYamlEditor yamlEditor) {
+                             TopicYamlEditor yamlEditor,
+                             GitAutoCommit autoCommit) {
+        this.autoCommit = autoCommit;
         this.topics = topics;
         this.versions = versions;
         this.ai = ai;
@@ -200,6 +204,9 @@ public class VersionController {
             }
             if (versionNo <= 1) {
                 writeExplanationFile(id, lang, text);
+                Path topicDir = repoPaths.topicsDir().resolve(id);
+                autoCommit.commitPaths("translate the " + id + " theory into " + ContentLanguages.englishName(lang),
+                        topicDir.resolve("explanation." + lang + ".md"), topicDir.resolve("topic.yaml"));
             } else {
                 versions.addTexts(id, versionNo, Map.of(lang, text));
             }

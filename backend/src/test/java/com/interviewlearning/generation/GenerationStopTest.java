@@ -64,11 +64,11 @@ class GenerationStopTest {
     @Test
     void aStoppedTopicRunLosesTheFolderItStartedWriting() throws IOException {
         Files.createDirectories(topics.resolve("hashmap"));
-        Runnable cleanup = NewTopicDirs.snapshot(topics, "catalog:plan-x", () -> List.of("catalog:plan-x"));
+        NewTopicDirs dirs = NewTopicDirs.snapshot(topics, "catalog:plan-x", () -> List.of("catalog:plan-x"));
         Files.createDirectories(topics.resolve("broken-access-control").resolve("images"));
         Files.writeString(topics.resolve("broken-access-control").resolve("topic.yaml"), "id: x");
 
-        cleanup.run();
+        dirs.deleteAdded();
 
         assertFalse(Files.exists(topics.resolve("broken-access-control")));
         assertTrue(Files.isDirectory(topics.resolve("hashmap")), "older topics stay");
@@ -76,11 +76,11 @@ class GenerationStopTest {
 
     @Test
     void theFolderStaysWhileAnotherTopicIsBeingGenerated() throws IOException {
-        Runnable cleanup = NewTopicDirs.snapshot(topics, "catalog:plan-x",
+        NewTopicDirs dirs = NewTopicDirs.snapshot(topics, "catalog:plan-x",
                 () -> List.of("catalog:plan-x", "add-topic:java", "atoms:hashmap"));
         Files.createDirectories(topics.resolve("new-topic"));
 
-        cleanup.run();
+        dirs.deleteAdded();
 
         assertTrue(Files.isDirectory(topics.resolve("new-topic")), "it may be the other run's");
     }

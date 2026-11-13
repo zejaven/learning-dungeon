@@ -16,6 +16,7 @@ import com.interviewlearning.config.RepoPaths;
 import com.interviewlearning.generation.AtomsPromptBuilder;
 import com.interviewlearning.generation.GenerationService;
 import com.interviewlearning.generation.GenerationTask;
+import com.interviewlearning.generation.GitAutoCommit;
 import com.interviewlearning.generation.NewTopicDirs;
 import com.interviewlearning.generation.TopicPromptBuilder;
 import com.interviewlearning.generation.TopicPromptBuilder.TopicGenSpec;
@@ -80,6 +81,7 @@ public class BulkGenerationService {
     private volatile BulkRun current;
 
     private final RepoPaths repoPaths;
+    private final GitAutoCommit autoCommit;
 
     public BulkGenerationService(GenerationService generation,
                                  UsageService usage,
@@ -88,8 +90,10 @@ public class BulkGenerationService {
                                  AtomsPromptBuilder atomsPrompts,
                                  CodeTaskGenerator taskGenerator,
                                  LessonGenerator lessonGenerator,
-                                 RepoPaths repoPaths) {
+                                 RepoPaths repoPaths,
+                                 GitAutoCommit autoCommit) {
         this.repoPaths = repoPaths;
+        this.autoCommit = autoCommit;
         this.taskGenerator = taskGenerator;
         this.lessonGenerator = lessonGenerator;
         this.generation = generation;
@@ -385,8 +389,9 @@ public class BulkGenerationService {
                         item.spec.categoryId(), item.spec.difficulty(), item.spec.style(),
                         item.spec.styleName(), run.provider, run.languages, run.domainId, null));
                 String key = "catalog:" + catalogId;
+                NewTopicDirs dirs = NewTopicDirs.snapshot(repoPaths.topicsDir(), key, generation::runningKeys);
                 return generation.startOrGet(key, run.provider, prompt, AiTask.GENERATE_TOPIC,
-                        NewTopicDirs.snapshot(repoPaths.topicsDir(), key, generation::runningKeys));
+                        dirs::deleteAdded, autoCommit.afterTopicRun(dirs));
             }
             TopicDetail topic = topics.getTopic(item.spec.id()).orElse(null);
             if (topic == null) {

@@ -47,7 +47,7 @@ class LessonGeneratorTest {
     @BeforeEach
     void setUp() throws IOException {
         JavaCodeRunner runner = new JavaCodeRunner(new RepoPaths(""), MAPPER, 10, "128m");
-        generator = new LessonGenerator(null, runner, new RepoPaths(root.toString()), MAPPER);
+        generator = new LessonGenerator(null, runner, new RepoPaths(root.toString()), MAPPER, null);
         file = root.resolve("topics").resolve(TOPIC).resolve("learning-atoms.json");
         Files.createDirectories(file.getParent());
     }

@@ -7,6 +7,7 @@ import com.interviewlearning.ai.AiTask;
 import com.interviewlearning.config.RepoPaths;
 import com.interviewlearning.generation.GenerationService;
 import com.interviewlearning.generation.GenerationTask;
+import com.interviewlearning.generation.GitAutoCommit;
 import com.interviewlearning.lesson.verify.SnippetCheck;
 import com.interviewlearning.lesson.verify.SnippetFixPrompt;
 import com.interviewlearning.runner.JavaCodeRunner;
@@ -49,9 +50,11 @@ public class LessonGenerator {
     private final JavaCodeRunner runner;
     private final RepoPaths repoPaths;
     private final ObjectMapper mapper;
+    private final GitAutoCommit autoCommit;
 
     public LessonGenerator(GenerationService generation, JavaCodeRunner runner, RepoPaths repoPaths,
-                           ObjectMapper mapper) {
+                           ObjectMapper mapper, GitAutoCommit autoCommit) {
+        this.autoCommit = autoCommit;
         this.generation = generation;
         this.runner = runner;
         this.repoPaths = repoPaths;
@@ -64,8 +67,10 @@ public class LessonGenerator {
 
     /** Starts (or returns the running) lesson generation for the topic with an already built prompt. */
     public GenerationTask start(String topicId, String provider, String prompt) {
+        Path file = repoPaths.topicsDir().resolve(topicId).resolve("learning-atoms.json");
         return generation.startJob(key(topicId), provider, AiTask.GENERATE_ATOMS,
-                steps -> run(topicId, prompt, steps));
+                steps -> run(topicId, prompt, steps),
+                () -> autoCommit.commitPaths("generate the " + topicId + " lesson", file));
     }
 
     String run(String topicId, String prompt, GenerationService.Steps steps) throws IOException {

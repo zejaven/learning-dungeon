@@ -5,6 +5,7 @@ import com.interviewlearning.codetask.CodeTaskDtos.CodeTask;
 import com.interviewlearning.config.RepoPaths;
 import com.interviewlearning.generation.GenerationService;
 import com.interviewlearning.generation.GenerationTask;
+import com.interviewlearning.generation.GitAutoCommit;
 import com.interviewlearning.generation.TasksPromptBuilder;
 import com.interviewlearning.lesson.LearningAtomsRepository;
 import com.interviewlearning.lesson.LessonDtos.Atom;
@@ -49,9 +50,12 @@ public class CodeTaskGenerator {
     private final CodeTaskValidator validator;
     private final LearningAtomsRepository atoms;
     private final RepoPaths repoPaths;
+    private final GitAutoCommit autoCommit;
 
     public CodeTaskGenerator(GenerationService generation, TasksPromptBuilder prompts, CodeTaskRepository tasks,
-                             CodeTaskValidator validator, LearningAtomsRepository atoms, RepoPaths repoPaths) {
+                             CodeTaskValidator validator, LearningAtomsRepository atoms, RepoPaths repoPaths,
+                             GitAutoCommit autoCommit) {
+        this.autoCommit = autoCommit;
         this.generation = generation;
         this.prompts = prompts;
         this.tasks = tasks;
@@ -80,8 +84,10 @@ public class CodeTaskGenerator {
 
     /** Starts (or returns the running) generation for the topic. Call {@link #refusal} first. */
     public GenerationTask start(TopicDetail topic, String provider, String comment) {
+        Path tasksDir = repoPaths.topicsDir().resolve(topic.id()).resolve("tasks");
         return generation.startJob(key(topic.id()), provider, AiTask.GENERATE_TASKS,
-                steps -> run(topic, provider, comment, steps));
+                steps -> run(topic, provider, comment, steps),
+                () -> autoCommit.commitPaths("generate code tasks for " + topic.id(), tasksDir));
     }
 
     private String run(TopicDetail topic, String provider, String comment, GenerationService.Steps steps)

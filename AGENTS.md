@@ -898,6 +898,18 @@ since the folder could be that run's), `LessonGenerator` puts the previous
 `learning-atoms.json` back, and `CodeTaskGenerator` promotes nothing. A new
 multi-step job must check `Steps.cancelled()` before it commits anything.
 
+A finished generation commits its own output (`generation/GitAutoCommit`,
+`app.generation.auto-commit`, on by default): a topic run its new `topics/`
+folders plus the `visual-runtime/` files it created or changed (ones already
+dirty at its start stay out), a lesson `learning-atoms.json`, code tasks the
+topic's `tasks/`, a version-1 translation its explanation file and `topic.yaml`.
+It commits by pathspec (`git commit -- <paths>`), so the user's staged or
+unstaged work and another run's files never ride along, and it never pushes.
+The result line ("Committed abc1234: ...", or why not) goes into the task log.
+A stopped or failed run commits nothing, and a topic run is not committed while
+another topic generation runs, for the same reason `NewTopicDirs` does not
+delete then. New versions (2+) live in PostgreSQL, so there is nothing to commit.
+
 Lesson (`learning-atoms.json`) generation is likewise constrained by
 `prompts/generate-learning-atoms.md` and follows the same detached-task pattern
 as topic generation and theory-version regeneration

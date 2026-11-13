@@ -154,6 +154,7 @@ const UI: Record<string, Localized> = {
   generating: { en: 'Generating…', ru: 'Генерация…' },
   reloadNew: { en: 'Reload to open new topic', ru: 'Перезагрузить, чтобы открыть тему' },
   genFinished: { en: '— topic generation finished —', ru: '— генерация темы завершена —' },
+  aiNoteOpen: { en: 'Note for the AI', ru: 'Уточнение для ИИ' },
   aiNotePlaceholder: { en: 'Note for the AI (optional)', ru: 'Уточнение для ИИ (необязательно)' },
   aiNoteHint: {
     en: 'What you want from this run: a focus, what to keep short, a case to add. It goes at the end of the prompt.',
